@@ -116,10 +116,7 @@ python tools\compile_shaders.py
 
 ### Rockstar Games
 - **Rockstar North** - GTA San Andreas
-- **Rockstar Games** - GTA IV, GTA V, RDR2 reference implementations
-
-### RAGE Engine Reference
-- **Rockstar Games** - RAGE engine source code for vehicle rendering, motion blur, tonemapping
+- **Rockstar Games** - GTA IV, GTA V, RDR2 - rendering techniques inspired by their titles
 
 ### O3DE
 - **O3DE Foundation** - Atom renderer reference for PBR pipeline
@@ -141,6 +138,6 @@ FXAA is property of NVIDIA Corporation.
 
 CryEngine reference code is property of Crytek GmbH.
 
-RAGE engine reference code is property of Rockstar Games.
+Rendering techniques inspired by Rockstar Games titles (GTA IV, GTA V, RDR2).
 
 O3DE reference code is licensed under the Apache 2.0 license.
