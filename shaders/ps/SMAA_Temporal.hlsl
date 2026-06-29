@@ -1,0 +1,75 @@
+// SMAA Temporal Motion Blur Pass (ps_3_0)
+// Blends current frame with previous frame based on motion detection
+// Moving edges get more blur for temporal stability
+//
+// Constants:
+//   c0   = (blendStrength, motionScale, 0, 0)
+//   c1   = (screenW, screenH, 1/screenW, 1/screenH)
+//
+// Textures:
+//   s0 = current frame (after SMAA)
+//   s1 = previous frame
+
+sampler2D currentTex : register(s0);
+sampler2D prevTex    : register(s1);
+
+uniform float4 params : register(c0); // x=blendStrength, y=motionScale
+uniform float4 screenSize : register(c1);
+
+struct PS_INPUT
+{
+    float2 texCoord : TEXCOORD0;
+};
+
+float Luma(float3 c)
+{
+    return dot(c, float3(0.2126, 0.7152, 0.0722));
+}
+
+float4 main(PS_INPUT IN) : COLOR
+{
+    float2 tex = IN.texCoord;
+    float2 pixel = screenSize.zw;
+    
+    // Sample current and previous frame
+    float3 current = tex2D(currentTex, tex).rgb;
+    float3 prev = tex2D(prevTex, tex).rgb;
+    
+    // Calculate motion based on luminance difference
+    float lumaCurrent = Luma(current);
+    float lumaPrev = Luma(prev);
+    float motion = abs(lumaCurrent - lumaPrev) * params.y;
+    
+    // Clamp motion to [0, 1]
+    motion = saturate(motion);
+    
+    // Sample neighbors for edge-aware blending
+    float3 currentN = tex2D(currentTex, tex + float2(0, -pixel.y)).rgb;
+    float3 currentS = tex2D(currentTex, tex + float2(0, pixel.y)).rgb;
+    float3 currentE = tex2D(currentTex, tex + float2(pixel.x, 0)).rgb;
+    float3 currentW = tex2D(currentTex, tex + float2(-pixel.x, 0)).rgb;
+    
+    float3 prevN = tex2D(prevTex, tex + float2(0, -pixel.y)).rgb;
+    float3 prevS = tex2D(prevTex, tex + float2(0, pixel.y)).rgb;
+    float3 prevE = tex2D(prevTex, tex + float2(pixel.x, 0)).rgb;
+    float3 prevW = tex2D(prevTex, tex + float2(-pixel.x, 0)).rgb;
+    
+    // Calculate motion at neighbors
+    float motionN = abs(Luma(currentN) - Luma(prevN)) * params.y;
+    float motionS = abs(Luma(currentS) - Luma(prevS)) * params.y;
+    float motionE = abs(Luma(currentE) - Luma(prevE)) * params.y;
+    float motionW = abs(Luma(currentW) - Luma(prevW)) * params.y;
+    
+    // Average motion in neighborhood
+    float avgMotion = (motion + motionN + motionS + motionE + motionW) * 0.2;
+    avgMotion = saturate(avgMotion);
+    
+    // Blend factor: more motion = more current frame (less ghosting)
+    // Less motion = more previous frame (temporal stability)
+    float blendFactor = lerp(params.x, 1.0, avgMotion);
+    
+    // Blend current and previous frame
+    float3 result = lerp(prev, current, blendFactor);
+    
+    return float4(result, 1.0);
+}

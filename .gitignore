@@ -1,0 +1,35 @@
+# Build artifacts
+build/
+bin/
+*.obj
+*.pdb
+*.exp
+*.lib
+*.dll
+*.cso
+*.exe
+
+# IDE
+.vs/
+*.user
+*.suo
+
+# OS
+Thumbs.db
+Desktop.ini
+nul
+
+# Logs
+*.log
+
+# Temp
+*.tmp
+*.bak
+
+# External repos
+SMAA_reference/
+O3DE_reference/
+external/d3d9/
+external/microsoft.dxsdk.d3dx.9.29.952.8/
+external/normalmap/
+external/nm_matbuild/
