@@ -1,0 +1,6 @@
+﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <WindowsSdkDir>C:\Program Files (x86)\Windows Kits\10\</WindowsSdkDir>
+    <WindowsSDKVersion>10.0.26100.0\</WindowsSDKVersion>
+  </PropertyGroup>
+</Project>

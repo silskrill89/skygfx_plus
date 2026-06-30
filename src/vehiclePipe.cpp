@@ -1,6 +1,5 @@
 #include "skygfx.h"
 #include "neo.h"
-#include "UniPipe.h"
 
 enum {
 	// common
@@ -23,9 +22,6 @@ enum {
 	// spec light
 	REG_eye		= 35,
 };
-
-// Include unified vehicle pipe implementation
-#include "UniVehPipe.cpp"
 
 void *vehiclePipeVS, *ps2CarFxVS;
 void *ps2EnvSpecFxPS;	// also used by the building pipeline
@@ -1471,13 +1467,7 @@ RwTexture *RwTextureRead_HACK(const RwChar * name, const RwChar * maskName)
 void
 hookVehiclePipe(void)
 {
-	// Initialize unified vehicle pipe configs
-	UniVehPipe_InitConfigs();
-	UniVehPipe_InitGTAIVConfig();
-	UniVehPipe_InitGTAVConfig();
-
-	// Hook to unified vehicle pipe render callback
-	InjectHook(0x5D9FE9, UniVehPipe_RenderCallback);
+	InjectHook(0x5D9FE9, setVehiclePipeCB);
 	InterceptCall(&CCustomCarEnvMapPipeline__PreRenderUpdate_orig, CCustomCarEnvMapPipeline__PreRenderUpdate, 0x5D5B10);
 	InjectHook(0x7323C0, CVisibilityPlugins__RenderWheelAtomicCB, PATCH_JUMP);
 

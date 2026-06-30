@@ -1,0 +1,91 @@
+{
+  "_comment": "Known GTA San Andreas gta_sa.exe versions. The wizard computes the SHA-1 hash of the user's exe and looks it up here. If the hash is unknown, it falls back to file-size detection. Add real hashes here as you collect them — see https://gtaforums.com/topic/931236-san-andreas-exe-versions/ for a community-maintained list.",
+  "_format": "Each entry has: id, label, region, version_string, file_size_bytes, sha1 (lowercase hex, or null if unknown), mod_compatible (bool), needs_downgrade (bool), source (where this build comes from).",
+
+  "versions": [
+    {
+      "id": "v1.0_us_hoodlum",
+      "label": "v1.0 US (HOODLUM No-CD)",
+      "region": "US",
+      "version_string": "1.0.0.0",
+      "file_size_bytes": 6170624,
+      "sha1": null,
+      "mod_compatible": true,
+      "needs_downgrade": false,
+      "source": "Retail CD + HOODLUM No-CD patch",
+      "notes": "Most widely compatible exe for SA mods. This is what the installer recommends."
+    },
+    {
+      "id": "v1.0_eu_hoodlum",
+      "label": "v1.0 EU (HOODLUM No-CD)",
+      "region": "EU",
+      "version_string": "1.0.0.0",
+      "file_size_bytes": 6180864,
+      "sha1": null,
+      "mod_compatible": true,
+      "needs_downgrade": false,
+      "source": "Retail CD + HOODLUM No-CD patch",
+      "notes": "EU equivalent of the US HOODLUM build. Also fully mod-compatible."
+    },
+    {
+      "id": "v1.01_us",
+      "label": "v1.01 US (Hot Coffee patch)",
+      "region": "US",
+      "version_string": "1.01.0.0",
+      "file_size_bytes": 6236160,
+      "sha1": null,
+      "mod_compatible": true,
+      "needs_downgrade": false,
+      "source": "Rockstar v1.01 patch (Hot Coffee removal)",
+      "notes": "v1.01 patched exe. Most mods work but a few require v1.0 specifically."
+    },
+    {
+      "id": "v2.0_us",
+      "label": "v2.0 US (SecuROM)",
+      "region": "US",
+      "version_string": "2.00.0.0",
+      "file_size_bytes": 6823936,
+      "sha1": null,
+      "mod_compatible": false,
+      "needs_downgrade": true,
+      "source": "Second Retail printing (SecuROM added)",
+      "notes": "SecuROM-protected exe. Breaks most ASI loaders and CLEO. Needs downgrade."
+    },
+    {
+      "id": "v3.0_steam_compact",
+      "label": "v3.0 Steam (Compact)",
+      "region": "Digital",
+      "version_string": "3.00.0.0",
+      "file_size_bytes": 9867264,
+      "sha1": null,
+      "mod_compatible": false,
+      "needs_downgrade": true,
+      "source": "Steam digital distribution",
+      "notes": "Steam Compact build. Includes SecuROM + altered memory layout. Must downgrade to v1.0 before modding."
+    },
+    {
+      "id": "v3.0_steam_alt",
+      "label": "v3.0 Steam (Alternate)",
+      "region": "Digital",
+      "version_string": "3.00.0.0",
+      "file_size_bytes": 9502720,
+      "sha1": null,
+      "mod_compatible": false,
+      "needs_downgrade": true,
+      "source": "Steam digital distribution (older depot)",
+      "notes": "Earlier Steam depot. Still requires downgrade."
+    },
+    {
+      "id": "v3.0_rockstar",
+      "label": "v3.0 Rockstar Launcher",
+      "region": "Digital",
+      "version_string": "3.00.0.0",
+      "file_size_bytes": null,
+      "sha1": null,
+      "mod_compatible": false,
+      "needs_downgrade": true,
+      "source": "Rockstar Games Launcher",
+      "notes": "Rockstar launcher version — also requires downgrade to v1.0."
+    }
+  ]
+}

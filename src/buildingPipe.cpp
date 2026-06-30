@@ -1,5 +1,4 @@
 #include "skygfx.h"
-#include "UniPipe.h"
 //#include <fstream>
 
 void *ps2BuildingVS, *ps2BuildingFxVS;
@@ -41,9 +40,6 @@ enum {
 
 };
 
-// Include unified building pipe implementation
-#include "UniBuildPipe.cpp"
-
 float &CCoronas__LightsMult = *(float*)0x8D4B5C;
 bool &CWeather__LightningFlash = *(bool*)0xC812CC;
 WRAPPER bool CPostEffects__IsVisionFXActive(void) { EAXJMP(0x7034F0); }
@@ -57,10 +53,23 @@ CustomBuildingPipeline__Update(void)
 	CustomBuildingPipeline__Update_orig();
 
 
+	// PS2 to PC gamma correction for ambient light
+	// PS2 gamma ~1.5, PC gamma 2.2
+	// Correction factor: 1.5/2.2 ≈ 0.68
+	// Use soft compression to prevent banding on bright values
+	float ps2Gamma = 0.68f;
+
+	// Soft compression for high values to prevent banding
+	auto CorrectGamma = [](float val, float gamma) -> float {
+		if(val > 0.5f)
+			val = 0.5f + (val - 0.5f) * 0.7f;
+		return val * gamma;
+	};
+
 	// do *not* use pAmbient light. It causes so many problems
-	buildingAmbient.red = CTimeCycle_GetAmbientRed()*CCoronas__LightsMult;
-	buildingAmbient.green = CTimeCycle_GetAmbientGreen()*CCoronas__LightsMult;
-	buildingAmbient.blue = CTimeCycle_GetAmbientBlue()*CCoronas__LightsMult;
+	buildingAmbient.red = CorrectGamma(CTimeCycle_GetAmbientRed(), ps2Gamma) * CCoronas__LightsMult;
+	buildingAmbient.green = CorrectGamma(CTimeCycle_GetAmbientGreen(), ps2Gamma) * CCoronas__LightsMult;
+	buildingAmbient.blue = CorrectGamma(CTimeCycle_GetAmbientBlue(), ps2Gamma) * CCoronas__LightsMult;
 
 	if(config->lightningIlluminatesWorld && CWeather__LightningFlash && !CPostEffects__IsVisionFXActive())
 		buildingAmbient = { 1.0, 1.0, 1.0, 0.0 };
@@ -935,10 +944,7 @@ hookBuildingPipe(void)
 	InjectHook(0x5D7D90, CCustomBuildingPipeline__CreateCustomObjPipe_PS2);
 	Patch<uint8>(0x5D7200, 0xC3);	// disable interpolation
 
-	// Initialize unified building pipe configs
-	UniBuildPipe_InitConfigs();
-
-	if(explicitBuildingPipe >= 0)
+	if(explicitBuildingPipe >= 0 && !gHasExternalNormalMapPlugin)
 		InjectHook(0x5D7F40, CCustomBuildingRenderer__IsCBPCPipelineAttached, PATCH_JUMP);
 
 

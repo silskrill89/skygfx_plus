@@ -34,7 +34,11 @@ float4 main(PS_INPUT IN) : COLOR
     // Sample down
     uv = IN.texCoord + float2(0, radius * invH);
     sd = tex2D(depthTexture, uv).r;
+<<<<<<< HEAD
     svz = projInfo.z / (sd - (sd - projInfo.w);
+=======
+    svz = projInfo.z / (sd - projInfo.w);
+>>>>>>> master
     occ += step(0, viewZ - svz) * (1 - (viewZ - svz)/radius);
     
     // Sample up

@@ -1,6 +1,11 @@
+<<<<<<< HEAD
 // Full SMAA implementation based on open source documentation
 // Subpixel Morphological Anti-Aliasing with edge detection and blending
 // Compatible with ps_3_0
+=======
+// SMAA pixel shader - edge detection and blending
+// Simplified SMAA for D3D9, compiled with ps_3_0 via build system
+>>>>>>> master
 
 uniform sampler2D colorTexture : register(s0);
 uniform sampler2D areaTex : register(s1);

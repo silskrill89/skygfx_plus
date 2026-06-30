@@ -174,3 +174,8 @@ WRAPPER RwMatrix *RwMatrixOptimize(RwMatrix*, const RwMatrixTolerance*) { EAXJMP
 WRAPPER void _rwD3D9EnableClippingIfNeeded(void *object, RwUInt32 type) { EAXJMP(0x756D90); }
 
 WRAPPER RpLight *RpLightSetColor(RpLight *light, const RwRGBAReal *color) { EAXJMP(0x751A90); }
+
+extern "C" {
+WRAPPER RwFrame *RwFrameTranslate(RwFrame *frame, const RwV3d *v, RwOpCombineType combine) { EAXJMP(0x7F0E30); }
+WRAPPER RpGeometry *RpGeometryForAllMaterials(RpGeometry *geometry, RpMaterialCallBack fpCallBack, void *pData) { EAXJMP(0x74C790); }
+}

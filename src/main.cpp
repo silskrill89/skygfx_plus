@@ -6,15 +6,66 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <excpt.h>
-#include "UniPipe.h"
 //#include <fstream>
-
-// Include unified vegetation pipe implementation
-#include "UniVegPipe.cpp"
 
 static char g_logPath[MAX_PATH];
 static int g_logInit = 0;
 static volatile int g_allowCrashPassThrough = 0;
+
+static const char *logLevelStr[] = { "INFO ", "WARN ", "ERROR", "FATAL" };
+
+static void
+dbglog_internal(LogLevel level, const char *file, int line, const char *func, const char *fmt, va_list ap)
+{
+	char msg[4096];
+	int len = vsnprintf(msg, sizeof(msg), fmt, ap);
+	if(len < 0) return;
+	if(len >= sizeof(msg)) len = sizeof(msg) - 1;
+
+	const char *shortFile = file;
+	for(const char *p = file; *p; p++)
+		if(*p == '\\' || *p == '/') shortFile = p + 1;
+
+	char buf[4096];
+	SYSTEMTIME st;
+	GetLocalTime(&st);
+	int hlen;
+	if(level >= 0)
+		hlen = snprintf(buf, sizeof(buf), "[%02d:%02d:%02d.%03d] [%s] %s:%d %s() - %s\n",
+			st.wHour, st.wMinute, st.wSecond, st.wMilliseconds,
+			logLevelStr[level], shortFile, line, func, msg);
+	else
+		hlen = snprintf(buf, sizeof(buf), "[%02d:%02d:%02d.%03d] [TRACE] %s:%d %s() - %s\n",
+			st.wHour, st.wMinute, st.wSecond, st.wMilliseconds,
+			shortFile, line, func, msg);
+	if(hlen < 0 || hlen >= sizeof(buf)) return;
+
+	HANDLE h = CreateFileA(g_logPath, FILE_APPEND_DATA, FILE_SHARE_READ,
+		NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+	if(h == INVALID_HANDLE_VALUE) return;
+	DWORD written;
+	WriteFile(h, buf, hlen, &written, NULL);
+	FlushFileBuffers(h);
+	CloseHandle(h);
+}
+
+void
+dbglog(const char *fmt, ...)
+{
+	va_list ap;
+	va_start(ap, fmt);
+	dbglog_internal(LOG_INFO, "", 0, "", fmt, ap);
+	va_end(ap);
+}
+
+void
+dbglog_loc(LogLevel level, const char *file, int line, const char *func, const char *fmt, ...)
+{
+	va_list ap;
+	va_start(ap, fmt);
+	dbglog_internal(level, file, line, func, fmt, ap);
+	va_end(ap);
+}
 
 static LONG WINAPI
 crashHandler(EXCEPTION_POINTERS *ep)
@@ -63,34 +114,6 @@ crashHandler(EXCEPTION_POINTERS *ep)
 	return EXCEPTION_CONTINUE_SEARCH;
 }
 
-void
-dbglog(const char *fmt, ...)
-{
-	char msg[4096];
-	va_list ap;
-	va_start(ap, fmt);
-	int len = vsnprintf(msg, sizeof(msg), fmt, ap);
-	va_end(ap);
-	if(len < 0) return;
-	if(len >= sizeof(msg)) len = sizeof(msg) - 1;
-
-	char buf[4096];
-	SYSTEMTIME st;
-	GetLocalTime(&st);
-	int hlen = snprintf(buf, sizeof(buf), "[%04d-%02d-%02d %02d:%02d:%02d.%03d] %s\n",
-		st.wYear, st.wMonth, st.wDay,
-		st.wHour, st.wMinute, st.wSecond, st.wMilliseconds, msg);
-	if(hlen < 0 || hlen >= sizeof(buf)) return;
-
-	HANDLE h = CreateFileA(g_logPath, FILE_APPEND_DATA, FILE_SHARE_READ,
-		NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-	if(h == INVALID_HANDLE_VALUE) return;
-	DWORD written;
-	WriteFile(h, buf, hlen, &written, NULL);
-	FlushFileBuffers(h);
-	CloseHandle(h);
-}
-
 HMODULE dllModule;
 DebugMenuAPI gDebugMenuAPI;
 char asipath[MAX_PATH];
@@ -111,6 +134,9 @@ bool iCanHasNeoDrops = true;
 bool iCanHasbuildingPipe = true;
 bool iCanHasvehiclePipe = true;
 bool iCanHasSunGlare = true;
+bool gHasExternalNormalMapPlugin = false;
+
+
 
 bool privateHooks;
 bool forceWindShader;
@@ -145,8 +171,6 @@ RwImVertexIndex* TempBufferRenderIndexList = reinterpret_cast<RwImVertexIndex*>(
 RwIm3DVertex* TempVertexBuffer = reinterpret_cast<RwIm3DVertex*>(0xC4D958);
 
 CVector2D windPos;
-
-void refreshMenu(void);
 
 extern "C" {
 __declspec(dllexport) Config*
@@ -698,9 +722,9 @@ CPlantMgr_Initialise(void)
 	RpAtomic *atomic;
 	for(int i = 0; i < 4; i++){
 		atomic = (*plantTab0)[i];
-		atomic->renderCallBack = UniVegPipe_RenderCallback;
+		atomic->renderCallBack = grassRenderCallback;
 		atomic = (*plantTab1)[i];
-		atomic->renderCallBack = UniVegPipe_RenderCallback;
+		atomic->renderCallBack = grassRenderCallback;
 	}
 	return ret;
 }
@@ -938,7 +962,8 @@ RenderScene_hook(void)
 		}else{
 			config->debugMenuOpen = 1;
 		}
-		dbglog("Debug menu toggled: %d", config->debugMenuOpen);
+		dbglog("Debug menu toggled: %d (config=%p, &debugMenuOpen=%p)",
+			config->debugMenuOpen, config, &config->debugMenuOpen);
 	}
 	s_f4Prev = f4Now;
 
@@ -948,56 +973,10 @@ RenderScene_hook(void)
 }
 
 int (*PipelinePluginAttach)(void);
-void
-RenderScene_hook(void)
+static int
+myPluginAttach(void)
 {
-	// F4 to toggle debug menu
-	static bool s_f4Prev = false;
-	bool f4Now = (GetAsyncKeyState(VK_F4) & 0x8000) != 0;
-	if(f4Now && !s_f4Prev){
-		if(config->debugMenuOpen){
-			config->debugMenuOpen = 0;
-		}else{
-			config->debugMenuOpen = 1;
-		}
-		dbglog("Debug menu toggled: %d", config->debugMenuOpen);
-	}
-	s_f4Prev = f4Now;
-
-	RenderScene_before(nil);
-	RenderScene();
-	RenderScene_after(nil);
-}
-
-// Normal map plugin hook - captures normal map textures from materials
-extern "C" RwTexture* RpNormMapMaterialGetNormMapTexture(const RpMaterial* material);
-extern "C" RpMaterial* RpNormMapMaterialSetNormMapTexture(RpMaterial* material, RwTexture* normalmap);
-
-RpAtomic* CustomPipeAtomicSetup_Hook(RpAtomic* atomic)
-{
-	// Call original setup first
-	RpAtomic* result = CCustomCarEnvMapPipeline__CustomPipeAtomicSetup(atomic);
-	
-	// If normal map plugin is active, capture normal map textures
-	if(RpNormMapAtomicIsInitialized && RpNormMapAtomicIsInitialized(atomic)){
-		RpGeometry* geo = RpAtomicGetGeometry(atomic);
-		if(geo){
-			int matCount = RpGeometryGetNumMaterials(geo);
-			for(int i = 0; i < matCount; i++){
-				RpMaterial* mat = RpGeometryGetMaterial(geo, i);
-				if(mat){
-					RwTexture* normalMap = RpNormMapMaterialGetNormMapTexture(mat);
-					if(normalMap){
-						dbglog("Normal map found on vehicle atomic: %s", normalMap->name);
-						// Store normal map for SSAO use
-					}
-				}
-			}
-		}
-	}
-	
-	return result;
-}
+	return PipelinePluginAttach() && PDSPipePluginAttach() && TexDBPluginAttach();
 }
 
 void (*InitialiseGame)(void);
@@ -1030,9 +1009,6 @@ InitialiseGame_hook(void)
 		dbglog("InitialiseGame_hook: neoInit done");
 		initTexDB();
 		dbglog("InitialiseGame_hook: initTexDB done");
-		// Initialize unified PostFX system
-		UniPostFX_InitConfigs();
-		dbglog("InitialiseGame_hook: PostFX configs initialized");
 	}else{
 		dbglog("InitialiseGame_hook: re-entry detected (call #%d), skipping hooks", initCount);
 	}
@@ -1447,7 +1423,7 @@ readIni(int n)
 	c->ssaoSampleCount = readint(cfg.get("SkyGfx", "ssaoSampleCount", ""), 16);
 
 	c->smaaEnable = readint(cfg.get("SkyGfx", "smaaEnable", ""), 1);
-	c->smaaPreset = readint(cfg.get("SkyGfx", "smaaPreset", ""), 2); // HIGH
+	c->smaaPreset = readint(cfg.get("SkyGfx", "smaaPreset", ""), 3); // ULTRA
 	c->smaaPredication = readint(cfg.get("SkyGfx", "smaaPredication", ""), 0);
 	c->smaaTemporal = readint(cfg.get("SkyGfx", "smaaTemporal", ""), 0);
 
@@ -1465,36 +1441,42 @@ readIni(int n)
 	if (readint(cfg.get("SkyGfx", "forceWindShader", ""), 0) == 1) forceWindShader = true;
 
 	if(!iniExisted){
-		cfg.set("SkyGfx", "buildingPipe", "PC");
-		cfg.set("SkyGfx", "colorFilter", "VCS");
-		cfg.set("SkyGfx", "vehiclePipe", "VCS");
-		cfg.set("SkyGfx", "radiosity", "Shader");
-		cfg.set("SkyGfx", "vcsTrails", "0");
-		cfg.set("SkyGfx", "doRadiosity", "1");
-		cfg.set("SkyGfx", "ps2ModulateBuilding", "0");
-		cfg.set("SkyGfx", "dualPassBuilding", "1");
-		cfg.set("SkyGfx", "ps2ModulateVehicle", "0");
-		cfg.set("SkyGfx", "dualPassVehicle", "1");
-		cfg.set("SkyGfx", "ps2ModulateGrass", "0");
-		cfg.set("SkyGfx", "grassAddAmbient", "1");
-		cfg.set("SkyGfx", "grassBackfaceCull", "1");
-		cfg.set("SkyGfx", "sunGlare", "0");
-		cfg.set("SkyGfx", "neoWaterDrops", "0");
-		cfg.set("SkyGfx", "detailMaps", "1");
-		cfg.set("SkyGfx", "stochasticTexturing", "1");
-		cfg.set("SkyGfx", "envMapSize", "256");
-		cfg.set("SkyGfx", "envMapUseLODs", "1");
-		cfg.set("SkyGfx", "envMapFarClipMult", "1.0");
-		cfg.set("SkyGfx", "neoShininessMult", "1.0");
-		cfg.set("SkyGfx", "neoSpecularityMult", "1.0");
+		// ===== Unused/Legacy values (commented out) =====
+		cfg.set("SkyGfx", "; ===== Unused / Legacy Settings =====", "");
+		cfg.set("SkyGfx", "; buildingPipe", "PC");
+		cfg.set("SkyGfx", "; colorFilter", "VCS");
+		cfg.set("SkyGfx", "; vehiclePipe", "VCS");
+		cfg.set("SkyGfx", "; radiosity", "Shader");
+		cfg.set("SkyGfx", "; vcsTrails", "0");
+		cfg.set("SkyGfx", "; doRadiosity", "1");
+		cfg.set("SkyGfx", "; ps2ModulateBuilding", "0");
+		cfg.set("SkyGfx", "; dualPassBuilding", "1");
+		cfg.set("SkyGfx", "; ps2ModulateVehicle", "0");
+		cfg.set("SkyGfx", "; dualPassVehicle", "1");
+		cfg.set("SkyGfx", "; ps2ModulateGrass", "0");
+		cfg.set("SkyGfx", "; grassAddAmbient", "1");
+		cfg.set("SkyGfx", "; grassBackfaceCull", "1");
+		cfg.set("SkyGfx", "; sunGlare", "0");
+		cfg.set("SkyGfx", "; neoWaterDrops", "0");
+		cfg.set("SkyGfx", "; detailMaps", "1");
+		cfg.set("SkyGfx", "; stochasticTexturing", "1");
+		cfg.set("SkyGfx", "; envMapSize", "256");
+		cfg.set("SkyGfx", "; envMapUseLODs", "1");
+		cfg.set("SkyGfx", "; envMapFarClipMult", "1.0");
+		cfg.set("SkyGfx", "; neoShininessMult", "1.0");
+		cfg.set("SkyGfx", "; neoSpecularityMult", "1.0");
+		cfg.set("SkyGfx", "; privateHooks", "0");
+		cfg.set("SkyGfx", "; forceWindShader", "0");
+
+		// ===== Active Settings =====
+		cfg.set("SkyGfx", "; ===== Active Settings =====", "");
 		cfg.set("SkyGfx", "ssaoEnable", "1");
 		cfg.set("SkyGfx", "ssaoRadius", "0.8");
 		cfg.set("SkyGfx", "ssaoPower", "1.5");
 		cfg.set("SkyGfx", "ssaoKernelSize", "16");
 		cfg.set("SkyGfx", "ssaoSampleCount", "16");
-
 		cfg.set("SkyGfx", "smaaEnable", "1");
-		cfg.set("SkyGfx", "smaaPreset", "2");
+		cfg.set("SkyGfx", "smaaPreset", "3");
 		cfg.set("SkyGfx", "smaaPredication", "0");
 		cfg.set("SkyGfx", "smaaTemporal", "0");
 		cfg.set("SkyGfx", "ivMode", "0");
@@ -1630,227 +1612,9 @@ afterStreamIni(void)
 	X(ivBloomIntensity)			\
 	X(ivExposure)
 
-struct SkyGfxMenu
-{
-#define X(NAME) DebugMenuEntry *NAME;
-MENUSETTINGS
-#undef X
-};
-SkyGfxMenu menu;
-bool hasMenu = false;
+// Debug menu functions are in debugmenu_ui.cpp (installMenu, refreshMenu, etc.)
 
-void
-refreshMenu(void)
-{
-	if(hasMenu){
-#define X(NAME) DebugMenuEntrySetAddress(menu.NAME, &config->NAME);
-MENUSETTINGS
-#undef X
-	}
-}
-
-void
-toggledDual(void)
-{
-	// override, we can't do better
-	config->dualPassBuilding = config->dualPassGlobal;
-	config->dualPassVehicle = config->dualPassGlobal;
-	config->dualPassPed = config->dualPassGlobal;
-	config->dualPassGrass = config->dualPassGlobal;
-	config->dualPassDefault = config->dualPassGlobal;
-}
-
-void
-toggledModulation(void)
-{
-	// override, we can't do better
-	config->ps2ModulateBuilding = config->ps2ModulateGlobal;
-	config->ps2ModulateGrass = config->ps2ModulateGlobal;
-}
-
-void
-changeEnvMapSize(void)
-{
-	int i = 1;
-	// increase or decrease by power of two. doesn't work for 4 or below
-	if(config->envMapSize+1 & config->envMapSize)
-		while(i < config->envMapSize) i *= 2;
-	else
-		while(i < config->envMapSize/2) i *= 2;
-	config->envMapSize = i;
-}
-
-// should we need to check this out again
-//float mirrorVal = 216.0f;
-//void
-//fixMirrors(void)
-//{
-//	Patch(0x726516 + 6, mirrorVal);
-//	Patch(0x726534 + 6, mirrorVal);
-//	Patch(0x726552 + 6, mirrorVal);
-//	Patch(0x726570 + 6, mirrorVal);
-//}
-
-/*
-WRAPPER void CTimeCycle__Initialise(bool) { EAXJMP(0x5BBAC0); }
-
-void
-LoadTimecycle(const char *filename)
-{
-	static char timecyc[256];
-	strncpy(timecyc, filename, 256);
-	Patch(0x5BBAD9 + 1, timecyc);
-	CTimeCycle__Initialise(false);
-}
-*/
-
-void
-installMenu(void)
-{
-	DebugMenuEntry *e;
-	if(DebugMenuLoad()){
-		static const char *ps2pcStr[] = { "PS2", "PC" };
-		static const char *buildPipeStr[] = { "PS2", "Xbox", "Mobile" };
-		static const char *vehPipeStr[] = { "PS2", "PC", "Xbox", "Spec", "Mobile", "Neo", "LCS", "VCS", "Env" };
-		static const char *colFilterStr[] = { "None", "PS2", "PC", "Mobile", "III", "VC", "VCS" };
-		static const char *lightningStr[] = { "Sky only", "Sky and objects" };
-		static const char *shadStr[] = { "Default", "PS2", "PC" };
-		static const char *radStr[] = { "PS2", "Shader" };
-		static const char *coronaStr[] = { "-", "default (PS2)", "Force (PC)" };
-		e = DebugMenuAddVar("SkyGFX", "Config", &currentConfig, setConfig, 1, 0, numConfigs-1, nil);
-		DebugMenuEntrySetWrap(e, true);
-		DebugMenuAddCmd("SkyGFX", "Reload Inis", reloadAllInis);
-
-		menu.dualPassGlobal = DebugMenuAddVarBool32("SkyGFX", "Dual-pass Global", &config->dualPassGlobal, toggledDual);
-		menu.ps2ModulateGlobal = DebugMenuAddVarBool32("SkyGFX", "PS2-modulate Global", &config->ps2ModulateGlobal, toggledModulation);
-		if(iCanHasbuildingPipe){
-			menu.buildingPipe = DebugMenuAddVar("SkyGFX", "Building Pipeline", &config->buildingPipe, nil, 1, BUILDING_PS2, NUMBUILDINGPIPES-1, buildPipeStr);
-			DebugMenuEntrySetWrap(menu.buildingPipe, true);
-			menu.tagsBuildingPipe = DebugMenuAddVar("SkyGFX", "Tags Building Pipeline", &config->tagsBuildingPipe, nil, 1, BUILDING_PS2, NUMBUILDINGPIPES - 1, buildPipeStr);
-			DebugMenuEntrySetWrap(menu.tagsBuildingPipe, true);
-			menu.detailMaps = DebugMenuAddVarBool32("SkyGFX", "Detail Maps", &config->detailMaps, nil);
-			menu.stochastic = DebugMenuAddVarBool32("SkyGFX", "Stochastic Texturing", &config->stochastic, nil);
-		}
-		if(iCanHasvehiclePipe){
-			menu.vehiclePipe = DebugMenuAddVar("SkyGFX", "Vehicle Pipeline", &config->vehiclePipe, nil, 1, CAR_PS2, NUMCARPIPES-1, vehPipeStr);
-			DebugMenuEntrySetWrap(menu.vehiclePipe, true);
-		}
-		menu.envMapSize = DebugMenuAddVar("SkyGFX", "Vehicle Env Map Size", &config->envMapSize, changeEnvMapSize, 1, 4, 2048, nil);
-		menu.envMapFarClipMult = DebugMenuAddVar("SkyGFX|Misc", "Vehicle Env Map Far Clip Mult", &config->envMapFarClipMult, nil, 0.1f, 0.0f, 10.0f);
-		//menu.envMapUseLODs = DebugMenuAddVarBool32("SkyGFX", "Vehicle Env Map Use LODs", &config->envMapUseLODs, nil);
-		menu.grassAddAmbient = DebugMenuAddVarBool32("SkyGFX", "Add Ambient to Grass", &config->grassAddAmbient, nil);
-		menu.backfaceCull = DebugMenuAddVarBool32("SkyGFX", "Grass Backface Culling", &config->backfaceCull, nil);
-		menu.pedShadows = DebugMenuAddVar("SkyGFX", "Ped Shadows", &config->pedShadows, nil, 1, -1, 1, shadStr);
-		DebugMenuEntrySetWrap(menu.pedShadows, true);
-		menu.stencilShadows = DebugMenuAddVar("SkyGFX", "Stencil Shadows", &config->stencilShadows, nil, 1, -1, 1, shadStr);
-		DebugMenuEntrySetWrap(menu.stencilShadows, true);
-		// TODO: allow III/VC somehow?
-		menu.colorFilter = DebugMenuAddVar("SkyGFX", "Colour filter", &config->colorFilter, resetValues, 1, COLORFILTER_NONE, COLORFILTER_MOBILE, colFilterStr);
-		DebugMenuEntrySetWrap(menu.colorFilter, true);
-		menu.doRadiosity = DebugMenuAddVarBool32("SkyGFX", "Radiosity", &config->doRadiosity, resetValues);
-		menu.radiosity = DebugMenuAddVar("SkyGFX", "Radiosity type", &config->radiosity, nil, 1, 0, 1, radStr);
-		DebugMenuEntrySetWrap(menu.radiosity, true);
-		if(iCanHasNeoDrops){
-			menu.neoWaterDrops = DebugMenuAddVarBool32("SkyGFX", "Neo Water drops", &config->neoWaterDrops, nil);
-			menu.neoBloodDrops = DebugMenuAddVarBool32("SkyGFX", "Neo-style Blood drops", &config->neoBloodDrops, nil);
-#ifdef DEBUG
-			DebugMenuAddVarBool8("SkyGFX", "Spray Water drops", (int8*)&WaterDrops::sprayWater, nil);
-			DebugMenuAddVarBool8("SkyGFX", "Spray Blood drops", (int8*)&WaterDrops::sprayBlood, nil);
-#endif
-		}
-
-		DebugMenuAddVarBool8("SkyGFX|Misc", "Blur PS2 Colour Filter", (int8_t*)&CPostEffects::m_bBlurColourFilter, nil);
-		if(iCanHasSunGlare)
-			menu.doglare = DebugMenuAddVarBool32("SkyGFX|Misc", "Sun Glare", &config->doglare, nil);
-		menu.leedsShininessMult = DebugMenuAddVar("SkyGFX|Misc", "Leeds Car Shininess", &config->leedsShininessMult, nil, 0.1f, 0.0f, 10.0f);
-		menu.neoShininessMult = DebugMenuAddVar("SkyGFX|Misc", "Neo Car Shininess", &config->neoShininessMult, nil, 0.1f, 0.0f, 10.0f);
-		menu.neoSpecularityMult = DebugMenuAddVar("SkyGFX|Misc", "Neo Car Specularity", &config->neoSpecularityMult, nil, 0.1f, 0.0f, 10.0f);
-		menu.envShininessMult = DebugMenuAddVar("SkyGFX|Misc", "Env Car Shininess", &config->envShininessMult, nil, 0.1f, 0.0f, 10.0f);
-		menu.envSpecularityMult = DebugMenuAddVar("SkyGFX|Misc", "Env Car Specularity", &config->envSpecularityMult, nil, 0.1f, 0.0f, 10.0f);
-		menu.envPower = DebugMenuAddVar("SkyGFX|Misc", "Env Car Power", &config->envPower, nil, 1.0f, 0.0f, 2000.0f);
-		menu.envFresnel = DebugMenuAddVar("SkyGFX|Misc", "Env Car Fresnel", &config->envFresnel, nil, 0.1f, 0.0f, 10.0f);
-		menu.fixGrassPlacement = DebugMenuAddVarBool32("SkyGFX|Misc", "Fix Grass Placement", &config->fixGrassPlacement, nil);
-		menu.lightningIlluminatesWorld = DebugMenuAddVar("SkyGFX|Misc", "Lightning illuminates", &config->lightningIlluminatesWorld, nil, 1, 0, 1, lightningStr);
-		DebugMenuEntrySetWrap(menu.lightningIlluminatesWorld, true);
-		menu.coronaZtest = DebugMenuAddVar("SkyGFX|Misc", "Corona Z test", &config->coronaZtest, resetValues, 1, -1, 1, coronaStr);
-		DebugMenuEntrySetWrap(menu.coronaZtest, true);
-
-		menu.dualPassDefault = DebugMenuAddVarBool32("SkyGFX|Advanced", "Dual-pass Default", &config->dualPassDefault, nil);
-		menu.dualPassBuilding = DebugMenuAddVarBool32("SkyGFX|Advanced", "Dual-pass Buildings", &config->dualPassBuilding, nil);
-		menu.dualPassVehicle = DebugMenuAddVarBool32("SkyGFX|Advanced", "Dual-pass Vehicles", &config->dualPassVehicle, nil);
-		menu.dualPassPed = DebugMenuAddVarBool32("SkyGFX|Advanced", "Dual-pass Peds", &config->dualPassPed, nil);
-		menu.dualPassGrass = DebugMenuAddVarBool32("SkyGFX|Advanced", "Dual-pass Grass", &config->dualPassGrass, nil);
-		menu.zwriteThreshold = DebugMenuAddVar("SkyGFX|Advanced", "Dual-pass Alpha Threshold", &config->zwriteThreshold, nil, 1, 0, 255, nil);
-		menu.zwriteThresholdGrass = DebugMenuAddVar("SkyGFX|Advanced", "Dual-pass Alpha Grass Threshold", &config->zwriteThresholdGrass, nil, 1, 0, 255, nil);
-		menu.zwriteThresholdPed = DebugMenuAddVar("SkyGFX|Advanced", "Dual-pass Alpha Ped Threshold", &config->zwriteThresholdPed, nil, 1, 0, 255, nil);
-		menu.ps2ModulateBuilding = DebugMenuAddVarBool32("SkyGFX|Advanced", "PS2-modulate Buildings", &config->ps2ModulateBuilding, nil);
-		menu.ps2ModulateGrass = DebugMenuAddVarBool32("SkyGFX|Advanced", "PS2-modulate Grass", &config->ps2ModulateGrass, nil);
-		menu.infraredVision = DebugMenuAddVar("SkyGFX|Advanced", "Infrared vision", &config->infraredVision, nil, 1, 0, 1, ps2pcStr);
-		DebugMenuEntrySetWrap(menu.infraredVision, true);
-		menu.nightVision = DebugMenuAddVar("SkyGFX|Advanced", "Night vision", &config->nightVision, nil, 1, 0, 1, ps2pcStr);
-		DebugMenuEntrySetWrap(menu.nightVision, true);
-		menu.grainFilter = DebugMenuAddVar("SkyGFX|Advanced", "Grain filter", &config->grainFilter, resetValues, 1, 0, 1, ps2pcStr);
-		DebugMenuEntrySetWrap(menu.grainFilter, true);
-
-		menu.rgb1Mult = DebugMenuAddVar("SkyGFX|Advanced", "RGB1 Mult", &config->rgb1Mult, resetValues, 1.0f, 0.0f, 10.0f);
-		menu.rgb2Mult = DebugMenuAddVar("SkyGFX|Advanced", "RGB2 Mult", &config->rgb2Mult, resetValues, 1.0f, 0.0f, 10.0f);
-
-		menu.bYCbCrFilter = DebugMenuAddVarBool8("SkyGFX|ScreenFX", "Enable YCbCr tweak", (int8_t*)&config->bYCbCrFilter, resetValues);
-		menu.lumaScale    = DebugMenuAddVar("SkyGFX|ScreenFX", "Y scale", &config->lumaScale, resetValues, 0.004f, 0.0f, 10.0f);
-		menu.lumaOffset   = DebugMenuAddVar("SkyGFX|ScreenFX", "Y offset", &config->lumaOffset, resetValues, 0.004f, -1.0f, 1.0f);
-		menu.cbScale      = DebugMenuAddVar("SkyGFX|ScreenFX", "Cb scale", &config->cbScale, resetValues, 0.004f, 0.0f, 10.0f);
-		menu.cbOffset     = DebugMenuAddVar("SkyGFX|ScreenFX", "Cb offset", &config->cbOffset, resetValues, 0.004f, -1.0f, 1.0f);
-		menu.crScale      = DebugMenuAddVar("SkyGFX|ScreenFX", "Cr scale", &config->crScale, resetValues, 0.004f, 0.0f, 10.0f);
-		menu.crOffset     = DebugMenuAddVar("SkyGFX|ScreenFX", "Cr offset", &config->crOffset, resetValues, 0.004f, -1.0f, 1.0f);
-
-		// SSAO Settings
-		menu.ssaoEnable = DebugMenuAddVarBool32("SkyGFX|SSAO", "Enable SSAO", &config->ssaoEnable, nil);
-		menu.ssaoRadius = DebugMenuAddVar("SkyGFX|SSAO", "SSAO Radius", &config->ssaoRadius, nil, 0.01f, 0.0f, 5.0f);
-		menu.ssaoPower = DebugMenuAddVar("SkyGFX|SSAO", "SSAO Power", &config->ssaoPower, nil, 0.1f, 0.0f, 10.0f);
-		menu.ssaoKernelSize = DebugMenuAddVar("SkyGFX|SSAO", "SSAO Kernel Size", &config->ssaoKernelSize, nil, 1.0f, 1.0f, 64.0f);
-		menu.ssaoSampleCount = DebugMenuAddVar("SkyGFX|SSAO", "SSAO Sample Count", &config->ssaoSampleCount, nil, 1, 1, 64, nil);
-
-		// SMAA Settings
-		static const char *smaaPresetStr[] = { "LOW", "MEDIUM", "HIGH", "ULTRA" };
-		menu.smaaEnable = DebugMenuAddVarBool32("SkyGFX|SMAA", "Enable SMAA", &config->smaaEnable, nil);
-		menu.smaaPreset = DebugMenuAddVar("SkyGFX|SMAA", "SMAA Preset", &config->smaaPreset, nil, 1, 0, 3, smaaPresetStr);
-		DebugMenuEntrySetWrap(menu.smaaPreset, true);
-		menu.smaaPredication = DebugMenuAddVarBool32("SkyGFX|SMAA", "SMAA Predication", &config->smaaPredication, nil);
-		menu.smaaTemporal = DebugMenuAddVarBool32("SkyGFX|SMAA", "SMAA Temporal", &config->smaaTemporal, nil);
-
-		// GTA IV Mode Settings
-		menu.ivMode = DebugMenuAddVarBool32("SkyGFX|GTA IV", "Enable GTA IV Mode", &config->ivMode, nil);
-		menu.ivDesaturation = DebugMenuAddVar("SkyGFX|GTA IV", "Desaturation", &config->ivDesaturation, nil, 0.01f, 0.0f, 1.0f);
-		menu.ivGamma = DebugMenuAddVar("SkyGFX|GTA IV", "Gamma", &config->ivGamma, nil, 0.01f, 0.1f, 3.0f);
-		menu.ivVignetteIntensity = DebugMenuAddVar("SkyGFX|GTA IV", "Vignette Intensity", &config->ivVignetteIntensity, nil, 0.01f, 0.0f, 2.0f);
-		menu.ivVignetteRadius = DebugMenuAddVar("SkyGFX|GTA IV", "Vignette Radius", &config->ivVignetteRadius, nil, 0.01f, 0.0f, 2.0f);
-		menu.ivVignetteContrast = DebugMenuAddVar("SkyGFX|GTA IV", "Vignette Contrast", &config->ivVignetteContrast, nil, 0.01f, 0.0f, 5.0f);
-		menu.ivBloomIntensity = DebugMenuAddVar("SkyGFX|GTA IV", "Bloom Intensity", &config->ivBloomIntensity, nil, 0.01f, 0.0f, 2.0f);
-		menu.ivExposure = DebugMenuAddVar("SkyGFX|GTA IV", "Exposure", &config->ivExposure, nil, 0.01f, 0.0f, 3.0f);
-
-/*
-		DebugMenuAddVarBool32("SkyGFX", "Timecycle usePC", &config->usePCTimecyc, nil);
-		DebugMenuAddCmd("SkyGFX", "Timecycle PostFX Alpha *1", [](){
-				Nop(0x5BBF6F, 2);
-				Nop(0x5BBF83, 2);
-			});
-		DebugMenuAddCmd("SkyGFX", "Timecycle PostFX Alpha *2", [](){
-				Patch<uint16>(0x5BBF6F, 0xC0DC);
-				Patch<uint16>(0x5BBF83, 0xC0DC);
-			});
-		DebugMenuAddCmd("SkyGFX", "Load PS2 timecyc.dat", [](){ LoadTimecycle("timecyc.dat"); });
-		DebugMenuAddCmd("SkyGFX", "Load PS2 timecyc_pc.dat", [](){ LoadTimecycle("timecyc_pc.dat"); });
-*/
-
-//#ifdef DEBUG
-//		DebugMenuAddVar("Debug", "Mirror Z", &mirrorVal, fixMirrors, 0.05f, 200.0f, 250.0f);
-//#endif
-
-		hasMenu = true;
-		//void privatepatches(void);
-		//privatepatches();
-	}
-}
+static int (*IsAlreadyRunning_orig)();
 
 int
 InjectDelayedPatches()
@@ -1891,6 +1655,10 @@ InjectDelayedPatches()
 	// don't assign building pipe just because a model has two sets of prelight
 	// or when it already has a pipeline
 	explicitBuildingPipe = explicitBuildingPipe_tmp;
+
+	// Initialize normal map plugin BEFORE building pipe hooks
+	// This sets gHasExternalNormalMapPlugin so buildingPipe doesn't hook 0x5D7F40
+	normalmap_init();
 
 	// custom building pipeline
 	if(iCanHasbuildingPipe)
@@ -2015,6 +1783,9 @@ InjectDelayedPatches()
 	InterceptCall(&CWaterLevel__RenderAndEmptyRenderBuffer, CWaterLevel__RenderAndEmptyRenderBuffer_hook, 0x6E91E4);
 	InterceptCall(&CWaterLevel__RenderAndEmptyRenderBuffer, CWaterLevel__RenderAndEmptyRenderBuffer_hook, 0x6E9963);*/
 
+	// TODO: ImGui debug menu via EndScene hook - disabled for now
+	// The EndScene hook was breaking game UI rendering
+
 	dbglog("  installMenu...");
 	installMenu();
 	dbglog("=== InjectDelayedPatches complete ===");
@@ -2073,21 +1844,15 @@ DllMain(HINSTANCE hInst, DWORD reason, LPVOID)
 		defaultColourTopVOffset = CPostEffects::m_colourTopVOffset;
 		defaultColourBottomVOffset = CPostEffects::m_colourBottomVOffset;
 
-		// windowed - not working yet
-//		Nop(0x7462FF, 2);
-//		Nop(0x745B55, 2);
-///		InjectHook(0x74639B, selectVM, PATCH_JUMP);
-
 		// moon mask
 		InjectHook(0x713C4C, renderMoonMask, PATCH_JUMP);
 		dbglog("  moon mask OK");
 
-		// Apply delayed patches directly from DllMain instead of hooking 0x74872D (IsAlreadyRunning).
-		// This avoids clashing with SilentPatch which hooks the exact same address.
-		// All delayed patches are just hook installations and memory patches — safe to apply here.
-		dbglog("  applying delayed patches directly...");
-		InjectDelayedPatches();
-		dbglog("  delayed patches OK");
+		// Defer InjectDelayedPatches to IsAlreadyRunning (0x74872D)
+		// Patches must run during CGame::Initialise, not during DLL_PROCESS_ATTACH
+		IsAlreadyRunning_orig = (int(*)())(*(int*)(0x74872D+1) + 0x74872D + 5);
+		InjectHook(0x74872D, InjectDelayedPatches);
+		dbglog("  IsAlreadyRunning hook OK");
 
 		InjectHook(0x5BCF14, afterStreamIni, PATCH_JUMP);
 		InjectHook(0x7491C0, myDefaultCallback, PATCH_JUMP);
@@ -2097,20 +1862,11 @@ DllMain(HINSTANCE hInst, DWORD reason, LPVOID)
 		//InjectHook(0x7572CC, rxD3D9DefaultRenderCallback_VertexShaderHook, PATCH_JUMP);
 		InjectHook(0x5DADB7, fixSeed, PATCH_JUMP);
 
-		// Attach normal map plugin for vehicle/vegetation normal maps
-		extern "C" bool RpNormMapPluginAttach(void);
-		if(RpNormMapPluginAttach()){
-			dbglog("RpNormMapPluginAttach: success");
-		}else{
-			dbglog("RpNormMapPluginAttach: failed");
-		}
+	// normalmap_init() is called in InjectDelayedPatches before hookBuildingPipe()
+	// It calls RpNormMapPluginAttach(), sets gHasExternalNormalMapPlugin, and hooks 0x5DA610/0x5D7F40/0x5D5B80
 
-		// Hook normal map pipeline creation to capture normal map textures
-		// Vehicle pipeline: 0x5DA610 is CustomPipeAtomicSetup
-		// Building pipeline: 0x5D7F40/0x5D5B80
-		InjectHook(0x5DA610, CustomPipeAtomicSetup_Hook, PATCH_JUMP);
-		InjectHook(0x5DAE61, saveIntensity, PATCH_JUMP);
-		Patch(0x5DAEC8, setTextureAndColor);
+		// 0x5DA610 is CustomPipeAtomicSetup - DO NOT hook it with InjectHook + EAXJMP wrapper
+		// that creates an infinite loop (wrapper jumps to hooked address which calls wrapper again)
 
 		// add dual pass for PC pipeline
 		InjectHook(0x5D9EEB, D3D9RenderDefault_DUAL);
@@ -2131,9 +1887,9 @@ DllMain(HINSTANCE hInst, DWORD reason, LPVOID)
 		*(void**)0xA9AD78 = (void*)TagRenderCB;	/* This is the (unused) material pipeline of player tags */
 
 		// postfx
-		InjectHook(0x704D1E, UniPostFX_ApplyColorFilter);
-		InjectHook(0x704D5D, UniPostFX_ApplyRadiosity);
-		InjectHook(0x704FB3, UniPostFX_ApplyRadiosity);
+		InjectHook(0x704D1E, CPostEffects::ColourFilter_switch);
+		InjectHook(0x704D5D, CPostEffects::Radiosity);
+		InjectHook(0x704FB3, CPostEffects::Radiosity);
 		InjectHook(0x704D48, CPostEffects::DarknessFilter_fix);
 
 		// infrared vision
@@ -2147,7 +1903,7 @@ DllMain(HINSTANCE hInst, DWORD reason, LPVOID)
 		// unused
 		InjectHook(0x705091, CPostEffects::Grain_PS2);
 
-		InjectHook(0x53EBE9, UniPostFX_ApplyFinalEffects);
+		InjectHook(0x53EBE9, CPostEffects::DrawFinalEffects);
 
 		// fix pointlight fog
 		InjectHook(0x700B6B, CSprite__RenderBufferedOneXLUSprite_Rotate_Aspect);

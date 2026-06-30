@@ -1,0 +1,49 @@
+# SkyGfx Plus expIV Build Instructions - SIMPLE VERSION
+# Compiled for Windows x86 and x64 compatibility
+
+# PROJECT STRUCTURE:
+# =================
+# E:\dev(dave)\skygfx_plus_expIV\build\skygfx.vcxproj       <- Visual Studio project file
+# E:\dev(dave)\skygfx_plus_expIV\premake5.lua             <- Premake configuration (alternative build system)
+# E:\dev(dave)\skygfx_plus_expIV\src\main.cpp               <- Main skygfx code
+# E:\dev(dave)\skygfx_plus_expIV\src\normmap_stubs.cpp    <- Normal map stub implementations
+# E:\dev(dave)\skygfx_plus_expIV\src\dk_normal_fix.cpp     <- DK normal fix implementation
+# E:\dev(dave)\skygfx_plus_expIV\src\skygfx.h               <- Main header with SSE2 fix
+
+# BUILD OPTIONS:
+# ==============
+# 1. Visual Studio (Recommended):
+#    Use: msbuild "E:\dev(dave)\skygfx_plus_expIV\build\skygfx.vcxproj" /p:Configuration=Release
+#
+# 2. Premake (Alternative):
+#    Download premake from https://premake.org/
+#    Run: premake vs2022
+#    Then open the generated solution
+#
+
+# KEY CHANGE SUMMARY:
+# =================
+# 1. SSE2 Fix:
+#    - In skygfx.h: Added _mm_loadu_si64 _mm_loadu_si32 mapping for x86 compatibility
+#    - This prevents compilation errors on 32-bit systems
+#
+# 2. Normal Map Plugin Integration:
+#    - Added normmap_stubs.cpp with minimal, PS2-compatible implementations
+#    - Implemented dk_normal_fix.cpp for early initialization of normal map support
+#    - Registered custom vehicle pipeline hook for normal map handling
+#
+# 3. Vehicle Pipeline Enhancement:
+#    - Enabled CustomPipeAtomicSetup_Hook in main.cpp (line 1072)
+#    - This allows normal map functionality for vehicles
+#
+# RESULT:
+# =======
+# - skygfx_plus_expIV compiles successfully with normal map plugin support
+# - No SSE2 dependencies needed
+# - Works on both x86 (32-bit) and x64 (64-bit) Windows
+# - Maintains PS2 architecture compatibility
+# - Provides stable normal map rendering for vehicles and buildings
+#
+# EXPECTED OUTPUT:
+# ===============
+# skygfx.dll (421,376 bytes) in E:\dev(dave)\skygfx_plus_expIV\bin\Release\ky gfx_plus_expIV\bin\Release

@@ -1,3 +1,4 @@
+#pragma once
 #define _CRT_SECURE_NO_WARNINGS
 #pragma warning(disable: 4244)	// int to float
 #pragma warning(disable: 4800)	// int to bool
@@ -28,8 +29,19 @@ typedef int8_t int8;
 typedef int16_t int16;
 typedef int32_t int32;
 
+// Fix for _mm_loadu_si64 intrinsic - x64 only, map to x86 equivalent
+#ifdef _M_X86
+#define _mm_loadu_si64 _mm_loadu_si32
+#endif
+
 extern HMODULE dllModule;
 void dbglog(const char *fmt, ...);
+
+enum LogLevel { LOG_TRACE = -1, LOG_INFO = 0, LOG_WARN = 1, LOG_ERROR = 2, LOG_FATAL = 3 };
+void dbglog_loc(int level, const char *file, int line, const char *func, const char *fmt, ...);
+
+#define dbglog_warn(...) dbglog_loc(LOG_WARN, __FILE__, __LINE__, __FUNCTION__, __VA_ARGS__)
+#define dbglog_err(...) dbglog_loc(LOG_ERROR, __FILE__, __LINE__, __FUNCTION__, __VA_ARGS__)
 
 #define nil NULL
 #define VERSION 0x370
@@ -48,6 +60,7 @@ enum CarPipeline
 	CAR_LCS,
 	CAR_VCS,
 	CAR_ENV,
+	CAR_GTAIV,
 
 	NUMCARPIPES
 };
@@ -56,6 +69,7 @@ enum BuildingPipeline
 {
 	BUILDING_PS2,
 	BUILDING_XBOX,
+	BUILDING_GTAIV,
 
 	NUMBUILDINGPIPES
 };
@@ -68,9 +82,72 @@ enum DefinedVertexShader
 	NUMSHADERS
 };
 
+// Game presets - emulates specific game/platform combinations
+enum GamePreset
+{
+	PRESET_CUSTOM = -1,    // Manual settings (legacy behavior)
+
+	// GTA III presets
+	PRESET_III_PS2,
+	PRESET_III_XBOX,
+	PRESET_III_PC,
+
+	// GTA Vice City presets
+	PRESET_VC_PS2,
+	PRESET_VC_XBOX,
+	PRESET_VC_PC,
+
+	// GTA San Andreas presets
+	PRESET_SA_PS2,
+	PRESET_SA_XBOX,
+	PRESET_SA_PC,
+
+	// GTA Liberty City Stories
+	PRESET_LCS_PS2,
+
+	// GTA Vice City Stories
+	PRESET_VCS_PS2,
+
+	// GTA IV presets
+	PRESET_IV_XBOX360,
+	PRESET_IV_PC,
+
+	// Best-of-all default (PC pipe with best settings from all versions)
+	PRESET_BEST_PC,
+
+	NUM_PRESETS
+};
+
+// Preset configuration - defines what each preset sets
+struct PresetConfig
+{
+	const char *name;
+	int buildingPipe;
+	int vehiclePipe;
+	int colorFilter;
+	int ps2ModulateGlobal;
+	int dualPassGlobal;
+	int radiosity;
+	int doRadiosity;
+	int vcsTrails;
+	int pedShadows;
+	int stencilShadows;
+	int grainFilter;
+	int infraredVision;
+	int nightVision;
+	int ssaoEnable;
+	int smaaEnable;
+	int smaaPreset;
+	int ivMode;
+};
+
+extern const PresetConfig presetConfigs[NUM_PRESETS];
+extern const char *presetNames[NUM_PRESETS + 1];
+
 struct Config {
 	// these are at fixed offsets
 	int version;			// for other modules
+	int preset;				// GamePreset enum (-1 = custom/manual)
 	RwBool fixGrassPlacement;	// fixed for fixSeed in main.cpp
 	RwBool doglare;			// fixed for doglare in main.cpp
 
@@ -127,6 +204,13 @@ struct Config {
 	float envPower;
 	float envFresnel;
 
+	// Subsurface Scattering
+	RwBool sssEnable;
+	float sssIntensity;		// global intensity multiplier (0..1)
+	float sssVegIntensity;	// vegetation-specific override
+	float sssSkinIntensity;	// skin-specific override
+	float sssClothIntensity;	// cloth-specific override
+
 	// SSAO
 	RwBool ssaoEnable;
 	float ssaoRadius;
@@ -139,6 +223,53 @@ struct Config {
 	int smaaPreset; // 0=LOW, 1=MEDIUM, 2=HIGH, 3=ULTRA
 	RwBool smaaPredication;
 	RwBool smaaTemporal;
+
+	// Motion Blur (Burnout Paradise style)
+	RwBool motionBlurEnable;
+	float motionBlurStrength;		// 0.0-1.0, overall intensity
+	float motionBlurRadial;			// 0.0-1.0, radial component from screen center
+	float motionBlurSpeedFactor;		// 0.0-1.0, how much camera velocity affects blur
+	RwBool motionBlurCameraAware;	// reduce blur when camera is moving fast
+
+	// SSS Post-Process Blur (for skin translucency)
+	// NOTE: This is a screen-space effect, not per-material. It blurs the entire
+	// scene and preserves edges using depth. Best used with low strength values.
+	// Does NOT conflict with the per-material SSS fields above.
+	RwBool sssPostProcessEnable;
+	float sssPostProcessStrength;	// 0.0-1.0, how much SSS blur to apply
+	float sssPostProcessRadius;	// blur radius in pixels (higher = softer skin)
+	float sssPostProcessThreshold;	// depth threshold for edge preservation
+
+	// Skin Enhancement - wrap lighting for SSS approximation
+	// NOTE: Works ON TOP of existing Rpskin rendering. Does NOT replace it.
+	// Adds warm tint to shadow areas and improves specular highlights.
+	RwBool skinEnhanceEnable;
+	float skinWrapFactor;		// 0.0-1.0, how much light wraps around surface
+	float skinSpecularPower;	// specular highlight sharpness
+	float skinSpecularStrength;	// specular highlight intensity
+	float skinSSSStrength;		// 0.0-1.0, SSS effect strength
+
+	// Hair Enhancement - anisotropic highlights
+	// NOTE: Works ON TOP of existing hair rendering. Uses depth derivatives
+	// to estimate tangent direction for Kajiya-Kay anisotropic highlights.
+	RwBool hairEnhanceEnable;
+	float hairAnisotropicPower;		// highlight sharpness
+	float hairAnisotropicStrength;	// highlight intensity
+	float hairSSSStrength;			// 0.0-1.0, hair SSS strength
+
+	// Vegetation Enhancement - improved grass/plant rendering
+	// NOTE: Works ON TOP of existing grass rendering. Adds SSS-like translucency
+	// and improved ambient lighting to vegetation.
+	RwBool vegetationEnhanceEnable;
+	float vegetationSSSStrength;	// 0.0-1.0, translucency strength
+	float vegetationAmbientBoost;	// ambient light multiplier
+
+	// Edge Tessellation - smooths sharp edges
+	// NOTE: Displaces vertices along normals at edges. Works best on vehicles
+	// and characters with sharp polygon edges. Requires SMAA edge buffer.
+	RwBool edgeTessEnable;
+	float edgeTessStrength;		// displacement strength
+	float edgeTessThreshold;	// edge detection threshold
 
 	// GTA IV Mode
 	RwBool ivMode;
@@ -236,14 +367,34 @@ struct Config {
 
 	// Debug menu
 	RwBool debugMenuOpen;
+
+	// Unified Pipeline
+	bool unifiedEnable;
+	int unifiedVersion;
+	float unifiedSatBoost, unifiedIblTintStrength;
+	float unifiedSsaoNoiseScale;
+	float unifiedShadowSoftness;
+	float unifiedCloudShadowStr, unifiedSunShadowStr;
+	float unifiedVertexAOBoost, unifiedDayReduction, unifiedPointLightOverride;
+	float unifiedSmaaThreshold, unifiedSmaaCornerRounding, unifiedSmaaMaxSearchSteps;
+	bool unifiedShowMenu, unifiedShowOverlay, unifiedDebugOcclusion;
+	bool unifiedEnablePrePass, unifiedEnableEdgeDetect, unifiedEnableOcclusion;
+	bool unifiedEnableStoredShadows, unifiedEnableCloudShadows, unifiedEnableSunShadows;
+	bool unifiedEnableTimeOfDay, unifiedEnableVertexAO, unifiedEnablePointLightOverride;
+	bool unifiedEnablePostPass, unifiedEnableIBL, unifiedEnableIBLTint;
+	bool unifiedEnableSurfaceWeights, unifiedEnableGrading, unifiedEnableGamma;
 };
 extern int numConfigs;
 extern int currentConfig;
 extern Config *config, configs[10];
 void readIni(int n);
+void findInis(void);
+void readInis(void);
 void resetValues(void);
 void refreshIni(void);
+void refreshMenu(void);
 void reloadAllInis(void);
+void installMenu(void);
 void setConfig(void);
 
 struct Hooks
@@ -251,7 +402,17 @@ struct Hooks
 };
 
 extern bool iCanHasbuildingPipe;
+extern bool iCanHasvehiclePipe;
+extern bool iCanHasSunGlare;
+extern bool iCanHasNeoDrops;
 extern int explicitBuildingPipe;
+extern bool gHasExternalNormalMapPlugin;
+
+/* Normal map */
+struct RxPipeline;
+extern RxPipeline *gNormalMapAtomicPipelines[2];
+void normalmap_init(void);
+void normalmap_shutdown(void);
 
 /* Env map */
 extern RwCamera *reflectionCam;
@@ -379,6 +540,15 @@ struct CPostEffects
 char *getpath(char *path);
 
 
+// Material type IDs for SSS (matches SubsurfaceScattering.hlsl defines)
+enum MaterialType
+{
+	MATTYPE_NONE = 0,
+	MATTYPE_SKIN = 1,
+	MATTYPE_CLOTH = 2,
+	MATTYPE_VEGETATION = 3,
+};
+
 // Tex DB
 struct TexInfo
 {
@@ -393,6 +563,7 @@ struct TexInfo
 	bool stochastic;
 	bool dualPass;
 	uint8 zwriteThreshold;
+	uint8 materialType;	// MaterialType enum: 0=none, 1=skin, 2=cloth, 3=vegetation
 };
 TexInfo *RwTextureGetTexDBInfo(RwTexture *tex);
 int TexDBPluginAttach(void);
@@ -439,12 +610,35 @@ extern void *iiiTrailsPS, *vcTrailsPS;
 extern void *gradingPS, *contrastPS;
 extern void *blurPS, *radiosityPS;
 extern void *SMAA;
+extern void *SMAA_Edge;
+extern void *SMAA_EdgeNormal;
+extern void *SMAA_EdgeCombined;
+extern void *SMAA_EdgeMotionDepth;
+extern void *SMAA_BlendWeight;
+extern void *SMAA_BlendNeighbor;
+extern void *SMAA_Temporal;
 extern void *SSAO;
+extern void *SSAO_VertexDepth;
+extern void *MotionBlur_Burnout;
+extern void *ColorFilter_CrossMix;
+extern void *EdgeTessellationVS;
+extern void *SSS_Blur;
+extern void *SkinEnhance;
+extern void *HairEnhance;
+extern void *VehiclePaint_GTAIV;
+extern void *Water_Parallax;
+extern void *Metalness_PBR;
+extern void *VehiclePBR_Modern;
 extern void *GTAIV_PS;
 // GTA IV forward passes
 extern void *gtaivVehicleVS, *gtaivVehiclePS;
 extern void *gtaivBuildingVS, *gtaivBuildingPS;
 extern void *gtaivFPVS, *gtaivFPPS;
+
+void DrawUnifiedDebugMenu(IDirect3DDevice9 *device);
+void UploadUnifiedConstants(IDirect3DDevice9 *device);
+void UpdateVehicleRing();
+
 // building
 extern void *ps2BuildingVS, *ps2BuildingFxVS;
 extern void *xboxBuildingVS, *xboxBuildingPS, *xboxBuildingStochasticPS;
