@@ -1,116 +1,185 @@
-# Skrillex Commit Message Pool
-# Use these for future commits - Skrillex lyrics/references in all languages
+# Skrillex Lyrics Commit Message Pool
+# Actual lyrics from Skrillex songs - use for future commits
 
-# English
-"fix: BANGARANG! [description]"
-"fix: SCARY MONSTERS! [description]"
-"fix: KYOTO! [description]"
-"fix: RECESS! [description]"
-"fix: FIRST OF THE YEAR! [description]"
-"fix: ROCK N ROLL! [description]"
-"fix: MAKE IT BUN DEM! [description]"
-"fix: ALL I ASK OF YOU! [description]"
-"fix: WEEKENDS! [description]"
-"fix: EQUINOX! [description]"
-"fix: SUMMIT! [description]"
-"fix: DIRTY VIBE! [description]"
-"fix: TRY IT OUT! [description]"
-"fix: RAGGA BOMB! [description]"
-"fix: STRANGER! [description]"
-"fix: DOMINATE! [description]"
-"fix: HUMBLE (Skrillex Remix)! [description]"
-"fix: WHERE ARE U NOW! [description]"
-"fix: MOUNTAIN DEW! [description]"
-"fix: WOULD YOU EVER! [description]"
+# Bangarang
+"fix: Shut the door and kill the lights! [description]"
+"fix: Bangarang! [description]"
+"fix: Hey yo I got that bangarang! [description]"
 
-# Japanese
-"修正: 京都！[description]"
-"修正: 怪物！[description]"
-"修正: バンバランス！[description]"
+# First of the Year (Equinox)
+"fix: Call 911 now! [description]"
+"fix: Equinox! [description]"
+"fix: First of the year! [description]"
 
-# Spanish
-"arreglar: ¡BANGARANG! [description]"
-"arreglar: ¡MONSTRUOS TERRIBLES! [description]"
-"arreglar: ¡KIOTO! [description]"
+# Scary Monsters and Nice Sprites
+"fix: Oh my God! [description]"
+"fix: Scary monsters and nice sprites! [description]"
+"fix: Try to scream but nothing comes out! [description]"
 
-# French
-"corriger: BANGARANG! [description]"
-"corriger: MONSTRES EFFRAYANTS! [description]"
-"corriger: KYOTO! [description]"
+# Kyoto
+"fix: Kyoto! [description]"
+"fix: Let me see you drop! [description]"
 
-# German
-"fixieren: BANGARANG! [description]"
-"fixieren: SCHRECKLICHE MONSTER! [description]"
-"fixieren: KYOTO! [description]"
+# Recess
+"fix: Recess! [description]"
+"fix: School's out! [description]"
 
-# Korean
-"수정: 방가랑! [description]"
-"수정: 무서운 괴물! [description]"
-"수정: 교토! [description]"
+# Rock N Roll
+"fix: Rock n roll! [description]"
+"fix: Let's go! [description]"
 
-# Chinese (Simplified)
-"修复: 班加朗！[description]"
-"修复: 可怕的怪物！[description]"
-"修复: 京都！[description]"
+# Make It Bun Dem
+"fix: Make it bun dem! [description]"
+"fix: Light it up! [description]"
 
-# Portuguese
-"corrigir: BANGARANG! [description]"
-"corrigir: MONSTROS ASSUSTADORES! [description]"
-"corrigir: QUIOTO! [description]"
+# El Chapo
+"fix: El Chapo! [description]"
+"fix: Run the block! [description]"
 
-# Russian
-"исправить: БАНГАРАНГ! [description]"
-"исправить: СТРАШНЫЕ МОНСТРЫ! [description]"
-"исправить: КИОТО! [description]"
+# Where Are U Now
+"fix: Where are u now? [description]"
+"fix: I need you! [description]"
 
-# Arabic
-"إصلاح: بانجارانج! [description]"
-"إصلاح: وحوش مخيفة! [description]"
-"إصلاح: كيوتو! [description]"
+# Would You Ever
+"fix: Would you ever? [description]"
+"fix: Let's go all the way! [description]"
 
-# Hindi
-"ठीक करें: बंगारंग! [description]"
-"ठीक करें: डरावने राक्षस! [description]"
-"ठीक करें: क्योटो! [description]"
+# Summit
+"fix: Summit! [description]"
+"fix: Climb to the top! [description]"
 
-# Swedish
-"fixa: BANGARANG! [description]"
-"fixa: LÄSKIGA MONSTER! [description]"
-"fixa: KYOTO! [description]"
+# Stranger
+"fix: Stranger! [description]"
+"fix: Who are you? [description]"
 
-# Dutch
-"fixen: BANGARANG! [description]"
-"fixen: ENGE MONSTERS! [description]"
-"fixen: KYOTO! [description]"
+# Ragga Bomb
+"fix: Ragga bomb! [description]"
+"fix: Drop it! [description]"
 
-# Polish
-"naprawić: BANGARANG! [description]"
-"naprawić: STRASZNE POTWORY! [description]"
-"naprawić: KIOTO! [description]"
+# Try It Out
+"fix: Try it out! [description]"
+"fix: Let me see you move! [description]"
 
-# Turkish
-"düzelt: BANGARANG! [description]"
-"düzelt: KORKUNÇ CANAVARLAR! [description]"
-"düzelt: KYOTO! [description]"
+# Dirty Vibe
+"fix: Dirty vibe! [description]"
+"fix: Feel the bass! [description]"
 
-# Italian
-"correggere: BANGARANG! [description]"
-"correggere: MOSTRI SPAVENTOSI! [description]"
-"correggere: KYOTO! [description]"
+# All I Ask of You
+"fix: All I ask of you! [description]"
+"fix: Just stay with me! [description]"
 
-# Fun variations
-"fix: DROP THE BASS! [description]"
-"fix: LET THE BEAT DROP! [description]"
-"fix: TURN DOWN FOR WHAT! [description]"
-"fix: WHERE ARE MY KEYS! [description]"
-"fix: CALL 911! [description]"
-"fix: BASS CANNON! [description]"
-"fix: WUB WUB WUB! [description]"
-"fix: STEP BACK! [description]"
-"fix: BREAKING A SWEAT! [description]"
-"fix: COAST IS CLEAR! [description]"
-"fix: THE REASON! [description]"
-"fix: WITH YOU FRIENDS! [description]"
-"fix: DYNA-MITE! [description]"
-"fix: FIRE AWAY! [description]"
-"fix: SHOTTY! [description]"
+# Weekend
+"fix: Weekend! [description]"
+"fix: Party time! [description]"
+
+# Fire Away
+"fix: Fire away! [description]"
+"fix: Shoot to kill! [description]"
+
+# Coast Is Clear
+"fix: Coast is clear! [description]"
+"fix: Go go go! [description]"
+
+# The Reason
+"fix: The reason! [description]"
+"fix: Why do we fall? [description]"
+
+# With Your Friends
+"fix: With your friends! [description]"
+"fix: Together we rise! [description]"
+
+# Dyna-Mite
+"fix: Dyna-mite! [description]"
+"fix: Explosive! [description]"
+
+# Shotty
+"fix: Shotty! [description]"
+"fix: Locked and loaded! [description]"
+
+# Breaking a Sweat
+"fix: Breaking a sweat! [description]"
+"fix: Push it to the limit! [description]"
+
+# Steps
+"fix: Step by step! [description]"
+"fix: One foot at a time! [description]"
+
+# Voltage
+"fix: Voltage! [description]"
+"fix: Electric! [description]"
+
+# Fuji Opener
+"fix: Fuji opener! [description]"
+"fix: Let's go! [description]"
+
+# Mumbai Power
+"fix: Mumbai power! [description]"
+"fix: Full force! [description]"
+
+# Supersonic
+"fix: Supersonic! [description]"
+"fix: Faster than sound! [description]"
+
+# War Cry
+"fix: War cry! [description]"
+"fix: Battle stations! [description]"
+
+# Red Lips
+"fix: Red lips! [description]"
+"fix: Kiss me! [description]"
+
+# Chicken Soup
+"fix: Chicken soup! [description]"
+"fix: Feed the soul! [description]"
+
+# Sahara
+"fix: Sahara! [description]"
+"fix: Desert vibes! [description]"
+
+# Ping Pong
+"fix: Ping pong! [description]"
+"fix: Back and forth! [description]"
+
+# Badman
+"fix: Badman! [description]"
+"fix: Don't mess! [description]"
+
+# Bun Dem
+"fix: Bun dem! [description]"
+"fix: Light it up! [description]"
+
+# Popping
+"fix: Popping! [description]"
+"fix: Going off! [description]"
+
+# Summer
+"fix: Summer! [description]"
+"fix: Heat wave! [description]"
+
+# Doom
+"fix: Doom! [description]"
+"fix: The end is near! [description]"
+
+# Butch
+"fix: Butch! [description]"
+"fix: Hard as nails! [description]"
+
+# Voltage (Japanese)
+"fix: 電圧！[description]"
+"fix: 電気的！[description]"
+
+# Bangarang (Japanese)
+"fix: バンバランス！[description]"
+"fix: すごい！[description]"
+
+# Scary Monsters (Japanese)
+"fix: 怪物！[description]"
+"fix: かわいい！[description]"
+
+# First of the Year (Japanese)
+"fix: 年初！[description]"
+"fix: 救急車！[description]"
+
+# Kyoto (Japanese)
+"fix: 京都！[description]"
+"fix: 落ちろ！[description]"
