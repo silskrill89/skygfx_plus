@@ -13,6 +13,7 @@ A rewrite of [SkyGFX](https://github.com/aap/skygfx) by aap, bringing modern ren
 ![Screenshot 7](screenshots/07.jpg)
 ![Screenshot 8](screenshots/08.jpg)
 ![Screenshot 9](screenshots/09.jpg)
+![Screenshot 10](screenshots/10.jpg)
 
 ## Features
 
