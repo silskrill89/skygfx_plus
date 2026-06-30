@@ -1,4 +1,5 @@
 // Vehicle PBR Shader with Color Separation (ps_3_0)
+// Unified shader: paint, chrome, rubber, glass, dirt
 // Uses GTA SA's material plugin data for classification
 // Supports 4 vehicle color channels (MAT1-MAT4)
 // PS2 spherical env mapping
@@ -8,6 +9,7 @@
 //   specularity > 0 = specular (paint, metal)
 //   Both = metallic paint
 //   Neither = rubber/plastic
+//   Glass: detected by atomic alpha flag, rendered with refraction
 //
 // Vehicle Colors (from GTA SA):
 //   MAT1 = primary body color (most of the car)
@@ -21,25 +23,27 @@
 //   c2 = (mat2Color.r, mat2Color.g, mat2Color.b, 0)
 //   c3 = (mat3Color.r, mat3Color.g, mat3Color.b, 0)
 //   c4 = (mat4Color.r, mat4Color.g, mat4Color.b, 0)
-//   c5 = (roughness, reflectance, envMapIntensity, 0)
-//   c6 = (envColor.r, envColor.g, envColor.b, 0)
+//   c5 = (roughness, reflectance, envMapIntensity, glassReflectivity)
+//   c6 = (envColor.r, envColor.g, envColor.b, glassOpacity)
 //
 // Textures:
 //   s0 = vehicle diffuse texture
 //   s1 = environment map (spherical)
 //   s2 = specular map (if available)
+//   s3 = glass normal map (for distortion)
 
 sampler2D vehicleDiffuseTex : register(s0);
 sampler2D envMapTex         : register(s1);
 sampler2D specMapTex        : register(s2);
+sampler2D glassNormalTex    : register(s3);
 
 uniform float4 materialParams : register(c0); // x=shininess, y=specularity, z=fresnel, w=metalness
 uniform float4 mat1Color      : register(c1); // xyz=primary color, w=clear coat
 uniform float4 mat2Color      : register(c2); // xyz=secondary color
 uniform float4 mat3Color      : register(c3); // xyz=tertiary color
 uniform float4 mat4Color      : register(c4); // xyz=quaternary color
-uniform float4 renderParams   : register(c5); // x=roughness, y=reflectance, z=envMapIntensity
-uniform float4 envColor       : register(c6); // xyz=environment tint
+uniform float4 renderParams   : register(c5); // x=roughness, y=reflectance, z=envMapIntensity, w=glassReflectivity
+uniform float4 envColor       : register(c6); // xyz=environment tint, w=glassOpacity
 
 struct PS_INPUT
 {

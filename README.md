@@ -98,35 +98,74 @@ python tools\compile_shaders.py
 ## Credits
 
 ### Original SkyGFX
-- **aap** - Original SkyGFX author
-- **Junior** - JuniorDjjr fork with additional features
-- **DK22Pac** - Normal mapping plugin
+- **aap** - Original SkyGFX author, the foundation of this project
+- **Junior (JuniorDjjr)** - JuniorDjjr fork with extensive additional features and improvements
+- **DK22Pac** - Normal mapping plugin for GTA SA
+- **Silent** - SilentPatch and various GTA SA fixes
+- **_AG** - RenderWare documentation and reverse engineering
+- **The GTA Modding Community** - Reverse engineering, documentation, and countless hours of research
 
-### SMAA
-- **Jorge Jimenez** - SMAA algorithm author
+### Anti-Aliasing (SMAA)
+- **Jorge Jimenez** - SMAA algorithm lead author, "Enhanced Subpixel Morphological Antialiasing" (2011)
 - **Jose I. Echevarria** - SMAA co-author
-- **Tiago Sousa** - SMAA co-author (Crytek)
+- **Tiago Sousa** (Crytek) - SMAA co-author, later integrated into CryEngine
 - **Diego Gutierrez** - SMAA co-author
+- **Fernando Navarro** - SMAA co-author
+- **Belen Masia** - SMAA co-author
+- University of Zaragoza, Spain - SMAA research institution
 
-### FXAA
-- **Timothy Lottes** (NVIDIA) - FXAA 3.11 author
+### Anti-Aliasing (FXAA)
+- **Timothy Lottes** (NVIDIA) - FXAA 3.11 author, revolutionized post-process AA
+- **NVIDIA** - FXAA development and release
 
-### Crytek
-- **Crytek GmbH** - CryEngine reference code for SSS, GGX BRDF, edge detection
+### Crytek / CryEngine Impact
+- **Crytek GmbH** - CryEngine rendering techniques that influenced modern game graphics
+- **Tiago Sousa** (Crytek) - Brought SMAA into CryEngine, contributed to SSDO/SSGI
+- **Crysis** (2007) - Set the benchmark for real-time graphics, influenced:
+  - Screen-Space Directional Obscurance (SSDO)
+  - Deferred shading pipelines
+  - Material-based rendering systems
+  - Real-time reflection techniques
+- **CryEngine Reference Code** - SSS implementation, GGX BRDF, edge detection patterns
+- The "Crytek BRDF" approach to physically-based shading influenced the entire industry
 
 ### Rockstar Games
-- **Rockstar North** - GTA San Andreas
+- **Rockstar North** - GTA San Andreas, the game this mod enhances
 - **Rockstar Games** - GTA IV, GTA V, RDR2 - rendering techniques inspired by their titles
+- The RAGE engine's approach to vehicle rendering, filmic tonemapping, and post-processing influenced our implementation
 
-### O3DE
-- **O3DE Foundation** - Atom renderer reference for PBR pipeline
+### PBR / Modern Rendering
+- **O3DE Foundation** - Atom renderer reference for PBR pipeline architecture
+- **Epic Games** - Unreal Engine's material system influenced our approach
+- **The PBR Revolution** - The shift to physically-based rendering in games (2013+) influenced our material classification system
 
 ### RenderWare
-- **Criterion Games** - RenderWare Graphics engine
+- **Criterion Games** - RenderWare Graphics engine that powers GTA SA
+- **Criterion Software** - Original RW development
+
+### AMD / Intel
+- **AMD** - Mantle API (precursor to Vulkan/DX12), GPUOpen resources
+- **Intel** - ISPC and compiler optimizations
+
+### Academic Research
+- **"A Practical Model for Subsurface Light Transport"** (Jensen et al., 2001) - SSS theory
+- **"Microfacet Models for Refraction through Rough Surfaces"** (Walter et al., 2007) - GGX distribution
+- **"Filmic Tonemapping"** (Hable, Uncharted 2) - Tonemapping curves used in GTA IV/V
+- **"Physically-Based Shading at Disney" (Burley, 2012)** - Disney BRDF that influenced PBR
+
+### Open Source Community
+- **Dear ImGui** - Debug menu interface
+- **stb libraries** - Image loading utilities
+- **The Khronos Group** - OpenGL/GLSL specifications
+- **Microsoft** - DirectX 9 SDK and documentation
 
 ### Special Thanks
-- **The GTA modding community** - For reverse engineering and documentation
+- **The GTA SA Modding Community** - For reverse engineering and documentation
+- **GTAForums** - Community knowledge base
 - **Everyone who contributed** to the original SkyGFX and its forks
+- **Rockstar Games** - For creating the GTA series
+- **Crytek** - For pushing the boundaries of real-time rendering
+- **NVIDIA / AMD** - For GPU hardware and driver support
 
 ## License
 
