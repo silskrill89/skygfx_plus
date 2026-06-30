@@ -1,6 +1,8 @@
 #include "skygfx.h"
 #include "neo.h"
 
+extern void *Glass_Vehicle;
+
 enum {
 	// common
 	REG_transform	= 0,
@@ -1381,8 +1383,14 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 		RwD3D9SetPixelShaderConstant(0, &surfProps, 1);
 		RwD3D9SetPixelShaderConstant(1, &fxParams, 1);
 
-		RwD3D9SetVertexShader(envCarVS);
-		RwD3D9SetPixelShader(envCarPS);
+		// Use glass shader for alpha surfaces (windows, light lenses)
+		if(hasAlpha && Glass_Vehicle){
+			RwD3D9SetVertexShader(envCarVS);
+			RwD3D9SetPixelShader(Glass_Vehicle);
+		}else{
+			RwD3D9SetVertexShader(envCarVS);
+			RwD3D9SetPixelShader(envCarPS);
+		}
 
 		D3D9RenderDual(config->dualPassVehicle, resEntryHeader, instancedData);
 	}

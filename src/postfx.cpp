@@ -1561,6 +1561,10 @@ static RwRaster *g_ssaoOutputRaster = NULL;
 static BOOL g_ssaoDepthFallback = FALSE;
 static BOOL g_ssaoDepthPacked = FALSE;
 
+// SMAA D3D textures (D3DPOOL_DEFAULT - must be released on device reset)
+static IDirect3DTexture9 *g_smaaAreaTex = NULL;
+static IDirect3DTexture9 *g_smaaSearchTex = NULL;
+
 // Release all D3DPOOL_DEFAULT resources (call on device lost/reset)
 void ReleaseDefaultPoolResources(void)
 {
@@ -1568,7 +1572,13 @@ void ReleaseDefaultPoolResources(void)
 	if(g_ssaoDepthTex){ g_ssaoDepthTex->Release(); g_ssaoDepthTex = NULL; }
 	if(g_ssaoDepthSurf){ g_ssaoDepthSurf->Release(); g_ssaoDepthSurf = NULL; }
 	// Note: g_ssaoNoiseTex is D3DPOOL_MANAGED, survives reset
+	
+	// SMAA area/search textures (D3DPOOL_DEFAULT)
+	if(g_smaaAreaTex){ g_smaaAreaTex->Release(); g_smaaAreaTex = NULL; }
+	if(g_smaaSearchTex){ g_smaaSearchTex->Release(); g_smaaSearchTex = NULL; }
+	
 	// RW rasters are managed by RW, not our responsibility
+	dbglog("ReleaseDefaultPoolResources: done");
 }
 
 // Check if device is valid and release resources if lost
@@ -1839,8 +1849,6 @@ CPostEffects::DrawSMAA(void)
 	static RwRaster *blendRaster = NULL;
 	static RwRaster *prevFrameRaster = NULL;
 	static int rtWidth = 0, rtHeight = 0;
-	static IDirect3DTexture9 *areaTexD3D = NULL;
-	static IDirect3DTexture9 *searchTexD3D = NULL;
 
 	int w = RwRasterGetWidth(pRasterFrontBuffer);
 	int h = RwRasterGetHeight(pRasterFrontBuffer);
@@ -1872,13 +1880,13 @@ CPostEffects::DrawSMAA(void)
 	}
 
 	// Create D3D textures for area/search lookup
-	if(!areaTexD3D){
+	if(!g_smaaAreaTex){
 		IDirect3DDevice9 *dev = d3d9device;
 		if(dev){
 			extern void GenerateSMAAAreaTex(IDirect3DDevice9*, IDirect3DTexture9**);
 			extern void GenerateSMAASearchTex(IDirect3DDevice9*, IDirect3DTexture9**);
-			GenerateSMAAAreaTex(dev, &areaTexD3D);
-			GenerateSMAASearchTex(dev, &searchTexD3D);
+			GenerateSMAAAreaTex(dev, &g_smaaAreaTex);
+			GenerateSMAASearchTex(dev, &g_smaaSearchTex);
 			dbglog("DrawSMAA: generated area/search textures");
 		}
 	}

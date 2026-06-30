@@ -6,6 +6,14 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <excpt.h>
+
+// Stubs for debug menu (excluded for now - no imgui)
+void refreshMenu(void) {}
+void installMenu(void) {}
+
+// Stub for normalmap (excluded for now)
+void normalmap_init(void) {}
+void normalmap_shutdown(void) {}
 //#include <fstream>
 
 static char g_logPath[MAX_PATH];

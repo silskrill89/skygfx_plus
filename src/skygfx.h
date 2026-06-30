@@ -28,6 +28,7 @@ typedef uint32_t uint32, uint;
 typedef int8_t int8;
 typedef int16_t int16;
 typedef int32_t int32;
+typedef bool bool8;
 
 // Fix for _mm_loadu_si64 intrinsic - x64 only, map to x86 equivalent
 #ifdef _M_X86
@@ -203,6 +204,10 @@ struct Config {
 	float envSpecularityMult;
 	float envPower;
 	float envFresnel;
+
+	// Normal mapping
+	float normalMapIntensity;
+	RwBool normalMapPlayerOnly;
 
 	// Subsurface Scattering
 	RwBool sssEnable;

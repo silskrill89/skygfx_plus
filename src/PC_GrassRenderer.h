@@ -11,7 +11,7 @@
 #define __VUGRASSRENDERER_H__
 
 #include "skygfx.h"
-#include "PC_GrassRenderer.h"
+#include "PC_PlantsMgr.h"
 
 
 //

@@ -27,14 +27,40 @@ extern float &CTimer__ms_fTimeStep;
 extern float &CWeather__Wind;
 extern CVector& CWeather__WindDir;
 
-extern float CGeneral_GetRandomNumberInRange(float min, float max);
-extern float CGeneral_GetRandomNumber(void);
-extern void CGeneral_SetRandomSeed(uint32 seed);
-extern uint32 CGeneral_GetRandomNumber(void);
-extern float CMaths_Sin(float x);
-extern int CMaths_Floor(float x);
-extern int CMaths_Min(int a, int b);
-extern int CMaths_Max(int a, int b);
+#ifndef ASSERT
+#define ASSERT(x)
+#endif
+
+#ifndef ASSERTMSG
+#define ASSERTMSG(x, msg)
+#endif
+
+#ifndef FX_QUALITY_HIGH
+#define FX_QUALITY_HIGH 2
+#endif
+
+static int g_fxQuality = FX_QUALITY_HIGH;
+
+// Stub implementations for missing GTA SA functions
+static uint32 g_randomSeed = 12345;
+
+float CGeneral_GetRandomNumber(void) {
+	g_randomSeed = g_randomSeed * 1103515245 + 12345;
+	return (float)(g_randomSeed & 0x7FFFFFFF) / (float)0x7FFFFFFF;
+}
+
+float CGeneral_GetRandomNumberInRange(float min, float max) {
+	return min + CGeneral_GetRandomNumber() * (max - min);
+}
+
+void CGeneral_SetRandomSeed(uint32 seed) {
+	g_randomSeed = seed;
+}
+
+float CMaths_Sin(float x) { return sinf(x); }
+int CMaths_Floor(float x) { return (int)floorf(x); }
+int CMaths_Min(int a, int b) { return a < b ? a : b; }
+int CMaths_Max(int a, int b) { return a > b ? a : b; }
 
 CVector	CGrassRenderer::m_vecCameraPos;
 float	CGrassRenderer::m_windBending	= 0.0f;

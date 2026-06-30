@@ -26,9 +26,9 @@ class CAtomicModelInfo;
 // stuff for VarConsole:
 //
 #ifndef MASTER
-	extern bool8	gbShowCPlantMgrPolys;
-	extern bool8	gbDisplayCPlantMgrInfo;
-	extern bool8	gbPlantMgrActive;
+	extern bool gbShowCPlantMgrPolys;
+	extern bool gbDisplayCPlantMgrInfo;
+	extern bool gbPlantMgrActive;
 #endif
 
 
@@ -357,7 +357,7 @@ private:
 
 private:
 	static uint16	m_scanCode;
-	static CRGBA	m_AmbientColor;
+	static RwRGBA	m_AmbientColor;
 	
 
 

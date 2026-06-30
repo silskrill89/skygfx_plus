@@ -13,6 +13,15 @@ CBaseModelInfo *GetModelInfo(CEntity *e);
 struct CVector
 {
 	float x, y, z;
+	
+	CVector() : x(0), y(0), z(0) {}
+	CVector(float _x, float _y, float _z) : x(_x), y(_y), z(_z) {}
+	
+	CVector operator-(const CVector &v) const { return CVector(x - v.x, y - v.y, z - v.z); }
+	CVector operator+(const CVector &v) const { return CVector(x + v.x, y + v.y, z + v.z); }
+	CVector operator*(float s) const { return CVector(x * s, y * s, z * s); }
+	
+	float Magnitude() const { return sqrtf(x*x + y*y + z*z); }
 };
 
 struct CVector2D

@@ -23,6 +23,7 @@ void *VehiclePaint_GTAIV = nullptr;
 void *Water_Parallax = nullptr;
 void *Metalness_PBR = nullptr;
 void *VehiclePBR_Modern = nullptr;
+void *Glass_Vehicle = nullptr;
 void *GTAIV_PS = nullptr;
 void *gtaivVehicleVS = nullptr, *gtaivVehiclePS = nullptr;
 void *gtaivBuildingVS = nullptr, *gtaivBuildingPS = nullptr;
