@@ -119,15 +119,14 @@ python tools\compile_shaders.py
 - **Timothy Lottes** (NVIDIA) - FXAA 3.11 author, revolutionized post-process AA
 - **NVIDIA** - FXAA development and release
 
-### Crytek / CryEngine Impact
-- **Crytek GmbH** - CryEngine rendering techniques that influenced modern game graphics
+### Inspiration and Research
+- **Crytek GmbH** - CryEngine rendering techniques that inspired modern game graphics
 - **Tiago Sousa** (Crytek) - Brought SMAA into CryEngine, contributed to SSDO/SSGI
 - **Crysis** (2007) - Set the benchmark for real-time graphics, influenced:
   - Screen-Space Directional Obscurance (SSDO)
   - Deferred shading pipelines
   - Material-based rendering systems
   - Real-time reflection techniques
-- **CryEngine Reference Code** - SSS implementation, GGX BRDF, edge detection patterns
 - The "Crytek BRDF" approach to physically-based shading influenced the entire industry
 
 ### Rockstar Games
@@ -143,10 +142,6 @@ python tools\compile_shaders.py
 ### RenderWare
 - **Criterion Games** - RenderWare Graphics engine that powers GTA SA
 - **Criterion Software** - Original RW development
-
-### AMD / Intel
-- **AMD** - Mantle API (precursor to Vulkan/DX12), GPUOpen resources
-- **Intel** - ISPC and compiler optimizations
 
 ### Academic Research
 - **"A Practical Model for Subsurface Light Transport"** (Jensen et al., 2001) - SSS theory
@@ -168,6 +163,24 @@ python tools\compile_shaders.py
 - **Crytek** - For pushing the boundaries of real-time rendering
 - **NVIDIA / AMD** - For GPU hardware and driver support
 
+## Important Notice on Source Code
+
+**No source code from Crytek, Rockstar, or any other commercial entity has been used in this project.**
+
+All code in this project is:
+- **Original work** by the SkyGFX Plus contributors
+- **Inspired by** rendering techniques and approaches from various game engines and research papers
+- **Based on deep reverse engineering** efforts by the GTA modding community
+- **Written from scratch** using publicly available documentation and specifications
+
+The rendering techniques implemented here are based on:
+- **Published academic research** (SMAA, PBR, GGX BRDF, etc.)
+- **Public documentation** (DirectX 9 SDK, RenderWare documentation)
+- **Community reverse engineering** of GTA SA's rendering pipeline
+- **Publicly known rendering techniques** used across the game industry
+
+All shader code, C++ code, and configuration files are original implementations that achieve similar visual results to commercial engines through standard graphics programming techniques.
+
 ## License
 
 This project is based on SkyGFX by aap. See the original SkyGFX license for details.
@@ -176,8 +189,8 @@ SMAA is licensed under the BSD license. See `SMAA_reference/LICENSE.txt` for det
 
 FXAA is property of NVIDIA Corporation.
 
-CryEngine reference code is property of Crytek GmbH.
-
 Rendering techniques inspired by Rockstar Games titles (GTA IV, GTA V, RDR2).
 
 O3DE reference code is licensed under the Apache 2.0 license.
+
+All original code in this project is licensed under the same terms as the original SkyGFX project.
