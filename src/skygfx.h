@@ -44,6 +44,28 @@ void dbglog_loc(int level, const char *file, int line, const char *func, const c
 #define dbglog_warn(...) dbglog_loc(LOG_WARN, __FILE__, __LINE__, __FUNCTION__, __VA_ARGS__)
 #define dbglog_err(...) dbglog_loc(LOG_ERROR, __FILE__, __LINE__, __FUNCTION__, __VA_ARGS__)
 
+// ---- Performance timing ----
+extern LARGE_INTEGER perfFreq;
+extern double perfFreqInv;
+inline void perfInit(){
+	if(!perfFreq.QuadPart){
+		QueryPerformanceFrequency(&perfFreq);
+		perfFreqInv = 1.0 / (double)perfFreq.QuadPart;
+	}
+}
+inline double perfNow(){
+	LARGE_INTEGER t;
+	QueryPerformanceCounter(&t);
+	return (double)t.QuadPart * perfFreqInv * 1000.0;
+}
+struct PerfTimer {
+	const char *name;
+	double startMs;
+	PerfTimer(const char *n) : name(n), startMs(perfNow()) {}
+	~PerfTimer(){ dbglog("PERF [%s] %.2f ms", name, perfNow() - startMs); }
+};
+#define PERF_SCOPE(name) PerfTimer _perf##__LINE__(name)
+
 #define nil NULL
 #define VERSION 0x370
 
@@ -62,6 +84,7 @@ enum CarPipeline
 	CAR_VCS,
 	CAR_ENV,
 	CAR_GTAIV,
+	CAR_MODERN, // PBR with glass, 4 color channels, GGX specular
 
 	NUMCARPIPES
 };
@@ -280,6 +303,8 @@ struct Config {
 	RwBool ivMode;
 	float ivDesaturation;
 	float ivGamma;
+	float ivSaturation;
+	float ivCurves;
 	float ivVignetteIntensity;
 	float ivVignetteRadius;
 	float ivVignetteContrast;
@@ -617,6 +642,7 @@ extern void *blurPS, *radiosityPS;
 extern void *SMAA;
 extern void *SMAA_Edge;
 extern void *SMAA_EdgeNormal;
+extern void *SMAA_EdgeDepth;
 extern void *SMAA_EdgeCombined;
 extern void *SMAA_EdgeMotionDepth;
 extern void *SMAA_BlendWeight;
@@ -634,6 +660,7 @@ extern void *VehiclePaint_GTAIV;
 extern void *Water_Parallax;
 extern void *Metalness_PBR;
 extern void *VehiclePBR_Modern;
+extern void *Glass_Vehicle;
 extern void *GTAIV_PS;
 // GTA IV forward passes
 extern void *gtaivVehicleVS, *gtaivVehiclePS;
@@ -643,6 +670,7 @@ extern void *gtaivFPVS, *gtaivFPPS;
 void DrawUnifiedDebugMenu(IDirect3DDevice9 *device);
 void UploadUnifiedConstants(IDirect3DDevice9 *device);
 void UpdateVehicleRing();
+void RenderIBLBuffer(void);
 
 // building
 extern void *ps2BuildingVS, *ps2BuildingFxVS;

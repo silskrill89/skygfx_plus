@@ -1,232 +1,170 @@
-// Vehicle PBR Shader with Color Separation (ps_3_0)
-// Unified shader: paint, chrome, rubber, glass, dirt
-// Uses GTA SA's material plugin data for classification
-// Supports 4 vehicle color channels (MAT1-MAT4)
-// PS2 spherical env mapping
-//
-// Material Classification (from GTA SA):
-//   shininess > 0 + envmap = chrome/envmap
-//   specularity > 0 = specular (paint, metal)
-//   Both = metallic paint
-//   Neither = rubber/plastic
-//   Glass: detected by atomic alpha flag, rendered with refraction
-//
-// Vehicle Colors (from GTA SA):
-//   MAT1 = primary body color (most of the car)
-//   MAT2 = secondary color (trim, bumpers)
-//   MAT3 = tertiary color (rarely used)
-//   MAT4 = quaternary color (rarely used)
-//
-// Constants:
-//   c0 = (shininess, specularity, fresnel, metalness)
-//   c1 = (mat1Color.r, mat1Color.g, mat1Color.b, clearCoat)
-//   c2 = (mat2Color.r, mat2Color.g, mat2Color.b, 0)
-//   c3 = (mat3Color.r, mat3Color.g, mat3Color.b, 0)
-//   c4 = (mat4Color.r, mat4Color.g, mat4Color.b, 0)
-//   c5 = (roughness, reflectance, envMapIntensity, glassReflectivity)
-//   c6 = (envColor.r, envColor.g, envColor.b, glassOpacity)
-//
-// Textures:
-//   s0 = vehicle diffuse texture
-//   s1 = environment map (spherical)
-//   s2 = specular map (if available)
-//   s3 = glass normal map (for distortion)
+/*===================================================================================
+SkyGFX Plus - Vehicle PBR Modern Shader (ps_3_0)
+Uses envCarVS vertex lighting for diffuse (matching original envCarPS approach).
+Adds O3DE-style PBR specular (GGX/Smith/Schlick) on top.
+Sphere map env projection matching envCarPS exactly.
+Based on CloudWorks noise by Brian Tu (keroroxzz), CC BY-NC-SA 3.0
+===================================================================================*/
 
-sampler2D vehicleDiffuseTex : register(s0);
-sampler2D envMapTex         : register(s1);
-sampler2D specMapTex        : register(s2);
-sampler2D glassNormalTex    : register(s3);
+sampler2D diffuseTex : register(s0);
+sampler2D envMapTex  : register(s1);
+sampler2D maskTex    : register(s2);
+sampler2D iblTex     : register(s3);
 
-uniform float4 materialParams : register(c0); // x=shininess, y=specularity, z=fresnel, w=metalness
-uniform float4 mat1Color      : register(c1); // xyz=primary color, w=clear coat
-uniform float4 mat2Color      : register(c2); // xyz=secondary color
-uniform float4 mat3Color      : register(c3); // xyz=tertiary color
-uniform float4 mat4Color      : register(c4); // xyz=quaternary color
-uniform float4 renderParams   : register(c5); // x=roughness, y=reflectance, z=envMapIntensity, w=glassReflectivity
-uniform float4 envColor       : register(c6); // xyz=environment tint, w=glassOpacity
+float4 surfProps   : register(c0);
+float4 fxParams    : register(c1);
+float3 eyePos      : register(c2);
+float4 iblParams   : register(c3);
+float4 cloudShadow : register(c4);
+float4 directCol   : register(c5);
+float4 lightCol[6] : register(c6);
+float3 directDir   : register(c12);
+float3 lightDir[6] : register(c13);
+float4 matCol      : register(c19);
+
+// PBR params at c22 (avoid overwriting c0/c5)
+float4 pbrParams   : register(c22); // {roughness, metalness, reflectance, envFresnel}
 
 struct PS_INPUT
 {
-    float2 texCoord : TEXCOORD0;
-    float3 normal   : TEXCOORD1;
-    float3 viewDir  : TEXCOORD2;
-    float3 lightDir : TEXCOORD3;
+    float2 texcoord0 : TEXCOORD0;
+    float3 WorldNormal : TEXCOORD1;
+    float3 WorldPos    : TEXCOORD2;
+    float4 color       : COLOR0;
+    float4 envColor    : COLOR1;
 };
 
-// GGX NDF
-float GGX_NDF(float NdotH, float roughness)
-{
-    float a2 = roughness * roughness * roughness * roughness;
-    float denom = NdotH * NdotH * (a2 - 1.0) + 1.0;
-    return a2 / (3.14159 * denom * denom);
+// ---- Cloud shadow noise (CloudWorks by Brian Tu) ----
+static float cnoiseSeed = 1618.03398875;
+float chash(float n) { return frac(sin(n / 1873.1873) * cnoiseSeed); }
+float cnoise3d(float3 p) {
+    float3 fr = floor(p); float3 ft = frac(p);
+    float n = 1153.0 * fr.x + 2381.0 * fr.y + fr.z;
+    float v  = lerp(chash(n), chash(n + 1.0), ft.z);
+    float vr = lerp(chash(n + 1153.0), chash(n + 1154.0), ft.z);
+    float vd = lerp(chash(n + 2381.0), chash(n + 2382.0), ft.z);
+    float vo = lerp(chash(n + 3534.0), chash(n + 3535.0), ft.z);
+    return lerp(lerp(v, vr, ft.x), lerp(vd, vo, ft.x), ft.y);
+}
+float cloudFBM(float3 p) {
+    float f = 0.0;
+    f += 0.5000 * cnoise3d(p); p *= 2.01;
+    f += 0.2500 * cnoise3d(p); p *= 2.02;
+    f += 0.1250 * cnoise3d(p); p *= 2.03;
+    f += 0.0625 * cnoise3d(p);
+    return f;
 }
 
-// Smith Visibility
-float SmithVisibility(float NdotL, float NdotV, float roughness)
+// ---- PBR BRDF (O3DE Enhanced / Disney Principled) ----
+
+float D_GGX(float NdotH, float roughness)
 {
-    float r2 = roughness * roughness;
-    float gv = NdotL * sqrt((-NdotV * r2 + NdotV) * NdotV + r2);
-    float gl = NdotV * sqrt((-NdotL * r2 + NdotL) * NdotL + r2);
-    return 0.5 / (gv + gl + 0.0001);
+    float a = roughness * roughness;
+    float a2 = a * a;
+    float d = NdotH * NdotH * (a2 - 1.0) + 1.0;
+    return a2 / (3.14159265 * d * d);
 }
 
-// Schlick Fresnel
-float3 SchlickFresnel(float3 F0, float VdotH)
+float V_SmithCorrelated(float NdotV, float NdotL, float roughness)
 {
-    return F0 + (1.0 - F0) * pow(1.0 - VdotH, 5.0);
+    float a = roughness * roughness;
+    float a2 = a * a;
+    float GGXL = NdotL * NdotL * (1.0 - a2) + a2;
+    float GGXV = NdotV * NdotV * (1.0 - a2) + a2;
+    return 0.5 / (sqrt(GGXV) * sqrt(GGXL) + 1e-5);
 }
 
-// PS2 Spherical Env Map
-float2 PS2SphericalEnvMap(float3 reflVec, float3 viewDir)
+float3 F_Schlick(float cosTheta, float3 F0)
 {
-    float2 envUV;
-    envUV.x = reflVec.x * 0.5 + 0.5;
-    envUV.y = reflVec.y * 0.5 + 0.5;
-    envUV.x += viewDir.x * 0.1;
-    envUV.y += viewDir.y * 0.1;
-    return envUV;
-}
-
-// Detect vehicle color channel from diffuse texture color
-// GTA SA uses sentinel colors in the diffuse to mark which channel
-float4 DetectVehicleColorChannel(float3 diffuse)
-{
-    // MAT1: 0x00ff3c (green-ish)
-    // MAT2: 0xaf00ff (purple)
-    // MAT3: 0xffff00 (yellow)
-    // MAT4: 0xff00ff (magenta)
-    
-    float r = diffuse.r;
-    float g = diffuse.g;
-    float b = diffuse.b;
-    
-    // Check each sentinel color (with tolerance)
-    float isMat1 = step(0.9, g) * step(0.9, b) * step(r, 0.1); // green
-    float isMat2 = step(0.6, r) * step(0.9, b) * step(g, 0.1); // purple
-    float isMat3 = step(0.9, r) * step(0.9, g) * step(b, 0.1); // yellow
-    float isMat4 = step(0.9, r) * step(0.9, b) * step(g, 0.1); // magenta
-    
-    return float4(isMat1, isMat2, isMat3, isMat4);
+    float fresnel = pow(1.0 - cosTheta, 5.0);
+    return F0 + (1.0 - F0) * fresnel;
 }
 
 float4 main(PS_INPUT IN) : COLOR
 {
-    float2 tex = IN.texCoord;
-    
-    // Sample textures
-    float4 diffuse = tex2D(vehicleDiffuseTex, tex);
-    
-    // Detect which vehicle color channel this pixel uses
-    float4 colorMask = DetectVehicleColorChannel(diffuse.rgb);
-    float isVehicleColor = colorMask.x + colorMask.y + colorMask.z + colorMask.w;
-    
-    // Apply vehicle colors based on detected channel
-    float3 baseColor;
-    if(isVehicleColor > 0.5)
+    float3 N = normalize(IN.WorldNormal);
+    float3 V = normalize(IN.WorldPos - eyePos);
+
+    // ---- Diffuse: use vertex lighting from envCarVS (game-correct) ----
+    float4 diff = tex2D(diffuseTex, IN.texcoord0);
+    float3 baseColor = diff.rgb * IN.color.rgb;
+
+    // ---- Cloud shadow on diffuse ----
+    float3 noisePos = float3(IN.WorldPos.xy * 0.0008, IN.WorldPos.z * 0.0004);
+    float cloudNoise = cloudFBM(noisePos);
+    cloudNoise = smoothstep(0.3, 0.7, cloudNoise);
+    float shadowFactor = lerp(0.6, 1.0, 1.0 - cloudNoise * 0.4);
+    baseColor *= shadowFactor;
+
+    // ---- PBR material properties ----
+    float roughness   = pbrParams.x;
+    float metalness   = pbrParams.y;
+    float reflectance = pbrParams.z;
+    float envFresnel  = pbrParams.w;
+
+    float NdotV = max(dot(N, V), 0.0);
+    float3 F0 = lerp(float3(reflectance, reflectance, reflectance), baseColor, metalness);
+
+    // ---- PBR specular (GGX/Smith/Schlick) from main sun + extra lights ----
+    float3 specTotal = float3(0, 0, 0);
+
+    // Sun
     {
-        // This pixel uses a vehicle color - blend based on mask
-        baseColor = diffuse.rgb;
-        baseColor = lerp(baseColor, mat1Color.rgb, colorMask.x);
-        baseColor = lerp(baseColor, mat2Color.rgb, colorMask.y);
-        baseColor = lerp(baseColor, mat3Color.rgb, colorMask.z);
-        baseColor = lerp(baseColor, mat4Color.rgb, colorMask.w);
+        float3 L = -directDir;
+        float3 H = normalize(V + L);
+        float NdotL = max(dot(N, L), 0.0);
+        float NdotH = max(dot(N, H), 0.0);
+        float LdotH = max(dot(L, H), 0.0);
+        if(NdotL > 0.0){
+            float D = D_GGX(NdotH, roughness);
+            float Vis = V_SmithCorrelated(NdotV, NdotL, roughness);
+            float3 F = F_Schlick(LdotH, F0);
+            specTotal += D * F * Vis * NdotL * directCol.rgb;
+        }
     }
+
+    // Extra lights (up to 6)
+    for(int i = 0; i < 6; i++){
+        float3 L = -lightDir[i];
+        float3 H = normalize(V + L);
+        float NdotL = max(dot(N, L), 0.0);
+        float NdotH = max(dot(N, H), 0.0);
+        float LdotH = max(dot(L, H), 0.0);
+        if(NdotL > 0.0){
+            float D = D_GGX(NdotH, roughness);
+            float Vis = V_SmithCorrelated(NdotV, NdotL, roughness);
+            float3 F = F_Schlick(LdotH, F0);
+            specTotal += D * F * Vis * NdotL * lightCol[i].rgb;
+        }
+    }
+
+    // ---- Env map reflection (sphere map matching envCarPS) ----
+    float3 envDir = -float3(reflect(-V, N)); // negate to match envCarPS ReflVector = V - 2*dot(V,N)*N
+    float2 envXY = envDir.xy;
+    float lenXY = length(envXY);
+    float2 envUV;
+    if(lenXY > 1e-6)
+        envUV = (envXY / lenXY) * (envDir.z * 0.5 + 0.5);
     else
-    {
-        // Normal diffuse (not a vehicle color remap)
-        baseColor = diffuse.rgb;
-    }
-    
-    // Unpack material properties
-    float shininess = materialParams.x;
-    float specularity = materialParams.y;
-    float fresnel = materialParams.z;
-    float metalness = materialParams.w;
-    
-    // Lighting vectors
-    float3 N = normalize(IN.normal);
-    float3 V = normalize(IN.viewDir);
-    float3 L = normalize(IN.lightDir);
-    float3 H = normalize(V + L);
-    
-    float NdotL = saturate(dot(N, L));
-    float NdotV = saturate(dot(N, V));
-    float NdotH = saturate(dot(N, H));
-    float VdotH = saturate(dot(V, H));
-    
-    // Material classification
-    float isChrome = step(0.5, shininess) * step(0.5, 1.0 - specularity);
-    float isPaint = step(0.1, shininess) * step(0.1, specularity);
-    float isMetal = step(0.5, specularity) * step(0.5, 1.0 - shininess);
-    float isRubber = step(0.5, 1.0 - shininess) * step(0.5, 1.0 - specularity);
-    
-    // Roughness per material
-    float roughness = renderParams.x;
-    roughness = lerp(roughness, 0.05, isChrome);
-    roughness = lerp(roughness, 0.3, isPaint);
-    roughness = lerp(roughness, 0.8, isRubber);
-    
-    // Metalness per material
-    float finalMetalness = metalness;
-    finalMetalness = lerp(finalMetalness, 1.0, isChrome);
-    finalMetalness = lerp(finalMetalness, 0.8, isMetal);
-    finalMetalness = lerp(finalMetalness, 0.0, isRubber);
-    
-    // F0
-    float reflectance = renderParams.y;
-    float3 F0 = lerp(float3(reflectance, reflectance, reflectance), baseColor, finalMetalness);
-    
-    // Specular BRDF
-    float D = GGX_NDF(NdotH, roughness);
-    float V_term = SmithVisibility(NdotL, NdotV, roughness);
-    float3 F = SchlickFresnel(F0, VdotH);
-    float3 specular = D * V_term * F;
-    
-    // Add specular from game data
-    if(specularity > 0.001)
-    {
-        float3 specMapColor = tex2D(specMapTex, tex).rgb;
-        specular *= specMapColor * specularity;
-    }
-    
-    // Diffuse (non-metals only)
-    float3 diffuseLight = baseColor * NdotL * (1.0 - finalMetalness);
-    
-    // Environment Reflection (PS2 Spherical)
-    float3 reflVec = reflect(-V, N);
-    float2 envUV = PS2SphericalEnvMap(reflVec, V);
-    float3 envReflection = tex2D(envMapTex, envUV).rgb;
-    
-    float3 envFresnel = SchlickFresnel(F0, NdotV);
-    float envMapIntensity = renderParams.z;
-    envReflection *= envFresnel * shininess * envMapIntensity;
-    
-    // Chrome: stronger, colored reflections
-    envReflection = lerp(envReflection, envReflection * baseColor * 2.0, isChrome);
-    
-    // Clear coat (paint only)
-    float clearCoat = mat1Color.w;
-    float3 clearCoatF0 = float3(0.04, 0.04, 0.04);
-    float3 clearCoatF = SchlickFresnel(clearCoatF0, NdotV);
-    float3 clearCoatSpec = clearCoatF * clearCoat * 0.5;
-    
-    // Final composition
-    float3 finalColor = float3(0, 0, 0);
-    
-    // Ambient
-    finalColor += baseColor * 0.15;
-    
-    // Diffuse + Specular
-    finalColor += diffuseLight + specular * NdotL;
-    
-    // Environment reflection
-    finalColor += envReflection * envColor.rgb;
-    
-    // Clear coat (paint only)
-    finalColor += clearCoatSpec * isPaint;
-    
-    // Rubber: darker
-    finalColor *= lerp(1.0, 0.3, isRubber);
-    
-    return float4(finalColor, diffuse.a);
+        envUV = float2(0.0, 0.0);
+    envUV = envUV * float2(0.5, -0.5) + float2(0.5, 0.5);
+
+    float4 env = tex2D(envMapTex, envUV) * fxParams.z;
+
+    // Reflection mask + fresnel
+    float4 mask = tex2D(maskTex, IN.texcoord0);
+    float3 envF = F_Schlick(NdotV, F0);
+    float reflStrength = mask.r * envF.x * envFresnel;
+    float3 envpass = env.rgb * reflStrength;
+
+    // ---- IBL ambient fill ----
+    float2 iblUV = N.xy * 0.5 + 0.5;
+    float4 iblSample = tex2D(iblTex, iblUV);
+    float3 iblFill = iblSample.rgb * 0.06;
+
+    // ---- Combine ----
+    // Diffuse (vertex-lit) + PBR specular + env reflection + IBL ambient
+    float3 finalColor = baseColor + specTotal + envpass + iblFill;
+
+    return float4(finalColor, diff.a);
 }

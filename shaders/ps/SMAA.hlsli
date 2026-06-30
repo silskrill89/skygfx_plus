@@ -53,7 +53,7 @@
 <<<<<<< HEAD
  *                           |input|------------------ï¿½
 =======
- *                           |input|------------------·
+ *                           |input|------------------ï¿½
 >>>>>>> master
  *                              v                     |
  *                    [ SMAA*EdgeDetection ]          |
@@ -67,7 +67,7 @@
 <<<<<<< HEAD
  *                [ SMAANeighborhoodBlending ] <------ï¿½
 =======
- *                [ SMAANeighborhoodBlending ] <------·
+ *                [ SMAANeighborhoodBlending ] <------ï¿½
 >>>>>>> master
  *                              v
  *                           |output|
@@ -594,13 +594,6 @@ SamplerState PointSampler { Filter = MIN_MAG_MIP_POINT; AddressU = Clamp; Addres
 #define bool4 bvec4
 #endif
 
-<<<<<<< HEAD
-#ifndef SMAA_HLSL_3
-#define SMAA_HLSL_3
-#endif
-
-=======
->>>>>>> master
 #if !defined(SMAA_HLSL_3) && !defined(SMAA_HLSL_4) && !defined(SMAA_HLSL_4_1) && !defined(SMAA_GLSL_3) && !defined(SMAA_GLSL_4) && !defined(SMAA_CUSTOM_SL)
 #error you must define the shading language: SMAA_HLSL_*, SMAA_GLSL_* or SMAA_CUSTOM_SL
 #endif

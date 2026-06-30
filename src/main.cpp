@@ -11,9 +11,13 @@
 void refreshMenu(void) {}
 void installMenu(void) {}
 
-// Stub for normalmap (excluded for now)
+// Stubs for normalmap (excluded for now)
 void normalmap_init(void) {}
 void normalmap_shutdown(void) {}
+
+// Performance timing globals
+LARGE_INTEGER perfFreq = {0};
+double perfFreqInv = 0.0;
 //#include <fstream>
 
 static char g_logPath[MAX_PATH];
@@ -948,13 +952,26 @@ RenderScene_before(void*)
 	return true;
 }
 
+float cloudAnimTimer = 0.0f;
+
 bool
 RenderScene_after(void*)
 {
+	cloudAnimTimer += CTimer__ms_fTimeStep;
+	perfInit();
+	// Render IBL buffer for vehicle pipe
+	if(config->vehiclePipe == CAR_MODERN || config->vehiclePipe == CAR_ENV || config->vehiclePipe == CAR_NEO){
+		PERF_SCOPE("IBL_Buffer");
+		RenderIBLBuffer();
+	}
 	if(config->vehiclePipe == CAR_NEO)
 		CarPipe::RenderEnvTex();
 	else if(config->vehiclePipe == CAR_LCS || config->vehiclePipe == CAR_VCS)
 		RenderReflectionMap_leeds();
+	else if(config->vehiclePipe == CAR_MODERN){
+		PERF_SCOPE("EnvTex");
+		CarPipe::RenderEnvTex();
+	}
 	DrawDebugEnvMap();
 	return true;
 }
@@ -1256,6 +1273,161 @@ readIni(int n)
 	c->keys[0] = readhex(cfg.get("SkyGfx", "keySwitch", "0x0").c_str());
 	c->keys[1] = readhex(cfg.get("SkyGfx", "keyReload", "0x0").c_str());
 
+	// ===== Quality Preset (read first, sets defaults) =====
+	// 0=LOW (PS2 classic), 1=MEDIUM (PC classic), 2=HIGH (Enhanced), 3=ULTRA (Full PBR)
+	int preset = readint(cfg.get("SkyGfx", "qualityPreset", ""), 2);
+
+	// Apply preset defaults — individual INI values override these
+	switch(preset){
+	case 0: // LOW - PS2 classic
+		c->buildingPipe = BUILDING_PS2;
+		c->vehiclePipe = CAR_PS2;
+		c->colorFilter = COLORFILTER_PS2;
+		c->smaaEnable = 0;
+		c->ssaoEnable = 0;
+		c->motionBlurEnable = 0;
+		c->sssPostProcessEnable = 0;
+		c->skinEnhanceEnable = 0;
+		c->hairEnhanceEnable = 0;
+		c->vegetationEnhanceEnable = 0;
+		c->edgeTessEnable = 0;
+		c->detailMaps = 0;
+		c->stochastic = 0;
+		c->dualPassBuilding = 0;
+		c->dualPassVehicle = 0;
+		c->dualPassGrass = 0;
+		c->doglare = 0;
+		c->neoWaterDrops = 0;
+		c->ivDesaturation = 0.0f;
+		c->ivGamma = 1.0f;
+		c->ivVignetteIntensity = 0.0f;
+		c->ivBloomIntensity = 0.0f;
+		c->envMapSize = 128;
+		c->envMapFarClipMult = 1.0f;
+		break;
+	case 1: // MEDIUM - PC classic
+		c->buildingPipe = BUILDING_XBOX;
+		c->vehiclePipe = CAR_PC;
+		c->colorFilter = COLORFILTER_PC;
+		c->smaaEnable = 1;
+		c->smaaPreset = 0; // LOW
+		c->ssaoEnable = 0;
+		c->motionBlurEnable = 0;
+		c->sssPostProcessEnable = 0;
+		c->skinEnhanceEnable = 0;
+		c->hairEnhanceEnable = 0;
+		c->vegetationEnhanceEnable = 0;
+		c->edgeTessEnable = 0;
+		c->detailMaps = 1;
+		c->stochastic = 0;
+		c->dualPassBuilding = 1;
+		c->dualPassVehicle = 1;
+		c->doglare = 1;
+		c->neoWaterDrops = 0;
+		c->ivDesaturation = 0.0f;
+		c->ivGamma = 1.0f;
+		c->ivVignetteIntensity = 0.0f;
+		c->ivBloomIntensity = 0.0f;
+		c->envMapSize = 256;
+		c->envMapFarClipMult = 1.0f;
+		break;
+	case 2: // HIGH - Enhanced
+		c->buildingPipe = BUILDING_XBOX;
+		c->vehiclePipe = CAR_MODERN;
+		c->colorFilter = COLORFILTER_VCS;
+		c->smaaEnable = 1;
+		c->smaaPreset = 2; // HIGH
+		c->ssaoEnable = 1;
+		c->ssaoRadius = 0.8f;
+		c->ssaoPower = 1.5f;
+		c->motionBlurEnable = 1;
+		c->motionBlurStrength = 0.3f;
+		c->sssPostProcessEnable = 1;
+		c->sssPostProcessStrength = 0.15f;
+		c->skinEnhanceEnable = 1;
+		c->hairEnhanceEnable = 1;
+		c->vegetationEnhanceEnable = 1;
+		c->edgeTessEnable = 0;
+		c->detailMaps = 1;
+		c->stochastic = 1;
+		c->dualPassBuilding = 1;
+		c->dualPassVehicle = 1;
+		c->dualPassGrass = 1;
+		c->doglare = 1;
+		c->neoWaterDrops = 1;
+		c->ivDesaturation = 0.2f;
+		c->ivGamma = 1.0f;
+		c->ivVignetteIntensity = 0.3f;
+		c->ivVignetteRadius = 0.6f;
+		c->ivVignetteContrast = 2.0f;
+		c->ivBloomIntensity = 0.1f;
+		c->ivExposure = 1.0f;
+		c->envMapSize = 256;
+		c->envMapFarClipMult = 1.5f;
+		c->rgb1Mult = 0.9f;
+		c->rgb2Mult = 0.9f;
+		break;
+	case 3: // ULTRA - Full PBR (settings from INI override below)
+		c->buildingPipe = BUILDING_XBOX;
+		c->vehiclePipe = CAR_MODERN;
+		c->colorFilter = COLORFILTER_GTAIV;
+		c->smaaEnable = 1;
+		c->smaaPreset = 3; // ULTRA
+		c->ssaoEnable = 1;
+		c->ssaoRadius = 1.0f;
+		c->ssaoPower = 2.0f;
+		c->ssaoKernelSize = 16;
+		c->ssaoSampleCount = 16;
+		c->motionBlurEnable = 1;
+		c->motionBlurStrength = 0.4f;
+		c->motionBlurRadial = 0.2f;
+		c->motionBlurSpeedFactor = 0.3f;
+		c->motionBlurCameraAware = 1;
+		c->sssPostProcessEnable = 1;
+		c->sssPostProcessStrength = 0.2f;
+		c->sssPostProcessRadius = 3.0f;
+		c->skinEnhanceEnable = 1;
+		c->skinWrapFactor = 0.4f;
+		c->skinSpecularPower = 24.0f;
+		c->skinSpecularStrength = 0.2f;
+		c->skinSSSStrength = 0.3f;
+		c->hairEnhanceEnable = 1;
+		c->hairAnisotropicPower = 48.0f;
+		c->hairAnisotropicStrength = 0.4f;
+		c->hairSSSStrength = 0.15f;
+		c->vegetationEnhanceEnable = 1;
+		c->vegetationSSSStrength = 0.2f;
+		c->vegetationAmbientBoost = 1.3f;
+		c->edgeTessEnable = 0;
+		c->detailMaps = 1;
+		c->stochastic = 1;
+		c->dualPassBuilding = 1;
+		c->dualPassVehicle = 1;
+		c->dualPassGrass = 1;
+		c->dualPassDefault = 1;
+		c->dualPassPed = 1;
+		c->doglare = 1;
+		c->neoWaterDrops = 1;
+		c->ivDesaturation = 1.0f;
+		c->ivGamma = 1.0f;
+		c->ivSaturation = 0.3f;
+		c->ivCurves = 1.0f;
+		c->ivVignetteIntensity = 0.15f;
+		c->ivVignetteRadius = 0.70f;
+		c->ivVignetteContrast = 1.5f;
+		c->ivBloomIntensity = 0.05f;
+		c->ivExposure = 2.5f;
+		c->envMapSize = 512;
+		c->envMapFarClipMult = 2.0f;
+		c->envShininessMult = 1.0f;
+		c->envSpecularityMult = 1.0f;
+		c->envPower = 128.0f;
+		c->envFresnel = 0.95f;
+		c->rgb1Mult = 0.88f;
+		c->rgb2Mult = 0.92f;
+		break;
+	}
+
 	config->ps2ModulateGlobal = readint(cfg.get("SkyGfx", "ps2Modulate", ""), 0);
 	config->dualPassGlobal = readint(cfg.get("SkyGfx", "dualPass", ""), 0);
 
@@ -1286,7 +1458,9 @@ readIni(int n)
 		{"LCS",     CAR_LCS},
 		{"VCS",     CAR_VCS},
 		{"Mobile",  CAR_MOBILE},
-		{"Env",  CAR_ENV},
+		{"Env",     CAR_ENV},
+		{"GTAIV",   CAR_GTAIV},
+		{"Modern",  CAR_MODERN},
 		{"",       -1},
 	};
 	c->vehiclePipe = StrAssoc::get(vehPipeMap, cfg.get("SkyGfx", "vehiclePipe", "").c_str());
@@ -1347,6 +1521,7 @@ readIni(int n)
 		{"III",     COLORFILTER_III},
 		{"VC",      COLORFILTER_VC},
 		{"VCS",     COLORFILTER_VCS},
+		{"GTAIV",   COLORFILTER_GTAIV},
 		{"",        COLORFILTER_PC},
 	};
 	static StrAssoc ps2pcMap[] = {
@@ -1437,8 +1612,10 @@ readIni(int n)
 
 	// GTA IV Mode
 	c->ivMode = readint(cfg.get("SkyGfx", "ivMode", ""), 0);
-	c->ivDesaturation = readfloat(cfg.get("SkyGfx", "ivDesaturation", ""), 0.3f);
+	c->ivDesaturation = readfloat(cfg.get("SkyGfx", "ivDesaturation", ""), 0.0f);
 	c->ivGamma = readfloat(cfg.get("SkyGfx", "ivGamma", ""), 1.0f);
+	c->ivSaturation = readfloat(cfg.get("SkyGfx", "ivSaturation", ""), 0.3f);
+	c->ivCurves = readfloat(cfg.get("SkyGfx", "ivCurves", ""), 1.0f);
 	c->ivVignetteIntensity = readfloat(cfg.get("SkyGfx", "ivVignetteIntensity", ""), 0.5f);
 	c->ivVignetteRadius = readfloat(cfg.get("SkyGfx", "ivVignetteRadius", ""), 0.5f);
 	c->ivVignetteContrast = readfloat(cfg.get("SkyGfx", "ivVignetteContrast", ""), 2.0f);
@@ -1488,8 +1665,10 @@ readIni(int n)
 		cfg.set("SkyGfx", "smaaPredication", "0");
 		cfg.set("SkyGfx", "smaaTemporal", "0");
 		cfg.set("SkyGfx", "ivMode", "0");
-		cfg.set("SkyGfx", "ivDesaturation", "0.3");
+		cfg.set("SkyGfx", "ivDesaturation", "0.0");
 		cfg.set("SkyGfx", "ivGamma", "1.0");
+		cfg.set("SkyGfx", "ivSaturation", "0.3");
+		cfg.set("SkyGfx", "ivCurves", "1.0");
 		cfg.set("SkyGfx", "ivVignetteIntensity", "0.5");
 		cfg.set("SkyGfx", "ivVignetteRadius", "0.5");
 		cfg.set("SkyGfx", "ivVignetteContrast", "2.0");

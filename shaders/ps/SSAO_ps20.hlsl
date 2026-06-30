@@ -1,19 +1,13 @@
-<<<<<<< HEAD
-// Full SSAO implementation based on open source documentation
-// Uses depth buffer to approximate ambient occlusion with 16 samples
-// Compatible with ps_3_0
-=======
 // Full SSAO implementation
 // Uses depth buffer to approximate ambient occlusion
-// Compiled with ps_3_0 via build system (supports both SM2.0 and SM3.0 code paths)
->>>>>>> master
+// Compiled with ps_3_0 via build system
 
 uniform sampler2D depthTexture : register(s0);
 uniform sampler2D randomTexture : register(s1);
 
 uniform float4 ssaoParams : register(c0); // x=radius, y=power, z=noiseScale, w=kernelSize
 uniform float4 screenSize : register(c1); // x=width, y=height, z=1/width, w=1/height
-uniform float4 projInfo : register(c2); // projection matrix info for view space reconstruction
+uniform float4 projInfo : register(c2); // projection matrix info
 
 struct PS_INPUT
 {
@@ -42,19 +36,10 @@ float4 main(PS_INPUT IN) : COLOR
     float3 rand = tex2D(randomTexture, IN.texCoord * noiseScale).rgb * 2.0 - 1.0;
     
     float occlusion = 0.0;
-<<<<<<< HEAD
-    float kernelSize = ssaoParams.w;
     float radius = ssaoParams.x;
     float power = ssaoParams.y;
     
     // Generate 16 random kernel samples
-=======
-    float radius = ssaoParams.x;
-    float power = ssaoParams.y;
-    
-#if SHADER_MODEL >= 0x300
-    // SM3.0/SM4.0: full 16-sample kernel with loops
->>>>>>> master
     float3 kernel[16];
     for (int i = 0; i < 16; ++i)
     {
@@ -66,13 +51,10 @@ float4 main(PS_INPUT IN) : COLOR
         sample = normalize(sample);
         sample *= rand.x * radius;
         kernel[i] = sample;
-        rand = tex2D(randomTexture, float2(i, 0.0)).rgb * 2.0 - 1.0;
+        rand = tex2D(randomTexture, float2(i * 0.1, 0.0)).rgb * 2.0 - 1.0;
     }
     
-<<<<<<< HEAD
     // Calculate occlusion using all kernel samples
-=======
->>>>>>> master
     for (int i = 0; i < 16; ++i)
     {
         float3 samplePos = centerPos + kernel[i];
@@ -93,41 +75,7 @@ float4 main(PS_INPUT IN) : COLOR
     }
     
     occlusion = 1.0 - (occlusion / 16.0);
-<<<<<<< HEAD
     occlusion = pow(occlusion, power);
     
     return float4(occlusion, occlusion, occlusion, 1.0);
 }
-=======
-#else
-    // SM2.0: 4 fixed samples, no loops
-    float2 invScreen = screenSize.zw;
-    
-    float2 uv = IN.texCoord + float2(radius * invScreen.x, 0);
-    float sd = tex2D(depthTexture, uv).r;
-    float3 sv = GetViewPos(uv, sd);
-    occlusion += step(sv.z, centerPos.z) * (1.0 - saturate(length(sv - centerPos) / radius));
-    
-    uv = IN.texCoord + float2(-radius * invScreen.x, 0);
-    sd = tex2D(depthTexture, uv).r;
-    sv = GetViewPos(uv, sd);
-    occlusion += step(sv.z, centerPos.z) * (1.0 - saturate(length(sv - centerPos) / radius));
-    
-    uv = IN.texCoord + float2(0, radius * invScreen.y);
-    sd = tex2D(depthTexture, uv).r;
-    sv = GetViewPos(uv, sd);
-    occlusion += step(sv.z, centerPos.z) * (1.0 - saturate(length(sv - centerPos) / radius));
-    
-    uv = IN.texCoord + float2(0, -radius * invScreen.y);
-    sd = tex2D(depthTexture, uv).r;
-    sv = GetViewPos(uv, sd);
-    occlusion += step(sv.z, centerPos.z) * (1.0 - saturate(length(sv - centerPos) / radius));
-    
-    occlusion = 1.0 - (occlusion * 0.25);
-#endif
-    
-    occlusion = pow(occlusion, power);
-    
-    return float4(occlusion, occlusion, occlusion, 1.0);
-}
->>>>>>> master

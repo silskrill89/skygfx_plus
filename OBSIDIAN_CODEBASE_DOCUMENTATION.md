@@ -327,6 +327,107 @@ void InitializeSkyGfx() {
 | **Target audience** | Hobbyists | Intermediate | **Producers/studios** |
 | **Documentation** | Minimal | Basic | **Comprehensive** |
 
+---
+
+## Vehicle Glass Reflection System
+
+### Architecture
+
+The glass reflection system spans three files:
+- **`shaders/vs/envCarVS.hlsl`** — Vertex shader, computes world-space vectors and passes to PS
+- **`shaders/ps/Glass_Vehicle.hlsl`** — Pixel shader, glass material rendering
+- **`src/vehiclePipe.cpp`** — C++ pipeline, per-vehicle tint computation and shader binding
+
+### Spherical Environment Mapping (Pinching Fix)
+
+**Problem**: The original PS2 spherical env map formula (`uv = normal.xy * 0.5 + 0.5`) ignores the Z component, causing pole pinching where texels collapse to a point on back-facing surfaces.
+
+**Solution**: Proper sphere mapping formula from the literature:
+```
+m = 2 * sqrt(nx² + ny² + (nz+1)²)
+u = nx / m + 0.5
+v = ny / m + 0.5
+```
+
+The `sqrt` in the denominator prevents pole collapse because `nx² + ny²` keeps the denominator nonzero even when `nz → -1` (back-facing). This distributes texels uniformly across the sphere surface.
+
+**Implementation** (`Glass_Vehicle.hlsl`):
+```hlsl
+float2 SphereEnvMapUV(float3 normal, float3 viewDir)
+{
+    float m = 2.0 * sqrt(dot(normal.xy, normal.xy) + (normal.z + 1.0) * (normal.z + 1.0));
+    float2 envUV = normal.xy / m + 0.5;
+    envUV += viewDir.xy * 0.04;  // subtle parallax offset
+    return envUV;
+}
+```
+
+### Fresnel Model
+
+**Schlick Fresnel** with glass IOR 1.5 → F0 = 0.04:
+```
+F = F0 + (1 - F0) * (1 - cosθ)⁵
+```
+
+The VS also computes a Fresnel-based env intensity using the 5th power:
+```hlsl
+float b = 1.0 - saturate(dot(-ViewVector, WorldNormal));
+EnvColor = lerp(1.0, b⁵, fresnel) * shininess;
+```
+
+### Sun Lighting
+
+**Sunspot**: Tight specular highlight where sun reflection aligns with view:
+```
+NdotH = saturate(dot(N, normalize(V + L)))
+sunSpot = pow(NdotH, 128) * 2.0
+```
+
+**Broad highlight**: Broader contribution from reflection-to-sun alignment:
+```
+reflDot = saturate(dot(reflVec, L))
+sunBroad = pow(reflDot, 16) * 0.5
+```
+
+**Fresnel hotspot**: Fresnel brightened where sun hits the surface:
+```
+fresnelHotspot = fresnel * NdotL * 0.4
+```
+
+### Per-Vehicle Tint System
+
+Computed in C++ (`vehiclePipe.cpp`), passed to shader as constants:
+- **c22** = `{ opacity, tintR, tintG, tintB }`
+- **c23** = `{ isLight, lightBoost, 0, 0 }`
+
+**Detection logic**:
+1. Glass: `hasAlpha && alpha < 255 && texture NOT "vehiclelights"`
+2. Light: `hasAlpha && alpha < 255 && texture IS "vehiclelights"` (GTA SA `ms_pLightsTexture`)
+
+**Tint profiles by vehicle class** (model index lookup):
+| Class | Model IDs | Tint |
+|-------|-----------|------|
+| Taxi | 420, 438 | Dark black (0.05, 0.05, 0.08) |
+| Cop | 596-598, 427, 490, 528 | Dark black |
+| Gang | 402, 467, 474, 478, 567, 469, 602, 492, 568 | Dark black |
+| Lowrider | 534-536, 575, 576 | Clear (0, 0, 0) |
+| Casual | All others | Blue/turquoise (hash-based variation) |
+
+### Blend Modes
+- **Glass**: `SRCALPHA / INVSRCALPHA` (standard alpha blend)
+- **Light**: `SRCALPHA / ONE` (additive glow)
+
+### VS → PS Data Flow
+| Register | Content | Purpose |
+|----------|---------|---------|
+| TEXCOORD0 | UV coords | Diffuse texture |
+| TEXCOORD1 | WorldNormal | Env map + lighting |
+| TEXCOORD2 | WorldPos | Position for reflections |
+| TEXCOORD3 | ViewDir | Eye-to-surface direction |
+| TEXCOORD4 | SunDir | Sun direction for sunspot |
+| COLOR0 | Vertex lighting | Ambient + diffuse from VS |
+| COLOR1 | EnvColor.a | Fresnel-based env intensity |
+
 ### Current Status
 ✅ **expIV is the foundation for a production-ready GTA San Andreas modification**
 ✅ **All original aap features preserved and enhanced**

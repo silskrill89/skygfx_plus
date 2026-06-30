@@ -1,11 +1,12 @@
 
 #include "skygfx.h"
-#include "d3d9helper.h"
+#include <d3d9types.h>
 #include <DirectXMath.h>
 
 void *SMAA = nullptr;
 void *SMAA_Edge = nullptr;
 void *SMAA_EdgeNormal = nullptr;
+void *SMAA_EdgeDepth = nullptr;
 void *SMAA_EdgeCombined = nullptr;
 void *SMAA_EdgeMotionDepth = nullptr;
 void *SMAA_BlendWeight = nullptr;
@@ -23,6 +24,8 @@ void *VehiclePaint_GTAIV = nullptr;
 void *Water_Parallax = nullptr;
 void *Metalness_PBR = nullptr;
 void *VehiclePBR_Modern = nullptr;
+void *IBL_SkyCloud = nullptr;
+void *GenericPBR_Gloss = nullptr;
 void *Glass_Vehicle = nullptr;
 void *GTAIV_PS = nullptr;
 void *gtaivVehicleVS = nullptr, *gtaivVehiclePS = nullptr;
@@ -413,6 +416,9 @@ CreateShaders(void)
 	dbglog("  loading SMAA edge+depth detection shader...");
 	makePS(IDR_SMAAEDGENORMALPS, &SMAA_EdgeNormal);
 	dbglog("  SMAA_EdgeNormal=%p", SMAA_EdgeNormal);
+	dbglog("  loading SMAA depth edge detection shader...");
+	makePS(IDR_SMAAEDGEDEPTHPS, &SMAA_EdgeDepth);
+	dbglog("  SMAA_EdgeDepth=%p", SMAA_EdgeDepth);
 	dbglog("  loading SMAA combined edge detection shader...");
 	makePS(IDR_SMAAEDGECOMBINEDPS, &SMAA_EdgeCombined);
 	dbglog("  SMAA_EdgeCombined=%p", SMAA_EdgeCombined);
@@ -452,6 +458,12 @@ CreateShaders(void)
 	dbglog("  loading vehicle PBR modern shader...");
 	makePS(IDR_VEHICLEPBR_MODERN, &VehiclePBR_Modern);
 	dbglog("  VehiclePBR_Modern=%p", VehiclePBR_Modern);
+	dbglog("  loading vehicle glass shader...");
+	makePS(IDR_GLASS_VEHICLE, &Glass_Vehicle);
+	dbglog("  Glass_Vehicle=%p", Glass_Vehicle);
+	dbglog("  loading IBL sky+cloud shader...");
+	makePS(IDR_IBL_SKYCLOUD, &IBL_SkyCloud);
+	dbglog("  IBL_SkyCloud=%p", IBL_SkyCloud);
 	dbglog("  loading SMAA blend weight shader...");
 	makePS(IDR_SMAABLENDWEIGHTPS, &SMAA_BlendWeight);
 	dbglog("  SMAA_BlendWeight=%p", SMAA_BlendWeight);
@@ -463,17 +475,7 @@ CreateShaders(void)
 	dbglog("  loading GTAIV shader...");
 	makePS(IDR_GTAIVPS, &GTAIV_PS);
 	dbglog("  GTAIV=%p", GTAIV_PS);
-	dbglog("  loading GTAIV forward pass shaders...");
-	makeVS(IDR_GTAIVVEHICLEVS, &gtaivVehicleVS);
-	makePS(IDR_GTAIVVEHICLEPS, &gtaivVehiclePS);
-	makeVS(IDR_GTAIVBUILDINGVS, &gtaivBuildingVS);
-	makePS(IDR_GTAIVBUILDINGPS, &gtaivBuildingPS);
-	dbglog("  GTAIV vehicle VS=%p PS=%p", gtaivVehicleVS, gtaivVehiclePS);
-	dbglog("  GTAIV building VS=%p PS=%p", gtaivBuildingVS, gtaivBuildingPS);
-	dbglog("  loading GTAIV Forward+ shaders...");
-	makeVS(IDR_GTAIVFPVS, &gtaivFPVS);
-	makePS(IDR_GTAIVFPPS, &gtaivFPPS);
-	dbglog("  GTAIV FP VS=%p PS=%p", gtaivFPVS, gtaivFPPS);
+	// GTAIV forward pass shaders removed (unused, broken merge conflicts)
 
 	// vehicles
 	makeVS(IDR_VEHICLEVS, &vehiclePipeVS);

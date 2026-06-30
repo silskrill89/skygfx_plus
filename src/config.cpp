@@ -178,8 +178,9 @@ readIni(int n)
 		{"LCS",     CAR_LCS},
 		{"VCS",     CAR_VCS},
 		{"Mobile",  CAR_MOBILE},
-		{"Env",  CAR_ENV},
+		{"Env",     CAR_ENV},
 		{"GTAIV",   CAR_GTAIV},
+		{"Modern",  CAR_MODERN},
 		{"",       -1},
 	};
 	c->vehiclePipe = StrAssoc::get(vehPipeMap, cfg.get("SkyGfx", "vehiclePipe", "").c_str());

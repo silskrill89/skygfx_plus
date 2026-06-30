@@ -31,6 +31,8 @@ struct VS_OUTPUT {
 	float2 Texcoord0	: TEXCOORD0;
 	float3 WorldNormal	: TEXCOORD1;
 	float3 WorldPos		: TEXCOORD2;
+	float3 ViewDir		: TEXCOORD3;
+	float3 SunDir		: TEXCOORD4;
 	float4 Color		: COLOR0;
 	float4 EnvColor		: COLOR1;
 };
@@ -55,6 +57,8 @@ main(VS_INPUT IN)
 	float3 ViewVector = normalize(WorldPos.xyz - eye);
 	OUT.WorldPos = WorldPos;
 	OUT.WorldNormal = WorldNormal;
+	OUT.ViewDir = ViewVector;
+	OUT.SunDir = -directDir[0];
 
 	// reflection intensity
 	float b = 1.0 - saturate(dot(-ViewVector, WorldNormal));

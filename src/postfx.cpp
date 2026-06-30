@@ -291,7 +291,6 @@ CPostEffects::Radiosity_VCS_init(void)
 void
 CPostEffects::Radiosity_VCS(int limit, int intensity)
 {
-	dbglog("Radiosity_VCS: start (limit=%d intensity=%d)", limit, intensity);
 	static int lastWidth, lastHeight, lastConfigRes;
 	int i;
 	int resMult = config->trailsResolution;
@@ -657,9 +656,8 @@ CPostEffects::Radiosity_shader(int intensityLimit, int filterPasses, int renderP
 void
 CPostEffects::Radiosity(int intensityLimit, int filterPasses, int renderPasses, int intensity)
 {
-	dbglog("Radiosity: start (do=%d rad=%d vcs=%d)", config->doRadiosity, config->radiosity, config->vcsTrails);
 	if(!pRasterFrontBuffer){
-		dbglog("Radiosity: pRasterFrontBuffer is NULL, skipping");
+		return;
 		return;
 	}
 /*
@@ -854,6 +852,10 @@ CPostEffects::ColourFilter_Generic(RwRGBA rgb1, RwRGBA rgb2, void *ps)
 	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
 	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)NULL);
 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
+	// CRITICAL: unbind pixel/vertex shaders after postfx draw
+	// Without this, the GTAIV pixel shader stays bound and corrupts UI rendering
+	RwD3D9SetPixelShader(NULL);
+	RwD3D9SetVertexShader(NULL);
 }
 
 void
@@ -1221,10 +1223,11 @@ CPostEffects::Grain_PS2(int strength, bool generate)
 void
 CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 {
-	dbglog("ColourFilter_switch: start (ssao=%d smaa=%d)", config->ssaoEnable, config->smaaEnable);
-
 	// SSAO must run before color filter to read original scene
-	DrawSSAO();
+	{
+		PERF_SCOPE("SSAO");
+		DrawSSAO();
+	}
 
 	{
 		static bool keystate = false;
@@ -1379,65 +1382,55 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 		CPostEffects::ColourFilter_PS2(rgb1, rgb2);
 		break;
 	case COLORFILTER_PC:
-		// this effects expects PC alphas
 		CPostEffects::ColourFilter(rgb1pc, rgb2pc);
 		break;
 	case COLORFILTER_MOBILE:
-		// this effects ignores alphas
 		if(!UG_mod)
 			CPostEffects::ColourFilter_Mobile(rgb1, rgb2);
 		break;
 	case COLORFILTER_III:
-		// this effects expects PC alphas
 		CPostEffects::ColourFilter_Generic(rgb1pc, rgb2pc, iiiTrailsPS);
 		break;
 	case COLORFILTER_VC:
-		// this effects ignores alphas
 		CPostEffects::ColourFilter_Generic(rgb1, rgb2, vcTrailsPS);
 		break;
 	case COLORFILTER_VCS:
-		// this effects ignores alphas
 		CPostEffects::ColourFilter_Generic(rgb1, rgb2, vcTrailsPS);
 		break;
 	case COLORFILTER_GTAIV:
-		// GTA IV filmic tonemapping postfx
+		// GTA IV filmic tonemap postfx
 		{
-			dbglog("ColourFilter_switch: GTAIV mode (desat=%.2f gamma=%.2f vignette=%.2f bloom=%.2f exposure=%.2f)",
-				config->ivDesaturation, config->ivGamma, config->ivVignetteIntensity, config->ivBloomIntensity, config->ivExposure);
+			PERF_SCOPE("GTAIV_Filter");
+			// Hable/Uncharted2 filmic tonemapping
+			// SA DirectX parameters, whitePoint=1.0 (no output scaling)
+			// Exposure boost applied separately via ivExposure
+			float A = 1.0f, B = 0.25f, C = 0.52f, D = 0.34f, E = 0.0f, F = 1.0f;
 
-			// Filmic tonemap parameters (Uncharted 2 / Hable curve from RAGE)
-			// A=Shoulder Strength, B=Linear Strength, C=Linear Angle
-			// D=Toe Strength, E=Toe Numerator, F=Toe Denominator
-			float A = 0.15f, B = 0.50f, C = 0.10f, D = 0.20f, E = 0.02f, F = 0.30f;
-			float whitePoint = 5.0f; // Controls white point clipping
+			// Register layout c7-c12 (safe from ColourFilter_Generic c0/c1):
+			// c7 = {A, B, 1/whitePoint, C*B}
+			// c8 = {D*E, D*F, E/F, 0}
+			// c9 = {desaturation, gamma, saturation, curves}
+			// c10 = {bloomIntensity, 0, 0, 0}
+			// c11 = {vIntensity, vRadius, vContrast, 0}
+			// c12 = {exposure, 0, 0, 0}
 
-			// c0 = {A, B, 1/whitePoint, unused}
-			float filmic0[4] = { A, B, 1.0f / whitePoint, 0.0f };
-			RwD3D9SetPixelShaderConstant(0, filmic0, 1);
+			float filmic0[4] = { A, B, 1.0f, C * B };
+			RwD3D9SetPixelShaderConstant(7, filmic0, 1);
 
-			// c1 = {C*B, D*E, D*F, E/F}
-			float filmic1[4] = { C * B, D * E, D * F, E / F };
-			RwD3D9SetPixelShaderConstant(1, filmic1, 1);
+			float filmic1[4] = { D * E, D * F, E / F, 0.0f };
+			RwD3D9SetPixelShaderConstant(8, filmic1, 1);
 
-			// c2 = {desaturation, gamma, unused, unused}
-			float colorCorrect[4] = { config->ivDesaturation, config->ivGamma, 0.0f, 0.0f };
-			RwD3D9SetPixelShaderConstant(2, colorCorrect, 1);
+			float colorCorr[4] = { config->ivDesaturation, config->ivGamma, config->ivSaturation, config->ivCurves };
+			RwD3D9SetPixelShaderConstant(9, colorCorr, 1);
 
-			// c3 = {bloom intensity, unused, unused, unused}
-			float bloom[4] = { config->ivBloomIntensity, 0.0f, 0.0f, 0.0f };
-			RwD3D9SetPixelShaderConstant(3, bloom, 1);
+			float bloomP[4] = { config->ivBloomIntensity, 0.0f, 0.0f, 0.0f };
+			RwD3D9SetPixelShaderConstant(10, bloomP, 1);
 
-			// c4 = {vignette intensity, radius, contrast, unused}
-			float vignette[4] = { config->ivVignetteIntensity, config->ivVignetteRadius, config->ivVignetteContrast, 0.0f };
-			RwD3D9SetPixelShaderConstant(4, vignette, 1);
+			float vigP[4] = { config->ivVignetteIntensity, config->ivVignetteRadius, config->ivVignetteContrast, 0.0f };
+			RwD3D9SetPixelShaderConstant(11, vigP, 1);
 
-			// c5 = vignette color (dark blue-black for GTA IV look)
-			float vigColor[4] = { 0.02f, 0.02f, 0.05f, 0.0f };
-			RwD3D9SetPixelShaderConstant(5, vigColor, 1);
-
-			// c6 = {exposure, unused, unused, unused}
-			float exposure[4] = { config->ivExposure, 0.0f, 0.0f, 0.0f };
-			RwD3D9SetPixelShaderConstant(6, exposure, 1);
+			float vigE[4] = { config->ivExposure, 0.0f, 0.0f, 0.0f };
+			RwD3D9SetPixelShaderConstant(12, vigE, 1);
 
 			CPostEffects::ColourFilter_Generic(rgb1, rgb2, GTAIV_PS);
 		}
@@ -1446,7 +1439,6 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 		return;
 	}
 	UpdateFrontBuffer();
-	dbglog("ColourFilter_switch: done (filter=%d)", colorFilter);
 
 	//static int doramp = 0;
 	//{
@@ -1480,7 +1472,6 @@ static RwMatrix YUV2RGB = {
 void
 CPostEffects::DrawFinalEffects(void)
 {
-	dbglog("DrawFinalEffects: start ycbcr=%d", m_bYCbCrFilter);
 	if(m_bYCbCrFilter){
 		UpdateFrontBuffer();
 
@@ -1551,7 +1542,6 @@ CPostEffects::DrawFinalEffects(void)
 	}
 
 	// Debug menu moved to D3D9 EndScene hook (main.cpp) - renders AFTER all UI
-	dbglog("DrawFinalEffects: done");
 }
 
 static IDirect3DTexture9 *g_ssaoDepthTex = NULL;
@@ -1565,6 +1555,12 @@ static BOOL g_ssaoDepthPacked = FALSE;
 static IDirect3DTexture9 *g_smaaAreaTex = NULL;
 static IDirect3DTexture9 *g_smaaSearchTex = NULL;
 
+// IBL buffer (quarter-res sky/cloud ambient)
+IDirect3DTexture9 *g_iblTex = NULL;
+static IDirect3DSurface9 *g_iblSurf = NULL;
+static RwRaster *g_iblOutputRaster = NULL;
+extern void *IBL_SkyCloud;
+
 // Release all D3DPOOL_DEFAULT resources (call on device lost/reset)
 void ReleaseDefaultPoolResources(void)
 {
@@ -1576,7 +1572,11 @@ void ReleaseDefaultPoolResources(void)
 	// SMAA area/search textures (D3DPOOL_DEFAULT)
 	if(g_smaaAreaTex){ g_smaaAreaTex->Release(); g_smaaAreaTex = NULL; }
 	if(g_smaaSearchTex){ g_smaaSearchTex->Release(); g_smaaSearchTex = NULL; }
-	
+
+	// IBL buffer (D3DPOOL_DEFAULT)
+	if(g_iblTex){ g_iblTex->Release(); g_iblTex = NULL; }
+	if(g_iblSurf){ g_iblSurf->Release(); g_iblSurf = NULL; }
+
 	// RW rasters are managed by RW, not our responsibility
 	dbglog("ReleaseDefaultPoolResources: done");
 }
@@ -1661,11 +1661,25 @@ static void InitSSAOResources(void)
 					dbglog("InitSSAOResources: CreateTexture INTZ failed hr=0x%08X", hr);
 				}
 			}else{
-				dbglog("InitSSAOResources: INTZ format not supported on this hardware/driver");
+				dbglog("InitSSAOResources: INTZ format not supported, using fallback");
+				// Fallback: create a regular texture for depth copy
+				hr = dev->CreateTexture(w, h, 1, D3DUSAGE_DEPTHSTENCIL,
+					D3DFMT_D24S8, D3DPOOL_DEFAULT, &g_ssaoDepthTex, NULL);
+				if(SUCCEEDED(hr)){
+					g_ssaoDepthTex->GetSurfaceLevel(0, &g_ssaoDepthSurf);
+					g_ssaoDepthFallback = TRUE;
+					dbglog("InitSSAOResources: fallback depth texture created OK");
+				}else{
+					dbglog("InitSSAOResources: fallback CreateTexture failed hr=0x%08X", hr);
+				}
 			}
 			d3d->Release();
 		}
-		dbglog("InitSSAOResources: SSAO disabled - INTZ depth format not available");
+		if(!g_ssaoDepthTex){
+			dbglog("InitSSAOResources: SSAO disabled - depth texture not available");
+			return;
+		}
+		dbglog("InitSSAOResources: done");
 	} __except(EXCEPTION_EXECUTE_HANDLER){
 		dbglog("InitSSAOResources crashed! exception=0x%08X", GetExceptionCode());
 	}
@@ -1678,20 +1692,17 @@ CPostEffects::DrawSSAO(void)
 		return;
 
 	__try {
-		dbglog("DrawSSAO: start");
 		IDirect3DDevice9 *dev = d3d9device;
-		if(dev == NULL){ dbglog("DrawSSAO: no dev"); return; }
-		if(Scene.camera == NULL){ dbglog("DrawSSAO: no camera"); return; }
+		if(dev == NULL) return;
+		if(Scene.camera == NULL) return;
 		RwRaster *camRas = RwCameraGetRaster(Scene.camera);
-		if(camRas == NULL){ dbglog("DrawSSAO: no camRas"); return; }
+		if(camRas == NULL) return;
 		int w = camRas->width;
 		int h = camRas->height;
-		dbglog("DrawSSAO: camRas %dx%d", w, h);
 
 		InitSSAOResources();
 
 		if(!g_ssaoNoiseTex || !g_ssaoDepthTex){
-			dbglog("DrawSSAO: no noise/depth tex (INTZ not supported), disabling SSAO");
 			config->ssaoEnable = 0;
 			return;
 		}
@@ -1699,16 +1710,14 @@ CPostEffects::DrawSSAO(void)
 		if(!g_ssaoOutputRaster || g_ssaoOutputRaster->width != w || g_ssaoOutputRaster->height != h){
 			if(g_ssaoOutputRaster) RwRasterDestroy(g_ssaoOutputRaster);
 			g_ssaoOutputRaster = RwRasterCreate(w, h, camRas->depth, rwRASTERTYPECAMERATEXTURE);
-			if(!g_ssaoOutputRaster){ dbglog("DrawSSAO: RwRasterCreate failed"); return; }
+			if(!g_ssaoOutputRaster) return;
 		}
 
 		IDirect3DSurface9 *pDS = NULL;
 		if(FAILED(dev->GetDepthStencilSurface(&pDS)) || pDS == NULL){
-			dbglog("DrawSSAO: GetDepthStencilSurface failed");
 			return;
 		}
 		if(FAILED(dev->StretchRect(pDS, NULL, g_ssaoDepthSurf, NULL, D3DTEXF_NONE))){
-			dbglog("DrawSSAO: StretchRect failed, disabling SSAO");
 			pDS->Release();
 			config->ssaoEnable = 0;
 			return;
@@ -1779,9 +1788,8 @@ CPostEffects::DrawSSAO(void)
 		RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
 
 		ImmediateModeRenderStatesReStore();
-		dbglog("DrawSSAO: done");
 	} __except(EXCEPTION_EXECUTE_HANDLER){
-		dbglog("DrawSSAO crashed! exception=0x%08X", GetExceptionCode());
+		dbglog("DrawSSAO CRASHED exception=0x%08X", GetExceptionCode());
 	}
 }
 
@@ -1832,6 +1840,109 @@ void GenerateSMAASearchTex(IDirect3DDevice9 *dev, IDirect3DTexture9 **outTex)
 	}
 	(*outTex)->UnlockRect(0);
 	dbglog("GenerateSMAASearchTex: OK %dx%d", SEARCHTEX_WIDTH, SEARCHTEX_HEIGHT);
+}
+
+// =====================================================
+// IBL Buffer - quarter-res sky/cloud ambient
+// =====================================================
+static IDirect3DTexture9 *GetIBLTexture(void)
+{
+	IDirect3DDevice9 *dev = d3d9device;
+	if(!dev) return NULL;
+	if(g_iblTex) return g_iblTex;
+
+	RwRaster *camRas = RwCameraGetRaster(Scene.camera);
+	if(!camRas) return NULL;
+	int w = camRas->width / 4;
+	int h = camRas->height / 4;
+	if(w < 16) w = 16;
+	if(h < 16) h = 16;
+
+	if(FAILED(dev->CreateTexture(w, h, 1, D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &g_iblTex, NULL)))
+		return NULL;
+	if(FAILED(g_iblTex->GetSurfaceLevel(0, &g_iblSurf))){
+		g_iblTex->Release();
+		g_iblTex = NULL;
+		return NULL;
+	}
+	dbglog("GetIBLTexture: OK %dx%d", w, h);
+	return g_iblTex;
+}
+
+void RenderIBLBuffer(void)
+{
+	static int iblLogged = 0;
+	if(!IBL_SkyCloud){ if(!iblLogged){ dbglog("RenderIBL: IBL_SkyCloud=NULL"); iblLogged=1; } return; }
+	IDirect3DTexture9 *tex = GetIBLTexture();
+	if(!tex || !g_iblSurf){ if(!iblLogged){ dbglog("RenderIBL: no tex/surf"); iblLogged=1; } return; }
+	IDirect3DDevice9 *dev = d3d9device;
+	if(!dev) return;
+	if(!iblLogged){ dbglog("RenderIBL: OK tex=%p surf=%p", tex, g_iblSurf); iblLogged=1; }
+
+	// Save current render target
+	IDirect3DSurface9 *oldRT = NULL;
+	IDirect3DSurface9 *oldDS = NULL;
+	dev->GetRenderTarget(0, &oldRT);
+	dev->GetDepthStencilSurface(&oldDS);
+
+	// Set IBL buffer as render target (no depth needed)
+	dev->SetRenderTarget(0, g_iblSurf);
+	dev->SetDepthStencilSurface(NULL);
+
+	// Get screen size
+	RwRaster *camRas = RwCameraGetRaster(Scene.camera);
+	float screenP[4] = { (float)camRas->width, (float)camRas->height, 1.0f/camRas->width, 1.0f/camRas->height };
+	RwD3D9SetPixelShaderConstant(0, screenP, 1);
+
+	// Sky colors from timecycle (zenith = sky top, horizon = sky bottom)
+	extern CColourSet &CTimeCycle__m_CurrentColours;
+	CColourSet &tc = CTimeCycle__m_CurrentColours;
+	float skyC[4] = {
+		tc.skyTopR / 255.0f,
+		tc.skyTopG / 255.0f,
+		tc.skyTopB / 255.0f,
+		tc.fogStart > 0.0f ? 1.0f : 0.0f
+	};
+	RwD3D9SetPixelShaderConstant(1, skyC, 1);
+
+	// Cloud params: time, coverage from weather, cloud alpha from timecycle, unused
+	extern float cloudAnimTimer;
+	extern float &CWeather__CloudCoverage;
+	float cloudP[4] = {
+		cloudAnimTimer * 0.01f,
+		CWeather__CloudCoverage,
+		tc.cloudAlpha,
+		0.0f
+	};
+	RwD3D9SetPixelShaderConstant(2, cloudP, 1);
+
+	// Sun direction from timecycle
+	float sunD[4];
+	GetSunDirection(sunD[0], sunD[1], sunD[2]);
+	sunD[3] = tc.spriteBrightness / 10.0f;
+	RwD3D9SetPixelShaderConstant(3, sunD, 1);
+
+	// Render fullscreen quad with IBL shader
+	CPostEffects::ImmediateModeRenderStatesStore();
+	CPostEffects::ImmediateModeRenderStatesSet();
+	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERNEAREST);
+	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
+	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
+	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
+	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
+	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)NULL);
+
+	overrideIm2dPixelShader = IBL_SkyCloud;
+	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
+	overrideIm2dPixelShader = nil;
+
+	CPostEffects::ImmediateModeRenderStatesReStore();
+
+	// Restore old render target
+	dev->SetRenderTarget(0, oldRT);
+	dev->SetDepthStencilSurface(oldDS);
+	if(oldRT) oldRT->Release();
+	if(oldDS) oldDS->Release();
 }
 
 void
@@ -1969,6 +2080,25 @@ CPostEffects::DrawSMAA(void)
 	// Bind edge raster as input texture on stage 0
 	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)edgeRaster);
 
+	// Bind area/search textures on stages 1 and 2
+	IDirect3DDevice9 *dev = d3d9device;
+	if(dev){
+		if(g_smaaAreaTex){
+			dev->SetTexture(1, g_smaaAreaTex);
+			dev->SetSamplerState(1, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+			dev->SetSamplerState(1, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+			dev->SetSamplerState(1, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+			dev->SetSamplerState(1, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+		}
+		if(g_smaaSearchTex){
+			dev->SetTexture(2, g_smaaSearchTex);
+			dev->SetSamplerState(2, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+			dev->SetSamplerState(2, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+			dev->SetSamplerState(2, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+			dev->SetSamplerState(2, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+		}
+	}
+
 	// Set blend weight shader constants
 	float blendP[4] = {0.0f, smaaSearchSteps, 0.0f, 0.0f};
 	RwD3D9SetPixelShaderConstant(0, blendP, 1);
@@ -1976,6 +2106,12 @@ CPostEffects::DrawSMAA(void)
 	overrideIm2dPixelShader = SMAA_BlendWeight;
 	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
 	overrideIm2dPixelShader = nil;
+
+	// Clean up texture stages after Pass 1
+	if(dev){
+		dev->SetTexture(1, NULL);
+		dev->SetTexture(2, NULL);
+	}
 
 	// ---- Pass 2: Neighborhood Blending ----
 	RwCameraEndUpdate(Scene.camera);
@@ -2013,13 +2149,6 @@ CPostEffects::DrawSMAA(void)
 	RwRasterRenderFast(RwCameraGetRaster(Scene.camera), 0, 0);
 	RwRasterPopContext();
 	RwCameraBeginUpdate(Scene.camera);
-
-	static int drawCount = 0;
-	if(drawCount < 3){
-		dbglog("DrawSMAA: all passes done preset=%d thresh=%.2f steps=%.0f",
-			config->smaaPreset, smaaThreshold, smaaSearchSteps);
-		drawCount++;
-	}
 }
 
 void (*CPostEffects::Initialise_orig)(void);

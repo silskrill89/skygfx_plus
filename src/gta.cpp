@@ -34,6 +34,19 @@ uint8 &CClock__ms_nGameClockHours = *(byte*)0xB70153;
 int16 &CWeather__OldWeatherType = *(short*)0xC81320;
 int16 &CWeather__NewWeatherType = *(short*)0xC8131C;
 float &CWeather__InterpolationValue = *(float*)0xC8130C;
+float &CWeather__CloudCoverage = *(float*)0xC81304;
+float &CWeather__Foggyness = *(float*)0xC81300;
+
+CColourSet &CTimeCycle__m_CurrentColours = *(CColourSet*)0xB7C4A0;
+
+// Get actual sun direction from timecycle
+void GetSunDirection(float &sx, float &sy, float &sz) {
+	int idx = *(int*)0xB79FD0 & 15;
+	CVector *sunVecs = (CVector*)0xB7CA50;
+	sx = sunVecs[idx].x;
+	sy = sunVecs[idx].y;
+	sz = sunVecs[idx].z;
+}
 
 void **rwengine = *(void***)0x58FFC0;
 RwInt32 &CCustomCarEnvMapPipeline__ms_envMapPluginOffset = *(RwInt32*)0x8D12C4;

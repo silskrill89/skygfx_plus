@@ -290,6 +290,29 @@ extern uint8 &CClock__ms_nGameClockHours;
 extern int16 &CWeather__OldWeatherType;
 extern int16 &CWeather__NewWeatherType;
 extern float &CWeather__InterpolationValue;
+extern float &CWeather__CloudCoverage;
+extern float &CWeather__Foggyness;
+
+struct CColourSet {
+	float ambientR, ambientG, ambientB;
+	float ambientObjR, ambientObjG, ambientObjB;
+	float directionalR, directionalG, directionalB;
+	short skyTopR, skyTopG, skyTopB;
+	short skyBotR, skyBotG, skyBotB;
+	short sunCoreR, sunCoreG, sunCoreB;
+	short sunCoronaR, sunCoronaG, sunCoronaB;
+	float sunSize, spriteSize, spriteBrightness;
+	short shadowStrength, lightShadowStrength, poleShadowStrength;
+	float farClip, fogStart, lightsOnGroundBrightness;
+	short lowCloudsR, lowCloudsG, lowCloudsB;
+	short fluffyBottomR, fluffyBottomG, fluffyBottomB;
+	float waterR, waterG, waterB, waterA;
+	float postFx1R, postFx1G, postFx1B, postFx1A;
+	float postFx2R, postFx2G, postFx2B, postFx2A;
+	float cloudAlpha;
+};
+extern CColourSet &CTimeCycle__m_CurrentColours;
+void GetSunDirection(float &sx, float &sy, float &sz);
 
 extern void **rwengine;
 extern RwInt32 &CCustomCarEnvMapPipeline__ms_envMapPluginOffset;

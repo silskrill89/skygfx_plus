@@ -1,113 +1,70 @@
 // GTA IV Style PostFX Shader
-// Adapted from RAGE engine (GTA V source) postfx.fx filmic tonemapping
-// and color grading system for GTA SA via skygfx
-//
-// Features:
-//   - Hable/Uncharted2 filmic tonemapping (from RAGE fullFilmicTonemap)
-//   - Luminance-dependent color correction (from RAGE ApplyColorCorrection)
-//   - Desaturation for GTA IV muted look
-//   - Bloom compositing
-//   - Vignette darkening
-//   - Blue shift for shadow tones (GTA IV signature)
-
 sampler2D sceneSampler : register(s0);
 sampler2D bloomSampler : register(s1);
+float4 filmic0   : register(c7);
+float4 filmic1   : register(c8);
+float4 colorCorr : register(c9);  // {desat, gamma, sat, curves}
+float4 bloomP    : register(c10);
+float4 vigP      : register(c11);
+float4 vigE      : register(c12); // {exposure, 0, 0, 0}
+float4 rgb1      : register(c0);  // timecycle tint (set by ColourFilter_Generic)
+float4 rgb2      : register(c1);  // timecycle tint (set by ColourFilter_Generic)
 
-// Filmic tonemap params (from RAGE BrightTonemapParams0/1, DarkTonemapParams0/1)
-// .xy = A,B  .zw = C*B  and  .x = D*E, .y = D*F, .z = E/F
-float4 filmicParams0 : register(c0);  // {A, B, 1/whitePoint, unused}
-float4 filmicParams1 : register(c1);  // {C*B, D*E, D*F, E/F}
-float4 colorCorrect : register(c2);   // {desaturate, gamma, unused, unused}
-float4 bloomParams : register(c3);    // {bloomIntensity, unused, unused, unused}
-float4 vignetteParams : register(c4); // {intensity, radius, contrast, unused}
-float4 vignetteColor : register(c5);  // {r, g, b, unused}
-float4 exposureScale : register(c6);  // {exposure, unused, unused, unused}
-
-// Hable/Uncharted2 filmic tonemapping - from RAGE fullFilmicTonemap()
-// ((x*(A*x + C*B) + D*E) / (x*(A*x + B) + D*F)) - E/F
-float3 filmicTonemap(float3 x)
+float filmicScalar(float x)
 {
-    float A = filmicParams0.x;
-    float B = filmicParams0.y;
-    float C_mul_B = filmicParams1.x;
-    float D_mul_E = filmicParams1.y;
-    float D_mul_F = filmicParams1.z;
-    float E_div_F = filmicParams1.w;
-    float ooWhitePoint = filmicParams0.z;
-
-    float3 numerator = x * (A * x + C_mul_B) + D_mul_E;
-    float3 denominator = x * (A * x + B) + D_mul_F;
-    float3 result = (numerator / denominator) - E_div_F;
-
-    return result * ooWhitePoint;
+    float A = filmic0.x, B = filmic0.y, wp = filmic0.z, Cb = filmic0.w;
+    float DE = filmic1.x, DF = filmic1.y, Ef = filmic1.z;
+    float num = x * (A * x + Cb) + DE;
+    float den = x * (A * x + B) + DF;
+    return max(((num / den) - Ef) * wp, 0.0);
 }
 
-// Luminance-dependent color correction - from RAGE ApplyColorCorrection()
-static const float3 LumFactors = float3(0.299, 0.587, 0.114);
+static const float3 LUM = float3(0.299, 0.587, 0.114);
 
-float3 applyColorCorrection(float3 color)
+float4 main(float2 uv : TEXCOORD0) : COLOR0
 {
-    float desat = colorCorrect.x;
-    float gamma = colorCorrect.y;
+    float3 color = tex2D(sceneSampler, uv).rgb;
+    color += tex2D(bloomSampler, uv).rgb * bloomP.x;
+    color *= vigE.x;
 
-    float lum = dot(color, LumFactors);
+    // Tonemap luminance only
+    float lum = dot(color, LUM);
+    float mappedLum = filmicScalar(lum);
+    if(lum > 0.001) color *= (mappedLum / lum);
 
-    // Desaturate (GTA IV muted look)
-    color = lerp(float3(lum, lum, lum), color, desat);
+    // Saturation boost
+    float sat = colorCorr.z;
+    if(sat != 0.0) {
+        float cl = dot(color, LUM);
+        color += (color - float3(cl,cl,cl)) * sat;
+    }
 
-    // Gamma correction
-    color = pow(max(color, 0.0), gamma);
+    // Desaturation
+    float desat = colorCorr.x;
+    if(desat < 1.0) {
+        float dl = dot(color, LUM);
+        color = lerp(float3(dl,dl,dl), color, desat);
+    }
 
-    return color;
-}
+    // Gamma
+    color = pow(max(color, 0.0), colorCorr.y);
 
-// Vignette - darkening at screen edges
-float3 applyVignette(float3 color, float2 uv)
-{
-    float intensity = vignetteParams.x;
-    float radius = vignetteParams.y;
-    float contrast = vignetteParams.z;
+    // Curves
+    float curve = colorCorr.w;
+    if(curve != 1.0) {
+        float cl = dot(color, LUM);
+        float sl = cl * cl * (3.0 - 2.0 * cl);
+        float nl = lerp(cl, sl, saturate(curve - 1.0));
+        if(cl > 0.001) color *= nl / cl;
+    }
 
-    float2 center = uv - 0.5;
-    float dist = length(center);
-    float vig = smoothstep(radius, radius * 0.5, dist);
-    vig = pow(vig, contrast);
+    // Vignette
+    float dist = length(uv - 0.5);
+    float vig = 1.0 - smoothstep(0.0, vigP.y, dist);
+    vig = pow(max(vig, 0.0), vigP.z);
+    color = lerp(color, color * vig, vigP.x);
 
-    float3 vigColor = vignetteColor.rgb;
-    color = lerp(vigColor, color, vig * intensity + (1.0 - intensity));
-    return color;
-}
-
-// Main composite pass
-struct PS_INPUT {
-    float2 texcoord : TEXCOORD0;
-};
-
-float4 main(PS_INPUT input) : COLOR0
-{
-    float2 uv = input.texcoord;
-
-    // Sample scene
-    float4 sceneColor = tex2D(sceneSampler, uv);
-    float3 color = sceneColor.rgb;
-
-    // Sample bloom and add
-    float4 bloomColor = tex2D(bloomSampler, uv);
-    color += bloomColor.rgb * bloomParams.x;
-
-    // Exposure scale
-    color *= exposureScale.x;
-
-    // Filmic tonemapping (RAGE Hable curve)
-    color = filmicTonemap(color);
-
-    // Color correction + desaturation (GTA IV muted palette)
-    color = applyColorCorrection(color);
-
-    // Vignette (GTA IV dark edges)
-    color = applyVignette(color, uv);
-
-    return float4(color, 1.0);
+    return float4(max(color, 0.0), 1.0);
 }
 
 technique GTAIV {
