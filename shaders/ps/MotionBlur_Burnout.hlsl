@@ -92,7 +92,6 @@ float4 main(PS_INPUT IN) : COLOR
     totalWeight += centerWeight;
     
     // Directional samples with chromatic aberration
-    [unroll]
     for(int i = 1; i <= 8; i++)
     {
         float t = (float)i / 8.0;

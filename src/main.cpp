@@ -968,10 +968,17 @@ RenderScene_after(void*)
 		CarPipe::RenderEnvTex();
 	else if(config->vehiclePipe == CAR_LCS || config->vehiclePipe == CAR_VCS)
 		RenderReflectionMap_leeds();
-	else if(config->vehiclePipe == CAR_MODERN){
+	else 	if(config->vehiclePipe == CAR_MODERN){
 		PERF_SCOPE("EnvTex");
 		CarPipe::RenderEnvTex();
 	}
+
+	// Normal buffer render (stereo disparity)
+	if(config->normalBufferEnable){
+		PERF_SCOPE("NormalBuffer");
+		RenderNormalBuffer();
+	}
+
 	DrawDebugEnvMap();
 	return true;
 }
@@ -1610,6 +1617,15 @@ readIni(int n)
 	c->smaaPredication = readint(cfg.get("SkyGfx", "smaaPredication", ""), 0);
 	c->smaaTemporal = readint(cfg.get("SkyGfx", "smaaTemporal", ""), 0);
 
+	// Faux Normal Buffer (stereo disparity)
+	c->normalBufferEnable = readint(cfg.get("SkyGfx", "normalBufferEnable", ""), 0);
+	c->normalBufferOffset = readfloat(cfg.get("SkyGfx", "normalBufferOffset", ""), 0.5f);
+	c->normalBufferScale = readfloat(cfg.get("SkyGfx", "normalBufferScale", ""), 1.0f);
+
+	// 4-Pipe Chain
+	c->pipeChainEnable = readint(cfg.get("SkyGfx", "pipeChainEnable", ""), 0);
+	c->pipeChainIntensity = readfloat(cfg.get("SkyGfx", "pipeChainIntensity", ""), 0.5f);
+
 	// GTA IV Mode
 	c->ivMode = readint(cfg.get("SkyGfx", "ivMode", ""), 0);
 	c->ivDesaturation = readfloat(cfg.get("SkyGfx", "ivDesaturation", ""), 0.0f);
@@ -2056,8 +2072,8 @@ DllMain(HINSTANCE hInst, DWORD reason, LPVOID)
 		// that creates an infinite loop (wrapper jumps to hooked address which calls wrapper again)
 
 		// add dual pass for PC pipeline
-		InjectHook(0x5D9EEB, D3D9RenderDefault_DUAL);
-		InjectHook(0x5D9EFB, D3D9RenderBlack_DUAL);
+	InjectHook(0x5D9EEB, D3D9RenderDefault_DUAL);
+	InjectHook(0x5D9EFB, D3D9RenderBlack_DUAL);
 
 		// give vehicle pipe to upgrade parts
 		InjectHook(0x4C88F0, 0x5DA610, PATCH_JUMP);

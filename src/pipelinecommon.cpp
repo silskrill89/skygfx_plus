@@ -27,6 +27,9 @@ void *VehiclePBR_Modern = nullptr;
 void *IBL_SkyCloud = nullptr;
 void *GenericPBR_Gloss = nullptr;
 void *Glass_Vehicle = nullptr;
+void *Rubber_Vehicle = nullptr;
+void *NormalBufferShader = nullptr;
+void *PipeChainShader = nullptr;
 void *GTAIV_PS = nullptr;
 void *gtaivVehicleVS = nullptr, *gtaivVehiclePS = nullptr;
 void *gtaivBuildingVS = nullptr, *gtaivBuildingPS = nullptr;
@@ -434,9 +437,6 @@ CreateShaders(void)
 	dbglog("  loading cross-mix color filter shader...");
 	makePS(IDR_COLORFILTER_CROSSMIX, &ColorFilter_CrossMix);
 	dbglog("  ColorFilter_CrossMix=%p", ColorFilter_CrossMix);
-	dbglog("  loading edge tessellation vertex shader...");
-	makeVS(IDR_EDGETESSELLATIONVS, &EdgeTessellationVS);
-	dbglog("  EdgeTessellationVS=%p", EdgeTessellationVS);
 	dbglog("  loading SSS blur shader...");
 	makePS(IDR_SSS_BLUR, &SSS_Blur);
 	dbglog("  SSS_Blur=%p", SSS_Blur);
@@ -461,6 +461,9 @@ CreateShaders(void)
 	dbglog("  loading vehicle glass shader...");
 	makePS(IDR_GLASS_VEHICLE, &Glass_Vehicle);
 	dbglog("  Glass_Vehicle=%p", Glass_Vehicle);
+
+	makePS(IDR_RUBBER_VEHICLE, &Rubber_Vehicle);
+	dbglog("  Rubber_Vehicle=%p", Rubber_Vehicle);
 	dbglog("  loading IBL sky+cloud shader...");
 	makePS(IDR_IBL_SKYCLOUD, &IBL_SkyCloud);
 	dbglog("  IBL_SkyCloud=%p", IBL_SkyCloud);
@@ -479,6 +482,12 @@ CreateShaders(void)
 
 	// vehicles
 	makeVS(IDR_VEHICLEVS, &vehiclePipeVS);
+
+	// normal buffer & pipe chain
+	makePS(IDR_NORMALBUFFERPS, &NormalBufferShader);
+	dbglog("  NormalBuffer=%p", NormalBufferShader);
+	makePS(IDR_PIPECHAINPS, &PipeChainShader);
+	dbglog("  PipeChain=%p", PipeChainShader);
 	makeVS(IDR_PS2CARFXVS, &ps2CarFxVS);
 	makePS(IDR_PS2ENVSPECFXPS, &ps2EnvSpecFxPS);	// also building
 	makeVS(IDR_SPECCARFXVS, &specCarFxVS);

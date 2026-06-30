@@ -59,13 +59,6 @@ float2 ParallaxOcclusionMapping(float2 texCoord, float3 viewDir, sampler2D heigh
     float2 tc6 = texCoord - deltaTexCoords * 6;
     float2 tc7 = texCoord - deltaTexCoords * 7;
     float2 tc8 = texCoord - deltaTexCoords * 8;
-    float2 tc9 = texCoord - deltaTexCoords * 9;
-    float2 tc10 = texCoord - deltaTexCoords * 10;
-    float2 tc11 = texCoord - deltaTexCoords * 11;
-    float2 tc12 = texCoord - deltaTexCoords * 12;
-    float2 tc13 = texCoord - deltaTexCoords * 13;
-    float2 tc14 = texCoord - deltaTexCoords * 14;
-    float2 tc15 = texCoord - deltaTexCoords * 15;
     
     // Sample all depths
     float d0 = tex2D(heightMap, tc0).r;
@@ -77,22 +70,14 @@ float2 ParallaxOcclusionMapping(float2 texCoord, float3 viewDir, sampler2D heigh
     float d6 = tex2D(heightMap, tc6).r;
     float d7 = tex2D(heightMap, tc7).r;
     float d8 = tex2D(heightMap, tc8).r;
-    float d9 = tex2D(heightMap, tc9).r;
-    float d10 = tex2D(heightMap, tc10).r;
-    float d11 = tex2D(heightMap, tc11).r;
-    float d12 = tex2D(heightMap, tc12).r;
-    float d13 = tex2D(heightMap, tc13).r;
-    float d14 = tex2D(heightMap, tc14).r;
-    float d15 = tex2D(heightMap, tc15).r;
     
     // Find first layer where depth > layer depth
-    float depths[16] = {d0, d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11, d12, d13, d14, d15};
-    float2 texCoords[16] = {tc0, tc1, tc2, tc3, tc4, tc5, tc6, tc7, tc8, tc9, tc10, tc11, tc12, tc13, tc14, tc15};
+    float depths[9] = {d0, d1, d2, d3, d4, d5, d6, d7, d8};
+    float2 texCoords[9] = {tc0, tc1, tc2, tc3, tc4, tc5, tc6, tc7, tc8};
     
     // Find the first intersection
     float2 finalTexCoords = texCoord;
-    [unroll]
-    for(int i = 0; i < 16; i++)
+    for(int i = 0; i < 9; i++)
     {
         float layerD = i * layerDepth;
         if(layerD >= depths[i])

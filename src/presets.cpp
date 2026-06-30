@@ -80,6 +80,27 @@ const PresetConfig presetConfigs[NUM_PRESETS] = {
 		3,                // SMAA ULTRA
 		0,                // No IV mode
 	},
+
+	// skygfxplusultramaxdeluxe — EVERYTHING maxed, all features on
+	{ "skygfxplusultramaxdeluxe",
+		BUILDING_XBOX,    // Xbox building pipe
+		CAR_MODERN,       // Modern PBR vehicle pipe
+		COLORFILTER_VCS,  // VCS color filter
+		0,                // No PS2 modulation
+		1,                // Dual-pass enabled
+		1,                // Shader radiosity
+		1,                // Radiosity enabled
+		1,                // VCS trails enabled
+		1,                // Ped shadows ON
+		1,                // Stencil shadows ON
+		1,                // Grain filter ON
+		0,                // No infrared
+		0,                // No night vision
+		1,                // SSAO enabled
+		1,                // SMAA enabled
+		3,                // SMAA ULTRA
+		0,                // No IV mode
+	},
 };
 
 // Apply a preset to the config

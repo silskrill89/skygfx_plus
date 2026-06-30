@@ -139,6 +139,9 @@ enum GamePreset
 	// Best-of-all default (PC pipe with best settings from all versions)
 	PRESET_BEST_PC,
 
+	// skygfxplusultramaxdeluxe — everything maxed, all features on
+	PRESET_SKYGFXPLUSULTRAMAXDELUXE,
+
 	NUM_PRESETS
 };
 
@@ -413,6 +416,15 @@ struct Config {
 	bool unifiedEnableTimeOfDay, unifiedEnableVertexAO, unifiedEnablePointLightOverride;
 	bool unifiedEnablePostPass, unifiedEnableIBL, unifiedEnableIBLTint;
 	bool unifiedEnableSurfaceWeights, unifiedEnableGrading, unifiedEnableGamma;
+
+	// Faux Normal Buffer (stereo disparity)
+	RwBool normalBufferEnable;
+	float normalBufferOffset;
+	float normalBufferScale;
+
+	// 4-Pipe Chain
+	RwBool pipeChainEnable;
+	float pipeChainIntensity;
 };
 extern int numConfigs;
 extern int currentConfig;
@@ -450,6 +462,15 @@ extern RwRaster *envFB, *envZB;
 extern RwTexture *reflectionTex;
 void MakeEnvmapRasters(void);
 void MakeEnvmapCam(void);
+
+/* Normal buffer (stereo disparity) */
+extern RwCamera *normalCam;
+extern RwRaster *normalFB, *normalZB;
+extern RwTexture *normalTex;
+void MakeNormalRasters(void);
+void MakeNormalCam(void);
+void RenderNormalBuffer(void);
+extern struct IDirect3DTexture9 *g_normalBufferTex;
 
 enum {
 	COLORFILTER_NONE   = 0,
@@ -609,6 +630,31 @@ RxPipeline *CCustomBuildingPipeline__CreateCustomObjPipe_PS2(void);
 RxPipeline *CCustomBuildingDNPipeline__CreateCustomObjPipe_PS2(void);
 int PDSPipePluginAttach(void);
 int EDEDPluginAttach(void);
+// ============================================================
+// Vehicle shader bridge (veh_shaders.cpp → vehicles.cpp)
+// ============================================================
+extern void VehShaders_Init(const char *gameDir);
+extern int  VehShaders_SelectPaintType(int modelID, unsigned int hash);
+extern void VehShaders_GetPaintPBR(int paintType, float *roughness, float *metalness, float *reflectance,
+                                   float *noiseScale, float *edgeBlend);
+extern void VehShaders_GetHeadlightTint(int modelID, float *r, float *g, float *b);
+extern void VehShaders_GetTaillightTint(int modelID, float *r, float *g, float *b);
+extern void VehShaders_GetGlassTint(int modelID, float *r, float *g, float *b, float *strength);
+extern void VehShaders_GetTireProps(int modelID, float *roughness, float *reflectance,
+                                    float *tintR, float *tintG, float *tintB);
+extern bool VehShaders_IsTireTexture(const char *texName);
+extern bool VehShaders_IsHeadlightTexture(const char *texName);
+extern bool VehShaders_IsTaillightTexture(const char *texName);
+extern bool VehShaders_IsGlassTexture(const char *texName, bool hasAlpha, unsigned char alpha);
+extern int  VehShaders_GetModelIndex(void *atomic);
+
+// Area-based color saturation system
+extern bool VehShaders_CheckColorSaturation(float r, float g, float b, int area);
+extern void VehShaders_GenerateColor(unsigned int hash, int area,
+                                     float *outR, float *outG, float *outB);
+extern int  VehShaders_GetColorArea(float posX, float posY);
+extern float VehShaders_GetMinSaturation(float posX, float posY);
+
 void hookVehiclePipe(void);
 void hookBuildingPipe(void);
 void D3D9Render(RxD3D9ResEntryHeader *resEntryHeader, RxD3D9InstanceData *instanceData);

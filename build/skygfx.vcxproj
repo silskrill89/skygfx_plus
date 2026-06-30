@@ -152,6 +152,8 @@
     <ClCompile Include="..\src\test.cpp" />
     <ClCompile Include="..\src\texdb.cpp" />
     <ClCompile Include="..\src\vehiclePipe.cpp" />
+    <ClCompile Include="..\src\vehicles.cpp" />
+    <ClCompile Include="..\src\veh_shaders.cpp" />
     <!-- <ClCompile Include="..\src\debugmenu_ui.cpp" /> -->
     <!-- <ClCompile Include="..\src\normalmap.cpp" /> -->
     <!-- <ClCompile Include="..\src\normalmap_plugin.cpp" /> -->

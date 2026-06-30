@@ -2,6 +2,7 @@
 #include "neo.h"
 
 extern void *Glass_Vehicle;
+extern void *Rubber_Vehicle;
 
 enum {
 	// common
@@ -74,6 +75,14 @@ CCustomCarEnvMapPipeline__AllocEnvMapPipeAtomicData(RpAtomic *atomic)
 void
 CCustomCarEnvMapPipeline__Init(void)
 {
+	// Initialize vehicle classification from game data files
+	extern void VehShaders_Init(const char *gameDir);
+	char gameDir[MAX_PATH];
+	GetModuleFileNameA(NULL, gameDir, MAX_PATH);
+	char *lastSlash = strrchr(gameDir, '\\');
+	if(lastSlash) *lastSlash = '\0';
+	VehShaders_Init(gameDir);
+
 	static RwV3d axis_X = { 1.0, 0.0, 0.0 };
 	static RwV3d axis_Y = { 0.0, 1.0, 0.0 };
 	static RwV3d axis_Z = { 0.0, 0.0, 1.0 };
@@ -81,8 +90,12 @@ CCustomCarEnvMapPipeline__Init(void)
 	reflectionTex = RwTextureCreate(nil);
 	RwTextureSetFilterMode(reflectionTex, rwFILTERLINEAR);
 
+	normalTex = RwTextureCreate(nil);
+	RwTextureSetFilterMode(normalTex, rwFILTERLINEAR);
+
 	MakeEnvmapCam();
 	MakeEnvmapRasters();
+	MakeNormalCam();
 
 	CreateShaders();
 
@@ -1247,6 +1260,8 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_mobile(RwResEntry *repEntry, void *
 void
 CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *object, RwUInt8 type, RwUInt32 flags)
 {
+	if(!repEntry || !object)
+		return;
 	RxD3D9ResEntryHeader *resEntryHeader;
 	RxD3D9InstanceData *instancedData;
 	RpAtomic *atomic;
@@ -1348,80 +1363,60 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 	// All color/tint data computed here, passed to shader as constants
 	// ================================================================
 
-	// Detect if THIS atomic is glass or light (per-mesh, not per-car)
-	// GTA SA glass: plain alpha-blended material, alpha < 255, no special effects
-	// GTA SA lights: texture name "vehiclelights" (ms_pLightsTexture)
-	// Exclude: alpha-tested cutouts (badges, decals, license plates) — these have
-	// alpha test function != ALWAYS and use hard-edge cutout, not soft blend
-	bool isGlassMesh = false;
-	bool isLightMesh = false;
-	if(hasAlpha && material->color.alpha < 255){
-		const char *texName = material->texture ? material->texture->name : "";
-		// Lights: GTA SA loads "vehiclelights128" and "vehiclelightson128"
-		if(strstr(texName, "vehiclelights") || strstr(texName, "vehiclelightson")){
-			isLightMesh = true;
-		}else{
-			isGlassMesh = true;
-		}
-	}
+	// ================================================================
+	// Vehicle subsystem — all classification via veh_shaders bridge
+	// ================================================================
+	if(!material)
+		goto skipmesh;
+	const char *texName = material->texture ? material->texture->name : "";
+	int modelIndex = VehShaders_GetModelIndex(object);
 
+	bool isGlassMesh = VehShaders_IsGlassTexture(texName, hasAlpha, material->color.alpha);
+	bool isHeadlight = !isGlassMesh && VehShaders_IsHeadlightTexture(texName);
+	bool isTaillight = !isGlassMesh && !isHeadlight && VehShaders_IsTaillightTexture(texName);
+	bool isLightMesh = isHeadlight || isTaillight;
+	bool isTireMesh  = !isGlassMesh && !isLightMesh && Rubber_Vehicle && VehShaders_IsTireTexture(texName);
+
+	// ================================================================
+	// GLASS + LIGHT PATH — alpha-blended glass shader
+	// ================================================================
 	if((isGlassMesh || isLightMesh) && Glass_Vehicle){
-		// ---- Per-vehicle tint (skygfx core — like carcols) ----
-		static unsigned int lastAtomic = 0;
-		static float carTintR = 0, carTintG = 0, carTintB = 0;
-		RpAtomic *curAtomic = (RpAtomic*)object;
-		unsigned int atomicHash = (unsigned int)(uintptr_t)curAtomic;
-		if(atomicHash != lastAtomic){
-			lastAtomic = atomicHash;
-			unsigned short atomId = CVisibilityPlugins__GetAtomicId(curAtomic);
-			int modelIndex = atomId & 0x7FF;
+		float opacity = (float)material->color.alpha / 255.0f;
 
-			// GTA SA vehicle class → tint profile
-			bool isTaxi = (modelIndex == 420 || modelIndex == 438);
-			bool isCop = (modelIndex == 596 || modelIndex == 597 || modelIndex == 598 ||
-			              modelIndex == 427 || modelIndex == 490 || modelIndex == 528);
-			bool isGang = (modelIndex == 402 || modelIndex == 467 || modelIndex == 474 ||
-			               modelIndex == 478 || modelIndex == 567 || modelIndex == 469 ||
-			               modelIndex == 602 || modelIndex == 492 || modelIndex == 568);
-			bool isLowrider = (modelIndex == 534 || modelIndex == 535 || modelIndex == 536 ||
-			                   modelIndex == 575 || modelIndex == 576);
+		if(isLightMesh){
+			float ltR, ltG, ltB;
+			if(isTaillight)
+				VehShaders_GetTaillightTint(modelIndex, &ltR, &ltG, &ltB);
+			else
+				VehShaders_GetHeadlightTint(modelIndex, &ltR, &ltG, &ltB);
 
-			if(isTaxi || isCop || isGang){
-				carTintR = 0.05f; carTintG = 0.05f; carTintB = 0.08f;
-			}else if(isLowrider){
-				carTintR = 0; carTintG = 0; carTintB = 0;
-			}else{
-				unsigned int h = modelIndex * 2654435761u;
-				float v = (float)(h & 0xFF) / 255.0f;
-				carTintR = 0.10f + v * 0.05f;
-				carTintG = 0.25f + v * 0.10f;
-				carTintB = 0.40f + v * 0.15f;
-			}
+			float glassP[4] = { ltR, ltG, ltB, opacity };
+			RwD3D9SetPixelShaderConstant(22, glassP, 1);
+			float lightP[4] = { 1.0f, isTaillight ? 1.8f : 2.5f, 0.0f, 0.0f };
+			RwD3D9SetPixelShaderConstant(23, lightP, 1);
+		}else{
+			float gtR, gtG, gtB, gtStr;
+			VehShaders_GetGlassTint(modelIndex, &gtR, &gtG, &gtB, &gtStr);
+
+			float glassP[4] = { gtR, gtG, gtB, opacity };
+			RwD3D9SetPixelShaderConstant(22, glassP, 1);
+			float lightP[4] = { 0.0f, 0.0f, gtStr, 0.0f };
+			RwD3D9SetPixelShaderConstant(23, lightP, 1);
 		}
 
-		// ---- Pass color data to shader ----
-		float opacity = (float)material->color.alpha / 255.0f;
-		float glassP[4] = { opacity, carTintR, carTintG, carTintB };
-		RwD3D9SetPixelShaderConstant(22, glassP, 1);
-
-		float lightP[4] = { isLightMesh ? 1.0f : 0.0f, isLightMesh ? 2.5f : 0.0f, 0.0f, 0.0f };
-		RwD3D9SetPixelShaderConstant(23, lightP, 1);
-
-		// ---- Common setup ----
 		pipeUploadMatCol(flags, material, REG_matCol);
 		surfProps.ambient = material->surfaceProps.ambient;
 		surfProps.diffuse = material->surfaceProps.diffuse;
 		RwD3D9SetVertexShaderConstant(REG_surfProps, &surfProps, 1);
 		RwD3D9SetPixelShaderConstant(0, &surfProps, 1);
-		float glassFx[4] = { 0, 0, fxParams.lightmult, 0 };
-		RwD3D9SetPixelShaderConstant(1, glassFx, 1);
-		float zero[4] = {0,0,0,0};
-		RwD3D9SetVertexShaderConstant(21, zero, 1);
 
-		// Env map on stage 1
+		float glassFxVS[4] = { config->envFresnel, 0, 0, config->envPower };
+		RwD3D9SetVertexShaderConstant(21, glassFxVS, 1);
+		float glassFxPS[4] = { 0, 0, fxParams.lightmult, 0 };
+		RwD3D9SetPixelShaderConstant(1, glassFxPS, 1);
+
 		pipeSetTexture(reflectionTex, 1);
 		RwRenderStateSet(rwRENDERSTATETEXTUREADDRESS, (void*)rwTEXTUREADDRESSWRAP);
-
 		RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION, (void*)rwALPHATESTFUNCTIONALWAYS);
 		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
 
@@ -1435,10 +1430,8 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 
 		RwD3D9SetVertexShader(envCarVS);
 		RwD3D9SetPixelShader(Glass_Vehicle);
-
 		D3D9Render(resEntryHeader, instancedData);
 
-		// Restore
 		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
 		RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION, (void*)alphafunc);
 		RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)src);
@@ -1446,7 +1439,30 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 		continue;
 	}
 
-		// === OPAQUE PBR PATH ===
+	// ================================================================
+	// RUBBER PATH — tires
+	// ================================================================
+	if(isTireMesh){
+		float tireRough, tireRefl, tireTR, tireTG, tireTB;
+		VehShaders_GetTireProps(modelIndex, &tireRough, &tireRefl, &tireTR, &tireTG, &tireTB);
+
+		pipeUploadMatCol(flags, material, REG_matCol);
+		surfProps.ambient = material->surfaceProps.ambient;
+		surfProps.diffuse = material->surfaceProps.diffuse;
+		RwD3D9SetVertexShaderConstant(REG_surfProps, &surfProps, 1);
+		RwD3D9SetPixelShaderConstant(0, &surfProps, 1);
+		float zero[4] = {0,0,0,0};
+		RwD3D9SetVertexShaderConstant(21, zero, 1);
+
+		RwD3D9SetVertexShader(envCarVS);
+		RwD3D9SetPixelShader(Rubber_Vehicle);
+		D3D9Render(resEntryHeader, instancedData);
+		continue;
+	}
+
+		// ================================================================
+		// OPAQUE PBR PATH — paint type system via bridge
+		// ================================================================
 		envData = *GETENVMAP(material);
 		specData = *GETSPECMAP(material);
 
@@ -1484,30 +1500,17 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 		RwD3D9SetPixelShaderConstant(0, &surfProps, 1);
 		RwD3D9SetPixelShaderConstant(1, &fxParams, 1);
 
-		// Determine material type for PBR shader
-		float metalness = 0.0f;
-		float roughness = 0.5f;
-		float reflectance = 0.5f;
+		// Paint type selection via bridge (deterministic per model)
+		unsigned int paintHash = modelIndex * 2654435761u;
+		int paintType = VehShaders_SelectPaintType(modelIndex, paintHash);
 
-		if(fxParams.shininess > 0.2f && surfProps.specular < 0.3f){
-			metalness = 1.0f;
-			roughness = 0.05f;
-			reflectance = 0.9f;
-		}
-		else if(fxParams.shininess > 0.1f && surfProps.specular > 0.1f){
-			metalness = 0.8f;
-			roughness = 0.3f;
-			reflectance = 0.7f;
-		}
-		else if(surfProps.specular > 0.3f && fxParams.shininess < 0.2f){
-			metalness = 0.9f;
-			roughness = 0.4f;
-			reflectance = 0.8f;
-		}
-		else{
-			metalness = 0.0f;
-			roughness = 0.8f;
-			reflectance = 0.04f;
+		float roughness, metalness, reflectance, noiseScale, edgeBlend;
+		VehShaders_GetPaintPBR(paintType, &roughness, &metalness, &reflectance, &noiseScale, &edgeBlend);
+
+		// Per-mesh variation from material data
+		if(fxParams.shininess > 0.2f){
+			roughness = max(roughness - fxParams.shininess * 0.1f, 0.05f);
+			reflectance = min(reflectance + fxParams.shininess * 0.1f, 1.0f);
 		}
 
 		float pbrParams[4] = {roughness, metalness, reflectance, config->envFresnel};
@@ -1541,18 +1544,26 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 		if(VehiclePBR_Modern){
 			RwD3D9SetVertexShader(envCarVS);
 			RwD3D9SetPixelShader(VehiclePBR_Modern);
+			if(g_normalBufferTex)
+				dev->SetTexture(4, g_normalBufferTex);
+			// Pass wheel flag + noise params in c23
+			float paintNoiseP[4] = { (float)renderingWheel, noiseScale, edgeBlend, 0.0f };
+			RwD3D9SetPixelShaderConstant(23, paintNoiseP, 1);
 		}else{
 			RwD3D9SetVertexShader(envCarVS);
 			RwD3D9SetPixelShader(envCarPS);
 		}
 
 		D3D9RenderDual(config->dualPassVehicle, resEntryHeader, instancedData);
+		continue;
+skipmesh: ;
 	}
 	RwD3D9SetVertexShader(NULL);
 	RwD3D9SetPixelShader(NULL);
 	RwD3D9SetTexture(NULL, 1);
 	RwD3D9SetTexture(NULL, 2);
 	RwD3D9SetTexture(NULL, 3);
+	RwD3D9SetTexture(NULL, 4);
 	RwD3D9SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
 	RwD3D9SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
 	RwD3D9SetTextureStageState(1, D3DTSS_TEXCOORDINDEX, 1);
@@ -1564,6 +1575,8 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 void
 CCustomCarEnvMapPipeline__CustomPipeRenderCB_Switch(RwResEntry *repEntry, void *object, RwUInt8 type, RwUInt32 flags)
 {
+	if(!repEntry || !object || !config)
+		return;
 	switch(config->vehiclePipe){
 	case CAR_PS2:
 		CCustomCarEnvMapPipeline__CustomPipeRenderCB_PS2(repEntry, object, type, flags);

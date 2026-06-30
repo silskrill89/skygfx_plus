@@ -64,10 +64,8 @@ float4 main(PS_INPUT IN) : COLOR
     float2 blurDir = blurParams.xy * radius * pixel;
     
     // Two-sided 6-tap Gaussian bilateral filter
-    [unroll]
     for(int i = 0; i < 2; i++)
     {
-        [unroll]
         for(int j = 0; j < 6; j++)
         {
             float2 uv = tex + offsets[j] / 5.5 * blurDir;

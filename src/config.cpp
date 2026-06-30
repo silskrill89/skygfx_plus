@@ -489,6 +489,17 @@ readIni(int n)
 		cfg.set("SkyGfx", "edgeTessStrength", "0.01");
 		cfg.set("SkyGfx", "edgeTessThreshold", "0.1");
 
+		cfg.set("SkyGfx", "; --- Faux Normal Buffer ---", "");
+		cfg.set("SkyGfx", "; Stereo disparity-derived normal map for effects", "");
+		cfg.set("SkyGfx", "normalBufferEnable", "0");
+		cfg.set("SkyGfx", "normalBufferOffset", "0.5");
+		cfg.set("SkyGfx", "normalBufferScale", "1.0");
+
+		cfg.set("SkyGfx", "; --- 4-Pipe Chain ---", "");
+		cfg.set("SkyGfx", "; Multi-pass post-processing using normal buffer", "");
+		cfg.set("SkyGfx", "pipeChainEnable", "0");
+		cfg.set("SkyGfx", "pipeChainIntensity", "0.5");
+
 		// ===== Unused / Legacy =====
 		cfg.set("SkyGfx", "; ===== Unused / Legacy =====", "");
 		cfg.set("SkyGfx", "; privateHooks", "0");

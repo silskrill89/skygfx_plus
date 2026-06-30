@@ -124,6 +124,28 @@ def check_merge_conflicts():
         print("  No merge conflicts found")
     return conflicts
 
+def check_process_conflict():
+    """Check if gta_sa.exe is already running (common cause of crashes that look like hook conflicts)"""
+    print("\n=== Checking for running game process ===")
+    import subprocess
+    try:
+        result = subprocess.run(['tasklist', '/FI', 'IMAGENAME eq gta_sa.exe'],
+                              capture_output=True, text=True, timeout=5)
+        if 'gta_sa.exe' in result.stdout:
+            lines = [l for l in result.stdout.strip().split('\n')
+                    if 'gta_sa.exe' in l.lower()]
+            print(f"  WARNING: gta_sa.exe is already running ({len(lines)} instance(s))!")
+            print("  This causes crashes that look like MoonLoader D3D9 hook conflicts")
+            print("  but are actually just the old process holding files locks.")
+            print("  Kill the existing process before launching again.")
+            return True
+        else:
+            print("  No running gta_sa.exe found - OK")
+            return False
+    except Exception as e:
+        print(f"  Could not check: {e}")
+        return False
+
 # ============================================================
 # Shader compilation
 # ============================================================
@@ -370,6 +392,9 @@ def main():
 
     # 2. Check merge conflicts
     check_merge_conflicts()
+
+    # 2b. Check for running game (prevents false crash reports)
+    check_process_conflict()
 
     # 3. Compile shaders
     shaders_ok = compile_shaders()

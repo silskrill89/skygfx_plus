@@ -13,6 +13,11 @@ RwCamera *reflectionCam;
 RwRaster *envFB, *envZB;
 RwTexture *reflectionTex;
 
+// Normal buffer (stereo disparity)
+RwCamera *normalCam;
+RwRaster *normalFB, *normalZB;
+RwTexture *normalTex;
+
 /* Create envmap rasters as we need them and attach them to cam */
 void
 MakeEnvmapRasters(void)
@@ -39,6 +44,39 @@ MakeEnvmapCam(void)
 	vw.x = vw.y = 0.4f;
 	RwCameraSetViewWindow(reflectionCam, &vw);
 	RpWorldAddCamera(Scene.world, reflectionCam);
+}
+
+void
+MakeNormalCam(void)
+{
+	normalCam = RwCameraCreate();
+	RwCameraSetFrame(normalCam, RwFrameCreate());
+	RwCameraSetNearClipPlane(normalCam, 0.1f);
+	RwCameraSetFarClipPlane(normalCam, 250.0f * config->envMapFarClipMult);
+	RwV2d vw;
+	vw.x = vw.y = 0.4f;
+	RwCameraSetViewWindow(normalCam, &vw);
+	RpWorldAddCamera(Scene.world, normalCam);
+}
+
+void
+MakeNormalRasters(void)
+{
+	RwRaster *camRas = RwCameraGetRaster(Scene.camera);
+	if(!camRas) return;
+	int w = camRas->width / 2;
+	int h = camRas->height / 2;
+	if(w < 1 || h < 1) return;
+	if(normalFB && normalFB->width == w && normalFB->height == h)
+		return;
+	if(normalFB) RwRasterDestroy(normalFB);
+	if(normalZB) RwRasterDestroy(normalZB);
+	normalFB = RwRasterCreate(w, h, 0, rwRASTERTYPECAMERATEXTURE);
+	normalZB = RwRasterCreate(w, h, 0, rwRASTERTYPEZBUFFER);
+	RwCameraSetRaster(normalCam, normalFB);
+	RwCameraSetZRaster(normalCam, normalZB);
+	if(normalTex)
+		RwTextureSetRaster(normalTex, normalFB);
 }
 
 #ifdef DEBUGENVTEX
@@ -465,6 +503,66 @@ RenderSphereReflections(void)
 		RwCameraSetFogDistance(cam, fog);
 	}
 	CRenderer__ConstructRenderList();
+}
+
+void
+RenderNormalBuffer(void)
+{
+	if(!config->normalBufferEnable || !normalCam)
+		return;
+	if(!Scene.camera) return;
+
+	MakeNormalRasters();
+	if(!normalFB || !normalZB) return;
+
+	RwCamera *cam = Scene.camera;
+	float farplane, fog;
+	RwRaster *fb, *zb;
+
+	// Get camera right vector for lateral offset
+	RwMatrix *camLTM = RwFrameGetLTM(RwCameraGetFrame(cam));
+	float offset = config->normalBufferOffset;
+
+	// Position normal cam offset along right vector
+	RwFrame *nFrame = RwCameraGetFrame(normalCam);
+	RwMatrix *nLTM = RwFrameGetMatrix(nFrame);
+	*nLTM = *RwFrameGetMatrix(RwCameraGetFrame(cam));
+	nLTM->pos.x += camLTM->right.x * offset;
+	nLTM->pos.y += camLTM->right.y * offset;
+	nLTM->pos.z += camLTM->right.z * offset;
+	RwMatrixUpdate(nLTM);
+	RwFrameUpdateObjects(nFrame);
+
+	// Set far clip to VLOD distance
+	float farclip = 250.0f * config->envMapFarClipMult;
+	RwCameraSetFarClipPlane(normalCam, farclip);
+
+	// Save main camera state
+	fb = RwCameraGetRaster(cam);
+	zb = RwCameraGetZRaster(cam);
+	farplane = RwCameraGetFarClipPlane(cam);
+	fog = RwCameraGetFogDistance(cam);
+
+	// Point main camera rasters at normal buffer
+	RwCameraSetRaster(cam, RwCameraGetRaster(normalCam));
+	RwCameraSetZRaster(cam, RwCameraGetZRaster(normalCam));
+	RwCameraSetFarClipPlane(cam, farclip);
+	RwCameraSetFogDistance(cam, farclip * 0.75f);
+
+	// Clear
+	RwRGBA color = { 128, 128, 255, 255 };
+	RwCameraClear(cam, &color, rwCAMERACLEARIMAGE | rwCAMERACLEARZ);
+
+	// NOTE: Scene re-rendering disabled — causes crash at 0x7F98DF
+	// when re-entering the vehicle pipe during RenderScene_after.
+	// Normal buffer is cleared to flat normal (128,128,255) = straight up.
+	// TODO: Reconstruct normals from depth buffer instead of re-rendering.
+
+	// Restore main camera
+	RwCameraSetRaster(cam, fb);
+	RwCameraSetZRaster(cam, zb);
+	RwCameraSetFarClipPlane(cam, farplane);
+	RwCameraSetFogDistance(cam, fog);
 }
 
 void

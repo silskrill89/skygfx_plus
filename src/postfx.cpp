@@ -1220,13 +1220,28 @@ CPostEffects::Grain_PS2(int strength, bool generate)
 	CPostEffects::ImmediateModeRenderStatesReStore();
 }
 
+void DrawNormalBufferToTexture(void);
+void DrawPipeChain(void);
+
 void
 CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 {
+	// Generate normal buffer from stereo disparity (before SSAO)
+	if(config->normalBufferEnable){
+		PERF_SCOPE("NormalBuf");
+		DrawNormalBufferToTexture();
+	}
+
 	// SSAO must run before color filter to read original scene
 	{
 		PERF_SCOPE("SSAO");
 		DrawSSAO();
+	}
+
+	// 4-Pipe chain (after SSAO, uses normal buffer)
+	if(config->pipeChainEnable && config->normalBufferEnable){
+		PERF_SCOPE("PipeChain");
+		DrawPipeChain();
 	}
 
 	{
@@ -1561,6 +1576,21 @@ static IDirect3DSurface9 *g_iblSurf = NULL;
 static RwRaster *g_iblOutputRaster = NULL;
 extern void *IBL_SkyCloud;
 
+// Normal buffer (half-res stereo-derived normals)
+IDirect3DTexture9 *g_normalBufferTex = NULL;
+static IDirect3DSurface9 *g_normalBufferSurf = NULL;
+static RwRaster *g_normalBufferRaster = NULL;
+extern void *NormalBufferShader;
+
+// 4-Pipe chain
+static IDirect3DTexture9 *g_pipeChainTexA = NULL;
+static IDirect3DSurface9 *g_pipeChainSurfA = NULL;
+static IDirect3DTexture9 *g_pipeChainTexB = NULL;
+static IDirect3DSurface9 *g_pipeChainSurfB = NULL;
+static RwRaster *g_pipeChainRasterA = NULL;
+static RwRaster *g_pipeChainRasterB = NULL;
+extern void *PipeChainShader;
+
 // Release all D3DPOOL_DEFAULT resources (call on device lost/reset)
 void ReleaseDefaultPoolResources(void)
 {
@@ -1576,6 +1606,16 @@ void ReleaseDefaultPoolResources(void)
 	// IBL buffer (D3DPOOL_DEFAULT)
 	if(g_iblTex){ g_iblTex->Release(); g_iblTex = NULL; }
 	if(g_iblSurf){ g_iblSurf->Release(); g_iblSurf = NULL; }
+
+	// Normal buffer (D3DPOOL_DEFAULT)
+	if(g_normalBufferTex){ g_normalBufferTex->Release(); g_normalBufferTex = NULL; }
+	if(g_normalBufferSurf){ g_normalBufferSurf->Release(); g_normalBufferSurf = NULL; }
+
+	// Pipe chain (D3DPOOL_DEFAULT)
+	if(g_pipeChainTexA){ g_pipeChainTexA->Release(); g_pipeChainTexA = NULL; }
+	if(g_pipeChainSurfA){ g_pipeChainSurfA->Release(); g_pipeChainSurfA = NULL; }
+	if(g_pipeChainTexB){ g_pipeChainTexB->Release(); g_pipeChainTexB = NULL; }
+	if(g_pipeChainSurfB){ g_pipeChainSurfB->Release(); g_pipeChainSurfB = NULL; }
 
 	// RW rasters are managed by RW, not our responsibility
 	dbglog("ReleaseDefaultPoolResources: done");
@@ -1742,10 +1782,13 @@ CPostEffects::DrawSSAO(void)
 
 		dev->SetTexture(0, g_ssaoDepthTex);
 		dev->SetTexture(1, g_ssaoNoiseTex);
+		dev->SetTexture(2, g_normalBufferTex);
 		dev->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
 		dev->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
 		dev->SetSamplerState(1, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP);
 		dev->SetSamplerState(1, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
+		dev->SetSamplerState(2, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+		dev->SetSamplerState(2, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
 
 		float radius = config->ssaoRadius > 0.0f ? config->ssaoRadius : 1.0f;
 		float power = config->ssaoPower > 0.0f ? config->ssaoPower : 2.0f;
@@ -1943,6 +1986,261 @@ void RenderIBLBuffer(void)
 	dev->SetDepthStencilSurface(oldDS);
 	if(oldRT) oldRT->Release();
 	if(oldDS) oldDS->Release();
+}
+
+static IDirect3DTexture9* GetNormalBufferTexture(void)
+{
+	if(g_normalBufferTex) return g_normalBufferTex;
+	IDirect3DDevice9 *dev = d3d9device;
+	if(!dev) return NULL;
+	if(!Scene.camera) return NULL;
+	RwRaster *camRas = RwCameraGetRaster(Scene.camera);
+	if(!camRas) return NULL;
+	int w = camRas->width / 2;
+	int h = camRas->height / 2;
+	if(w < 1 || h < 1) return NULL;
+	if(FAILED(dev->CreateTexture(w, h, 1, D3DUSAGE_RENDERTARGET,
+		D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &g_normalBufferTex, NULL)))
+		return NULL;
+	if(FAILED(g_normalBufferTex->GetSurfaceLevel(0, &g_normalBufferSurf))){
+		g_normalBufferTex->Release();
+		g_normalBufferTex = NULL;
+		return NULL;
+	}
+	return g_normalBufferTex;
+}
+
+static IDirect3DTexture9* GetPipeChainTexture(int idx)
+{
+	IDirect3DTexture9 **tex = (idx == 0) ? &g_pipeChainTexA : &g_pipeChainTexB;
+	IDirect3DSurface9 **surf = (idx == 0) ? &g_pipeChainSurfA : &g_pipeChainSurfB;
+	if(*tex) return *tex;
+	IDirect3DDevice9 *dev = d3d9device;
+	if(!dev) return NULL;
+	if(!Scene.camera) return NULL;
+	RwRaster *camRas = RwCameraGetRaster(Scene.camera);
+	if(!camRas) return NULL;
+	int w = camRas->width;
+	int h = camRas->height;
+	if(FAILED(dev->CreateTexture(w, h, 1, D3DUSAGE_RENDERTARGET,
+		D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, tex, NULL)))
+		return NULL;
+	if(FAILED((*tex)->GetSurfaceLevel(0, surf))){
+		(*tex)->Release();
+		*tex = NULL;
+		return NULL;
+	}
+	return *tex;
+}
+
+void DrawNormalBufferToTexture(void)
+{
+	if(!config->normalBufferEnable || !normalTex || !NormalBufferShader)
+		return;
+	if(!g_ssaoDepthTex) return;
+
+	IDirect3DTexture9 *tex = GetNormalBufferTexture();
+	if(!tex || !g_normalBufferSurf) return;
+	IDirect3DDevice9 *dev = d3d9device;
+	if(!dev) return;
+
+	// Save current RT
+	IDirect3DSurface9 *oldRT = NULL;
+	IDirect3DSurface9 *oldDS = NULL;
+	dev->GetRenderTarget(0, &oldRT);
+	dev->GetDepthStencilSurface(&oldDS);
+
+	// Set normal buffer as render target
+	dev->SetRenderTarget(0, g_normalBufferSurf);
+	dev->SetDepthStencilSurface(NULL);
+
+	// Get screen size
+	RwRaster *camRas = RwCameraGetRaster(Scene.camera);
+	float screenP[4] = { (float)camRas->width, (float)camRas->height,
+		1.0f/camRas->width, 1.0f/camRas->height };
+
+	// Stereo params: offset, scale, pixelSizeX, pixelSizeY
+	float stereoP[4] = { config->normalBufferOffset, config->normalBufferScale,
+		1.0f / (camRas->width / 2), 1.0f / (camRas->height / 2) };
+	RwD3D9SetPixelShaderConstant(0, stereoP, 1);
+
+	// Projection info for depth reconstruction (approximate for half-res)
+	float projP[4] = { 1.0f, 1.0f, 1.0f, 0.0f };
+	RwD3D9SetPixelShaderConstant(1, projP, 1);
+	RwD3D9SetPixelShaderConstant(2, screenP, 1);
+
+	// Set depth texture on stage 0 (main camera depth)
+	dev->SetTexture(0, g_ssaoDepthTex);
+	dev->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+	dev->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+	dev->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+	dev->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+
+	// Set normal camera texture on stage 1
+	RwD3D9SetTexture(normalTex, 1);
+	dev->SetSamplerState(1, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+	dev->SetSamplerState(1, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+	dev->SetSamplerState(1, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+	dev->SetSamplerState(1, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+
+	// Render fullscreen quad with normal buffer shader
+	CPostEffects::ImmediateModeRenderStatesStore();
+	CPostEffects::ImmediateModeRenderStatesSet();
+	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
+	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
+	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
+	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
+	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
+
+	overrideIm2dPixelShader = NormalBufferShader;
+	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
+	overrideIm2dPixelShader = nil;
+
+	CPostEffects::ImmediateModeRenderStatesReStore();
+
+	// Cleanup
+	dev->SetTexture(0, NULL);
+	dev->SetTexture(1, NULL);
+
+	// Restore old RT
+	dev->SetRenderTarget(0, oldRT);
+	dev->SetDepthStencilSurface(oldDS);
+	if(oldRT) oldRT->Release();
+	if(oldDS) oldDS->Release();
+}
+
+void DrawPipeChain(void)
+{
+	if(!config->pipeChainEnable || !PipeChainShader)
+		return;
+	if(!config->normalBufferEnable || !g_normalBufferTex)
+		return;
+	if(!g_ssaoDepthTex) return;
+
+	IDirect3DTexture9 *texA = GetPipeChainTexture(0);
+	IDirect3DTexture9 *texB = GetPipeChainTexture(1);
+	if(!texA || !texB || !g_pipeChainSurfA || !g_pipeChainSurfB) return;
+	IDirect3DDevice9 *dev = d3d9device;
+	if(!dev) return;
+
+	RwRaster *camRas = RwCameraGetRaster(Scene.camera);
+	float screenP[4] = { (float)camRas->width, (float)camRas->height,
+		1.0f/camRas->width, 1.0f/camRas->height };
+	float projP[4] = { 1.0f, 1.0f, 1.0f, 0.0f };
+
+	CPostEffects::ImmediateModeRenderStatesStore();
+	CPostEffects::ImmediateModeRenderStatesSet();
+	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
+	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
+	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
+	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
+	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
+
+	IDirect3DSurface9 *oldRT = NULL;
+	IDirect3DSurface9 *oldDS = NULL;
+	dev->GetRenderTarget(0, &oldRT);
+	dev->GetDepthStencilSurface(&oldDS);
+
+	// ---- Pass 0: Input -> texA ----
+	{
+		dev->SetRenderTarget(0, g_pipeChainSurfA);
+		dev->SetDepthStencilSurface(NULL);
+
+		float pipeP[4] = { 0.0f, 0.0f, config->pipeChainIntensity, 0.0f };
+		RwD3D9SetPixelShaderConstant(0, pipeP, 1);
+		RwD3D9SetPixelShaderConstant(1, projP, 1);
+		RwD3D9SetPixelShaderConstant(2, screenP, 1);
+
+		dev->SetTexture(0, NULL);
+		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)CPostEffects::pRasterFrontBuffer);
+
+		// Normal buffer on stage 1
+		dev->SetTexture(1, g_normalBufferTex);
+		dev->SetSamplerState(1, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+		dev->SetSamplerState(1, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+
+		// Depth on stage 2
+		dev->SetTexture(2, g_ssaoDepthTex);
+		dev->SetSamplerState(2, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+		dev->SetSamplerState(2, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+
+		overrideIm2dPixelShader = PipeChainShader;
+		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
+		overrideIm2dPixelShader = nil;
+	}
+
+	// ---- Pass 1: Mid-A -> texB ----
+	{
+		dev->SetRenderTarget(0, g_pipeChainSurfB);
+		dev->SetDepthStencilSurface(NULL);
+
+		float pipeP[4] = { 1.0f, 0.0f, config->pipeChainIntensity, 0.0f };
+		RwD3D9SetPixelShaderConstant(0, pipeP, 1);
+		RwD3D9SetPixelShaderConstant(1, projP, 1);
+		RwD3D9SetPixelShaderConstant(2, screenP, 1);
+
+		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)CPostEffects::pRasterFrontBuffer);
+		dev->SetTexture(1, g_normalBufferTex);
+		dev->SetTexture(2, g_ssaoDepthTex);
+		dev->SetTexture(3, NULL);
+
+		overrideIm2dPixelShader = PipeChainShader;
+		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
+		overrideIm2dPixelShader = nil;
+	}
+
+	// ---- Pass 2: Mid-B -> texA (ping-pong) ----
+	{
+		dev->SetRenderTarget(0, g_pipeChainSurfA);
+		dev->SetDepthStencilSurface(NULL);
+
+		float pipeP[4] = { 2.0f, 0.0f, config->pipeChainIntensity, 0.0f };
+		RwD3D9SetPixelShaderConstant(0, pipeP, 1);
+		RwD3D9SetPixelShaderConstant(1, projP, 1);
+		RwD3D9SetPixelShaderConstant(2, screenP, 1);
+
+		// Scene on stage 0
+		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)CPostEffects::pRasterFrontBuffer);
+		dev->SetTexture(1, g_normalBufferTex);
+		dev->SetTexture(2, g_ssaoDepthTex);
+		// Intermediate (texB) on stage 3
+		dev->SetTexture(3, texB);
+		dev->SetSamplerState(3, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+		dev->SetSamplerState(3, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+
+		overrideIm2dPixelShader = PipeChainShader;
+		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
+		overrideIm2dPixelShader = nil;
+	}
+
+	// ---- Pass 3: Output -> back buffer ----
+	{
+		dev->SetRenderTarget(0, oldRT);
+		dev->SetDepthStencilSurface(oldDS);
+
+		float pipeP[4] = { 3.0f, 0.0f, config->pipeChainIntensity, 0.0f };
+		RwD3D9SetPixelShaderConstant(0, pipeP, 1);
+		RwD3D9SetPixelShaderConstant(1, projP, 1);
+		RwD3D9SetPixelShaderConstant(2, screenP, 1);
+
+		// Scene on stage 0
+		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)CPostEffects::pRasterFrontBuffer);
+		dev->SetTexture(1, NULL);
+		dev->SetTexture(2, NULL);
+		// Intermediate (texA) on stage 3
+		dev->SetTexture(3, texA);
+
+		overrideIm2dPixelShader = PipeChainShader;
+		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
+		overrideIm2dPixelShader = nil;
+	}
+
+	// Cleanup
+	dev->SetTexture(1, NULL);
+	dev->SetTexture(2, NULL);
+	dev->SetTexture(3, NULL);
+
+	CPostEffects::ImmediateModeRenderStatesReStore();
 }
 
 void

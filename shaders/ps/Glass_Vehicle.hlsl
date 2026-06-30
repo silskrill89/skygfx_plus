@@ -1,33 +1,33 @@
 /*===================================================================================
 SkyGFX Plus - Vehicle Glass Shader (ps_3_0)
-Glass material renderer using car paint reflection techniques.
-All color/tint data from skygfx core constants.
+Energy-conserving glass with Fresnel reflections and era-based tinting.
 
-c0  = surfProps
-c1  = fxParams (.z = envIntensity)
-c22 = { opacity, tintR, tintG, tintB }  // C++ pre-computed per vehicle class
-c23 = { isLight, lightBoost, unused, unused }
+Energy Conservation:
+  Glass: kS = Fresnel (edges reflect more), kD = 1 - kS (center shows interior)
+  Dark parts of glass always stay dark, reflections add on top via Fresnel.
 
-Reflection model:
-  - PS2 Spherical Env Mapping with view offset
-  - Schlick Fresnel (IOR 1.5, F0 = 0.04)
-  - VS-computed EnvColor for Fresnel-based env intensity
-  - Sunspot: sharp specular highlight where sun reflection hits
-  - Fresnel hotspot: Fresnel brightened where sun hits hardest
-  - Edge darkening + opacity thickening
-  - Light path: additive glow with tint bleed
-==================================================================================*/
+Lens mode (headlights/taillights):
+  Nearly fully transparent — interior texture visible through glass.
+  Subtle Fresnel glow at edges for lens effect.
+
+Layers:
+  1. Interior base (diffuse * vertex color) — always visible
+  2. Environment reflection — blended via Fresnel, energy-conserved
+  3. Colored tint — subtle overlay
+  4. Sun specular — additive highlight
+===================================================================================*/
+
+#include "../include/PBR_Common.hlsl"
 
 sampler2D diffuseTex : register(s0);
 sampler2D envMapTex  : register(s1);
 
 float4 surfProps   : register(c0);
 float4 fxParams    : register(c1);
-float4 glassParams : register(c22);  // { opacity, tintR, tintG, tintB }
-float4 lightParams : register(c23);  // { isLight, lightBoost, 0, 0 }
+float4 glassParams : register(c22);  // { tintR, tintG, tintB, opacity }
+float4 lightParams : register(c23);  // { isLight, lightBoost, tintStrength, 0 }
 
-struct PS_INPUT
-{
+struct PS_INPUT{
     float2 texcoord0 : TEXCOORD0;
     float3 WorldNormal : TEXCOORD1;
     float3 WorldPos    : TEXCOORD2;
@@ -37,28 +37,6 @@ struct PS_INPUT
     float4 envColor    : COLOR1;
 };
 
-// Schlick Fresnel — glass IOR 1.5 → F0 = 0.04
-float SchlickFresnel(float cosTheta)
-{
-    float f0 = 0.04;
-    float pow5 = pow(saturate(1.0 - cosTheta), 5.0);
-    return f0 + (1.0 - f0) * pow5;
-}
-
-// Proper Spherical Environment Mapping (UV-based, no pole pinching)
-// Uses the world normal projected onto a sphere, like the original PS2 approach,
-// but with the correct denominator: m = 2*sqrt(nx² + ny² + (nz+1)²)
-// The sqrt prevents pole collapse because nx²+ny² keeps denominator
-// nonzero even when nz approaches -1 (back-facing normal)
-float2 SphereEnvMapUV(float3 normal, float3 viewDir)
-{
-    float m = 2.0 * sqrt(dot(normal.xy, normal.xy) + (normal.z + 1.0) * (normal.z + 1.0));
-    float2 envUV = normal.xy / m + 0.5;
-    // Subtle view-dependent offset for parallax feel
-    envUV += viewDir.xy * 0.04;
-    return envUV;
-}
-
 float4 main(PS_INPUT IN) : COLOR
 {
     float3 N = normalize(IN.WorldNormal);
@@ -66,79 +44,84 @@ float4 main(PS_INPUT IN) : COLOR
     float3 L = normalize(IN.SunDir);
     float4 diff = tex2D(diffuseTex, IN.texcoord0);
 
-    // ---- Proper NdotV from actual view direction ----
     float NdotV = saturate(dot(N, V));
 
-    // ---- Fresnel (IOR 1.5) ----
-    float fresnel = SchlickFresnel(NdotV);
+    // ---- Fresnel (glass: F0 = 0.04 for dielectric) ----
+    float3 F0 = float3(0.04, 0.04, 0.04);
+    float3 F = F_Schlick(NdotV, F0);
+    float fresnel = F.r;
 
-    // ---- Env map (PS2 spherical, from car paint) ----
-    float3 reflVec = reflect(-V, N);
-    float2 envUV = SphereEnvMapUV(N, V);
+    // ---- Energy conservation for glass ----
+    // kS = Fresnel (edges reflect more)
+    // kD = 1 - kS (center shows interior)
+    float3 kS = F;
+    float3 kD = 1.0 - kS;
+
+    // ---- Env map reflection (energy-conserved) ----
+    float3 R = reflect(-V, N);
+    float2 envUV = SphereEnvMapUV(R, V);
     float4 env = tex2D(envMapTex, envUV);
-
-    // Env intensity from VS (Fresnel-based, uses shininess)
-    float envIntensity = IN.envColor.a;
+    float envIntensity = max(IN.envColor.a, 0.15) * 0.8;
     float3 envCol = env.rgb * envIntensity;
 
-    // ---- Sun lighting ----
+    // ---- Sun ----
     float NdotL = saturate(dot(N, L));
+    float3 sunContrib = ComputeSunContribution(N, V, L, F0, NdotL);
 
-    // Sunspot: sharp specular where reflected view aligns with sun
-    float3 H = normalize(V + L);
-    float NdotH = saturate(dot(N, H));
-    float sunSpot = pow(NdotH, 128.0) * 2.0;
-    // Also add a broader highlight based on reflection alignment
-    float reflDot = saturate(dot(reflVec, L));
-    float sunBroad = pow(reflDot, 16.0) * 0.5;
-
-    // Fresnel hotspot: Fresnel boosted where sun hits the surface
-    float fresnelHotspot = fresnel * NdotL * 0.4;
-
-    float3 sunColor = float3(1.0, 0.95, 0.9);
-    float3 sunContrib = sunColor * (sunSpot + sunBroad + fresnelHotspot);
-
-    float opacity = glassParams.x;
+    // ---- Glass params ----
+    float3 tint = glassParams.xyz;
+    float opacity = glassParams.w;
     float isLight = lightParams.x;
     float lightBoost = lightParams.y;
+    float tintStrength = lightParams.z;
 
+    // ================================================================
+    // LIGHT PATH — nearly transparent, interior texture visible
+    // Lens effect: very subtle reflection, texture shows through
+    // ================================================================
     if(isLight > 0.5){
-        // ---- LIGHT PATH ----
-        float3 glow = diff.rgb * lightBoost;
-        // Tint bleed from C++ tint
-        float3 tint = glassParams.rgb;
-        float hasTint = dot(tint, tint) > 0.001 ? 1.0 : 0.0;
-        glow *= lerp(float3(1,1,1), tint, hasTint * 0.4);
-        // Edge reflection + sun highlight on lens
-        glow += envCol * fresnel * 0.3;
-        glow += sunContrib * 0.5;
-        return float4(glow, saturate(opacity * 1.5));
+        float3 lightTint = glassParams.xyz;
+
+        // Interior is fully visible (the light texture IS the interior)
+        float3 interior = diff.rgb * lightBoost * lightTint;
+
+        // Very subtle env reflection — just enough to show glass surface
+        // Reduces with NdotV so face-on is pure interior, edges show reflection
+        float lensReflStrength = fresnel * 0.06;
+        float3 lensRefl = envCol * lensReflStrength;
+
+        // Combine: interior base + subtle reflection overlay
+        float3 glow = interior + lensRefl;
+
+        // Alpha: mostly transparent, slight opacity at edges for lens effect
+        float lensAlpha = saturate(opacity * 0.2 + fresnel * 0.15);
+        return float4(glow, lensAlpha);
     }
 
-    // ---- GLASS PATH ----
+    // ================================================================
+    // GLASS PATH — dark base (44,44,44), subtle reflection
+    // ================================================================
 
-    // Diffuse texture seen through glass (darkened by Fresnel)
-    float3 base = diff.rgb * (1.0 - fresnel * 0.5);
+    // LAYER 1: Interior base (RGB 68,68,68 ≈ 0.267)
+    float3 glassBase = float3(0.267, 0.267, 0.267);
+    float3 layer1 = glassBase * IN.color.rgb;
 
-    // Env reflection scaled by VS Fresnel intensity + material Fresnel
-    float3 refl = envCol * fresnel;
+    // LAYER 2: Environment reflection (subtle, Fresnel-blended)
+    float3 layer2 = envCol * kS * 0.2;
 
-    // Composite: glass body + reflection
-    float3 color = lerp(base, refl, fresnel);
+    // COMPOSITE: dark base + subtle reflection
+    float3 color = lerp(layer1, layer2, fresnel * 0.5);
 
-    // Add sun contribution
-    color += sunContrib;
+    // Sun highlight (very subtle)
+    color += sunContrib * 0.15;
 
-    // Apply C++ tint (raw color from vehicle class)
-    float3 tint = glassParams.rgb;
-    float hasTint = dot(tint, tint) > 0.001 ? 1.0 : 0.0;
-    color = lerp(color, tint, hasTint * 0.7);
+    // LAYER 3: Colored tint
+    float3 tintColor = tint * 2.0;
+    float tintAlpha = opacity * tintStrength;
+    color = lerp(color, color * tintColor, tintAlpha);
 
-    // Edge darkening (car paint technique)
-    color *= 1.0 - fresnel * 0.3;
+    // Final alpha: glass opacity, thickened at grazing angles
+    float alpha = opacity + (1.0 - opacity) * (1.0 - NdotV) * 0.25;
 
-    // Opacity thickening at grazing angles
-    float edgeAlpha = opacity + (1.0 - opacity) * (1.0 - NdotV) * 0.25;
-
-    return float4(color, saturate(edgeAlpha));
+    return float4(color, saturate(alpha));
 }
