@@ -57,7 +57,6 @@ readTxt(void)
 		int stochastic = 0;
 		int dualPass = 1;
 		int zwriteThreshold = 0;
-		int materialType = 0;
 		start = end = buf;
 		while(end){
 			if(start[0] == '"'){
@@ -92,19 +91,13 @@ readTxt(void)
 				dualPass = atoi(start+9);
 			else if (strncmp(start, "zwriteThreshold=", 16) == 0)
 				zwriteThreshold = atoi(start + 16);
-			else if (strncmp(start, "materialType=", 13) == 0){
-				if(strncmp(start+13, "vegetation", 10) == 0) materialType = MATTYPE_VEGETATION;
-				else if(strncmp(start+13, "skin", 4) == 0) materialType = MATTYPE_SKIN;
-				else if(strncmp(start+13, "cloth", 5) == 0) materialType = MATTYPE_CLOTH;
-				else materialType = atoi(start+13);
-			}
 
 			start = end+1;
 		}
 		if(filename){
 			if(isdetail)
 				detailTextures[isdetail] = RwTextureRead(filename, nil);
-			else if(hasdetail || alphamode || hassibling || affiliate || stochastic || materialType){
+			else if(hasdetail || alphamode || hassibling || affiliate || stochastic){
 				std::string s = filename;
 				strtolower(s);
 				info = new TexInfo;
@@ -123,8 +116,6 @@ readTxt(void)
 					info->alphamode = alphamode;
 				if (stochastic)
 					info->stochastic = 1;
-				if (materialType)
-					info->materialType = materialType;
 				if (dualPass)
 					info->dualPass = dualPass;
 				if (zwriteThreshold > 0)

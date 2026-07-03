@@ -20,9 +20,7 @@ extern bool iCanHasNeoDrops;
 	X(dualPassPed)			\
 	X(dualPassGrass)				\
 	X(buildingPipe)				\
-	X(tagsBuildingPipe)				\
 	X(detailMaps)				\
-	X(stochastic)				\
 	X(vehiclePipe)				\
 	X(leedsShininessMult)				\
 	X(neoShininessMult)				\
@@ -54,8 +52,6 @@ extern bool iCanHasNeoDrops;
 	X(radiosityRenderPasses)		\
 	X(radiosityIntensity)			\
 	X(zwriteThreshold)			\
-	X(zwriteThresholdGrass)			\
-	X(zwriteThresholdPed)			\
 	X(coronaZtest)				\
 	X(bYCbCrFilter)				\
 	X(lumaScale)				\
@@ -64,8 +60,6 @@ extern bool iCanHasNeoDrops;
 	X(cbOffset)				\
 	X(crScale)				\
 	X(crOffset)				\
-	X(rgb1Mult)				\
-	X(rgb2Mult)				\
 	X(envMapSize)			\
 	X(envMapUseLODs)			\
 	X(envMapFarClipMult)		\
@@ -158,11 +152,11 @@ installMenu(void)
 		menu.ps2ModulateGlobal = DebugMenuAddVarBool32("SkyGFX", "PS2-modulate Global", &config->ps2ModulateGlobal, toggledModulation);
 		if(iCanHasbuildingPipe){
 			menu.buildingPipe = DebugMenuAddVar("SkyGFX", "Building Pipeline", &config->buildingPipe, nil, 1, BUILDING_PS2, NUMBUILDINGPIPES-1, buildPipeStr);
-			DebugMenuEntrySetWrap(menu.buildingPipe, true);
-			menu.tagsBuildingPipe = DebugMenuAddVar("SkyGFX", "Tags Building Pipeline", &config->tagsBuildingPipe, nil, 1, BUILDING_PS2, NUMBUILDINGPIPES - 1, buildPipeStr);
-			DebugMenuEntrySetWrap(menu.tagsBuildingPipe, true);
-			menu.detailMaps = DebugMenuAddVarBool32("SkyGFX", "Detail Maps", &config->detailMaps, nil);
-			menu.stochastic = DebugMenuAddVarBool32("SkyGFX", "Stochastic Texturing", &config->stochastic, nil);
+DebugMenuEntrySetWrap(menu.buildingPipe, true);
+		//menu.tagsBuildingPipe = DebugMenuAddVar("SkyGFX", "Tags Building Pipeline", &config->tagsBuildingPipe, nil, 1, BUILDING_PS2, NUMBUILDINGPIPES - 1, buildPipeStr);
+		//DebugMenuEntrySetWrap(menu.tagsBuildingPipe, true);
+		menu.detailMaps = DebugMenuAddVarBool32("SkyGFX", "Detail Maps", &config->detailMaps, nil);
+		//menu.stochastic = DebugMenuAddVarBool32("SkyGFX", "Stochastic Texturing", &config->stochastic, nil);
 		}
 		if(iCanHasvehiclePipe){
 			menu.vehiclePipe = DebugMenuAddVar("SkyGFX", "Vehicle Pipeline", &config->vehiclePipe, nil, 1, CAR_PS2, NUMCARPIPES-1, vehPipeStr);
@@ -214,8 +208,8 @@ installMenu(void)
 		menu.dualPassPed = DebugMenuAddVarBool32("SkyGFX|Advanced", "Dual-pass Peds", &config->dualPassPed, nil);
 		menu.dualPassGrass = DebugMenuAddVarBool32("SkyGFX|Advanced", "Dual-pass Grass", &config->dualPassGrass, nil);
 		menu.zwriteThreshold = DebugMenuAddVar("SkyGFX|Advanced", "Dual-pass Alpha Threshold", &config->zwriteThreshold, nil, 1, 0, 255, nil);
-		menu.zwriteThresholdGrass = DebugMenuAddVar("SkyGFX|Advanced", "Dual-pass Alpha Grass Threshold", &config->zwriteThresholdGrass, nil, 1, 0, 255, nil);
-		menu.zwriteThresholdPed = DebugMenuAddVar("SkyGFX|Advanced", "Dual-pass Alpha Ped Threshold", &config->zwriteThresholdPed, nil, 1, 0, 255, nil);
+		//menu.zwriteThresholdGrass = DebugMenuAddVar("SkyGFX|Advanced", "Dual-pass Alpha Grass Threshold", &config->zwriteThresholdGrass, nil, 1, 0, 255, nil);
+		//menu.zwriteThresholdPed = DebugMenuAddVar("SkyGFX|Advanced", "Dual-pass Alpha Ped Threshold", &config->zwriteThresholdPed, nil, 1, 0, 255, nil);
 		menu.ps2ModulateBuilding = DebugMenuAddVarBool32("SkyGFX|Advanced", "PS2-modulate Buildings", &config->ps2ModulateBuilding, nil);
 		menu.ps2ModulateGrass = DebugMenuAddVarBool32("SkyGFX|Advanced", "PS2-modulate Grass", &config->ps2ModulateGrass, nil);
 		menu.infraredVision = DebugMenuAddVar("SkyGFX|Advanced", "Infrared vision", &config->infraredVision, nil, 1, 0, 1, ps2pcStr);
@@ -225,8 +219,8 @@ installMenu(void)
 		menu.grainFilter = DebugMenuAddVar("SkyGFX|Advanced", "Grain filter", &config->grainFilter, resetValues, 1, 0, 1, ps2pcStr);
 		DebugMenuEntrySetWrap(menu.grainFilter, true);
 
-		menu.rgb1Mult = DebugMenuAddVar("SkyGFX|Advanced", "RGB1 Mult", &config->rgb1Mult, resetValues, 1.0f, 0.0f, 10.0f);
-		menu.rgb2Mult = DebugMenuAddVar("SkyGFX|Advanced", "RGB2 Mult", &config->rgb2Mult, resetValues, 1.0f, 0.0f, 10.0f);
+		//menu.rgb1Mult = DebugMenuAddVar("SkyGFX|Advanced", "RGB1 Mult", &config->rgb1Mult, resetValues, 1.0f, 0.0f, 10.0f);
+		//menu.rgb2Mult = DebugMenuAddVar("SkyGFX|Advanced", "RGB2 Mult", &config->rgb2Mult, resetValues, 1.0f, 0.0f, 10.0f);
 
 		menu.bYCbCrFilter = DebugMenuAddVarBool8("SkyGFX|ScreenFX", "Enable YCbCr tweak", (int8_t*)&config->bYCbCrFilter, resetValues);
 		menu.lumaScale    = DebugMenuAddVar("SkyGFX|ScreenFX", "Y scale", &config->lumaScale, resetValues, 0.004f, 0.0f, 10.0f);
@@ -296,12 +290,15 @@ static void EnsureImGuiInit(IDirect3DDevice9 *device)
 	if(unifiedImGuiInited) return;
 	if(!device) return;
 	ImGui::CreateContext();
+	ImGuiIO &io = ImGui::GetIO();
+	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 	ImGui_ImplDX9_Init(device);
 	unifiedImGuiInited = true;
 }
 
 void UploadUnifiedConstants(IDirect3DDevice9 *device)
 {
+	return; // TODO: recover unified pipeline from JuniorDjjr fork
 	if(!config->unifiedEnable) return;
 	if(!device) return;
 
@@ -364,11 +361,206 @@ void UploadUnifiedConstants(IDirect3DDevice9 *device)
 	float c6[4] = { (float)config->unifiedVersion, 1.0f, 0, 0 };
 	device->SetPixelShaderConstantF(6, c6, 1);
 }
+
 #define RB(x) reinterpret_cast<bool*>(&(x))
 
-// ImGui debug menu DISABLED for crash debugging
 void DrawUnifiedDebugMenu(IDirect3DDevice9 *device)
 {
-	// Disabled - ImGui debug menu not available in original skygfx
-	(void)device;
+	if(!device) return;
+	EnsureImGuiInit(device);
+	if(!unifiedImGuiInited) return;
+
+	ImGui_ImplDX9_NewFrame();
+	ImGui::NewFrame();
+
+	if(config->debugMenuOpen){
+		bool open = true;
+		ImGui::SetNextWindowSize(ImVec2(380, 520), ImGuiCond_FirstUseEver);
+		if(ImGui::Begin("SkyGFX", &open)){
+
+			if(ImGui::CollapsingHeader("Pipelines", ImGuiTreeNodeFlags_DefaultOpen)){
+				static const char *buildPipeStr[] = { "PS2", "Xbox", "GTAIV" };
+				ImGui::Combo("Building", &config->buildingPipe, buildPipeStr, 3);
+				static const char *vehPipeStr[] = { "PS2", "PC", "Xbox", "Spec", "Mobile", "Neo", "LCS", "VCS", "Env", "GTAIV" };
+				ImGui::Combo("Vehicle", &config->vehiclePipe, vehPipeStr, 10);
+				static const char *colFilterStr[] = { "None", "PS2", "PC", "Mobile", "III", "VC", "VCS", "GTAIV" };
+				ImGui::Combo("Colour Filter", &config->colorFilter, colFilterStr, 8);
+				static const char *buildPipeStr2[] = { "PS2", "Xbox", "GTAIV" };
+				ImGui::Combo("Tags Building", &config->tagsBuildingPipe, buildPipeStr2, 3);
+			}
+
+			if(ImGui::CollapsingHeader("Building")){
+				ImGui::Checkbox("PS2 Modulate", RB(config->ps2ModulateBuilding));
+				ImGui::Checkbox("Dual-pass", RB(config->dualPassBuilding));
+				ImGui::Checkbox("Detail Maps", RB(config->detailMaps));
+				ImGui::Checkbox("Stochastic", RB(config->stochastic));
+			}
+
+			if(ImGui::CollapsingHeader("Vehicle")){
+				ImGui::Checkbox("Dual-pass", RB(config->dualPassVehicle));
+				ImGui::SliderInt("Env Map Size", &config->envMapSize, 4, 2048);
+				ImGui::Checkbox("Env Map LODs", RB(config->envMapUseLODs));
+				ImGui::SliderFloat("Env Far Clip", &config->envMapFarClipMult, 0.1f, 10.0f);
+				ImGui::SliderFloat("Leeds Shininess", &config->leedsShininessMult, 0.0f, 10.0f);
+				ImGui::SliderFloat("Neo Shininess", &config->neoShininessMult, 0.0f, 10.0f);
+				ImGui::SliderFloat("Neo Specularity", &config->neoSpecularityMult, 0.0f, 10.0f);
+				ImGui::SliderFloat("Env Shininess", &config->envShininessMult, 0.0f, 10.0f);
+				ImGui::SliderFloat("Env Specularity", &config->envSpecularityMult, 0.0f, 10.0f);
+				ImGui::SliderFloat("Env Power", &config->envPower, 0.0f, 2000.0f);
+				ImGui::SliderFloat("Env Fresnel", &config->envFresnel, 0.0f, 10.0f);
+			}
+
+			if(ImGui::CollapsingHeader("Grass")){
+				ImGui::Checkbox("PS2 Modulate", RB(config->ps2ModulateGrass));
+				ImGui::Checkbox("Dual-pass", RB(config->dualPassGrass));
+				ImGui::Checkbox("Add Ambient", RB(config->grassAddAmbient));
+				ImGui::Checkbox("Backface Cull", RB(config->backfaceCull));
+				ImGui::Checkbox("Fix Placement", RB(config->fixGrassPlacement));
+			}
+
+			if(ImGui::CollapsingHeader("Post Effects")){
+				ImGui::Checkbox("Radiosity", RB(config->doRadiosity));
+				static const char *radStr[] = { "PS2", "Shader" };
+				ImGui::Combo("Rad Type", &config->radiosity, radStr, 2);
+				ImGui::SliderInt("Rad Filter Passes", &config->radiosityFilterPasses, 0, 8);
+				ImGui::SliderInt("Rad Render Passes", &config->radiosityRenderPasses, 0, 8);
+				ImGui::SliderInt("Rad Intensity", &config->radiosityIntensity, 0, 255);
+				ImGui::Separator();
+				ImGui::Checkbox("VCS Trails", RB(config->vcsTrails));
+				ImGui::SliderInt("Trails Limit", &config->trailsLimit, 0, 255);
+				ImGui::SliderInt("Trails Intensity", &config->trailsIntensity, 0, 255);
+				ImGui::SliderInt("Trails Resolution", &config->trailsResolution, 1, 4);
+				ImGui::Separator();
+				ImGui::SliderInt("Blur Left", &config->offLeft, -1000, 1000);
+				ImGui::SliderInt("Blur Right", &config->offRight, -1000, 1000);
+				ImGui::SliderInt("Blur Top", &config->offTop, -1000, 1000);
+				ImGui::SliderInt("Blur Bottom", &config->offBottom, -1000, 1000);
+			}
+
+			if(ImGui::CollapsingHeader("Dual Pass")){
+				ImGui::Checkbox("Global", RB(config->dualPassGlobal));
+				ImGui::Checkbox("Default", RB(config->dualPassDefault));
+				ImGui::Checkbox("Buildings", RB(config->dualPassBuilding));
+				ImGui::Checkbox("Vehicles", RB(config->dualPassVehicle));
+				ImGui::Checkbox("Peds", RB(config->dualPassPed));
+				ImGui::Checkbox("Grass", RB(config->dualPassGrass));
+				ImGui::SliderInt("Alpha Threshold", &config->zwriteThreshold, 0, 255);
+				ImGui::SliderInt("Grass Threshold", &config->zwriteThresholdGrass, 0, 255);
+				ImGui::SliderInt("Ped Threshold", &config->zwriteThresholdPed, 0, 255);
+			}
+
+			if(ImGui::CollapsingHeader("Effects")){
+				static const char *shadStr[] = { "Default", "PS2", "PC" };
+				ImGui::Combo("Ped Shadows", &config->pedShadows, shadStr, 3);
+				ImGui::Combo("Stencil Shadows", &config->stencilShadows, shadStr, 3);
+				static const char *ps2pcStr[] = { "PS2", "PC" };
+				ImGui::Combo("Infrared Vision", &config->infraredVision, ps2pcStr, 2);
+				ImGui::Combo("Night Vision", &config->nightVision, ps2pcStr, 2);
+				ImGui::Combo("Grain Filter", &config->grainFilter, ps2pcStr, 2);
+				ImGui::Checkbox("Sun Glare", RB(config->doglare));
+				static const char *lightningStr[] = { "Sky only", "Sky and objects" };
+				ImGui::Combo("Lightning", &config->lightningIlluminatesWorld, lightningStr, 2);
+				ImGui::Checkbox("PS2 Modulate Global", RB(config->ps2ModulateGlobal));
+			}
+
+			if(ImGui::CollapsingHeader("SSAO")){
+				ImGui::Checkbox("Enable", RB(config->ssaoEnable));
+				ImGui::SliderFloat("Radius", &config->ssaoRadius, 0.0f, 5.0f);
+				ImGui::SliderFloat("Power", &config->ssaoPower, 0.0f, 10.0f);
+				ImGui::SliderFloat("Kernel Size", &config->ssaoKernelSize, 1.0f, 64.0f);
+				ImGui::SliderInt("Sample Count", &config->ssaoSampleCount, 1, 64);
+			}
+
+			if(ImGui::CollapsingHeader("SMAA")){
+				ImGui::Checkbox("Enable", RB(config->smaaEnable));
+				static const char *smaaPresetStr[] = { "LOW", "MEDIUM", "HIGH", "ULTRA" };
+				ImGui::Combo("Preset", &config->smaaPreset, smaaPresetStr, 4);
+				ImGui::Checkbox("Predication", RB(config->smaaPredication));
+				ImGui::Checkbox("Temporal", RB(config->smaaTemporal));
+			}
+
+			if(ImGui::CollapsingHeader("GTA IV")){
+				ImGui::Checkbox("Enable IV Mode", RB(config->ivMode));
+				ImGui::SliderFloat("Desaturation", &config->ivDesaturation, 0.0f, 1.0f);
+				ImGui::SliderFloat("Gamma", &config->ivGamma, 0.1f, 3.0f);
+				ImGui::SliderFloat("Vignette Intensity", &config->ivVignetteIntensity, 0.0f, 2.0f);
+				ImGui::SliderFloat("Vignette Radius", &config->ivVignetteRadius, 0.0f, 2.0f);
+				ImGui::SliderFloat("Vignette Contrast", &config->ivVignetteContrast, 0.0f, 5.0f);
+				ImGui::SliderFloat("Bloom Intensity", &config->ivBloomIntensity, 0.0f, 2.0f);
+				ImGui::SliderFloat("Exposure", &config->ivExposure, 0.0f, 3.0f);
+			}
+
+			if(ImGui::CollapsingHeader("SSS")){
+				ImGui::Checkbox("Enable", RB(config->sssEnable));
+				ImGui::SliderFloat("Global Intensity", &config->sssIntensity, 0.0f, 1.0f);
+				ImGui::SliderFloat("Vegetation", &config->sssVegIntensity, 0.0f, 1.0f);
+				ImGui::SliderFloat("Skin", &config->sssSkinIntensity, 0.0f, 1.0f);
+				ImGui::SliderFloat("Cloth", &config->sssClothIntensity, 0.0f, 1.0f);
+			}
+
+			if(ImGui::CollapsingHeader("Screen FX")){
+				ImGui::Checkbox("YCbCr Filter", &config->bYCbCrFilter);
+				ImGui::SliderFloat("Luma Scale", &config->lumaScale, 0.0f, 2.0f);
+				ImGui::SliderFloat("Luma Offset", &config->lumaOffset, -1.0f, 1.0f);
+				ImGui::SliderFloat("Cb Scale", &config->cbScale, 0.0f, 5.0f);
+				ImGui::SliderFloat("Cb Offset", &config->cbOffset, -1.0f, 1.0f);
+				ImGui::SliderFloat("Cr Scale", &config->crScale, 0.0f, 5.0f);
+				ImGui::SliderFloat("Cr Offset", &config->crOffset, -1.0f, 1.0f);
+				ImGui::SliderFloat("RGB1 Mult", &config->rgb1Mult, 0.0f, 10.0f);
+				ImGui::SliderFloat("RGB2 Mult", &config->rgb2Mult, 0.0f, 10.0f);
+			}
+
+			if(ImGui::CollapsingHeader("Unified Pipeline")){
+				ImGui::Checkbox("Enable", &config->unifiedEnable);
+				static const char *verStr[] = { "PS2", "PC 1.0", "Steam", "Mobile" };
+				ImGui::Combo("Version", &config->unifiedVersion, verStr, 4);
+				ImGui::SliderFloat("Sat Boost", &config->unifiedSatBoost, -0.5f, 1.0f);
+				ImGui::SliderFloat("IBL Tint", &config->unifiedIblTintStrength, 0.0f, 1.0f);
+				ImGui::Separator();
+				ImGui::Checkbox("Pre-Pass", &config->unifiedEnablePrePass);
+				ImGui::Checkbox("Edge Detect", &config->unifiedEnableEdgeDetect);
+				ImGui::Checkbox("Occlusion", &config->unifiedEnableOcclusion);
+				ImGui::Checkbox("Stored Shadows", &config->unifiedEnableStoredShadows);
+				ImGui::Checkbox("Cloud Shadows", &config->unifiedEnableCloudShadows);
+				ImGui::Checkbox("Sun Shadows", &config->unifiedEnableSunShadows);
+				ImGui::Checkbox("Time of Day", &config->unifiedEnableTimeOfDay);
+				ImGui::Checkbox("Vertex AO", &config->unifiedEnableVertexAO);
+				ImGui::Checkbox("Point Light Override", &config->unifiedEnablePointLightOverride);
+				ImGui::Checkbox("Post-Pass", &config->unifiedEnablePostPass);
+				ImGui::Checkbox("IBL", &config->unifiedEnableIBL);
+				ImGui::Checkbox("IBL Tint", &config->unifiedEnableIBLTint);
+				ImGui::Checkbox("Surface Weights", &config->unifiedEnableSurfaceWeights);
+				ImGui::Checkbox("Grading", &config->unifiedEnableGrading);
+				ImGui::Checkbox("Gamma", &config->unifiedEnableGamma);
+				ImGui::Separator();
+				ImGui::SliderFloat("SSAO Noise", &config->unifiedSsaoNoiseScale, 0.5f, 16.0f);
+				ImGui::SliderFloat("Shadow Softness", &config->unifiedShadowSoftness, 0.0f, 1.0f);
+				ImGui::SliderFloat("Cloud Shadow", &config->unifiedCloudShadowStr, 0.0f, 1.0f);
+				ImGui::SliderFloat("Sun Shadow", &config->unifiedSunShadowStr, 0.0f, 1.0f);
+				ImGui::SliderFloat("Vertex AO Boost", &config->unifiedVertexAOBoost, 0.5f, 3.0f);
+				ImGui::SliderFloat("Day Reduction", &config->unifiedDayReduction, 0.0f, 1.0f);
+				ImGui::SliderFloat("Point Light OVR", &config->unifiedPointLightOverride, 0.0f, 1.0f);
+				ImGui::SliderFloat("SMAA Threshold", &config->unifiedSmaaThreshold, 0.01f, 0.5f);
+				ImGui::SliderFloat("SMAA Corner", &config->unifiedSmaaCornerRounding, 0.0f, 100.0f);
+				ImGui::Checkbox("Show Overlay", &config->unifiedShowOverlay);
+				ImGui::Checkbox("Debug Occlusion", &config->unifiedDebugOcclusion);
+			}
+
+			if(ImGui::CollapsingHeader("Actions")){
+				if(ImGui::Button("Reload INI")){
+					reloadAllInis();
+				}
+				ImGui::SameLine();
+				if(ImGui::Button("Reset Values")){
+					resetValues();
+				}
+				ImGui::Text("Config: %d / %d", currentConfig, numConfigs);
+			}
+		}
+		ImGui::End();
+		if(!open) config->debugMenuOpen = 0;
+	}
+
+	ImGui::Render();
+	ImGui_ImplDX9_RenderDrawData(ImGui::GetDrawData());
 }

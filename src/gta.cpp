@@ -11,9 +11,6 @@ int &NumExtraDirLightsInWorld = *(int*)0xC88708;
 D3DLIGHT9 &gCarEnvMapLight = *(D3DLIGHT9*)0xC02CB0;
 
 RwTexture *&gpWhiteTexture = *(RwTexture**)0xB4E3EC;
-// RwEngineInstance: RW SDK global, stored at game address 0xC97B24
-// Declared extern in gta.h, defined here
-void *RwEngineInstance = NULL;
 
 
 float *gfLaRiotsLightMult = (float*)0x8CD060;
@@ -37,7 +34,21 @@ uint8 &CClock__ms_nGameClockHours = *(byte*)0xB70153;
 int16 &CWeather__OldWeatherType = *(short*)0xC81320;
 int16 &CWeather__NewWeatherType = *(short*)0xC8131C;
 float &CWeather__InterpolationValue = *(float*)0xC8130C;
+float &CWeather__CloudCoverage = *(float*)0xC81304;
+float &CWeather__Foggyness = *(float*)0xC81300;
 
+CColourSet &CTimeCycle__m_CurrentColours = *(CColourSet*)0xB7C4A0;
+
+// Get actual sun direction from timecycle
+void GetSunDirection(float &sx, float &sy, float &sz) {
+	int idx = *(int*)0xB79FD0 & 15;
+	CVector *sunVecs = (CVector*)0xB7CA50;
+	sx = sunVecs[idx].x;
+	sy = sunVecs[idx].y;
+	sz = sunVecs[idx].z;
+}
+
+void **rwengine = *(void***)0x58FFC0;
 RwInt32 &CCustomCarEnvMapPipeline__ms_envMapPluginOffset = *(RwInt32*)0x8D12C4;
 RwInt32 &CCustomCarEnvMapPipeline__ms_envMapAtmPluginOffset = *(RwInt32*)0x8D12C8;
 RwInt32 &CCustomCarEnvMapPipeline__ms_specularMapPluginOffset = *(RwInt32*)0x8D12CC;
@@ -75,9 +86,6 @@ WRAPPER RwInt32 RpAtomicRegisterPlugin(RwInt32, RwUInt32, RwPluginObjectConstruc
 WRAPPER RwInt32 RpAtomicRegisterPluginStream(RwUInt32, RwPluginDataChunkReadCallBack, RwPluginDataChunkWriteCallBack, RwPluginDataChunkGetSizeCallBack) { EAXJMP(0x74BE00); }
 WRAPPER RwInt32 RpAtomicSetStreamRightsCallBack(RwUInt32, RwPluginDataChunkRightsCallBack) { EAXJMP(0x74BE50); }
 WRAPPER RwUInt32 RwStreamRead(RwStream* stream, void* buffer, RwUInt32 length) { EAXJMP(0x7EC9D0); }
-WRAPPER RpClump* RpClumpStreamRead(RwStream* stream) { EAXJMP(0x74B420); }
-WRAPPER RpClump* RpClumpForAllAtomics(RpClump* clump, RpAtomicCallBack callback, void* data) { EAXJMP(0x749B70); }
-WRAPPER RwBool RpClumpDestroy(RpClump* clump) { EAXJMP(0x74A310); }
 
 WRAPPER RpMatFXMaterialFlags RpMatFXMaterialGetEffects(const RpMaterial*) { EAXJMP(0x812140); }
 WRAPPER const RpMaterial *RpMatFXMaterialGetUVTransformMatrices(const RpMaterial*, RwMatrix**, RwMatrix**) { EAXJMP(0x812A50); }
@@ -143,6 +151,9 @@ WRAPPER RpAtomic *CCustomCarEnvMapPipeline__CustomPipeAtomicSetup(RpAtomic *atom
 WRAPPER char *GetFrameNodeName(RwFrame *frame) { EAXJMP(0x72FB30); }
 WRAPPER int gtaGetPipelineID(RpAtomic* atomic) { EAXJMP(0x72FC40); }
 WRAPPER RpAtomic *AtomicDefaultRenderCallBack(RpAtomic*) { EAXJMP(0x7491C0); };
+WRAPPER RpClump *RpClumpStreamRead(RwStream *stream) { EAXJMP(0x748A10); }
+WRAPPER RwBool RpClumpDestroy(RpClump *clump) { EAXJMP(0x748C50); }
+WRAPPER RpClump *RpClumpForAllAtomics(RpClump *clump, RpAtomicCallBack callBack, void *pData) { EAXJMP(0x748E90); }
 WRAPPER void CCustomCarEnvMapPipeline__CustomPipeRenderCB_exe(RwResEntry *repEntry, void *object, RwUInt8 type, RwUInt32 flags) { EAXJMP(0x5D9900) };
 WRAPPER void GTAfree(void *data) { EAXJMP(0x82413F); }
 

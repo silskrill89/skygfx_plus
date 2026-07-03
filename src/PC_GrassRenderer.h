@@ -11,34 +11,7 @@
 #define __VUGRASSRENDERER_H__
 
 #include "skygfx.h"
-
-#ifndef ASSERT
-#define ASSERT(x) ((void)0)
-#endif
-#ifndef ASSERTMSG
-#define ASSERTMSG(x, msg) ((void)0)
-#endif
-
-typedef uint8 bool8;
-
-// GTA SA PPTriPlant struct - plant triangle data for grass rendering
-struct PPTriPlant
-{
-	CVector V1, V2, V3;
-	CVector center;
-	int32 model_id;
-	int32 seed;
-	RwRGBA color;
-	int32 num_plants;
-	float scale_var_xy;
-	float scale_var_z;
-	float scale;
-	float wind_bend_var;
-	float wind_bend_scale;
-	RwTexture *texture_ptr;
-	float intensity_var;
-	float intensity;
-};
+#include "PC_PlantsMgr.h"
 
 
 //

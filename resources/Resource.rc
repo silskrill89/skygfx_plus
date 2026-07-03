@@ -38,8 +38,6 @@ IDR_BLURPS              RCDATA "cso/blurPS.cso"
 IDR_RADIOSITYPS         RCDATA "cso/radiosityPS.cso"
 IDR_VCTRAILSPS          RCDATA "cso/vcTrailsPS.cso"
 IDR_MODERNCOLORFILTERPS RCDATA "cso/ModernColorFilterPS.cso"
-IDR_IIITRAILSPS         RCDATA "cso/iiiTrailsPS.cso"
-IDR_SIMPLESTOCHASTICPS  RCDATA "cso/simpleStochasticPS.cso"
 
 // PBR / Modern
 IDR_VEHICLEPAINT_GTAIV  RCDATA "cso/VehiclePaint_GTAIV.cso"
@@ -57,7 +55,6 @@ IDR_SKINPBR             RCDATA "cso/SkinSSS.cso"
 
 // Vehicle legacy
 IDR_VEHICLEPBRVS         RCDATA "cso/vehiclePBRVS.cso"
-IDR_NEOVEHICLEONEVS      RCDATA "cso/neoVehiclePass1VS.cso"
 IDR_PS2CARFXVS          RCDATA "cso/ps2CarFxVS.cso"
 IDR_SPECCARFXVS         RCDATA "cso/specCarFxVS.cso"
 IDR_SPECCARFXPS         RCDATA "cso/specCarFxPS.cso"
@@ -65,16 +62,6 @@ IDR_XBOXCARVS           RCDATA "cso/xboxCarVS.cso"
 IDR_LEEDSCARFXVS        RCDATA "cso/leedsCarFxVS.cso"
 IDR_MOBILEVEHICLEVS     RCDATA "cso/mobileVehicleVS.cso"
 IDR_MOBILEVEHICLEPS     RCDATA "cso/mobileVehiclePS.cso"
-
-// GTAIV vehicle/building
-IDR_NEOVEHICLETWOVS     RCDATA "cso/neoVehiclePass2VS.cso"
-IDR_GTAIVVEHICLEVS      RCDATA "cso/GTAIVVehicle_vs.cso"
-IDR_GTAIVVEHICLEPS      RCDATA "cso/GTAIVVehicle_ps.cso"
-IDR_ENVCARVS            RCDATA "cso/envCarVS.cso"
-IDR_ENVCARPS            RCDATA "cso/envCarPS.cso"
-IDR_PS2ENVSPECFXPS      RCDATA "cso/ps2EnvSpecFxPS.cso"
-IDR_GTAIVBUILDINGVS     RCDATA "cso/GTAIVBuilding_vs.cso"
-IDR_GTAIVBUILDINGPS     RCDATA "cso/GTAIVBuilding_ps.cso"
 
 // Building legacy
 IDR_PS2BUILDINGVS       RCDATA "cso/ps2BuildingVS.cso"

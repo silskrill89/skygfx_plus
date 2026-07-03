@@ -97,5 +97,3 @@ __pycache__/
 
 # Node
 node_modules/
-broken_build/
-backups/

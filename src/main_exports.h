@@ -25,12 +25,11 @@ extern bool iCanHasNeoDrops;
 extern bool iCanHasSunGlare;
 extern int  transparentLockon;
 extern int  fixShadows;
-extern bool debugMenuOpen;
 
 // ============================================================
 // Callback function pointers (set by hooks, used by game)
 // ============================================================
-extern void (*InitialiseGame)(void);
+extern void (*InitialiseGame)();
 extern void (*CSkidmarks__Render_orig)(void);
 extern void (*CTagManager__RenderTagForPC)(RpAtomic *atomic);
 extern void (*CTagManager__SetupAtomic_orig)(RpAtomic *atomic);

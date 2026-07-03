@@ -17,8 +17,6 @@ static int(__cdecl *game_RpMatFXAtomicQueryEffects)(void *atomic) = (int(__cdecl
 static int(__cdecl *game_RpMatFXMaterialGetEffects)(void *material) = (int(__cdecl*)(void *))0x812140;
 static void(__cdecl *game_RpGeometryForAllMaterials)(void *geom, void *cb, void *data) = (void(__cdecl*)(void *, void *, void *))0x74C790;
 
-static bool gHasExternalNormalMapPlugin = false;
-
 // Pipeline IDs
 #define RSPIPE_PC_CustomBuilding_PipeID    0x53F20098
 #define RSPIPE_PC_CustomBuildingDN_PipeID  0x53F2009C

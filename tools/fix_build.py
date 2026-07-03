@@ -104,7 +104,7 @@ SDKS = {
     'imgui_be':    r'E:\SDKs\imgui-master\backends',
     'plugin_sdk':  r'E:\SDKs\plugin-sdk-master\plugin_sa',
     'normalmap':   r'E:\SDKs\normalmap_byDK_1.01\normalmap_byDK_1.01\sources',
-    'gta_sa_re':   r'E:\dev(dave)\releases\GTASource\gta-reversed-master',
+    'gta_sa_re':   r'E:\dev(dave)\Sa_dev\GTASource\GTA SA RE\source',
     'dxsdk':       r'C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)',
     'msbuild':     r'C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe',
 }
@@ -119,7 +119,7 @@ REQUIRED_SDK_PATHS = {
     'imgui_be':    ('imgui_impl_dx9.h', r'E:\SDKs\imgui-master\backends\imgui_impl_dx9.h'),
     'plugin_sdk':  ('plugin_sa.h', r'E:\SDKs\plugin-sdk-master\plugin_sa\plugin_sa.h'),
     'normalmap':   ('sources', r'E:\SDKs\normalmap_byDK_1.01\normalmap_byDK_1.01\sources'),
-    'gta_sa_re':   ('GTA SA RE', r'E:\dev(dave)\releases\GTASource\gta-reversed-master'),
+    'gta_sa_re':   ('GTA SA RE', r'E:\dev(dave)\Sa_dev\GTASource\GTA SA RE\source'),
     'injector':    ('injector.hpp', os.path.join(PROJECT_DIR, r'external\injector\include\injector\injector.hpp')),
     'rw37':        ('rwcore.h', r'E:\SDKs\Renderware 3.7 SDK (For Windows) Full\RWSDK37\Graphics\rwsdk\include\d3d9\rwcore.h'),
     'dxsdk':       ('d3d9.h', os.path.join(SDKS['dxsdk'], 'Include', 'd3d9.h')),
