@@ -3,7 +3,6 @@
 #include "ini_parser.hpp"
 #include "debugmenu_public.h"
 #include "ModuleList.hpp"
-#include <rpnormmap.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <excpt.h>
@@ -956,25 +955,6 @@ RpAtomic* CustomPipeAtomicSetup_Hook(RpAtomic* atomic)
 {
 	// Call original setup first
 	RpAtomic* result = CCustomCarEnvMapPipeline__CustomPipeAtomicSetup(atomic);
-	
-	// If normal map plugin is active, capture normal map textures
-	if(RpNormMapAtomicIsInitialized(atomic)){
-		RpGeometry* geo = RpAtomicGetGeometry(atomic);
-		if(geo){
-			int matCount = RpGeometryGetNumMaterials(geo);
-			for(int i = 0; i < matCount; i++){
-				RpMaterial* mat = RpGeometryGetMaterial(geo, i);
-				if(mat){
-					RwTexture* normalMap = RpNormMapMaterialGetNormMapTexture(mat);
-					if(normalMap){
-						dbglog("Normal map found on vehicle atomic: %s", normalMap->name);
-						// Store normal map for SSAO use
-					}
-				}
-			}
-		}
-	}
-	
 	return result;
 }
 
@@ -2077,17 +2057,15 @@ DllMain(HINSTANCE hInst, DWORD reason, LPVOID)
 		//InjectHook(0x7572CC, rxD3D9DefaultRenderCallback_VertexShaderHook, PATCH_JUMP);
 		InjectHook(0x5DADB7, fixSeed, PATCH_JUMP);
 
-		// Attach normal map plugin for vehicle/vegetation normal maps
-		if(RpNormMapPluginAttach()){
-			dbglog("RpNormMapPluginAttach: success");
-		}else{
-			dbglog("RpNormMapPluginAttach: failed");
-		}
+		// Normal map plugin disabled for now (crashes when rpnormmap.lib not linked)
+		// if(RpNormMapPluginAttach()){
+		// 	dbglog("RpNormMapPluginAttach: success");
+		// }else{
+		// 	dbglog("RpNormMapPluginAttach: failed");
+		// }
 
-		// Hook normal map pipeline creation to capture normal map textures
-		// Vehicle pipeline: 0x5DA610 is CustomPipeAtomicSetup
-		// Building pipeline: 0x5D7F40/0x5D5B80
-		InjectHook(0x5DA610, CustomPipeAtomicSetup_Hook, PATCH_JUMP);
+		// Normal map pipeline hook disabled for now
+		// InjectHook(0x5DA610, CustomPipeAtomicSetup_Hook, PATCH_JUMP);
 		InjectHook(0x5DAE61, saveIntensity, PATCH_JUMP);
 		Patch(0x5DAEC8, setTextureAndColor);
 

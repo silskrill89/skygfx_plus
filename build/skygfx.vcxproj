@@ -79,7 +79,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
-      <AdditionalDependencies>d3d9.lib;d3dx9.lib;winmm.lib;rpnormmap.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d9.lib;d3dx9.lib;winmm.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Lib\x86;E:\SDKs\normalmap_byDK_1.01\normalmap_byDK_1.01\sources;E:\SDKs\Renderware 3.7 SDK (For Windows) Full\RWSDK37\Graphics\rwsdk\lib\d3d9\release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <ImportLibrary>E:\games\gtasa_skygfx_plus\skygfx.lib</ImportLibrary>
     </Link>
@@ -110,7 +110,7 @@
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
-      <AdditionalDependencies>d3d9.lib;d3dx9.lib;winmm.lib;rpnormmap.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d9.lib;d3dx9.lib;winmm.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Lib\x86;E:\SDKs\normalmap_byDK_1.01\normalmap_byDK_1.01\sources;E:\SDKs\Renderware 3.7 SDK (For Windows) Full\RWSDK37\Graphics\rwsdk\lib\d3d9\release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <ImportLibrary>E:\games\gtasa_skygfx_plus\skygfx.lib</ImportLibrary>
     </Link>
@@ -156,8 +156,8 @@
     <ClCompile Include="..\src\neo.cpp" />
     <ClCompile Include="..\src\neoCarpipe.cpp" />
     <ClCompile Include="..\src\neoWaterdrops.cpp" />
-    <ClCompile Include="..\src\normalmap.cpp" />
-    <ClCompile Include="..\src\normmap_stubs.cpp" />
+    <!-- <ClCompile Include="..\src\normalmap.cpp" /> -->
+    <!-- <ClCompile Include="..\src\normmap_stubs.cpp" /> -->
     <ClCompile Include="..\src\PC_GrassRenderer.cpp" />
     <!-- <ClCompile Include="..\src\pc_patched_mode.cpp" /> -->
     <ClCompile Include="..\src\pipelinecommon.cpp" />
