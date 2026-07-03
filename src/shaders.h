@@ -132,8 +132,7 @@ extern void *NormalBufferShader;
 extern void *PipeChainShader;
 
 // Common shaders
-extern void *envCarVS;
-extern void *envCarPS;
+extern void *vehiclePBRVS;
 extern void *simplePS;
 
 // ============================================================

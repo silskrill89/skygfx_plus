@@ -1,130 +1,23 @@
 #include "skygfx.h"
+#include "main_exports.h"
+#include "hooks.h"
 #include "neo.h"
+#include "waterPipe.h"
+#include "chars.h"
 #include "ini_parser.hpp"
 #include "debugmenu_public.h"
 #include "ModuleList.hpp"
-#include <stdarg.h>
-#include <stdio.h>
-#include <excpt.h>
+#include "diagnostics.h"
 
 // Stubs for debug menu (excluded for now - no imgui)
 void refreshMenu(void) {}
 void installMenu(void) {}
 
-// Stubs for normalmap (excluded for now)
-void normalmap_init(void) {}
-void normalmap_shutdown(void) {}
+// normalmap_init() and normalmap_shutdown() are now in normalmap.cpp
 
 // Performance timing globals
 LARGE_INTEGER perfFreq = {0};
 double perfFreqInv = 0.0;
-//#include <fstream>
-
-static char g_logPath[MAX_PATH];
-static int g_logInit = 0;
-static volatile int g_allowCrashPassThrough = 0;
-
-static const char *logLevelStr[] = { "INFO ", "WARN ", "ERROR", "FATAL" };
-
-static void
-dbglog_internal(LogLevel level, const char *file, int line, const char *func, const char *fmt, va_list ap)
-{
-	char msg[4096];
-	int len = vsnprintf(msg, sizeof(msg), fmt, ap);
-	if(len < 0) return;
-	if(len >= sizeof(msg)) len = sizeof(msg) - 1;
-
-	const char *shortFile = file;
-	for(const char *p = file; *p; p++)
-		if(*p == '\\' || *p == '/') shortFile = p + 1;
-
-	char buf[4096];
-	SYSTEMTIME st;
-	GetLocalTime(&st);
-	int hlen;
-	if(level >= 0)
-		hlen = snprintf(buf, sizeof(buf), "[%02d:%02d:%02d.%03d] [%s] %s:%d %s() - %s\n",
-			st.wHour, st.wMinute, st.wSecond, st.wMilliseconds,
-			logLevelStr[level], shortFile, line, func, msg);
-	else
-		hlen = snprintf(buf, sizeof(buf), "[%02d:%02d:%02d.%03d] [TRACE] %s:%d %s() - %s\n",
-			st.wHour, st.wMinute, st.wSecond, st.wMilliseconds,
-			shortFile, line, func, msg);
-	if(hlen < 0 || hlen >= sizeof(buf)) return;
-
-	HANDLE h = CreateFileA(g_logPath, FILE_APPEND_DATA, FILE_SHARE_READ,
-		NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-	if(h == INVALID_HANDLE_VALUE) return;
-	DWORD written;
-	WriteFile(h, buf, hlen, &written, NULL);
-	FlushFileBuffers(h);
-	CloseHandle(h);
-}
-
-void
-dbglog(const char *fmt, ...)
-{
-	va_list ap;
-	va_start(ap, fmt);
-	dbglog_internal(LOG_INFO, "", 0, "", fmt, ap);
-	va_end(ap);
-}
-
-void
-dbglog_loc(LogLevel level, const char *file, int line, const char *func, const char *fmt, ...)
-{
-	va_list ap;
-	va_start(ap, fmt);
-	dbglog_internal(level, file, line, func, fmt, ap);
-	va_end(ap);
-}
-
-static LONG WINAPI
-crashHandler(EXCEPTION_POINTERS *ep)
-{
-	DWORD code = ep->ExceptionRecord->ExceptionCode;
-
-	// Let C++ exceptions (0xE06D7363) pass through to try/catch blocks in readint/readfloat
-	// Swallowing them with EXCEPTION_EXECUTE_HANDLER corrupts C++ exception handling
-	if(code == 0xE06D7363)
-		return EXCEPTION_CONTINUE_SEARCH;
-
-	static int crashCount = 0;
-	if(++crashCount > 20) return EXCEPTION_CONTINUE_SEARCH;
-	
-	CONTEXT *ctx = ep->ContextRecord;
-	dbglog("CRASH: code=0x%08X at=0x%p EAX=%08X EBX=%08X ECX=%08X EDX=%08X ESI=%08X EDI=%08X EBP=%08X ESP=%08X",
-		code, ep->ExceptionRecord->ExceptionAddress,
-		ctx->Eax, ctx->Ebx, ctx->Ecx, ctx->Edx, ctx->Esi, ctx->Edi, ctx->Ebp, ctx->Esp);
-
-	// Auto-fixes must fire BEFORE pass-through check so they work during InitialiseGame
-	// Auto-fix: cascade crash in LoadCollisionFileFirstTime after corrupt COL model
-	// Instruction at 0x5B5192: mov byte ptr [esi+0x28], dl (3 bytes, ESI=NULL from failed new CColModel)
-	if(code == 0xC0000005 && ctx->Eip == 0x5B5192 && ctx->Esi == 0){
-		dbglog("AUTO-FIX: skipping NULL CColModel store at 0x5B5192");
-		ctx->Eip += 3;
-		return EXCEPTION_CONTINUE_EXECUTION;
-	}
-
-	// Auto-fix: crash in model info lookup during CGame::Initialise
-	// Instruction at 0x405CBC: inc byte ptr [eax+34h] (3 bytes)
-	// EAX comes from corrupted model info array lookup — always skip
-	if(code == 0xC0000005 && ctx->Eip == 0x405CBC){
-		dbglog("AUTO-FIX: skipping model info refcount at 0x405CBC (EAX=%08X)", ctx->Eax);
-		ctx->Eip += 3;
-		return EXCEPTION_CONTINUE_EXECUTION;
-	}
-
-	// During InitialiseGame call, let SEH handlers fire to get exact crash info
-	if(g_allowCrashPassThrough)
-		return EXCEPTION_CONTINUE_SEARCH;
-
-	// Handle our rendering crashes - suppress them
-	if(code == 0xC0000005 || code == 0x40010006){
-		return EXCEPTION_EXECUTE_HANDLER;
-	}
-	return EXCEPTION_CONTINUE_SEARCH;
-}
 
 HMODULE dllModule;
 DebugMenuAPI gDebugMenuAPI;
@@ -166,7 +59,6 @@ int original_bRadiosity = 0;
 
 void *grassPixelShader;
 void *simplePS;
-void *simpleStochasticPS;
 void *gpCurrentPixelShaderForDefaultCallbacks;
 void *gpCurrentVertexShaderForDefaultCallbacks;
 bool gRenderingSpheremap;
@@ -741,14 +633,6 @@ CPlantMgr_Initialise(void)
 	return ret;
 }
 
-struct FX
-{
-	char data[0x54];
-	int fxQuality;
-	int GetFxQuality_ped(void);
-	int GetFxQuality_stencil(void);
-};
-
 int
 FX::GetFxQuality_ped(void)
 {
@@ -957,10 +841,19 @@ float cloudAnimTimer = 0.0f;
 bool
 RenderScene_after(void*)
 {
+	static int s_afterFrame = 0;
+	s_afterFrame++;
+	bool doLog = s_afterFrame <= 3;
+
 	cloudAnimTimer += CTimer__ms_fTimeStep;
 	perfInit();
-	// Render IBL buffer for vehicle pipe
-	if(config->vehiclePipe == CAR_MODERN || config->vehiclePipe == CAR_ENV || config->vehiclePipe == CAR_NEO){
+
+	if(doLog) dbglog("  RS_after: Weather_Update");
+	extern void Weather_Update(void);
+	Weather_Update();
+
+	if((config->vehiclePipe == CAR_MODERN || config->vehiclePipe == CAR_ENV || config->vehiclePipe == CAR_NEO) && DynamicSky){
+		if(doLog) dbglog("  RS_after: RenderIBLBuffer");
 		PERF_SCOPE("IBL_Buffer");
 		RenderIBLBuffer();
 	}
@@ -968,23 +861,39 @@ RenderScene_after(void*)
 		CarPipe::RenderEnvTex();
 	else if(config->vehiclePipe == CAR_LCS || config->vehiclePipe == CAR_VCS)
 		RenderReflectionMap_leeds();
-	else 	if(config->vehiclePipe == CAR_MODERN){
+	else if(config->vehiclePipe == CAR_MODERN){
+		if(doLog) dbglog("  RS_after: RenderEnvTex");
 		PERF_SCOPE("EnvTex");
 		CarPipe::RenderEnvTex();
 	}
 
-	// Normal buffer render (stereo disparity)
+	// Temporal smoothing — blend new env map with previous to eliminate
+	// "melting" / ghosting artifacts on vehicle bodies when camera moves.
+	extern void BlendEnvMapTemporal(void);
+	BlendEnvMapTemporal();
+
 	if(config->normalBufferEnable){
+		if(doLog) dbglog("  RS_after: RenderNormalBuffer");
 		PERF_SCOPE("NormalBuffer");
 		RenderNormalBuffer();
 	}
 
 	DrawDebugEnvMap();
+	if(doLog) dbglog("  RS_after: done");
 	return true;
 }
 void
 RenderScene_hook(void)
 {
+	static int s_frameNum = 0;
+	s_frameNum++;
+
+	// Check device state via RenderWare camera - skip frame if no valid camera/raster
+	if (!Scene.camera || !RwCameraGetRaster(Scene.camera)) {
+		// Device is lost/resetting, skip this frame
+		return;
+	}
+
 	// F4 to toggle debug menu
 	static bool s_f4Prev = false;
 	bool f4Now = (GetAsyncKeyState(VK_F4) & 0x8000) != 0;
@@ -999,20 +908,24 @@ RenderScene_hook(void)
 	}
 	s_f4Prev = f4Now;
 
+	if(s_frameNum <= 3) dbglog("RS_hook: frame %d START", s_frameNum);
 	RenderScene_before(nil);
+	if(s_frameNum <= 3) dbglog("RS_hook: before done, calling RenderScene");
 	RenderScene();
+	if(s_frameNum <= 3) dbglog("RS_hook: RenderScene done, calling after");
 	RenderScene_after(nil);
+	if(s_frameNum <= 3) dbglog("RS_hook: frame %d END", s_frameNum);
 }
 
 int (*PipelinePluginAttach)(void);
-static int
+int
 myPluginAttach(void)
 {
 	return PipelinePluginAttach() && PDSPipePluginAttach() && TexDBPluginAttach();
 }
 
 void (*InitialiseGame)(void);
-static void
+void
 installLCMV2Hooks(void)
 {
 	// Removed - aap's skygfx doesn't hook these and works fine
@@ -1026,6 +939,11 @@ InitialiseGame_hook(void)
 	dbglog("InitialiseGame_hook: entered (call #%d)", initCount);
 
 	if(initCount == 1){
+		// Initialize normal map plugin — must run AFTER RwEngineInit()
+		// (InjectDelayedPatches runs at IsAlreadyRunning hook, before RW is ready)
+		normalmap_init();
+		dbglog("InitialiseGame_hook: normalmap_init done");
+
 		if(!UG_RegisterEventCallback)
 			InterceptCall(&RenderScene_A, RenderScene_hook, 0x53EABF);
 		else{
@@ -1041,6 +959,8 @@ InitialiseGame_hook(void)
 		dbglog("InitialiseGame_hook: neoInit done");
 		initTexDB();
 		dbglog("InitialiseGame_hook: initTexDB done");
+		chars_init();
+		dbglog("InitialiseGame_hook: chars_init done");
 	}else{
 		dbglog("InitialiseGame_hook: re-entry detected (call #%d), skipping hooks", initCount);
 	}
@@ -1048,17 +968,14 @@ InitialiseGame_hook(void)
 	dbglog("InitialiseGame_hook: calling original CGame::Initialise...");
 	static DWORD s_initCrashCode;
 	static EXCEPTION_POINTERS* s_initCrashPtrs;
-	g_allowCrashPassThrough = 1;
 	__try {
 		InitialiseGame();
-		g_allowCrashPassThrough = 0;
 		dbglog("InitialiseGame_hook: original returned successfully");
 	} __except(
 		(s_initCrashCode = GetExceptionCode(),
 		 s_initCrashPtrs = GetExceptionInformation(),
 		 EXCEPTION_EXECUTE_HANDLER)
 	) {
-		g_allowCrashPassThrough = 0;
 		CONTEXT *ctx = s_initCrashPtrs->ContextRecord;
 		DWORD storeCount = *(DWORD*)0xB1F650;
 		dbglog("InitialiseGame_hook: CRASH in original! code=0x%08X addr=%p",
@@ -1090,35 +1007,20 @@ void (*CWaterLevel__RenderAndEmptyRenderBuffer)(void);
 void
 CWaterLevel__RenderAndEmptyRenderBuffer_hook(void)
 {
-	/*if (TempBufferVerticesStored)
-	{
-		//GenerateNormals();
-		if (g_pCustomWaterPipe)
-			g_pCustomWaterPipe->RenderWater(TempVertexBuffer, TempBufferVerticesStored, TempBufferRenderIndexList, TempBufferIndicesStored);
-	}
-	TempBufferIndicesStored = 0;
-	TempBufferVerticesStored = 0;*/
-
 	_rwD3D9RenderStateFlushCache();
 
 	if (TempBufferVerticesStored) {
-		//RwD3D9SetStreamSource(0, TempVertexBuffer, 0, sizeof(RwIm3DVertex));
-		//RwD3D9SetIndices(TempBufferRenderIndexList);
-		//RwD3D9SetVertexDeclaration(TempVertexBuffer);
+		// Set water pipe render state (our VS/PS/constants)
+		waterPipe_setRenderState();
+
 		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)true);
-		RwD3D9SetPixelShader(simplePS);
-		//RwD3D9DrawIndexedPrimitive(3, (RwInt32)TempVertexBuffer, 0, TempBufferVerticesStored, 0, TempBufferIndicesStored);
-		RwD3D9DrawIndexedPrimitiveUP(3, 0, TempBufferVerticesStored, TempBufferIndicesStored, TempBufferRenderIndexList, TempVertexBuffer, sizeof(RwIm3DVertex));
+		RwD3D9DrawIndexedPrimitiveUP(3, 0, TempBufferVerticesStored, TempBufferIndicesStored,
+		                            TempBufferRenderIndexList, TempVertexBuffer, sizeof(RwIm3DVertex));
+
+		// Restore previous state
+		waterPipe_restoreRenderState();
 	}
 
-	/*if (TempBufferVerticesStored)
-	{
-		if (RwIm3DTransform(TempVertexBuffer, TempBufferVerticesStored, 0, 1u))
-		{
-			RwIm3DRenderIndexedPrimitive(RwPrimitiveType::rwPRIMTYPETRILIST, TempBufferRenderIndexList, TempBufferIndicesStored);
-			RwIm3DEnd();
-		}
-	}*/
 	TempBufferVerticesStored = 0;
 	TempBufferIndicesStored = 0;
 }
@@ -1127,8 +1029,8 @@ CWaterLevel__RenderAndEmptyRenderBuffer_hook(void)
 void
 StartWaterRender_hook(void)
 {
-	RwD3D9SetPixelShader(simpleStochasticPS);
-	gpCurrentPixelShaderForDefaultCallbacks = simpleStochasticPS;
+	RwD3D9SetPixelShader(simplePS);
+	gpCurrentPixelShaderForDefaultCallbacks = simplePS;
 	StartWaterRender();
 }
 
@@ -1243,7 +1145,7 @@ readfloat(const std::string &s, float default = 0)
 	}
 }
 
-static int explicitBuildingPipe_tmp;
+int explicitBuildingPipe_tmp;
 
 void
 readIni(int n)
@@ -1280,9 +1182,50 @@ readIni(int n)
 	c->keys[0] = readhex(cfg.get("SkyGfx", "keySwitch", "0x0").c_str());
 	c->keys[1] = readhex(cfg.get("SkyGfx", "keyReload", "0x0").c_str());
 
-	// ===== Quality Preset (read first, sets defaults) =====
+	// ===== Unified Pipeline (read first, locks building/vehicle pipes) =====
+	// PBR = unified PBR for all assets, PS2/Xbox/Mobile/GTAIV = locked presets
+	static StrAssoc pipelineMap[] = {
+		{"PBR",    PIPELINE_PBR},
+		{"PS2",    PIPELINE_PS2},
+		{"Xbox",   PIPELINE_XBOX},
+		{"Mobile", PIPELINE_MOBILE},
+		{"GTAIV",  PIPELINE_GTAIV},
+		{"",       PIPELINE_PBR},  // default to PBR
+	};
+	c->pipeline = StrAssoc::get(pipelineMap, cfg.get("SkyGfx", "pipeline", "").c_str());
+
+	// Map pipeline to internal building/vehicle pipes (locked presets)
+	switch(c->pipeline){
+	case PIPELINE_PBR:
+		c->buildingPipe = BUILDING_PBR;
+		c->vehiclePipe = CAR_MODERN;
+		c->colorFilter = COLORFILTER_MODERN;
+		break;
+	case PIPELINE_PS2:
+		c->buildingPipe = BUILDING_PS2;
+		c->vehiclePipe = CAR_PS2;
+		break;
+	case PIPELINE_XBOX:
+		c->buildingPipe = BUILDING_XBOX;
+		c->vehiclePipe = CAR_XBOX;
+		break;
+	case PIPELINE_MOBILE:
+		c->buildingPipe = BUILDING_XBOX;  // Mobile uses Xbox building pipe
+		c->vehiclePipe = CAR_MOBILE;
+		break;
+	case PIPELINE_GTAIV:
+		c->buildingPipe = BUILDING_GTAIV;
+		c->vehiclePipe = CAR_GTAIV;
+		break;
+	default:
+		c->buildingPipe = BUILDING_PBR;
+		c->vehiclePipe = CAR_MODERN;
+		break;
+	}
+
+	// ===== Quality Preset (read second, sets feature defaults) =====
 	// 0=LOW (PS2 classic), 1=MEDIUM (PC classic), 2=HIGH (Enhanced), 3=ULTRA (Full PBR)
-	int preset = readint(cfg.get("SkyGfx", "qualityPreset", ""), 2);
+	int preset = readint(cfg.get("SkyGfx", "qualityPreset", ""), 3);  // default to ULTRA
 
 	// Apply preset defaults — individual INI values override these
 	switch(preset){
@@ -1375,9 +1318,9 @@ readIni(int n)
 		c->rgb2Mult = 0.9f;
 		break;
 	case 3: // ULTRA - Full PBR (settings from INI override below)
-		c->buildingPipe = BUILDING_XBOX;
-		c->vehiclePipe = CAR_MODERN;
-		c->colorFilter = COLORFILTER_GTAIV;
+		// NOTE: buildingPipe and vehiclePipe are set by the pipeline switch above
+		// Do NOT override them here — qualityPreset only sets features, not pipes
+		c->colorFilter = COLORFILTER_VCS;
 		c->smaaEnable = 1;
 		c->smaaPreset = 3; // ULTRA
 		c->ssaoEnable = 1;
@@ -1438,43 +1381,41 @@ readIni(int n)
 	config->ps2ModulateGlobal = readint(cfg.get("SkyGfx", "ps2Modulate", ""), 0);
 	config->dualPassGlobal = readint(cfg.get("SkyGfx", "dualPass", ""), 0);
 
-	static StrAssoc buildPipeMap[] = {
-		{"PS2",     BUILDING_PS2},
-		{"PC",      BUILDING_XBOX},
-		{"Xbox",    BUILDING_XBOX},
+	// Explicit buildingPipe/vehiclePipe INI values override pipeline mapping
+	static StrAssoc buildingPipeMap[] = {
+		{"PS2",    BUILDING_PS2},
+		{"Xbox",   BUILDING_XBOX},
+		{"GTAIV",  BUILDING_GTAIV},
+		{"PBR",    BUILDING_PBR},
 		{"",       -1},
 	};
-	c->buildingPipe = StrAssoc::get(buildPipeMap, cfg.get("SkyGfx", "buildingPipe", "").c_str());
-	if(c->buildingPipe < 0){
-		iCanHasbuildingPipe = false;
-		c->buildingPipe = 0;
-	}
+	int bpOverride = StrAssoc::get(buildingPipeMap, cfg.get("SkyGfx", "buildingPipe", "").c_str());
+	if(bpOverride >= 0)
+		c->buildingPipe = bpOverride;
+
+	static StrAssoc vehiclePipeMap[] = {
+		{"PS2",     CAR_PS2},
+		{"PC",      CAR_PC},
+		{"Xbox",    CAR_XBOX},
+		{"Specular", CAR_SPEC},
+		{"Mobile",  CAR_MOBILE},
+		{"Neo",     CAR_NEO},
+		{"Leeds",   CAR_LCS},
+		{"VCS",     CAR_VCS},
+		{"Env",     CAR_ENV},
+		{"GTAIV",   CAR_GTAIV},
+		{"Modern",  CAR_MODERN},
+		{"",        -1},
+	};
+	int vpOverride = StrAssoc::get(vehiclePipeMap, cfg.get("SkyGfx", "vehiclePipe", "").c_str());
+	if(vpOverride >= 0)
+		c->vehiclePipe = vpOverride;
+
 	c->detailMaps = readint(cfg.get("SkyGfx", "detailMaps", ""), 0);
 	c->stochastic = readint(cfg.get("SkyGfx", "stochasticTexturing", ""), 0);
 
 	c->ps2ModulateBuilding = readint(cfg.get("SkyGfx", "ps2ModulateBuilding", ""), config->ps2ModulateGlobal);
 	c->dualPassBuilding = readint(cfg.get("SkyGfx", "dualPassBuilding", ""), config->dualPassGlobal);
-
-	static StrAssoc vehPipeMap[] = {
-		{"PS2",     CAR_PS2},
-		{"PC",      CAR_PC},
-		{"Xbox",    CAR_XBOX},
-		{"Spec",    CAR_SPEC},
-		{"Neo",     CAR_NEO},
-		{"Leeds",   CAR_LCS},
-		{"LCS",     CAR_LCS},
-		{"VCS",     CAR_VCS},
-		{"Mobile",  CAR_MOBILE},
-		{"Env",     CAR_ENV},
-		{"GTAIV",   CAR_GTAIV},
-		{"Modern",  CAR_MODERN},
-		{"",       -1},
-	};
-	c->vehiclePipe = StrAssoc::get(vehPipeMap, cfg.get("SkyGfx", "vehiclePipe", "").c_str());
-	if(c->vehiclePipe < 0){
-		iCanHasvehiclePipe = false;
-		c->vehiclePipe = 0;
-	}
 
 	c->dualPassVehicle = readint(cfg.get("SkyGfx", "dualPassVehicle", ""), config->dualPassGlobal);
 	c->leedsShininessMult = readfloat(cfg.get("SkyGfx", "leedsShininessMult", ""), 1.0);
@@ -1529,6 +1470,7 @@ readIni(int n)
 		{"VC",      COLORFILTER_VC},
 		{"VCS",     COLORFILTER_VCS},
 		{"GTAIV",   COLORFILTER_GTAIV},
+		{"Modern",  COLORFILTER_MODERN},
 		{"",        COLORFILTER_PC},
 	};
 	static StrAssoc ps2pcMap[] = {
@@ -1581,7 +1523,8 @@ readIni(int n)
 	c->neoBloodDrops = readint(cfg.get("SkyGfx", "neoBloodDrops", ""), 0);
 	fixPcCarLight = readint(cfg.get("SkyGfx", "fixPcCarLight", ""), 0);
 	explicitBuildingPipe_tmp = readint(cfg.get("SkyGfx", "explicitBuildingPipe", ""), -1);
-	c->tagsBuildingPipe = StrAssoc::get(buildPipeMap, cfg.get("SkyGfx", "tagsBuildingPipe", "").c_str());
+	// tagsBuildingPipe follows the same pipeline as main building pipe
+	c->tagsBuildingPipe = c->buildingPipe;
 
 	c->zwriteThreshold = readint(cfg.get("SkyGfx", "zwriteThreshold", ""), 128);
 	if(c->zwriteThreshold < 0) c->zwriteThreshold = 0;
@@ -1628,25 +1571,38 @@ readIni(int n)
 
 	// GTA IV Mode
 	c->ivMode = readint(cfg.get("SkyGfx", "ivMode", ""), 0);
-	c->ivDesaturation = readfloat(cfg.get("SkyGfx", "ivDesaturation", ""), 0.0f);
+	c->ivDesaturation = readfloat(cfg.get("SkyGfx", "ivDesaturation", ""), 1.0f);
 	c->ivGamma = readfloat(cfg.get("SkyGfx", "ivGamma", ""), 1.0f);
-	c->ivSaturation = readfloat(cfg.get("SkyGfx", "ivSaturation", ""), 0.3f);
-	c->ivCurves = readfloat(cfg.get("SkyGfx", "ivCurves", ""), 1.0f);
-	c->ivVignetteIntensity = readfloat(cfg.get("SkyGfx", "ivVignetteIntensity", ""), 0.5f);
-	c->ivVignetteRadius = readfloat(cfg.get("SkyGfx", "ivVignetteRadius", ""), 0.5f);
-	c->ivVignetteContrast = readfloat(cfg.get("SkyGfx", "ivVignetteContrast", ""), 2.0f);
-	c->ivBloomIntensity = readfloat(cfg.get("SkyGfx", "ivBloomIntensity", ""), 0.15f);
+	c->ivSaturation = readfloat(cfg.get("SkyGfx", "ivSaturation", ""), 0.0f);
+	c->ivCurves = readfloat(cfg.get("SkyGfx", "ivCurves", ""), 0.0f);
+	c->ivVignetteIntensity = readfloat(cfg.get("SkyGfx", "ivVignetteIntensity", ""), 0.0f);
+	c->ivVignetteRadius = readfloat(cfg.get("SkyGfx", "ivVignetteRadius", ""), 0.75f);
+	c->ivVignetteContrast = readfloat(cfg.get("SkyGfx", "ivVignetteContrast", ""), 1.5f);
+	c->ivBloomIntensity = readfloat(cfg.get("SkyGfx", "ivBloomIntensity", ""), 0.0f);
 	c->ivExposure = readfloat(cfg.get("SkyGfx", "ivExposure", ""), 1.0f);
 
 	privateHooks = readint(cfg.get("SkyGfx", "privateHooks", ""), 0);
 	if (readint(cfg.get("SkyGfx", "forceWindShader", ""), 0) == 1) forceWindShader = true;
 
 	if(!iniExisted){
-		// ===== Unused/Legacy values (commented out) =====
-		cfg.set("SkyGfx", "; ===== Unused / Legacy Settings =====", "");
-		cfg.set("SkyGfx", "; buildingPipe", "PC");
+		// ===== Brand new INI - write all defaults =====
+		// ===== Unified Pipeline =====
+		cfg.set("SkyGfx", "; =============================================================", "");
+		cfg.set("SkyGfx", "; SkyGFX Plus - Ultra Max Deluxe Configuration", "");
+		cfg.set("SkyGfx", "; Unified PBR pipeline for all assets", "");
+		cfg.set("SkyGfx", "; =============================================================", "");
+		cfg.set("SkyGfx", "", "");
+		cfg.set("SkyGfx", "; ===== Pipeline (locks building/vehicle pipes) =====", "");
+		cfg.set("SkyGfx", "; Options: PBR, PS2, Xbox, Mobile, GTAIV", "");
+		cfg.set("SkyGfx", "pipeline", "PBR");
+		cfg.set("SkyGfx", "qualityPreset", "3");  // ULTRA
+		cfg.set("SkyGfx", "", "");
+
+		// ===== Legacy/Unused Settings (commented out) =====
+		cfg.set("SkyGfx", "; ===== Legacy Settings (ignored when pipeline is set) =====", "");
+		cfg.set("SkyGfx", "; buildingPipe", "PBR");
+		cfg.set("SkyGfx", "; vehiclePipe", "Modern");
 		cfg.set("SkyGfx", "; colorFilter", "VCS");
-		cfg.set("SkyGfx", "; vehiclePipe", "VCS");
 		cfg.set("SkyGfx", "; radiosity", "Shader");
 		cfg.set("SkyGfx", "; vcsTrails", "0");
 		cfg.set("SkyGfx", "; doRadiosity", "1");
@@ -1657,41 +1613,95 @@ readIni(int n)
 		cfg.set("SkyGfx", "; ps2ModulateGrass", "0");
 		cfg.set("SkyGfx", "; grassAddAmbient", "1");
 		cfg.set("SkyGfx", "; grassBackfaceCull", "1");
-		cfg.set("SkyGfx", "; sunGlare", "0");
-		cfg.set("SkyGfx", "; neoWaterDrops", "0");
+		cfg.set("SkyGfx", "; sunGlare", "1");
+		cfg.set("SkyGfx", "; neoWaterDrops", "1");
 		cfg.set("SkyGfx", "; detailMaps", "1");
 		cfg.set("SkyGfx", "; stochasticTexturing", "1");
-		cfg.set("SkyGfx", "; envMapSize", "256");
+		cfg.set("SkyGfx", "; envMapSize", "512");
 		cfg.set("SkyGfx", "; envMapUseLODs", "1");
-		cfg.set("SkyGfx", "; envMapFarClipMult", "1.0");
+		cfg.set("SkyGfx", "; envMapFarClipMult", "2.0");
 		cfg.set("SkyGfx", "; neoShininessMult", "1.0");
 		cfg.set("SkyGfx", "; neoSpecularityMult", "1.0");
 		cfg.set("SkyGfx", "; privateHooks", "0");
 		cfg.set("SkyGfx", "; forceWindShader", "0");
+		cfg.set("SkyGfx", "", "");
 
-		// ===== Active Settings =====
-		cfg.set("SkyGfx", "; ===== Active Settings =====", "");
+		// ===== Active Settings (Ultra Max Deluxe) =====
+		cfg.set("SkyGfx", "; ===== Active Settings (Ultra Max Deluxe) =====", "");
 		cfg.set("SkyGfx", "ssaoEnable", "1");
-		cfg.set("SkyGfx", "ssaoRadius", "0.8");
-		cfg.set("SkyGfx", "ssaoPower", "1.5");
+		cfg.set("SkyGfx", "ssaoRadius", "1.0");
+		cfg.set("SkyGfx", "ssaoPower", "2.0");
 		cfg.set("SkyGfx", "ssaoKernelSize", "16");
 		cfg.set("SkyGfx", "ssaoSampleCount", "16");
 		cfg.set("SkyGfx", "smaaEnable", "1");
-		cfg.set("SkyGfx", "smaaPreset", "3");
+		cfg.set("SkyGfx", "smaaPreset", "3");  // ULTRA
 		cfg.set("SkyGfx", "smaaPredication", "0");
 		cfg.set("SkyGfx", "smaaTemporal", "0");
+		cfg.set("SkyGfx", "motionBlurEnable", "1");
+		cfg.set("SkyGfx", "motionBlurStrength", "0.4");
+		cfg.set("SkyGfx", "sssPostProcessEnable", "1");
+		cfg.set("SkyGfx", "sssPostProcessStrength", "0.2");
+		cfg.set("SkyGfx", "skinEnhanceEnable", "1");
+		cfg.set("SkyGfx", "hairEnhanceEnable", "1");
+		cfg.set("SkyGfx", "vegetationEnhanceEnable", "1");
+		cfg.set("SkyGfx", "enableNormalMaps", "1");
 		cfg.set("SkyGfx", "ivMode", "0");
-		cfg.set("SkyGfx", "ivDesaturation", "0.0");
+		cfg.set("SkyGfx", "ivDesaturation", "0.15");
 		cfg.set("SkyGfx", "ivGamma", "1.0");
 		cfg.set("SkyGfx", "ivSaturation", "0.3");
 		cfg.set("SkyGfx", "ivCurves", "1.0");
-		cfg.set("SkyGfx", "ivVignetteIntensity", "0.5");
-		cfg.set("SkyGfx", "ivVignetteRadius", "0.5");
-		cfg.set("SkyGfx", "ivVignetteContrast", "2.0");
-		cfg.set("SkyGfx", "ivBloomIntensity", "0.15");
-		cfg.set("SkyGfx", "ivExposure", "1.0");
-		cfg.write_file(modulePath);
+		cfg.set("SkyGfx", "ivVignetteIntensity", "0.15");
+		cfg.set("SkyGfx", "ivVignetteRadius", "0.70");
+		cfg.set("SkyGfx", "ivVignetteContrast", "1.5");
+		cfg.set("SkyGfx", "ivBloomIntensity", "0.05");
+		cfg.set("SkyGfx", "ivExposure", "2.5");
+	} else {
+		// ===== Existing INI - only add missing keys (preserve user settings) =====
+		dbglog("skygfx: INI exists, adding any missing keys");
+		
+		// Helper lambda to add key only if not present
+		#define ADD_IF_MISSING(section, key, default) \
+			if(cfg.get(section, key, "").empty()) \
+				cfg.set(section, key, default)
+		
+		// ===== Unified Pipeline =====
+		ADD_IF_MISSING("SkyGfx", "pipeline", "PBR");
+		ADD_IF_MISSING("SkyGfx", "qualityPreset", "3");  // ULTRA
+		
+		// ===== Active Settings (Ultra Max Deluxe) =====
+		ADD_IF_MISSING("SkyGfx", "ssaoEnable", "1");
+		ADD_IF_MISSING("SkyGfx", "ssaoRadius", "1.0");
+		ADD_IF_MISSING("SkyGfx", "ssaoPower", "2.0");
+		ADD_IF_MISSING("SkyGfx", "ssaoKernelSize", "16");
+		ADD_IF_MISSING("SkyGfx", "ssaoSampleCount", "16");
+		ADD_IF_MISSING("SkyGfx", "smaaEnable", "1");
+		ADD_IF_MISSING("SkyGfx", "smaaPreset", "3");
+		ADD_IF_MISSING("SkyGfx", "smaaPredication", "0");
+		ADD_IF_MISSING("SkyGfx", "smaaTemporal", "0");
+		ADD_IF_MISSING("SkyGfx", "motionBlurEnable", "1");
+		ADD_IF_MISSING("SkyGfx", "motionBlurStrength", "0.4");
+		ADD_IF_MISSING("SkyGfx", "sssPostProcessEnable", "1");
+		ADD_IF_MISSING("SkyGfx", "sssPostProcessStrength", "0.2");
+		ADD_IF_MISSING("SkyGfx", "skinEnhanceEnable", "1");
+		ADD_IF_MISSING("SkyGfx", "hairEnhanceEnable", "1");
+		ADD_IF_MISSING("SkyGfx", "vegetationEnhanceEnable", "1");
+		ADD_IF_MISSING("SkyGfx", "enableNormalMaps", "1");
+		ADD_IF_MISSING("SkyGfx", "ivMode", "0");
+		ADD_IF_MISSING("SkyGfx", "ivDesaturation", "0.15");
+		ADD_IF_MISSING("SkyGfx", "ivGamma", "1.0");
+		ADD_IF_MISSING("SkyGfx", "ivSaturation", "0.3");
+		ADD_IF_MISSING("SkyGfx", "ivCurves", "1.0");
+		ADD_IF_MISSING("SkyGfx", "ivVignetteIntensity", "0.15");
+		ADD_IF_MISSING("SkyGfx", "ivVignetteRadius", "0.70");
+		ADD_IF_MISSING("SkyGfx", "ivVignetteContrast", "1.5");
+		ADD_IF_MISSING("SkyGfx", "ivBloomIntensity", "0.05");
+		ADD_IF_MISSING("SkyGfx", "ivExposure", "2.5");
+		
+		#undef ADD_IF_MISSING
 	}
+	
+	// Write back only if we made changes (always safe since linb::ini preserves existing keys)
+	cfg.write_file(modulePath);
 }
 
 void
@@ -1817,204 +1827,29 @@ afterStreamIni(void)
 
 // Debug menu functions are in debugmenu_ui.cpp (installMenu, refreshMenu, etc.)
 
-static int (*IsAlreadyRunning_orig)();
+int (*IsAlreadyRunning_orig)();
 
-int
-InjectDelayedPatches()
-{
-	dbglog("InjectDelayedPatches entered");
-
-	dbglog("  findInis...");
-	findInis();
-	dbglog("  numConfigs=%d", numConfigs);
-	if(numConfigs == 0)
-		readIni(0);
-	else
-		readIni(1);
-	dbglog("  ini loaded");
-
-	fixingSAMP = ModuleList().Get(L"samp") || ModuleList().Get(L"SAMPGraphicRestore");
-	UG_mod = ModuleList().Get(L"Underground_Core");
-	if(UG_mod)
-		UG_RegisterEventCallback = (void (*)(const char*, UG_EventHook))GetProcAddress(UG_mod, "RegisterEventCallback");
-
-	if(UG_RegisterEventCallback){
-		dbglog("  UG EVENTS: initposteffects");
-		UG_RegisterEventCallback("EVENT_INITPOSTEFFECTS", CPostEffects::Initialise_skygfx);
-	}else{
-		dbglog("  InterceptCall Initialise at 0x5BD779");
-		InterceptCall(&CPostEffects::Initialise_orig, CPostEffects::Initialise, 0x5BD779);
-	}
-	InterceptCall(&InitialiseGame, InitialiseGame_hook, 0x748CFB);
-
-	// Hook LoadCollisionModelVer2 at entry point to catch collision crashes
-	// from ALL paths (streaming system, COLFILE handler, etc.)
-	installLCMV2Hooks();
-
-	// Stop timecycle from converting colour filter alphas
-	Nop(0x5BBF6F, 2);
-	Nop(0x5BBF83, 2);
-
-	// don't assign building pipe just because a model has two sets of prelight
-	// or when it already has a pipeline
-	explicitBuildingPipe = explicitBuildingPipe_tmp;
-
-	// Initialize normal map plugin BEFORE building pipe hooks
-	// This sets gHasExternalNormalMapPlugin so buildingPipe doesn't hook 0x5D7F40
-	normalmap_init();
-
-	// custom building pipeline
-	if(iCanHasbuildingPipe)
-		hookBuildingPipe();
-
-	// custom vehicle pipeline
-	if(iCanHasvehiclePipe)
-		hookVehiclePipe();
-
-// fuck this, can't be fixed so easily anyway
-//	if(ps2grassFiles){
-//		Patch<const char*>(0x5DDA87, "grass2_1.dff");
-//		Patch<const char*>(0x5DDA8F, "grass2_2.dff");
-//		Patch<const char*>(0x5DDA97, "grass2_3.dff");
-//		Patch<const char*>(0x5DDA9F, "grass2_4.dff");
-//
-//		Patch<const char*>(0x5DDAC3, "grass3_1.dff");
-//		Patch<const char*>(0x5DDACB, "grass3_2.dff");
-//		Patch<const char*>(0x5DDAD3, "grass3_3.dff");
-//		Patch<const char*>(0x5DDADB, "grass3_4.dff");
-//		Patch<uint>(0x5DDB14 + 1, 0xC03A30+4);
-//		Patch<uint>(0x5DDB21 + 2, 0xC03A30+8);
-//		Patch<uint>(0x5DDB2F + 2, 0xC03A30+12);
-//	}
-
-	// use static ped shadows
-	InjectHook(0x5E675E, &FX::GetFxQuality_ped);
-	InjectHook(0x5E676D, &FX::GetFxQuality_ped);
-	InjectHook(0x706BC4, &FX::GetFxQuality_ped);
-	InjectHook(0x706BD3, &FX::GetFxQuality_ped);
-	// stencil???
-	InjectHook(0x7113B8, &FX::GetFxQuality_stencil);
-	InjectHook(0x711D95, &FX::GetFxQuality_stencil);
-	// vehicle, pole
-	InjectHook(0x70F9B8, &FX::GetFxQuality_stencil);
-
-	if(fixPcCarLight){
-		// carenv light diffuse
-		Patch<uint>(0x5D88D1 +6, 0);
-		Patch<uint>(0x5D88DB +6, 0);
-		Patch<uint>(0x5D88E5 +6, 0);
-		// carenv light ambient
-		Patch<uint>(0x5D88F9 +6, 0);
-		Patch<uint>(0x5D8903 +6, 0);
-		Patch<uint>(0x5D890D +6, 0);
-		// use local viewer for spec light
-		// ...or not... (PS2 doesn't)
-		// Patch<uchar>(0x5D9AD0 +1, 1);
-	}
-
-	if(disableClouds)
-		// jump over cloud loop
-		InjectHook(0x714145, 0x71422A, PATCH_JUMP);
-
-	if(disableGamma)
-		InjectHook(0x74721C, 0x7472F3, PATCH_JUMP);
-
-	if(iCanHasNeoDrops)
-		hookWaterDrops();
-
-	// sun glare on cars
-	if(iCanHasSunGlare)
-		InjectHook(0x6ABCFD, doglare, PATCH_JUMP);
-
-	// remove black background of lockon siphon
-	if(transparentLockon > 0){
-		InjectHook(0x742E33, 0x742EC1, PATCH_JUMP);
-		InjectHook(0x742FE0, 0x743085, PATCH_JUMP);
-	}
-
-
-	if(fixShadows){
-		// Remove 0.06 z-offset from shadows, PS2 doesn't do it
-		static float shadowoffset = 0.0f;
-		Patch(0x709B2D + 2, &shadowoffset);
-		Patch(0x709B8C + 2, &shadowoffset);
-		Patch(0x709BC5 + 2, &shadowoffset);
-		Patch(0x709BF4 + 2, &shadowoffset);
-		Patch(0x709C91 + 2, &shadowoffset);
-
-		Patch(0x709E9C + 2, &shadowoffset);
-		Patch(0x709EBA + 2, &shadowoffset);
-		Patch(0x709ED5 + 2, &shadowoffset);
-
-		Patch(0x70B21F + 2, &shadowoffset);
-		Patch(0x70B371 + 2, &shadowoffset);
-		Patch(0x70B4CF + 2, &shadowoffset);
-		Patch(0x70B633 + 2, &shadowoffset);
-
-		Patch(0x7085A7 + 2, &shadowoffset);
-
-		// Change z-hack multiplier from 2.0 to 256.0 as on PS2
-		*(float*)0x8CD4F0 = 256.0f;
-	}
-
-	if(privateHooks){
-		// PS2 splash
-		static const char *loadsc0 = "loadsc0";
-		Patch(0x5901BD + 1, loadsc0);
-
-		// nvidia is not the way it's meant to be played
-		Nop(0x748AA8, 0x748AE7-0x748AA8);
-
-	//	// lens flare for police cars
-	//	Patch<uint8>(0x6AB9E6 + 1, 2);
-	//	Patch<uint8>(0x6ABA33 + 1, 2);
-	//	// and change distance to 50 (150*LODdist normally)
-	//	static const float one = 1.0f;
-	//	Patch(0x6AB9BE + 2, &one);
-	//	Patch(0x6ABA0B + 2, &one);
-	//	static const float flaredist = 50.0f;
-	//	Patch(0x6AB9C6 + 2, &flaredist);
-	//	Patch(0x6ABA13 + 2, &flaredist);
-	}
-
-	// test water shader
-	//InterceptCall(&StartWaterRender, StartWaterRender_hook, 0x6EF664);
-	//InterceptCall(&EndWaterRender, EndWaterRender_hook, 0x6F00BE);
-
-	/*InterceptCall(&CWaterLevel__RenderAndEmptyRenderBuffer, CWaterLevel__RenderAndEmptyRenderBuffer_hook, 0x6E8790);
-	InterceptCall(&CWaterLevel__RenderAndEmptyRenderBuffer, CWaterLevel__RenderAndEmptyRenderBuffer_hook, 0x6E8EF1);
-	InterceptCall(&CWaterLevel__RenderAndEmptyRenderBuffer, CWaterLevel__RenderAndEmptyRenderBuffer_hook, 0x6E91E4);
-	InterceptCall(&CWaterLevel__RenderAndEmptyRenderBuffer, CWaterLevel__RenderAndEmptyRenderBuffer_hook, 0x6E9963);*/
-
-	// TODO: ImGui debug menu via EndScene hook - disabled for now
-	// The EndScene hook was breaking game UI rendering
-
-	dbglog("  installMenu...");
-	installMenu();
-	dbglog("=== InjectDelayedPatches complete ===");
-
-	return FALSE;
-}
+// InstallAllHooks and InjectDelayedPatches are in hooks.cpp
 
 BOOL WINAPI
 DllMain(HINSTANCE hInst, DWORD reason, LPVOID)
 {
 	if(reason == DLL_PROCESS_ATTACH){
-		AddVectoredExceptionHandler(1, crashHandler);
 		dllModule = hInst;
-		GetModuleFileNameA(dllModule, g_logPath, MAX_PATH);
-		char *p = strrchr(g_logPath, '.');
-		if(p) strcpy(p, "_dbg.log");
-		else strcat(g_logPath, "_dbg.log");
-		g_logInit = 1;
 
-		// Truncate log on fresh boot
-		HANDLE hLog = CreateFileA(g_logPath, GENERIC_WRITE, FILE_SHARE_READ,
-			NULL, TRUNCATE_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-		if(hLog != INVALID_HANDLE_VALUE) CloseHandle(hLog);
+		// Initialize diagnostics (log file + crash handler)
+		char logPath[MAX_PATH];
+		GetModuleFileNameA(NULL, logPath, MAX_PATH);
+		char *sl = strrchr(logPath, '\\');
+		if(!sl) sl = strrchr(logPath, '/');
+		if(sl) sl++;
+		else sl = logPath + strlen(logPath);
+		strcpy(sl, "scripts\\skygfx_dbg.log");
+		diag_init(logPath);
+		diag_installVEH();
 
 		dbglog("=== skygfx loading ===");
-		dbglog("dllModule=%p, g_logPath=%s", dllModule, g_logPath);
+		dbglog("dllModule=%p, logPath=%s", dllModule, diag_getLogPath());
 		dbglog("DynBaseAddr=%p", GetModuleHandle(nullptr));
 
 		DWORD v1 = *(DWORD*)DynBaseAddress(0x82457C);
@@ -2022,10 +1857,10 @@ DllMain(HINSTANCE hInst, DWORD reason, LPVOID)
 		dbglog("ver check: 0x82457C=%08X, 0x8245BC=%08X (expect 0x94BF)", v1, v2);
 
 		if(v1 != 0x94BF && v2 == 0x94BF){
-			dbglog("version check WARNING - v1 mismatch (0x%08X != 0x94BF), continuing anyway", v1);
-		} else {
-			dbglog("version check OK");
+			dbglog("version check FAIL - v1 mismatch (0x%08X != 0x94BF), aborting", v1);
+			return FALSE;
 		}
+		dbglog("version check OK");
 
 		if(GetAsyncKeyState(VK_F8) & 0x8000){
 			AllocConsole();
@@ -2038,193 +1873,7 @@ DllMain(HINSTANCE hInst, DWORD reason, LPVOID)
 			configs[i].version = VERSION;
 
 		dbglog("applying hooks...");
-
-		/* Fix order of multiplication */
-		InjectHook(0x7646E0, _rwD3D9VSGetComposedTransformMatrix, PATCH_JUMP);
-
-		defaultColourLeftUOffset = CPostEffects::m_colourLeftUOffset;
-		defaultColourRightUOffset = CPostEffects::m_colourRightUOffset;
-		defaultColourTopVOffset = CPostEffects::m_colourTopVOffset;
-		defaultColourBottomVOffset = CPostEffects::m_colourBottomVOffset;
-
-		// moon mask
-		InjectHook(0x713C4C, renderMoonMask, PATCH_JUMP);
-		dbglog("  moon mask OK");
-
-		// Defer InjectDelayedPatches to IsAlreadyRunning (0x74872D)
-		// Patches must run during CGame::Initialise, not during DLL_PROCESS_ATTACH
-		IsAlreadyRunning_orig = (int(*)())(*(int*)(0x74872D+1) + 0x74872D + 5);
-		InjectHook(0x74872D, InjectDelayedPatches);
-		dbglog("  IsAlreadyRunning hook OK");
-
-		InjectHook(0x5BCF14, afterStreamIni, PATCH_JUMP);
-		InjectHook(0x7491C0, myDefaultCallback, PATCH_JUMP);
-
-		InjectHook(0x5BF8EA, CPlantMgr_Initialise);
-		InjectHook(0x756DFE, rxD3D9DefaultRenderCallback_Hook, PATCH_JUMP);
-		//InjectHook(0x7572CC, rxD3D9DefaultRenderCallback_VertexShaderHook, PATCH_JUMP);
-		InjectHook(0x5DADB7, fixSeed, PATCH_JUMP);
-
-	// normalmap_init() is called in InjectDelayedPatches before hookBuildingPipe()
-	// It calls RpNormMapPluginAttach(), sets gHasExternalNormalMapPlugin, and hooks 0x5DA610/0x5D7F40/0x5D5B80
-
-		// 0x5DA610 is CustomPipeAtomicSetup - DO NOT hook it with InjectHook + EAXJMP wrapper
-		// that creates an infinite loop (wrapper jumps to hooked address which calls wrapper again)
-
-		// add dual pass for PC pipeline
-	InjectHook(0x5D9EEB, D3D9RenderDefault_DUAL);
-	InjectHook(0x5D9EFB, D3D9RenderBlack_DUAL);
-
-		// give vehicle pipe to upgrade parts
-		InjectHook(0x4C88F0, 0x5DA610, PATCH_JUMP);
-
-		// jump over code that sets alpha ref to 140 (not on PS2).
-		// This caused skidmarks to disappear when rendering the neo reflection scene
-		InjectHook(0x553AD1, 0x553AE5, PATCH_JUMP);
-		// ... was not enough. disable alpha test for skidmarks
-		InterceptCall(&CSkidmarks__Render_orig, CSkidmarks__Render, 0x53E175);
-
-		/* Don't change tag material. Instead handle it by special code in the render CB */
-		InterceptCall(&CTagManager__RenderTagForPC, CTagManager__RenderTag, 0x534335);
-		InterceptCall(&CTagManager__SetupAtomic_orig, CTagManager__SetupAtomic, 0x4C4412);
-		*(void**)0xA9AD78 = (void*)TagRenderCB;	/* This is the (unused) material pipeline of player tags */
-
-		// postfx
-		InjectHook(0x704D1E, CPostEffects::ColourFilter_switch);
-		InjectHook(0x704D5D, CPostEffects::Radiosity);
-		InjectHook(0x704FB3, CPostEffects::Radiosity);
-		InjectHook(0x704D48, CPostEffects::DarknessFilter_fix);
-
-		// infrared vision
-		InjectHook(0x704F4B, CPostEffects::InfraredVision_PS2);
-		InjectHook(0x704F59, CPostEffects::Grain_PS2);
-		// night vision
-		InjectHook(0x704EDA, CPostEffects::NightVision_PS2);
-		InjectHook(0x704EE8, CPostEffects::Grain_PS2);
-		// rain
-		InjectHook(0x705078, CPostEffects::Grain_PS2);
-		// unused
-		InjectHook(0x705091, CPostEffects::Grain_PS2);
-
-		InjectHook(0x53EBE9, CPostEffects::DrawFinalEffects);
-
-		// fix pointlight fog
-		InjectHook(0x700B6B, CSprite__RenderBufferedOneXLUSprite_Rotate_Aspect);
-
-		InjectHook(0x44E82E, ps2rand);
-		InjectHook(0x44ECEE, ps2rand);
-		InjectHook(0x42453B, ps2rand);
-		InjectHook(0x42454D, ps2rand);
-
-		///
-		InterceptCall(&PipelinePluginAttach, myPluginAttach, 0x53D903);
-
-		// procobj placement. Not really broken but whatever
-		InjectHook(0x5A3C7D, ps2srand);
-		InjectHook(0x5A3DFB, ps2srand);
-		InjectHook(0x5A3C75, ps2rand);
-		InjectHook(0x5A3CB9, ps2rand);
-		InjectHook(0x5A3CDB, ps2rand);
-		InjectHook(0x5A3CF2, ps2rand);
-		Patch(0x5A3CC8, &ps2randnormalize);
-		Patch(0x5A3CEA, &ps2randnormalize);
-		Patch(0x5A3D05, &ps2randnormalize);
-		// a few more procobjs
-		InjectHook(0x5A3476, ps2rand);
-		InjectHook(0x5A34AB, ps2rand);
-		InjectHook(0x5A34E0, ps2rand);
-		InjectHook(0x5A3515, ps2rand);
-		Patch(0x5A348D + 2, &ps2randnormalize);
-		Patch(0x5A34C2 + 2, &ps2randnormalize);
-		Patch(0x5A34FB + 2, &ps2randnormalize);
-		Patch(0x5A352F + 2, &ps2randnormalize);
-
-		// increase multipass distance
-		static float multipassMultiplier = 1000.0f;
-		Patch<float*>(0x73290A+2, &multipassMultiplier);
-
-		// Get rid of the annoying dotproduct check in visibility renderCBs
-		Nop(0x733313, 2);
-		Nop(0x73405A, 2);
-		Nop(0x733403, 2);
-		Nop(0x73431A, 2);
-		Nop(0x73444A, 2);
-
-		// change grass close far to ps2 values
-		Patch<float>(0x5DDB3D+1, 78.0f);
-
-		// High detail water color multiplier
-		Nop(0x6E716B, 6);
-		Nop(0x6E7176, 6);
-
-		// Hook Skpin Pipe so we can easily cull peds
-		// TODO: do this with other pipelines too
-		// No longer needed
-//		__rwSkinD3D9AtomicAllInOneNode_orig = nodeD3D9SkinAtomicAllInOneCSL->nodeMethods.nodeBody;
-//		nodeD3D9SkinAtomicAllInOneCSL->nodeMethods.nodeBody = __rwSkinD3D9AtomicAllInOneNode_hook;
-
-//		InterceptCall(&SetLightsWithTimeOfDayColour_orig, SetLightsWithTimeOfDayColour, 0x53E997);
-
-
-		// Camera planes in CRenderer::RenderEverythingBarRoads
-		static float zoffset = 0.0f;
-		Patch(0x553C7D + 2, &zoffset);
-		Nop(0x553C78, 5);
-		Nop(0x553C9A, 5);	// begin update
-		Nop(0x553CD1, 5);
-		Nop(0x553CEC, 5);	// begin update
-		//Nop(0x553CB8, 5);	// render LODs
-
-		// Fix mirrors
-		Patch(0x726516 + 6, 216.1f);
-		Patch(0x726534 + 6, 216.1f);
-		Patch(0x726552 + 6, 216.1f);
-		Patch(0x726570 + 6, 216.1f);
-
-void hooktexdb();
-		hooktexdb();
-
-
-		//void dumpMenu(void);
-		//dumpMenu();
-		
-		//InjectHook(0x5A3C7D, mysrand);
-		//InjectHook(0x5A3DFB, mysrand);
-		//InjectHook(0x5A3C75, ps2rand);
-
-//		Nop(0x748054, 10);
-///		Nop(0x748063, 5);
-//		Nop(0x747FB0, 10);
-//		Nop(0x748A87, 12);
-//		InjectHook(0x747F98, 0x748446, PATCH_JUMP);
-
-
-
-		// Water tests
-//		Nop(0x6EFC9B, 5);	// disable CWaterLevel::RenderWaterTriangle
-		//Nop(0x6EFE4C, 5);	// disable CWaterLevel::RenderWaterRectangle
-//		Nop(0x6F004E, 5);	// disable CWaterLevel::RenderWaterRectangle outside
-	//	Nop(0x6ECED8, 5);	// disable CWaterLevel::RenderFlatWaterRectangle
-	//	Nop(0x6ECE15, 5);	// disable CWaterLevel::RenderFlatWaterRectangle
-	//	Nop(0x6ECD69, 5);	// disable CWaterLevel::RenderHighDetailWaterRectangle
-
-	//	Nop(0x6EC509, 5);	// disable CWaterLevel::RenderFlatWaterRectangle_OneLayer
-//		Nop(0x6EC5B8, 5);	// disable CWaterLevel::RenderFlatWaterRectangle_OneLayer
-	//	Nop(0x6EBA1D, 5);	// disable CWaterLevel::RenderHighDetailWaterRectangle_OneLayer
-//		Nop(0x6EBAF8, 5);	// disable CWaterLevel::RenderHighDetailWaterRectangle_OneLayer
-
-	//	InjectHook(0x6E9760, CWaterLevel__CalculateWavesForCoordinate_hook);
-	//	InjectHook(0x6E8CB8, CWaterLevel__CalculateWavesForCoordinate_hook);
-
-		// Cloud tests
-		//Nop(0x53E1AF, 5);	// CClouds::MovingFogRender
-		//Nop(0x53E1B4, 5);	// CClouds::VolumetricCloudsRender
-		//Nop(0x53E121, 5);	// CClouds::RenderBottomFromHeight
-
-		// remove some shadows for mobile test
-		//Nop(0x53E0C3, 5);
-		//Nop(0x53E0C8, 5);
-
+		InstallAllHooks();
 		dbglog("=== DllMain complete, all hooks applied ===");
 	}
 

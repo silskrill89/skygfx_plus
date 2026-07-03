@@ -156,6 +156,7 @@ readIni(int n)
 		{"PC",      BUILDING_XBOX},
 		{"Xbox",    BUILDING_XBOX},
 		{"GTAIV",   BUILDING_GTAIV},
+		{"PBR",     BUILDING_PBR},
 		{"",       -1},
 	};
 	c->buildingPipe = StrAssoc::get(buildPipeMap, cfg.get("SkyGfx", "buildingPipe", "").c_str());
@@ -360,12 +361,14 @@ readIni(int n)
 	c->edgeTessThreshold = readfloat(cfg.get("SkyGfx", "edgeTessThreshold", ""), 0.1f);
 
 	c->ivMode = readint(cfg.get("SkyGfx", "ivMode", ""), 0);
-	c->ivDesaturation = readfloat(cfg.get("SkyGfx", "ivDesaturation", ""), 0.3f);
+	c->ivDesaturation = readfloat(cfg.get("SkyGfx", "ivDesaturation", ""), 1.0f);
 	c->ivGamma = readfloat(cfg.get("SkyGfx", "ivGamma", ""), 1.0f);
-	c->ivVignetteIntensity = readfloat(cfg.get("SkyGfx", "ivVignetteIntensity", ""), 0.5f);
-	c->ivVignetteRadius = readfloat(cfg.get("SkyGfx", "ivVignetteRadius", ""), 0.5f);
-	c->ivVignetteContrast = readfloat(cfg.get("SkyGfx", "ivVignetteContrast", ""), 2.0f);
-	c->ivBloomIntensity = readfloat(cfg.get("SkyGfx", "ivBloomIntensity", ""), 0.15f);
+	c->ivSaturation = readfloat(cfg.get("SkyGfx", "ivSaturation", ""), 0.0f);
+	c->ivCurves = readfloat(cfg.get("SkyGfx", "ivCurves", ""), 0.0f);
+	c->ivVignetteIntensity = readfloat(cfg.get("SkyGfx", "ivVignetteIntensity", ""), 0.0f);
+	c->ivVignetteRadius = readfloat(cfg.get("SkyGfx", "ivVignetteRadius", ""), 0.75f);
+	c->ivVignetteContrast = readfloat(cfg.get("SkyGfx", "ivVignetteContrast", ""), 1.5f);
+	c->ivBloomIntensity = readfloat(cfg.get("SkyGfx", "ivBloomIntensity", ""), 0.0f);
 	c->ivExposure = readfloat(cfg.get("SkyGfx", "ivExposure", ""), 1.0f);
 
 	privateHooks = readint(cfg.get("SkyGfx", "privateHooks", ""), 0);
@@ -415,13 +418,15 @@ readIni(int n)
 		// ===== GTA IV Features =====
 		cfg.set("SkyGfx", "; ===== GTA IV Features =====", "");
 		cfg.set("SkyGfx", "ivMode", "0");
-		cfg.set("SkyGfx", "ivDesaturation", "0.3");
+		cfg.set("SkyGfx", "ivDesaturation", "1.0");
 		cfg.set("SkyGfx", "ivGamma", "1.0");
-		cfg.set("SkyGfx", "ivVignetteIntensity", "0.5");
-		cfg.set("SkyGfx", "ivVignetteRadius", "0.5");
-		cfg.set("SkyGfx", "ivVignetteContrast", "2.0");
-		cfg.set("SkyGfx", "ivBloomIntensity", "0.15");
-		cfg.set("SkyGfx", "ivExposure", "1.0");
+		cfg.set("SkyGfx", "ivSaturation", "0.3");
+		cfg.set("SkyGfx", "ivCurves", "1.0");
+		cfg.set("SkyGfx", "ivVignetteIntensity", "0.15");
+		cfg.set("SkyGfx", "ivVignetteRadius", "0.70");
+		cfg.set("SkyGfx", "ivVignetteContrast", "1.5");
+		cfg.set("SkyGfx", "ivBloomIntensity", "0.05");
+		cfg.set("SkyGfx", "ivExposure", "2.5");
 
 		// ===== Modern Enhancements =====
 		cfg.set("SkyGfx", "; ===== Modern Enhancements =====", "");

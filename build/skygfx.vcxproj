@@ -43,14 +43,14 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
-    <OutDir>E:\games\San Andreas Retro Revised\</OutDir>
+    <OutDir>E:\games\gtasa_skygfx_plus\</OutDir>
     <IntDir>$(ProjectDir)obj\Release\</IntDir>
     <TargetName>skygfx</TargetName>
     <TargetExt>.dll</TargetExt>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
-    <OutDir>E:\games\San Andreas Retro Revised\</OutDir>
+    <OutDir>E:\games\gtasa_skygfx_plus\</OutDir>
     <IntDir>$(ProjectDir)obj\Debug\</IntDir>
     <TargetName>skygfx</TargetName>
     <TargetExt>.dll</TargetExt>
@@ -78,9 +78,10 @@
       <SubSystem>Windows</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>d3d9.lib;d3dx9.lib;winmm.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Lib\x86;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <ImportLibrary>E:\games\San Andreas Retro Revised\skygfx.lib</ImportLibrary>
+      <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
+      <AdditionalDependencies>d3d9.lib;d3dx9.lib;winmm.lib;rpnormmap.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Lib\x86;E:\SDKs\normalmap_byDK_1.01\normalmap_byDK_1.01\sources;E:\SDKs\Renderware 3.7 SDK (For Windows) Full\RWSDK37\Graphics\rwsdk\lib\d3d9\release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <ImportLibrary>E:\games\gtasa_skygfx_plus\skygfx.lib</ImportLibrary>
     </Link>
     <PreBuildEvent>
       <Command>rem Shaders precompiled manually</Command>
@@ -108,7 +109,10 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <ImportLibrary>E:\games\San Andreas Retro Revised\skygfx.lib</ImportLibrary>
+      <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
+      <AdditionalDependencies>d3d9.lib;d3dx9.lib;winmm.lib;rpnormmap.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Lib\x86;E:\SDKs\normalmap_byDK_1.01\normalmap_byDK_1.01\sources;E:\SDKs\Renderware 3.7 SDK (For Windows) Full\RWSDK37\Graphics\rwsdk\lib\d3d9\release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <ImportLibrary>E:\games\gtasa_skygfx_plus\skygfx.lib</ImportLibrary>
     </Link>
     <PreBuildEvent>
       <Command>rem Shaders precompiled manually</Command>
@@ -137,29 +141,43 @@
   <ItemGroup>
     <ClCompile Include="..\src\HLSL_hook.cpp" />
     <ClCompile Include="..\src\buildingPipe.cpp" />
+    <ClCompile Include="..\src\chars.cpp" />
+    <!-- <ClCompile Include="..\src\config.cpp" /> -->
+    <ClCompile Include="..\src\custom_mode.cpp" />
     <ClCompile Include="..\src\defaultFuncs.cpp" />
+    <ClCompile Include="..\src\diagnostics.cpp" />
     <ClCompile Include="..\src\envmap.cpp" />
     <ClCompile Include="..\src\extendedplg.cpp" />
     <ClCompile Include="..\src\gta.cpp" />
+    <ClCompile Include="..\src\hooks.cpp" />
+    <ClCompile Include="..\src\iv_mode.cpp" />
     <ClCompile Include="..\src\main.cpp" />
+    <ClCompile Include="..\src\mobile.cpp" />
     <ClCompile Include="..\src\neo.cpp" />
     <ClCompile Include="..\src\neoCarpipe.cpp" />
     <ClCompile Include="..\src\neoWaterdrops.cpp" />
+    <ClCompile Include="..\src\normalmap.cpp" />
+    <ClCompile Include="..\src\normmap_stubs.cpp" />
     <ClCompile Include="..\src\PC_GrassRenderer.cpp" />
+    <ClCompile Include="..\src\pc_patched_mode.cpp" />
     <ClCompile Include="..\src\pipelinecommon.cpp" />
     <ClCompile Include="..\src\pipeplg.cpp" />
     <ClCompile Include="..\src\postfx.cpp" />
+    <ClCompile Include="..\src\presets.cpp" />
+    <ClCompile Include="..\src\ps2_mode.cpp" />
     <ClCompile Include="..\src\test.cpp" />
     <ClCompile Include="..\src\texdb.cpp" />
     <ClCompile Include="..\src\vehiclePipe.cpp" />
     <ClCompile Include="..\src\vehicles.cpp" />
     <ClCompile Include="..\src\veh_shaders.cpp" />
+    <ClCompile Include="..\src\waterPipe.cpp" />
+    <ClCompile Include="..\src\weather.cpp" />
+    <ClCompile Include="..\src\wheels.cpp" />
+    <ClCompile Include="..\src\wheels_extender.cpp" />
+    <ClCompile Include="..\src\xbox_mode.cpp" />
     <!-- <ClCompile Include="..\src\debugmenu_ui.cpp" /> -->
-    <!-- <ClCompile Include="..\src\normalmap.cpp" /> -->
     <!-- <ClCompile Include="..\src\normalmap_plugin.cpp" /> -->
-    <!-- <ClCompile Include="..\src\config.cpp" /> -->
     <!-- <ClCompile Include="..\src\SMAA.cpp" /> -->
-    <ClCompile Include="..\src\presets.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\resources\Resource.aps" />

@@ -1,0 +1,10 @@
+{
+  "basePath": "..",
+  "showUnsupportedFiles": false,
+  "newFileLocation": "current",
+  "newLinkFormat": "shortest",
+  "useMarkdownLinks": false,
+  "showFrontmatter": true,
+  "defaultViewMode": "preview",
+  "livePreview": true
+}

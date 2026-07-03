@@ -1,6 +1,7 @@
 #include "skygfx.h"
 #include "ModuleList.hpp"
 #include "postfx.h"
+#include "chars.h"
 
 RwIm2DVertex *colorfilterVerts = (RwIm2DVertex*)0xC400D8;
 RwImVertexIndex *colorfilterIndices = (RwImVertexIndex*)0x8D5174;
@@ -90,6 +91,7 @@ static RwRaster *smaaRaster = nil;
 int overrideColorMod = -1;
 int overrideAlphaMod = -1;
 void *overrideIm2dPixelShader;
+void InitSSAOResources(void);
 
 void Im2DColorModulationHook(RwUInt32 stage, RwUInt32 type, RwUInt32 value)
 {
@@ -120,7 +122,7 @@ Im2dSetPixelShader_hook(void*)
 // Credits: much of the code in this file was originally written by NTAuthority
 // there's not a lot of that left now
 
-void *iiiTrailsPS, *vcTrailsPS;
+void *iiiTrailsPS, *vcTrailsPS, *modernColorFilterPS;
 RwRaster *grainRaster;
 
 
@@ -859,6 +861,58 @@ CPostEffects::ColourFilter_Generic(RwRGBA rgb1, RwRGBA rgb2, void *ps)
 }
 
 void
+CPostEffects::ColourFilter_Modern(RwRGBA rgba1, RwRGBA rgba2)
+{
+	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
+	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
+	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
+	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
+	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)CPostEffects::pRasterFrontBuffer);
+	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
+
+	if(!Colorcycle::initialised)
+		Colorcycle::Initialise();
+
+	GradeColorset cset;
+	Colorcycle::Update(&cset);
+	Grade red, green, blue;
+	red = cset.red;
+	green = cset.green;
+	blue = cset.blue;
+
+	// Modern: use timecycle colors to modulate grading (like PC filter)
+	// Reduce base brightness by 30% to lower grey middle point
+	float a1 = rgba1.alpha/128.0f;
+	float a2 = rgba2.alpha/128.0f;
+	red.r = 0.7f + a1*rgba1.red/255.0f + a2*rgba2.red/255.0f;
+	green.g = 0.7f + a1*rgba1.green/255.0f + a2*rgba2.green/255.0f;
+	blue.b = 0.7f + a1*rgba1.blue/255.0f + a2*rgba2.blue/255.0f;
+	red.g = red.b = red.a = 0.0f;
+	green.r = green.b = green.a = 0.0f;
+	blue.r = blue.g = blue.a = 0.0f;
+
+	RwD3D9SetPixelShaderConstant(0, &red, 1);
+	RwD3D9SetPixelShaderConstant(1, &green, 1);
+	RwD3D9SetPixelShaderConstant(2, &blue, 1);
+
+	// Reinhard tonemapping: enable=1, exposure=1.2 (slightly lower than mobile for better contrast)
+	float tonemapP[4] = { 1.0f, 1.2f, 0.0f, 0.0f };
+	RwD3D9SetPixelShaderConstant(5, tonemapP, 1);
+
+	overrideIm2dPixelShader = gradingPS;
+	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
+	overrideIm2dPixelShader = nil;
+
+	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
+	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
+	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
+	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)NULL);
+	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
+	RwD3D9SetPixelShader(NULL);
+	RwD3D9SetVertexShader(NULL);
+}
+
+void
 CPostEffects::ColourFilter_Mobile(RwRGBA rgba1, RwRGBA rgba2)
 {
 //	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERNEAREST);
@@ -1294,7 +1348,9 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 		float f = val / 255.0f;
 		// Apply sqrt-based compression for high values
 		// This preserves detail in bright areas while preventing banding
-		if(f > 0.5f){
+		static const float SOFT_COMPRESS_THRESHOLD = 0.5f;
+		static const float SQRT_COMPRESS_THRESHOLD = 0.7f;
+		if(f > SQRT_COMPRESS_THRESHOLD){
 			f = 0.5f + (f - 0.5f) * 0.7f; // Compress upper range
 		}
 		f *= PS2_TO_PC_GAMMA; // Apply gamma correction
@@ -1385,7 +1441,7 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 
 	int colorFilter = config->colorFilter;
 
-	// VCS trails isn't compatible with PC/PS2 color filter, falls of to VCS color filter
+	// VCS trails isn't compatible with PC/PS2 color filter, falls off to VCS color filter
 	if (config->vcsTrails) {
 		if (colorFilter == COLORFILTER_PC || colorFilter == COLORFILTER_PS2) {
 			colorFilter = COLORFILTER_VCS;
@@ -1393,6 +1449,10 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 	}
 
 	switch(colorFilter){
+	case COLORFILTER_NONE:
+		// Fall back to PC filter (same as COLORFILTER_PC)
+		CPostEffects::ColourFilter(rgb1pc, rgb2pc);
+		break;
 	case COLORFILTER_PS2:
 		CPostEffects::ColourFilter_PS2(rgb1, rgb2);
 		break;
@@ -1412,48 +1472,26 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 	case COLORFILTER_VCS:
 		CPostEffects::ColourFilter_Generic(rgb1, rgb2, vcTrailsPS);
 		break;
+	case COLORFILTER_MODERN:
+		CPostEffects::ColourFilter_Modern(rgb1, rgb2);
+		break;
 	case COLORFILTER_GTAIV:
-		// GTA IV filmic tonemap postfx
-		{
-			PERF_SCOPE("GTAIV_Filter");
-			// Hable/Uncharted2 filmic tonemapping
-			// SA DirectX parameters, whitePoint=1.0 (no output scaling)
-			// Exposure boost applied separately via ivExposure
-			float A = 1.0f, B = 0.25f, C = 0.52f, D = 0.34f, E = 0.0f, F = 1.0f;
-
-			// Register layout c7-c12 (safe from ColourFilter_Generic c0/c1):
-			// c7 = {A, B, 1/whitePoint, C*B}
-			// c8 = {D*E, D*F, E/F, 0}
-			// c9 = {desaturation, gamma, saturation, curves}
-			// c10 = {bloomIntensity, 0, 0, 0}
-			// c11 = {vIntensity, vRadius, vContrast, 0}
-			// c12 = {exposure, 0, 0, 0}
-
-			float filmic0[4] = { A, B, 1.0f, C * B };
-			RwD3D9SetPixelShaderConstant(7, filmic0, 1);
-
-			float filmic1[4] = { D * E, D * F, E / F, 0.0f };
-			RwD3D9SetPixelShaderConstant(8, filmic1, 1);
-
-			float colorCorr[4] = { config->ivDesaturation, config->ivGamma, config->ivSaturation, config->ivCurves };
-			RwD3D9SetPixelShaderConstant(9, colorCorr, 1);
-
-			float bloomP[4] = { config->ivBloomIntensity, 0.0f, 0.0f, 0.0f };
-			RwD3D9SetPixelShaderConstant(10, bloomP, 1);
-
-			float vigP[4] = { config->ivVignetteIntensity, config->ivVignetteRadius, config->ivVignetteContrast, 0.0f };
-			RwD3D9SetPixelShaderConstant(11, vigP, 1);
-
-			float vigE[4] = { config->ivExposure, 0.0f, 0.0f, 0.0f };
-			RwD3D9SetPixelShaderConstant(12, vigE, 1);
-
-			CPostEffects::ColourFilter_Generic(rgb1, rgb2, GTAIV_PS);
-		}
+		// Bypass mode - no color filter applied.
+		// GTAIV filter removed - we rely on SA's own timecycle/carcols values.
+		// CRITICAL: unbind shaders to prevent UI corruption.
+		RwD3D9SetPixelShader(NULL);
+		RwD3D9SetVertexShader(NULL);
+		RwD3D9SetTexture(NULL, 0);
+		RwD3D9SetTexture(NULL, 1);
 		break;
 	default:
 		return;
 	}
-	UpdateFrontBuffer();
+	// CRITICAL: unbind all shaders after every color filter pass
+	// Prevents UI corruption from stale shader bindings
+	RwD3D9SetPixelShader(NULL);
+	RwD3D9SetVertexShader(NULL);
+	UpdateFrontBuffer();	dbglog("ColourFilter_switch: done (filter=%d)", colorFilter);
 
 	//static int doramp = 0;
 	//{
@@ -1535,6 +1573,10 @@ CPostEffects::DrawFinalEffects(void)
 		RwD3D9SetPixelShaderConstant(1, &green, 1);
 		RwD3D9SetPixelShaderConstant(2, &blue, 1);
 
+		// Reinhard tonemapping params: enable=1, exposure=1.5
+		float tonemapP[4] = { 1.0f, 1.5f, 0.0f, 0.0f };
+		RwD3D9SetPixelShaderConstant(5, tonemapP, 1);
+
 		overrideIm2dPixelShader = gradingPS;
 		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
 		overrideIm2dPixelShader = nil;
@@ -1548,6 +1590,12 @@ CPostEffects::DrawFinalEffects(void)
 		UpdateFrontBuffer();
 	}
 
+	// SSS blur pass (after color filter, before SMAA)
+	{
+		PERF_SCOPE("SSS_Blur");
+		chars_drawSSSBlur();
+	}
+
 	// SMAA at end of post-processing (3-pass)
 	if(config->smaaEnable && SMAA_Edge){
 		ImmediateModeRenderStatesStore();
@@ -1559,7 +1607,7 @@ CPostEffects::DrawFinalEffects(void)
 	// Debug menu moved to D3D9 EndScene hook (main.cpp) - renders AFTER all UI
 }
 
-static IDirect3DTexture9 *g_ssaoDepthTex = NULL;
+IDirect3DTexture9 *g_ssaoDepthTex = NULL;
 static IDirect3DSurface9 *g_ssaoDepthSurf = NULL;
 static IDirect3DTexture9 *g_ssaoNoiseTex = NULL;
 static RwRaster *g_ssaoOutputRaster = NULL;
@@ -1574,7 +1622,7 @@ static IDirect3DTexture9 *g_smaaSearchTex = NULL;
 IDirect3DTexture9 *g_iblTex = NULL;
 static IDirect3DSurface9 *g_iblSurf = NULL;
 static RwRaster *g_iblOutputRaster = NULL;
-extern void *IBL_SkyCloud;
+extern void *DynamicSky;
 
 // Normal buffer (half-res stereo-derived normals)
 IDirect3DTexture9 *g_normalBufferTex = NULL;
@@ -1621,27 +1669,17 @@ void ReleaseDefaultPoolResources(void)
 	dbglog("ReleaseDefaultPoolResources: done");
 }
 
-// Check if device is valid and release resources if lost
-bool CheckDeviceState(void)
+// Check if device is valid - use RenderWare camera state instead
+static inline bool CheckDeviceState(void)
 {
-	IDirect3DDevice9 *dev = d3d9device;
-	if(!dev) return false;
-
-	// Test cooperative level
-	HRESULT hr = dev->TestCooperativeLevel();
-	if(hr == D3DERR_DEVICELOST){
-		ReleaseDefaultPoolResources();
-		return false;
-	}
-	if(hr == D3DERR_DEVICENOTRESET){
-		// Device is ready to reset - release resources
-		ReleaseDefaultPoolResources();
-		return false;
-	}
-	return true;
+	// RW camera BeginUpdate handles device state internally
+	// Just check if we have a valid camera and raster
+	if (!Scene.camera) return false;
+	RwRaster *camRas = RwCameraGetRaster(Scene.camera);
+	return camRas != NULL;
 }
 
-static void InitSSAOResources(void)
+void InitSSAOResources(void)
 {
 	if(g_ssaoNoiseTex)
 		return;
@@ -1915,7 +1953,7 @@ static IDirect3DTexture9 *GetIBLTexture(void)
 void RenderIBLBuffer(void)
 {
 	static int iblLogged = 0;
-	if(!IBL_SkyCloud){ if(!iblLogged){ dbglog("RenderIBL: IBL_SkyCloud=NULL"); iblLogged=1; } return; }
+	if(!DynamicSky){ if(!iblLogged){ dbglog("RenderIBL: DynamicSky=NULL"); iblLogged=1; } return; }
 	IDirect3DTexture9 *tex = GetIBLTexture();
 	if(!tex || !g_iblSurf){ if(!iblLogged){ dbglog("RenderIBL: no tex/surf"); iblLogged=1; } return; }
 	IDirect3DDevice9 *dev = d3d9device;
@@ -1965,6 +2003,52 @@ void RenderIBLBuffer(void)
 	sunD[3] = tc.spriteBrightness / 10.0f;
 	RwD3D9SetPixelShaderConstant(3, sunD, 1);
 
+	// Weather type for smog support
+	// GTA SA weather types: 0=Sunny, 1=SunnyWindy, 2=Cloudy, 3=Rainy, 4=Smoggy, ...
+	extern int16 &CWeather__OldWeatherType;
+	extern int16 &CWeather__NewWeatherType;
+	extern float &CWeather__InterpolationValue;
+	float oldW = (float)CWeather__OldWeatherType;
+	float newW = (float)CWeather__NewWeatherType;
+	float wInterp = CWeather__InterpolationValue;
+	// Calculate smog boost: 1.0 when fully smoggy, 0.0 otherwise
+	float smogBoost = 0.0f;
+	if(CWeather__OldWeatherType == 4) smogBoost = 1.0f - wInterp;
+	if(CWeather__NewWeatherType == 4) smogBoost = wInterp;
+	float weatherP[4] = { newW, oldW, wInterp, smogBoost };
+	RwD3D9SetPixelShaderConstant(8, weatherP, 1);
+
+	// Horizon colors from timecycle (c4 = skyBot)
+	float horizC[4] = {
+		tc.skyBotR / 255.0f,
+		tc.skyBotG / 255.0f,
+		tc.skyBotB / 255.0f,
+		0.8f  // horizon blend factor
+	};
+	RwD3D9SetPixelShaderConstant(4, horizC, 1);
+
+	// Moon data (c5) — opposite sun direction, phase from time
+	float moonD[4] = { -sunD[0], -sunD[1], -sunD[2], 0.5f };
+	RwD3D9SetPixelShaderConstant(5, moonD, 1);
+
+	// Cloud clump params (c6) — reasonable defaults
+	float clumpP[4] = { 3.0f, 0.6f, 1.5f, 6.0f };
+	RwD3D9SetPixelShaderConstant(6, clumpP, 1);
+
+	// Weather fog from timecycle (c7)
+	// fogStart in SA: lower = denser fog. Invert to get density.
+	float fogD = 0.0f;
+	if(tc.fogStart > 0.0f){
+		fogD = max(0.0f, min(1.0f, 1.0f / max(tc.fogStart, 1.0f)));
+	}
+	float fogC[4] = {
+		tc.lowCloudsR / 255.0f,
+		tc.lowCloudsG / 255.0f,
+		tc.lowCloudsB / 255.0f,
+		fogD
+	};
+	RwD3D9SetPixelShaderConstant(7, fogC, 1);
+
 	// Render fullscreen quad with IBL shader
 	CPostEffects::ImmediateModeRenderStatesStore();
 	CPostEffects::ImmediateModeRenderStatesSet();
@@ -1975,7 +2059,7 @@ void RenderIBLBuffer(void)
 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
 	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)NULL);
 
-	overrideIm2dPixelShader = IBL_SkyCloud;
+	overrideIm2dPixelShader = DynamicSky;
 	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
 	overrideIm2dPixelShader = nil;
 
@@ -2037,7 +2121,12 @@ void DrawNormalBufferToTexture(void)
 {
 	if(!config->normalBufferEnable || !normalTex || !NormalBufferShader)
 		return;
-	if(!g_ssaoDepthTex) return;
+
+	// Ensure SSAO depth texture exists (needed for depth reconstruction)
+	if(!g_ssaoDepthTex){
+		InitSSAOResources();
+		if(!g_ssaoDepthTex) return;
+	}
 
 	IDirect3DTexture9 *tex = GetNormalBufferTexture();
 	if(!tex || !g_normalBufferSurf) return;
@@ -2305,8 +2394,14 @@ CPostEffects::DrawSMAA(void)
 	static RwMatrix prevCamMatrix = {0};
 	static bool camInitialized = false;
 
-	RwMatrix *camMatrix = RwFrameGetLTM(RwCameraGetFrame(Scene.camera));
-	CVector camPos = {camMatrix->pos.x, camMatrix->pos.y, camMatrix->pos.z};
+	RwMatrix *camMatrix = NULL;
+	RwFrame *camFrame = Scene.camera ? RwCameraGetFrame(Scene.camera) : NULL;
+	if(camFrame)
+		camMatrix = RwFrameGetLTM(camFrame);
+	
+	CVector camPos = {0, 0, 0};
+	if(camMatrix)
+		camPos = {camMatrix->pos.x, camMatrix->pos.y, camMatrix->pos.z};
 
 	float cameraVelocity = 0.0f;
 	float cameraRotation = 0.0f;

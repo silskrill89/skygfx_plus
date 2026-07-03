@@ -1,12 +1,21 @@
 #include "skygfx.h"
+#include "brdfLibrary.h"
 //#include <fstream>
 
-void *ps2BuildingVS, *ps2BuildingFxVS;
-void *xboxBuildingVS, *xboxBuildingPS, *xboxBuildingStochasticPS;
-void *simpleDetailPS, *simpleDetailStochasticPS;
-void *simpleFogPS;
+void *ps2BuildingVS;
+void *ps2BuildingFxVS;
+void *ps2BuildingWindVS;
+void *gtaivBuildingVS;
+void *gtaivBuildingPS;
+void *simpleDetailStochasticPS;
+void *simpleDetailPS;
+void *xboxBuildingWindVS;
+void *xboxBuildingVS;
+void *xboxBuildingStochasticPS;
+void *xboxBuildingPS;
 void *sphereBuildingVS;
-void *xboxBuildingWindVS, *ps2BuildingWindVS;
+void *simpleFogPS;
+
 RxPipeline *&CCustomBuildingPipeline__ObjPipeline = *(RxPipeline**)0xC02C68;
 RxPipeline *&CCustomBuildingDNPipeline__ObjPipeline = *(RxPipeline**)0xC02C1C;
 
@@ -52,32 +61,13 @@ CustomBuildingPipeline__Update(void)
 {
 	CustomBuildingPipeline__Update_orig();
 
-
-	// PS2 to PC gamma correction for ambient light
-	// PS2 gamma ~1.5, PC gamma 2.2
-	// Correction factor: 1.5/2.2 ≈ 0.68
-	// Use soft compression to prevent banding on bright values
-	float ps2Gamma = 0.68f;
-
-	// Soft compression for high values to prevent banding
-	auto CorrectGamma = [](float val, float gamma) -> float {
-		if(val > 0.5f)
-			val = 0.5f + (val - 0.5f) * 0.7f;
-		return val * gamma;
-	};
-
-	// do *not* use pAmbient light. It causes so many problems
-	buildingAmbient.red = CorrectGamma(CTimeCycle_GetAmbientRed(), ps2Gamma) * CCoronas__LightsMult;
-	buildingAmbient.green = CorrectGamma(CTimeCycle_GetAmbientGreen(), ps2Gamma) * CCoronas__LightsMult;
-	buildingAmbient.blue = CorrectGamma(CTimeCycle_GetAmbientBlue(), ps2Gamma) * CCoronas__LightsMult;
+	// Timecyc dictates everything — use timecyc ambient values directly
+	buildingAmbient.red = CTimeCycle_GetAmbientRed() * CCoronas__LightsMult;
+	buildingAmbient.green = CTimeCycle_GetAmbientGreen() * CCoronas__LightsMult;
+	buildingAmbient.blue = CTimeCycle_GetAmbientBlue() * CCoronas__LightsMult;
 
 	if(config->lightningIlluminatesWorld && CWeather__LightningFlash && !CPostEffects__IsVisionFXActive())
 		buildingAmbient = { 1.0, 1.0, 1.0, 0.0 };
-
-	// test
-	//buildingAmbient.red = 0.04706;
-	//buildingAmbient.green = 0.04706;
-	//buildingAmbient.blue = 0.04706;
 }
 
 void
@@ -219,8 +209,16 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PS2(RwResEntry *repEntry, void *ob
 	RwD3D9SetVertexShaderConstant(REG_envmat, &envmat, 3);
 
 
-	//for gloss
-	eye = RwFrameGetLTM(RwCameraGetFrame((RwCamera*)RWSRCGLOBAL(curCamera)))->pos;
+	//for gloss - with null checks
+	eye = {0, 0, 0};
+	RwCamera *cam = (RwCamera*)RWSRCGLOBAL(curCamera);
+	if(cam){
+		RwFrame *camFrame = RwCameraGetFrame(cam);
+		if(camFrame){
+			RwMatrix *camLTM = RwFrameGetLTM(camFrame);
+			if(camLTM) eye = camLTM->pos;
+		}
+	}
 	RwD3D9SetVertexShaderConstant(34, &eye, 1);
 	RwD3D9SetPixelShaderConstant(2, &eye, 1);
 
@@ -298,7 +296,7 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PS2(RwResEntry *repEntry, void *ob
 			}
 			else {
 				if (texinfo->stochastic && config->stochastic) {
-					RwD3D9SetPixelShader(simpleStochasticPS);
+					RwD3D9SetPixelShader(simplePS);
 				}
 				else {
 					RwD3D9SetPixelShader(simplePS);
@@ -321,7 +319,7 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PS2(RwResEntry *repEntry, void *ob
 			}
 			else {
 				if (texinfo->stochastic && config->stochastic) {
-					RwD3D9SetPixelShader(simpleStochasticPS);
+					RwD3D9SetPixelShader(simplePS);
 				}
 				else {
 					RwD3D9SetPixelShader(simplePS);
@@ -351,7 +349,7 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PS2(RwResEntry *repEntry, void *ob
 			RwD3D9SetVertexShaderConstant(REG_fxParams, &fxParams, 1);
 
 			RwD3D9SetVertexShader(ps2BuildingFxVS);
-			RwD3D9SetPixelShader(ps2EnvSpecFxPS);
+			RwD3D9SetPixelShader(simplePS);
 
 			RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION, (void*)rwALPHATESTFUNCTIONALWAYS);
 			RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
@@ -502,7 +500,7 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *o
 		}
 		else {
 			if (texinfo->stochastic && config->stochastic) {
-				RwD3D9SetPixelShader(simpleStochasticPS);
+				RwD3D9SetPixelShader(simplePS);
 			}
 			else {
 				RwD3D9SetPixelShader(simplePS);
@@ -566,7 +564,15 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Sphere(RwResEntry *repEntry, void 
 	RwD3D9SetVertexShaderConstant(44, &reflectionCamPos, 1);
 	RwD3D9SetPixelShaderConstant(1, &reflectionCamPos, 1);
 	float worldmat[16];
-	RwToD3DMatrix(worldmat, RwFrameGetLTM(RpAtomicGetFrame(atomic)));
+	RwFrame *atomicFrame = RpAtomicGetFrame(atomic);
+	if(atomicFrame){
+		RwMatrix *atomicLTM = RwFrameGetLTM(atomicFrame);
+		if(atomicLTM)
+			RwToD3DMatrix(worldmat, atomicLTM);
+		else
+			memset(worldmat, 0, sizeof(worldmat));
+	}else
+		memset(worldmat, 0, sizeof(worldmat));
 	RwD3D9SetVertexShaderConstant(REG_transform, worldmat, 4);
 	RwD3D9SetVertexShader(sphereBuildingVS);
 	RwD3D9SetPixelShader(simpleFogPS);
@@ -602,6 +608,143 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Sphere(RwResEntry *repEntry, void 
 }
 
 void
+CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *object, RwUInt8 type, RwUInt32 flags)
+{
+	RpAtomic *atomic = (RpAtomic*)object;
+
+	RwMatrix ident;
+	RwMatrixSetIdentity(&ident);
+
+	RwFrame* frame = (RwFrame*)atomic->object.object.parent;
+	_rwD3D9EnableClippingIfNeeded(object, type);
+
+	// Transform
+	float transform[16];
+	pipeGetComposedTransformMatrix(atomic, transform);
+	RwD3D9SetVertexShaderConstant(REG_transform, transform, 4);
+
+	RxD3D9ResEntryHeader *resEntryHeader = (RxD3D9ResEntryHeader*)(repEntry + 1);
+	RxD3D9InstanceData *instancedData = (RxD3D9InstanceData*)(resEntryHeader + 1);
+	if(resEntryHeader->indexBuffer)
+		RwD3D9SetIndices(resEntryHeader->indexBuffer);
+	_rwD3D9SetStreams(resEntryHeader->vertexStream, resEntryHeader->useOffsets);
+	RwD3D9SetVertexDeclaration(resEntryHeader->vertexDeclaration);
+
+	setDnParams(atomic);
+
+	// Eye position (PBR addition) - with null checks like vehicle pipe
+	RwV3d eyePos = {0, 0, 0};
+	RwCamera *curCam = (RwCamera*)RWSRCGLOBAL(curCamera);
+	if(curCam){
+		RwFrame *camFrame = RwCameraGetFrame(curCam);
+		if(camFrame){
+			RwMatrix *camLTM = RwFrameGetLTM(camFrame);
+			if(camLTM) eyePos = camLTM->pos;
+		}
+	}
+	RwD3D9SetVertexShaderConstant(34, &eyePos, 1);
+	RwD3D9SetPixelShaderConstant(2, &eyePos, 1);
+
+	// Lights (PBR addition)
+	pipeUploadLightColorPS(pDirect, REG_directCol);
+	pipeUploadLightDirectionPS(pDirect, REG_directDir);
+
+	// Env map setup (from Xbox building pipeline)
+	RwMatrix envmat;
+	CustomBuildingEnvMapPipeline__SetupEnv(atomic, NULL, &envmat);
+	RwD3D9SetVertexShaderConstant(REG_envmat, &envmat, 3);
+
+	DefinedVertexShader definedVertexShader = (DefinedVertexShader)GetDefinedShader(atomic);
+
+	// Set PBR building shader - use Xbox vertex shaders for proper building setup
+	// with wind support (merged Xbox/PS2 approach)
+	bool vertexAlphaIsAlpha = true;
+	if (definedVertexShader == DefinedVertexShader::WIND) {
+		vertexAlphaIsAlpha = false;
+		setWindParams(atomic, frame);
+		RwD3D9SetVertexShader(xboxBuildingWindVS);
+	}
+	else {
+		RwD3D9SetVertexShader(xboxBuildingVS);
+	}
+	RwD3D9SetPixelShader(VehiclePBR_Modern);
+
+	int alphafunc, alpharef;
+	int src, dst;
+	int fog;
+	int zwrite;
+	RwRenderStateGet(rwRENDERSTATEALPHATESTFUNCTIONREF, &alpharef);
+	RwRenderStateGet(rwRENDERSTATEALPHATESTFUNCTION, &alphafunc);
+	RwRenderStateGet(rwRENDERSTATESRCBLEND, &src);
+	RwRenderStateGet(rwRENDERSTATEDESTBLEND, &dst);
+	RwRenderStateGet(rwRENDERSTATEFOGCOLOR, &fog);
+	RwRenderStateGet(rwRENDERSTATEZWRITEENABLE, &zwrite);
+
+	for(int numMeshes = resEntryHeader->numMeshes; numMeshes--; instancedData++){
+		RpMaterial *material = instancedData->material;
+		float colorScale = 1.0f;
+		if(material->texture)
+			colorScale = config->ps2ModulateBuilding ? 255.0f/128.0f : 1.0f;
+		pipeSetTexture(material->texture, 0);
+		RwD3D9SetPixelShaderConstant(0, &colorScale, 1);
+		RwD3D9SetVertexShaderConstant(REG_shaderParams, &colorScale, 1);
+
+		// UV transform support (from Xbox building pipeline)
+		RwMatrix ident, *m1, *m2;
+		RwMatrixSetIdentity(&ident);
+		int effect = RpMatFXMaterialGetEffects(material);
+		if(effect == rpMATFXEFFECTUVTRANSFORM){
+			RpMatFXMaterialGetUVTransformMatrices(material, &m1, &m2);
+			if(m1)
+				RwD3D9SetVertexShaderConstant(REG_texmat, m1, 4);
+			else
+				RwD3D9SetVertexShaderConstant(REG_texmat, &ident, 4);
+		}else
+			RwD3D9SetVertexShaderConstant(REG_texmat, &ident, 4);
+
+		// Vertex alpha handling (from Xbox building pipeline)
+		bool hasAlpha;
+		if (vertexAlphaIsAlpha) {
+			hasAlpha = (bool)(instancedData->vertexAlpha || instancedData->material->color.alpha != 255);
+		}
+		else {
+			hasAlpha = instancedData->material->color.alpha != 255;
+		}
+		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)hasAlpha);
+
+		RwD3D9SetVertexShaderConstant(REG_ambient, &buildingAmbient, 1);
+		
+		// Material color and surface properties (from Xbox building pipeline)
+		if(flags & rpGEOMETRYLIGHT){
+			pipeUploadMatCol(flags, material, REG_matCol);
+			RwD3D9SetVertexShaderConstant(REG_surfProps, &material->surfaceProps, 1);
+		}else{
+			static float white[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+			RwSurfaceProperties surf = { 1.0f, 1.0f, 1.0f };
+			RwD3D9SetVertexShaderConstant(REG_matCol, white, 1);
+			RwD3D9SetVertexShaderConstant(REG_surfProps, &surf, 1);
+		}
+
+		// Unified PBR upload (c22/c23 layout defined in pipeUploadPBR)
+		int surfaceType = GetSurfaceTypeFromMaterial(material);
+		const BRDFMaterial *brdf = GetBRDF(surfaceType);
+		pipeUploadPBR(brdf->glossiness, brdf->specular, brdf->clearcoat, brdf->subsurface,
+		              brdf->specularTintR, brdf->specularTintG, brdf->specularTintB);
+
+		// Tag rendering support (from PS2 building pipeline)
+		if(material->pipeline == (RxPipeline*)TagRenderCB){
+			TagRenderCB(atomic, resEntryHeader, instancedData);
+			continue;
+		}
+
+		D3D9Render(resEntryHeader, instancedData);
+	}
+
+	RwD3D9SetVertexShader(NULL);
+	RwD3D9SetPixelShader(NULL);
+}
+
+void
 CCustomBuildingDNPipeline__CustomPipeRenderCB_Switch(RwResEntry *repEntry, void *object, RwUInt8 type, RwUInt32 flags)
 {
 //	if(GetAsyncKeyState(VK_F4) & 0x8000)
@@ -616,6 +759,9 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Switch(RwResEntry *repEntry, void 
 		break;
 	case BUILDING_XBOX:
 		CCustomBuildingDNPipeline__CustomPipeRenderCB_Xbox(repEntry, object, type, flags);
+		break;
+	case BUILDING_PBR:
+		CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(repEntry, object, type, flags);
 		break;
 	}
 	fixSAMP();

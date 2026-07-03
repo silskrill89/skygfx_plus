@@ -6,8 +6,10 @@
 //
 // This file owns: paint types, paint weights, light tints, glass tints, tire props,
 // mesh detection, and PBR property computation.
+// Uses unified BRDF library for consistent materials across all asset types.
 
 #include "skygfx.h"
+#include "brdfLibrary.h"
 #include <string.h>
 
 // ============================================================
@@ -27,25 +29,28 @@ extern void Vehicles_Init(const char *gameDir);
 // Paint types — 5 types (including Grid-style clearcoat)
 // ============================================================
 
+// CryEngine-style paint properties (NOT Unreal metallic/roughness)
 struct PaintProps {
-    float roughness;
-    float metalness;
-    float reflectance;
+    float specular;        // 0.02-0.05 dielectric, 0.5-1.0 metal
+    float glossiness;      // 0=rough, 1=smooth
+    float specularTintR;   // Specular color tint (for metals)
+    float specularTintG;
+    float specularTintB;
     float noiseScale;
     float edgeBlend;
 };
 
 static const PaintProps paintTable[5] = {
     // Index 0 = Gloss:       clear coat, mirror-smooth
-    { 0.15f, 0.00f, 0.90f, 0.20f, 1.0f },
-    // Index 1 = Metallic:    metallic flake, shiny
-    { 0.18f, 0.35f, 0.85f, 0.25f, 1.2f },
+    { 0.06f, 0.90f, 1.0f, 1.0f, 1.0f, 0.20f, 1.0f },
+    // Index 1 = Metallic:    metallic flake, shiny (slight tint for sparkle)
+    { 0.70f, 0.88f, 0.9f, 0.9f, 0.9f, 0.25f, 1.2f },
     // Index 2 = Matte:       flat, no reflection
-    { 0.85f, 0.00f, 0.10f, 0.05f, 0.3f },
+    { 0.04f, 0.30f, 1.0f, 1.0f, 1.0f, 0.05f, 0.3f },
     // Index 3 = Satin:       semi-gloss
-    { 0.45f, 0.00f, 0.50f, 0.15f, 0.8f },
+    { 0.05f, 0.60f, 1.0f, 1.0f, 1.0f, 0.15f, 0.8f },
     // Index 4 = Clearcoat:   Grid-style (very smooth, strong Fresnel, deep color)
-    { 0.08f, 0.10f, 0.95f, 0.15f, 1.5f },
+    { 0.06f, 0.95f, 1.0f, 1.0f, 1.0f, 0.15f, 1.5f },
 };
 
 // Paint probability weights per vehicle group [group][paintType]
@@ -99,16 +104,18 @@ static const GlassTint glassTaxi     = { 0.35f, 0.28f, 0.15f, 0.30f };
 static const GlassTint glassFWD      = { 0.10f, 0.22f, 0.30f, 0.25f };
 
 // ============================================================
-// Tire props — per era
+// Tire props — per era (CryEngine-style: specular/glossiness)
 // ============================================================
 
-struct TireProps { float roughness, reflectance, tintR, tintG, tintB; };
+struct TireProps { float specular, glossiness, tintR, tintG, tintB; };
 
+// Tire properties per vehicle era
+// Uses SURFACE_CAR_TIRE as base, with era-specific variations
 static const TireProps tireTable[] = {
-    { 0.90f, 0.03f, 0.08f, 0.08f, 0.08f },  // VERA_PRE80
-    { 0.88f, 0.04f, 0.06f, 0.06f, 0.06f },  // VERA_80S
-    { 0.85f, 0.05f, 0.05f, 0.05f, 0.05f },  // VERA_90S
-    { 0.92f, 0.03f, 0.10f, 0.09f, 0.08f },  // VERA_UTILITY
+    { 0.04f, 0.10f, 0.08f, 0.08f, 0.08f },  // VERA_PRE80 - older, more worn
+    { 0.04f, 0.12f, 0.06f, 0.06f, 0.06f },  // VERA_80S - standard
+    { 0.04f, 0.15f, 0.05f, 0.05f, 0.05f },  // VERA_90S - newer, darker
+    { 0.04f, 0.08f, 0.10f, 0.09f, 0.08f },  // VERA_UTILITY - off-road tires
 };
 
 // ============================================================
@@ -142,16 +149,19 @@ int VehShaders_SelectPaintType(int modelID, unsigned int hash){
 }
 
 // ============================================================
-// PBR property queries
+// PBR property queries (CryEngine-style: specular/glossiness)
 // ============================================================
 
-void VehShaders_GetPaintPBR(int paintType, float *roughness, float *metalness, float *reflectance,
+void VehShaders_GetPaintPBR(int paintType, float *specular, float *glossiness,
+                             float *specularTintR, float *specularTintG, float *specularTintB,
                              float *noiseScale, float *edgeBlend){
     if(paintType < 0 || paintType > 3) paintType = 0;
     const PaintProps *p = &paintTable[paintType];
-    *roughness = p->roughness;
-    *metalness = p->metalness;
-    *reflectance = p->reflectance;
+    *specular = p->specular;
+    *glossiness = p->glossiness;
+    *specularTintR = p->specularTintR;
+    *specularTintG = p->specularTintG;
+    *specularTintB = p->specularTintB;
     *noiseScale = p->noiseScale;
     *edgeBlend = p->edgeBlend;
 }
@@ -193,13 +203,13 @@ void VehShaders_GetGlassTint(int modelID, float *r, float *g, float *b, float *s
 // Tire prop query
 // ============================================================
 
-void VehShaders_GetTireProps(int modelID, float *roughness, float *reflectance,
-                             float *tintR, float *tintG, float *tintB){
+void VehShaders_GetTireProps(int modelID, float *specular, float *glossiness,
+                              float *tintR, float *tintG, float *tintB){
     int era = GetVehicleEraByID(modelID);
     if(era < 0 || era > 3) era = 1;
     const TireProps *t = &tireTable[era];
-    *roughness = t->roughness;
-    *reflectance = t->reflectance;
+    *specular = t->specular;
+    *glossiness = t->glossiness;
     *tintR = t->tintR;
     *tintG = t->tintG;
     *tintB = t->tintB;
@@ -207,6 +217,7 @@ void VehShaders_GetTireProps(int modelID, float *roughness, float *reflectance,
 
 // ============================================================
 // Texture name detection (mesh type identification)
+// Uses unified BRDF library surface detection
 // ============================================================
 
 bool VehShaders_IsTireTexture(const char *texName){
@@ -226,6 +237,70 @@ bool VehShaders_IsGlassTexture(const char *texName, bool hasAlpha, unsigned char
     if(VehShaders_IsHeadlightTexture(texName)) return false;
     if(VehShaders_IsTaillightTexture(texName)) return false;
     return true;
+}
+
+// Get unified surface type from vehicle texture name
+// Returns SURFACE_CAR_* for vehicle-specific materials
+int VehShaders_GetSurfaceType(const char *texName){
+    if(!texName || !texName[0]) return SURFACE_DEFAULT;
+    
+    // Vehicle-specific materials (check first for priority)
+    if(strstri(texName, "chrome") || strstri(texName, "bumper_chrome"))
+        return SURFACE_CAR_CHROME;
+    if(strstri(texName, "tire") || strstri(texName, "tyre") || strstri(texName, "wheel_rubber"))
+        return SURFACE_CAR_TIRE;
+    if(strstri(texName, "wheel") || strstri(texName, "alloy") || strstri(texName, "rim"))
+        return SURFACE_CAR_WHEEL;
+    if(strstri(texName, "headlight") || strstri(texName, "light_front"))
+        return SURFACE_CAR_HEADLIGHT;
+    if(strstri(texName, "taillight") || strstri(texName, "light_rear"))
+        return SURFACE_CAR_TAILLIGHT;
+    if(strstri(texName, "carbon"))
+        return SURFACE_CAR_CARBON;
+    if(strstri(texName, "leather"))
+        return SURFACE_CAR_LEATHER;
+    if(strstri(texName, "fabric") || strstri(texName, "seat"))
+        return SURFACE_CAR_FABRIC;
+    if(strstri(texName, "windscreen") || strstri(texName, "window") || strstri(texName, "glass"))
+        return SURFACE_CAR_GLASS;
+    if(strstri(texName, "trim") || strstri(texName, "plastic_interior"))
+        return SURFACE_CAR_PLASTIC;
+    if(strstri(texName, "rubber_seal") || strstri(texName, "seal"))
+        return SURFACE_CAR_RUBBER;
+    // Dirt overlay texture detection (GTA SA dirt system)
+    if(strstri(texName, "vehiclegrunge") || strstri(texName, "grunge") || strstri(texName, "dirt"))
+        return SURFACE_CAR_DIRT;
+    if(strstri(texName, "rust"))
+        return SURFACE_CAR_RUST;
+    
+    // Default to car body for unknown vehicle textures
+    return SURFACE_CAR_BODY;
+}
+
+// ============================================================
+// Dirt level from CVehicle (offset 0x4B0, 0.0=clean, 15.0=max dirt)
+// ============================================================
+
+// Get dirt level from a CVehicle pointer
+// Returns normalized dirt level 0.0 (clean) to 1.0 (max dirt)
+float VehShaders_GetDirtLevel(void *vehicle){
+    if(!vehicle) return 0.0f;
+    // CVehicle::m_fDirtLevel at offset 0x4B0
+    float dirtLevel = *(float*)((char*)vehicle + 0x4B0);
+    // Normalize from 0-15 to 0-1
+    return max(0.0f, min(dirtLevel / 15.0f, 1.0f));
+}
+
+// Apply dirt modification to PBR properties (CryEngine-style)
+// Dirt increases roughness (reduces glossiness), reduces specular
+void VehShaders_ApplyDirtToPBR(float dirtLevel, float *specular, float *glossiness, float *specularTintR, float *specularTintG, float *specularTintB){
+    // Dirt makes surfaces rougher (lower glossiness) and less reflective (lower specular)
+    *glossiness = max(*glossiness * (1.0f - dirtLevel * 0.60f), 0.05f);
+    *specular = max(*specular * (1.0f - dirtLevel * 0.40f), 0.02f);
+    // Dirt tint (brownish-grey)
+    *specularTintR = *specularTintR * (1.0f - dirtLevel * 0.3f) + dirtLevel * 0.15f;
+    *specularTintG = *specularTintG * (1.0f - dirtLevel * 0.3f) + dirtLevel * 0.10f;
+    *specularTintB = *specularTintB * (1.0f - dirtLevel * 0.3f) + dirtLevel * 0.05f;
 }
 
 // ============================================================

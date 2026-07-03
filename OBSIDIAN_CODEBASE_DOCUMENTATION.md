@@ -1,10 +1,8 @@
 # SkyGfx Code Evolution Documentation
 
-## Project Overview
-**Version Lineage**: aap → junior → expIV
-**Current Target**: GTA: San Andreas 1.0 US (0x94BF) - expIV/GTA_IV_focus
-
-This documentation tracks the technical evolution from the original aap version through junior's enhancements to the current expIV implementation.
+> [!info] Migrated
+> This document has been refactored into the Obsidian vault.
+> Start at [[00 - Index]] for the current documentation.
 
 ---
 

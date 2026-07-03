@@ -1,11 +1,8 @@
 # SkyGfx Plus expIV - Complete Codebase Documentation
 
-## Project Overview
-**Repository**: E:\dev(dave)\skygfx_plus_expIV
-**Branch**: gta_IV_focus
-**Base**: expIV fork (based on aap's skygfx, via junior → zeneric → plk4 lineage)
-**Target**: GTA: San Andreas 1.0 US (0x94BF)
-**Build**: Visual Studio 2022, Release x86 (Win32), Static Runtime
+> [!info] Migrated
+> This document has been refactored into the Obsidian vault.
+> Start at [[00 - Index]] for the current documentation.
 
 ---
 

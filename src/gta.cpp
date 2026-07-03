@@ -151,6 +151,9 @@ WRAPPER RpAtomic *CCustomCarEnvMapPipeline__CustomPipeAtomicSetup(RpAtomic *atom
 WRAPPER char *GetFrameNodeName(RwFrame *frame) { EAXJMP(0x72FB30); }
 WRAPPER int gtaGetPipelineID(RpAtomic* atomic) { EAXJMP(0x72FC40); }
 WRAPPER RpAtomic *AtomicDefaultRenderCallBack(RpAtomic*) { EAXJMP(0x7491C0); };
+WRAPPER RpClump *RpClumpStreamRead(RwStream *stream) { EAXJMP(0x748A10); }
+WRAPPER RwBool RpClumpDestroy(RpClump *clump) { EAXJMP(0x748C50); }
+WRAPPER RpClump *RpClumpForAllAtomics(RpClump *clump, RpAtomicCallBack callBack, void *pData) { EAXJMP(0x748E90); }
 WRAPPER void CCustomCarEnvMapPipeline__CustomPipeRenderCB_exe(RwResEntry *repEntry, void *object, RwUInt8 type, RwUInt32 flags) { EAXJMP(0x5D9900) };
 WRAPPER void GTAfree(void *data) { EAXJMP(0x82413F); }
 

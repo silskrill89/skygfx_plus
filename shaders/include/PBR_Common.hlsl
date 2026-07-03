@@ -65,8 +65,9 @@ float3 ComputeSunContribution(float3 N, float3 V, float3 L, float3 F0, float Ndo
     float sunBroad = pow(reflDot, 16.0) * 0.3;
     float fresnelHotspot = F_Schlick(NdotV, F0).r * NdotL * 0.2;
 
+    float sunTotal = saturate(sunSpot + sunBroad + fresnelHotspot);
     float3 sunColor = float3(1.0, 0.95, 0.9);
-    return sunColor * (sunSpot + sunBroad + fresnelHotspot);
+    return sunColor * sunTotal;
 }
 
 // ---- Cloud shadow noise (CloudWorks by Brian Tu, CC BY-NC-SA 3.0) ----

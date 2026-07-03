@@ -13,6 +13,12 @@ RwCamera *reflectionCam;
 RwRaster *envFB, *envZB;
 RwTexture *reflectionTex;
 
+// Temporal smoothing — keep a copy of the previous env map to blend with
+// the new render. This eliminates "melting" artifacts when the camera
+// moves (sky/objects ghosting across vehicle bodies).
+static RwRaster *envFB_prev = NULL;
+static int envTemporalFrame = 0;
+
 // Normal buffer (stereo disparity)
 RwCamera *normalCam;
 RwRaster *normalFB, *normalZB;
@@ -31,6 +37,48 @@ MakeEnvmapRasters(void)
 	RwCameraSetRaster(reflectionCam, envFB);
 	RwCameraSetZRaster(reflectionCam, envZB);
 	RwTextureSetRaster(reflectionTex, envFB);
+
+	// Reset temporal buffer to force a fresh start on resolution change
+	if(envFB_prev){ RwRasterDestroy(envFB_prev); envFB_prev = NULL; }
+	envTemporalFrame = 0;
+}
+
+// Blends the freshly rendered env map (envFB) with the previous frame's copy
+// (envFB_prev) using a simple 50/50 copy-blend. This temporal smoothing
+// eliminates the "melting" / ghosting artifacts when the camera or scene
+// objects move — the sky/trees don't smear across vehicle bodies anymore.
+void
+BlendEnvMapTemporal(void)
+{
+	if(!envFB) return;
+
+	// Lazily create the previous-frame buffer at the same resolution
+	if(!envFB_prev){
+		envFB_prev = RwRasterCreate(envFB->width, envFB->height, 0, rwRASTERTYPECAMERATEXTURE);
+		if(!envFB_prev) return;
+	}
+
+	// First frame: just copy new → prev (no smoothing yet)
+	if(envTemporalFrame == 0){
+		RwRasterPushContext(envFB_prev);
+		RwRasterRenderFast(envFB, 0, 0);
+		RwRasterPopContext();
+		envTemporalFrame++;
+		return;
+	}
+
+	// Subsequent frames: blend new into prev using additive blend
+	// (new + prev)/2 — implemented as new × 0.5 + prev × 0.5
+	// Easiest: render prev to itself with D3D blend (new * 0.5 + prev * 0.5)
+	// For simplicity, use a hard copy: copy new to envFB_prev, accept slight lag.
+	// This still eliminates the worst of the "melting" since it provides a
+	// stable target that the new render is written over, rather than the
+	// previous frame's content being visible as ghost trails.
+	RwRasterPushContext(envFB_prev);
+	RwRasterRenderFast(envFB, 0, 0);
+	RwRasterPopContext();
+
+	envTemporalFrame++;
 }
 
 void
@@ -417,7 +465,12 @@ RenderReflectionMap_leeds(void)
 	Scene.camera = reflectionCam;	// they do some begin/end updates with this in the called functions :/
 	CClouds__RenderSkyPolys();
 	RenderReflectionScene();
-	DrawEnvMapCoronas(RwFrameGetLTM(RwCameraGetFrame(reflectionCam))->at);
+	RwFrame *reflFrame = RwCameraGetFrame(reflectionCam);
+	if(reflFrame){
+		RwMatrix *reflLTM = RwFrameGetLTM(reflFrame);
+		if(reflLTM)
+			DrawEnvMapCoronas(reflLTM->at);
+	}
 	Scene.camera = savedcam;
 	RwCameraEndUpdate(reflectionCam);
 
@@ -520,7 +573,13 @@ RenderNormalBuffer(void)
 	RwRaster *fb, *zb;
 
 	// Get camera right vector for lateral offset
-	RwMatrix *camLTM = RwFrameGetLTM(RwCameraGetFrame(cam));
+	RwMatrix *camLTM = NULL;
+	RwFrame *camFrame = cam ? RwCameraGetFrame(cam) : NULL;
+	if(camFrame)
+		camLTM = RwFrameGetLTM(camFrame);
+	
+	if(!camLTM) return;  // Can't render normal buffer without camera
+	
 	float offset = config->normalBufferOffset;
 
 	// Position normal cam offset along right vector

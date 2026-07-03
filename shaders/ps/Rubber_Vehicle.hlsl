@@ -29,6 +29,8 @@ float4 lightCol[6] : register(c6);
 float3 directDir   : register(c12);
 float3 lightDir[6] : register(c13);
 float4 matCol      : register(c19);
+float4 tireParams  : register(c22); // {roughness, F0, tintR, tintG}
+float4 tireParams2 : register(c23); // {tintB, dirtLevel, wearFactor, 0}
 
 struct PS_INPUT{
     float2 texcoord0 : TEXCOORD0;
@@ -49,24 +51,28 @@ float4 main(PS_INPUT IN) : COLOR
     float4 diff = tex2D(diffuseTex, IN.texcoord0);
     float3 baseColor = diff.rgb * IN.color.rgb * matCol.rgb;
 
-    float NdotV = max(dot(N, V), 0.0);
-
     // ================================================================
-    // REAL RUBBER BRDF VALUES
-    // Based on measured data from:
-    //   - Pharr, Humphreys "Physically Based Rendering" Ch 8.2
-    //   - Disney BRDF explorer rubber presets
-    //   - NVIDIA UE4 material parameters
-    //
-    // Rubber is a dielectric with very high roughness:
-    //   F0 = 0.04 (standard dielectric reflectance)
-    //   roughness = 0.88 (very diffuse, almost no specular peak)
-    //   metalness = 0.0 (pure dielectric)
-    //   subsurface = 0.08 (subtle warm edge glow)
+    // PARAMETRIC RUBBER BRDF VALUES
+    // Read from tireParams (c22) and tireParams2 (c23)
+    // Uploaded from C++ via VehShaders_GetTireProps + dirt level
     // ================================================================
-    float roughness = 0.88;
+    float roughness = tireParams.x;
     float metalness = 0.0;
-    float3 F0 = float3(0.04, 0.04, 0.04);
+    float3 F0 = float3(tireParams.y, tireParams.y, tireParams.y);
+
+    float dirtLevel = tireParams2.y;
+    float wearFactor = tireParams2.z;
+
+    // Dirt/wear tint: dirt makes rubber brownish-grey, wear makes it lighter/greyer
+    float3 dirtTint = float3(0.35, 0.25, 0.15);
+    float3 wearTint = float3(0.55, 0.55, 0.50);
+    baseColor = lerp(baseColor, dirtTint * baseColor, dirtLevel * 0.4);
+    baseColor = lerp(baseColor, wearTint * baseColor, wearFactor * 0.3);
+
+    // Dirt increases roughness (dirty rubber is more matte)
+    roughness = lerp(roughness, min(roughness + 0.1, 0.98), dirtLevel * 0.5);
+
+    float NdotV = max(dot(N, V), 0.0);
 
     // ---- Energy conservation ----
     float3 F_atNdotV = F_Schlick(NdotV, F0);

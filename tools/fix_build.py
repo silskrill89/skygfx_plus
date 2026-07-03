@@ -1,8 +1,27 @@
 #!/usr/bin/env python3
 """
-SkyGFX Plus - Build Script
+SkyGFX Plus - Build Script / Bug-Fix Checklist
 Auto-detects SDK paths, compiles shaders, builds project, deploys to game.
+
 Run: python tools/fix_build.py
+
+PBR build bug notes (add new ones here as we hit them):
+  1. vcxproj ImportLibrary must NOT point to "E:\games\San Andreas Retro Revised\skygfx.lib".
+     That path is a stale leftover; .lib/.exp should go to OutDir/IntDir.
+  2. rpnormmap.lib needs /SAFESEH:NO via <ImageHasSafeExceptionHandlers>false>,
+     otherwise LNK2026/LNK1281 fails the link.
+  3. src/normalmap.cpp must be compiled in vcxproj (normalmap_plugin.cpp stays off).
+  4. src/normmap_stubs.cpp must ALSO be compiled; it provides the RW SDK symbols that
+     rpnormmap.lib needs without linking rwcore.lib/rpworld.lib (which duplicate symbols
+     already defined in gta.cpp/pipelinecommon.cpp).
+  5. src/config.cpp must be COMMENTED OUT in vcxproj; main.cpp owns INI reading now.
+  6. src/brdfLibrary.h must exist and define CryEngine-style Diffuse/Specular/Gloss BRDFs.
+  7. vehiclePipe.cpp, buildingPipe.cpp, veh_shaders.cpp, main.cpp must exist and
+     reference the unified BRDF / surface-detection helpers.
+  8. PBR c22/c23 constant layout MUST use pipeUploadPBR() from pipelinecommon.cpp.
+     NEVER upload c22/c23 manually — the order is {glossiness, specular, ...} and
+     getting it backwards produces completely flat/dark car paint (roughness 0.96).
+     If vehicles look flat grey with no specular, check the c22 ordering first.
 """
 
 import os
@@ -11,10 +30,37 @@ import subprocess
 import sys
 import glob as globmod
 import shutil
+import time
+import json
+import hashlib
+from pathlib import Path
+from multiprocessing import Pool, cpu_count
 
 PROJECT_DIR = r'E:\dev(dave)\skygfx_plus_expIV'
 BUILD_DIR = os.path.join(PROJECT_DIR, 'build')
-GAME_DIR = r'E:\games\San Andreas Retro Revised'
+GAME_DIR = r'E:\games\gtasa_skygfx_plus'
+CACHE_DIR = os.path.join(PROJECT_DIR, '.cache')
+os.makedirs(CACHE_DIR, exist_ok=True)
+
+_timer_start = time.time()
+_timer_phases = {}
+
+def _t_begin(name):
+    _timer_phases[name] = time.time()
+    print(f"\n--- {name} ---")
+
+def _t_end(name):
+    elapsed = time.time() - _timer_phases[name]
+    _timer_phases[name] = elapsed
+    print(f"    ({elapsed:.2f}s)")
+
+def _t_summary():
+    total = time.time() - _timer_start
+    print(f"\n{'='*50}")
+    print(f"Build Summary ({total:.2f}s total):")
+    for phase, t in _timer_phases.items():
+        print(f"  {phase:20s} {t:6.2f}s")
+    print(f"{'='*50}")
 
 # ============================================================
 # SDK Auto-Detection
@@ -147,26 +193,106 @@ def check_process_conflict():
         return False
 
 # ============================================================
-# Shader compilation
+# PBR / build integrity checks (historical bug list)
 # ============================================================
 
-def compile_shaders():
-    """Compile all HLSL shaders to CSO files"""
-    print("\n=== Compiling shaders ===")
-    fxc = os.path.join(SDKS['dxsdk'], 'Utilities', 'bin', 'x86', 'fxc.exe')
-    if not os.path.exists(fxc):
-        print(f"  FAIL: fxc.exe not found at {fxc}")
-        return False
+def check_pbr_build_integrity():
+    """Check fragile settings that historically broke PBR builds."""
+    print("\n=== PBR build integrity checks ===")
+    issues = []
+    proj_path = os.path.join(BUILD_DIR, 'skygfx.vcxproj')
 
+    if os.path.exists(proj_path):
+        with open(proj_path, 'r', errors='ignore') as fh:
+            proj_lines = fh.readlines()
+        proj_text = ''.join(proj_lines)
+
+        # 1. stale ImportLibrary path
+        if 'San Andreas Retro Revised' in proj_text:
+            issues.append("vcxproj ImportLibrary/exp path points to 'San Andreas Retro Revised' (stale output dir)")
+
+        # 2. SAFESEH must be disabled for rpnormmap.lib
+        if 'ImageHasSafeExceptionHandlers>false' not in proj_text:
+            issues.append("vcxproj missing <ImageHasSafeExceptionHandlers>false> (rpnormmap.lib SAFESEH LNK2026)")
+
+        # 3. normalmap.cpp + normmap_stubs.cpp must be compiled
+        def _is_active_cpp(name):
+            for line in proj_lines:
+                if name in line and f'<ClCompile Include="..\\src\\{name}"' in line:
+                    return not line.strip().startswith('<!--')
+            return False
+
+        if not _is_active_cpp('normalmap.cpp'):
+            issues.append("normalmap.cpp is not compiled in vcxproj")
+        if not _is_active_cpp('normmap_stubs.cpp'):
+            issues.append("normmap_stubs.cpp is not compiled in vcxproj (rpnormmap.lib needs it)")
+
+        # 4. do NOT link rwcore/rpworld - they duplicate symbols from gta.cpp
+        if 'rwcore.lib' in proj_text or 'rpworld.lib' in proj_text:
+            issues.append("vcxproj links rwcore.lib/rpworld.lib; use normmap_stubs.cpp instead")
+
+        # 5. both pipes must use pipeUploadPBR, not manual c22/c23 upload
+        vpipe = os.path.join(PROJECT_DIR, 'src', 'vehiclePipe.cpp')
+        bpipe = os.path.join(PROJECT_DIR, 'src', 'buildingPipe.cpp')
+        for ppath, pname in [(vpipe, 'vehiclePipe'), (bpipe, 'buildingPipe')]:
+            if os.path.exists(ppath):
+                src = open(ppath, 'r', errors='ignore').read()
+                if 'pipeUploadPBR' not in src:
+                    issues.append(f"{pname}.cpp does not use pipeUploadPBR (manual c22/c23 upload risks param-order bug)")
+
+        # 6. config.cpp must be commented out (main.cpp owns INI now)
+        for line in proj_lines:
+            if 'config.cpp' in line and '<ClCompile Include="..\\src\\config.cpp"' in line:
+                if not line.strip().startswith('<!--'):
+                    issues.append("config.cpp is active in vcxproj; comment it out so main.cpp reads INI")
+
+        # 6. required PBR source files
+        for f in ['brdfLibrary.h', 'vehiclePipe.cpp', 'buildingPipe.cpp',
+                  'veh_shaders.cpp', 'main.cpp']:
+            p = os.path.join(PROJECT_DIR, 'src', f)
+            if not os.path.exists(p):
+                issues.append(f"Missing {p}")
+
+    else:
+        issues.append(f"Project file not found: {proj_path}")
+
+    if issues:
+        print("  ISSUES FOUND:")
+        for i in issues:
+            print(f"    - {i}")
+    else:
+        print("  PBR build integrity OK")
+    return not issues
+
+# ============================================================
+# Parallel Shader Compilation
+# ============================================================
+
+def _compile_one(args):
+    """Compile a single shader. Called by multiprocessing Pool."""
+    fxc, hlsl_path, cso_path, profile, entry = args
+    # Skip if up-to-date
+    if os.path.exists(cso_path):
+        if os.path.getmtime(cso_path) >= os.path.getmtime(hlsl_path):
+            return ('skip', hlsl_path)
+    result = subprocess.run(
+        [fxc, '/T', profile, '/nologo', '/E', entry, '/Fo', cso_path, hlsl_path],
+        capture_output=True, text=True
+    )
+    if result.returncode == 0:
+        return ('ok', hlsl_path)
+    else:
+        err = result.stderr.strip().split('\n')[0] if result.stderr else 'Unknown'
+        return ('fail', hlsl_path, err)
+
+def _get_shader_list():
+    """Build list of all shaders to compile."""
+    shaders = []
+    fxc = os.path.join(SDKS['dxsdk'], 'Utilities', 'bin', 'x86', 'fxc.exe')
     shaders_dir = os.path.join(PROJECT_DIR, 'shaders')
     cso_dir = os.path.join(PROJECT_DIR, 'resources', 'cso')
-    os.makedirs(cso_dir, exist_ok=True)
 
-    compiled = 0
-    failed = 0
-    skipped = 0
-
-    # Compile ps/ and vs/ directories
+    # Single-entry shaders (ps/ and vs/)
     for subdir, profile in [('ps', 'ps_3_0'), ('vs', 'vs_3_0')]:
         shader_dir = os.path.join(shaders_dir, subdir)
         if not os.path.exists(shader_dir):
@@ -175,117 +301,139 @@ def compile_shaders():
             for f in files:
                 if not f.endswith('.hlsl'):
                     continue
-                # Skip GTAIV VS shaders (use vs_main entrypoint, not main)
                 if subdir == 'vs' and 'GTAIV' in f:
                     continue
                 hlsl_path = os.path.join(root, f)
-                cso_name = os.path.splitext(f)[0] + '.cso'
-                cso_path = os.path.join(cso_dir, cso_name)
+                cso_path = os.path.join(cso_dir, os.path.splitext(f)[0] + '.cso')
+                shaders.append((fxc, hlsl_path, cso_path, profile, 'main'))
 
-                # Skip if CSO is newer than HLSL
-                if os.path.exists(cso_path):
-                    if os.path.getmtime(cso_path) >= os.path.getmtime(hlsl_path):
-                        skipped += 1
-                        continue
+    # Multi-entry consolidated shaders
+    multi_entry = [
+        ('vs_3_0', 'vehiclePipeVS.hlsl', 'main_vehiclePBR', 'vehiclePBRVS.cso', True),
+        ('vs_3_0', 'vehiclePipeVS.hlsl', 'main_ps2CarFx', 'ps2CarFxVS.cso', True),
+        ('vs_3_0', 'vehiclePipeVS.hlsl', 'main_specCarFx', 'specCarFxVS.cso', True),
+        ('vs_3_0', 'vehiclePipeVS.hlsl', 'main_xboxCar', 'xboxCarVS.cso', True),
+        ('vs_3_0', 'vehiclePipeVS.hlsl', 'main_leedsCarFx', 'leedsCarFxVS.cso', True),
+        ('vs_3_0', 'vehiclePipeVS.hlsl', 'main_mobileVehicle', 'mobileVehicleVS.cso', True),
+        ('vs_3_0', 'vehiclePipeVS.hlsl', 'main_neoPass1', 'neoVehiclePass1VS.cso', True),
+        ('vs_3_0', 'vehiclePipeVS.hlsl', 'main_neoPass2', 'neoVehiclePass2VS.cso', True),
+        ('ps_3_0', 'VehiclePBR_Modern.hlsl', 'main_specCarFx', 'specCarFxPS.cso', False),
+        ('ps_3_0', 'VehiclePBR_Modern.hlsl', 'main_mobileVehicle', 'mobileVehiclePS.cso', False),
+        ('ps_3_0', 'VehiclePBR_Modern.hlsl', 'main_rubber', 'Rubber_Vehicle_Modern.cso', False),
+    ]
+    for profile, src_file, entry, out_cso, in_root in multi_entry:
+        hlsl_path = os.path.join(shaders_dir, src_file) if in_root else os.path.join(shaders_dir, 'ps', src_file)
+        if not os.path.exists(hlsl_path):
+            continue
+        shaders.append((fxc, hlsl_path, os.path.join(cso_dir, out_cso), profile, entry))
+    return shaders
 
-                result = subprocess.run(
-                    [fxc, '/T', profile, '/nologo', '/E', 'main', '/Fo', cso_path, hlsl_path],
-                    capture_output=True, text=True
-                )
-                if result.returncode == 0:
-                    compiled += 1
-                    print(f"  OK:   {subdir}/{f}")
-                else:
-                    failed += 1
-                    print(f"  FAIL: {subdir}/{f}")
-                    for line in result.stderr.strip().split('\n')[:3]:
-                        print(f"        {line}")
+def compile_shaders():
+    """Compile all HLSL shaders to CSO in parallel."""
+    _t_begin("Shader Compilation")
+    cso_dir = os.path.join(PROJECT_DIR, 'resources', 'cso')
+    os.makedirs(cso_dir, exist_ok=True)
+    shaders = _get_shader_list()
+    if not shaders:
+        print("  No shaders found")
+        _t_end("Shader Compilation")
+        return True
 
-    # Also compile subdirectory shaders (ps/2_a/)
-    sub_ps = os.path.join(shaders_dir, 'ps', '2_a')
-    if os.path.exists(sub_ps):
-        for f in os.listdir(sub_ps):
-            if not f.endswith('.hlsl'):
-                continue
-            hlsl_path = os.path.join(sub_ps, f)
-            cso_name = os.path.splitext(f)[0] + '.cso'
-            cso_path = os.path.join(cso_dir, cso_name)
+    workers = min(cpu_count(), len(shaders))
+    print(f"  Compiling {len(shaders)} shaders with {workers} workers...")
+    results = {'ok': 0, 'skip': 0, 'fail': 0}
+    failures = []
+    with Pool(workers) as pool:
+        for result in pool.imap_unordered(_compile_one, shaders):
+            status = result[0]
+            name = os.path.basename(result[1])
+            if status == 'ok':
+                results['ok'] += 1
+                print(f"  OK:   {name}")
+            elif status == 'skip':
+                results['skip'] += 1
+            elif status == 'fail':
+                results['fail'] += 1
+                err = result[2] if len(result) > 2 else 'Unknown'
+                failures.append((name, err))
+                print(f"  FAIL: {name} - {err}")
 
-            if os.path.exists(cso_path):
-                if os.path.getmtime(cso_path) >= os.path.getmtime(hlsl_path):
-                    skipped += 1
-                    continue
+    # Copy pre-compiled GTAIV CSOs
+    for cso_name in ['GTAIVVehicle_vs.cso', 'GTAIVVehicle_ps.cso',
+                     'GTAIVBuilding_vs.cso', 'GTAIVBuilding_ps.cso']:
+        for subdir in ['vs', 'ps']:
+            src = os.path.join(PROJECT_DIR, 'shaders', subdir, cso_name)
+            dst = os.path.join(cso_dir, cso_name)
+            if os.path.exists(src) and not os.path.exists(dst):
+                shutil.copy2(src, dst)
+                print(f"  COPY: {cso_name}")
 
-            result = subprocess.run(
-                [fxc, '/T', 'ps_3_0', '/nologo', '/E', 'main', '/Fo', cso_path, hlsl_path],
-                capture_output=True, text=True
-            )
-            if result.returncode == 0:
-                compiled += 1
-                print(f"  OK:   ps/2_a/{f}")
-            else:
-                failed += 1
-                print(f"  FAIL: ps/2_a/{f}")
-                for line in result.stderr.strip().split('\n')[:3]:
-                    print(f"        {line}")
-
-    print(f"  Shaders: {compiled} compiled, {failed} failed, {skipped} up-to-date")
-    return failed == 0
+    print(f"  {results['ok']} compiled, {results['skip']} up-to-date, {results['fail']} failed")
+    _t_end("Shader Compilation")
+    return results['fail'] == 0
 
 # ============================================================
 # MSBuild
 # ============================================================
 
 def get_vs_env():
-    """Get environment from vcvarsall.bat for x86 build"""
+    """Get environment from vcvarsall.bat for x86 build (cached)."""
+    cache_file = os.path.join(CACHE_DIR, 'vs_env.json')
+    # Use cache if < 1 hour old
+    if os.path.exists(cache_file):
+        age = time.time() - os.path.getmtime(cache_file)
+        if age < 3600:
+            with open(cache_file, 'r') as f:
+                return json.load(f)
+
     vcvarsall = r'C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat'
     if not os.path.exists(vcvarsall):
         print(f"  WARNING: vcvarsall.bat not found at {vcvarsall}")
         return None
-
-    # Run vcvarsall.bat and capture the environment
+    print("  Caching VS environment...")
     cmd = f'"{vcvarsall}" x86 && set'
     result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
     if result.returncode != 0:
         print(f"  WARNING: vcvarsall.bat failed")
         return None
-
     env = {}
     for line in result.stdout.splitlines():
         if '=' in line:
             key, _, value = line.partition('=')
             env[key.upper()] = value
+    with open(cache_file, 'w') as f:
+        json.dump(env, f)
     return env
 
 def build():
     """Build project via MSBuild with VS environment"""
-    print("\n=== Building project ===")
+    _t_begin("MSBuild")
     msbuild = SDKS['msbuild']
     if not os.path.exists(msbuild):
         print(f"  FAIL: MSBuild not found at {msbuild}")
+        _t_end("MSBuild")
         return False
 
     proj = os.path.join(BUILD_DIR, 'skygfx.vcxproj')
     if not os.path.exists(proj):
         print(f"  FAIL: Project file not found at {proj}")
+        _t_end("MSBuild")
         return False
 
-    # Get VS environment for cl.exe
     vs_env = get_vs_env()
     if not vs_env:
         print("  WARNING: Could not get VS environment, trying MSBuild directly")
 
-    # Build env dict for subprocess
     build_env = os.environ.copy()
     if vs_env:
         build_env.update(vs_env)
 
-    cmd = [msbuild, proj, '/p:Configuration=Release', '/p:Platform=Win32', '/nologo', '/v:minimal']
-    print(f"  Running: MSBuild Release|Win32")
+    cmd = [msbuild, proj, '/p:Configuration=Release', '/p:Platform=Win32',
+           '/nologo', '/v:minimal', '/m']  # /m = parallel build
+    print(f"  Running: MSBuild Release|Win32 (parallel)")
 
     result = subprocess.run(cmd, capture_output=True, text=True, cwd=PROJECT_DIR, env=build_env)
 
-    # Parse output
     lines = result.stdout.split('\n')
     error_lines = []
     success_line = None
@@ -306,24 +454,26 @@ def build():
         for l in lines[-10:]:
             if l.strip():
                 print(f"    {l.strip()}")
+        _t_end("MSBuild")
         return False
 
     if success_line:
         print(f"  {success_line}")
 
-    # Verify output DLL exists
     dll_path = os.path.join(GAME_DIR, 'skygfx.dll')
     if os.path.exists(dll_path):
         size = os.path.getsize(dll_path)
         print(f"  Output: {dll_path} ({size:,} bytes)")
+        _t_end("MSBuild")
         return True
     else:
-        print(f"  WARNING: Output DLL not found at {dll_path}")
         alt = os.path.join(GAME_DIR, 'skygfx.asi')
         if os.path.exists(alt):
             size = os.path.getsize(alt)
             print(f"  Found ASI: {alt} ({size:,} bytes)")
+            _t_end("MSBuild")
             return True
+        _t_end("MSBuild")
         return False
 
 # ============================================================
@@ -331,22 +481,19 @@ def build():
 # ============================================================
 
 def deploy():
-    """Copy ASI + INI to game directory"""
-    print("\n=== Deploying to game ===")
+    """Copy ASI + INI to game directory. Always overwrites ASI."""
+    _t_begin("Deploy")
 
-    # Find ASI
-    asi_candidates = [
-        os.path.join(GAME_DIR, 'skygfx.asi'),
+    dll_candidates = [
         os.path.join(GAME_DIR, 'skygfx.dll'),
         os.path.join(PROJECT_DIR, 'bin', 'Release', 'skygfx.dll'),
     ]
-    asi_src = None
-    for c in asi_candidates:
+    dll_src = None
+    for c in dll_candidates:
         if os.path.exists(c):
-            asi_src = c
+            dll_src = c
             break
 
-    # Find INI
     ini_candidates = [
         os.path.join(PROJECT_DIR, 'bin', 'Release', 'skygfx.ini'),
         os.path.join(GAME_DIR, 'skygfx.ini'),
@@ -357,26 +504,31 @@ def deploy():
             ini_src = c
             break
 
-    asi_dst = os.path.join(GAME_DIR, 'skygfx.asi')
-    ini_dst = os.path.join(GAME_DIR, 'skygfx.ini')
-
-    if asi_src:
-        if os.path.normpath(asi_src) != os.path.normpath(asi_dst):
-            shutil.copy2(asi_src, asi_dst)
-            print(f"  ASI: {asi_src} -> {asi_dst}")
-        else:
-            print(f"  ASI: already at {asi_dst}")
-    else:
-        print("  WARNING: No ASI found to deploy")
+    if dll_src:
+        asi_dst = os.path.join(GAME_DIR, 'skygfx.asi')
+        if os.path.exists(asi_dst):
+            backup_dir = os.path.join(PROJECT_DIR, 'backups')
+            os.makedirs(backup_dir, exist_ok=True)
+            from datetime import datetime
+            ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+            shutil.copy2(asi_dst, os.path.join(backup_dir, f'skygfx_{ts}.asi'))
+        for old in [asi_dst, asi_dst + '.disabled', asi_dst + '.dl_l']:
+            if os.path.exists(old):
+                os.remove(old)
+        shutil.copy2(dll_src, asi_dst)
+        print(f"  ASI deployed ({os.path.getsize(asi_dst):,} bytes)")
 
     if ini_src:
-        if os.path.normpath(ini_src) != os.path.normpath(ini_dst):
-            shutil.copy2(ini_src, ini_dst)
-            print(f"  INI: {ini_src} -> {ini_dst}")
+        ini_dst = os.path.join(GAME_DIR, 'skygfx.ini')
+        if os.path.exists(ini_dst):
+            print(f"  INI already exists in game directory — preserving user settings")
+        elif os.path.abspath(ini_src) == os.path.abspath(ini_dst):
+            print(f"  INI already in game directory")
         else:
-            print(f"  INI: already at {ini_dst}")
-    else:
-        print("  WARNING: No INI found to deploy")
+            shutil.copy2(ini_src, ini_dst)
+            print(f"  INI deployed (first-time copy)")
+
+    _t_end("Deploy")
 
 # ============================================================
 # Main
@@ -388,27 +540,28 @@ def main():
     print("=" * 60)
 
     # 1. Check SDKs
+    _t_begin("Pre-flight")
     check_sdks()
-
-    # 2. Check merge conflicts
     check_merge_conflicts()
-
-    # 2b. Check for running game (prevents false crash reports)
     check_process_conflict()
+    check_pbr_build_integrity()
+    _t_end("Pre-flight")
 
-    # 3. Compile shaders
+    # 2. Compile shaders (parallel)
     shaders_ok = compile_shaders()
 
-    # 4. Build
+    # 3. Build (parallel MSBuild)
     build_ok = build()
 
-    # 5. Deploy
+    # 4. Deploy
     if build_ok:
         deploy()
+        _t_summary()
         print("\n" + "=" * 60)
         print("  BUILD SUCCESSFUL")
         print("=" * 60)
     else:
+        _t_summary()
         print("\n" + "=" * 60)
         print("  BUILD FAILED - check errors above")
         print("=" * 60)

@@ -94,8 +94,21 @@ enum BuildingPipeline
 	BUILDING_PS2,
 	BUILDING_XBOX,
 	BUILDING_GTAIV,
+	BUILDING_PBR,
 
 	NUMBUILDINGPIPES
+};
+
+// Unified Pipeline - single setting controls all asset types
+enum Pipeline
+{
+	PIPELINE_PBR,      // Unified PBR for all assets (buildings, vehicles, peds, terrain, vegetation, water)
+	PIPELINE_PS2,      // PS2-style rendering (locked preset)
+	PIPELINE_XBOX,     // Xbox-style rendering (locked preset)
+	PIPELINE_MOBILE,   // Mobile-style rendering (locked preset)
+	PIPELINE_GTAIV,    // GTA IV-style rendering (locked preset)
+
+	NUMPIPELINES
 };
 
 enum DefinedVertexShader
@@ -178,7 +191,10 @@ struct Config {
 	RwBool fixGrassPlacement;	// fixed for fixSeed in main.cpp
 	RwBool doglare;			// fixed for doglare in main.cpp
 
-	int buildingPipe;
+	// Unified Pipeline - single setting controls all asset types
+	int pipeline;			// Pipeline enum (PBR, PS2, Xbox, Mobile, GTAIV)
+
+	int buildingPipe;		// Internal: mapped from pipeline
 	int tagsBuildingPipe;
 	RwBool ps2ModulateBuilding;
 	RwBool dualPassBuilding;
@@ -390,6 +406,17 @@ struct Config {
 	
 	// Water
 	float waterReflectionFarClip;
+	RwBool waterParallaxEnable;
+	float waterParallaxScale;
+	float waterNormalStrength;
+	float waterFresnelPower;
+	float waterSpecularPower;
+	float waterSpecularIntensity;
+	float waterUnderwaterFog;
+	float waterFoamThreshold;
+	float waterFoamSoftness;
+	float waterShallowR, waterShallowG, waterShallowB;
+	float waterDeepR, waterDeepG, waterDeepB;
 	
 	// Weather cycle control
 	int currentWeatherType;
@@ -481,6 +508,7 @@ enum {
 	COLORFILTER_VC     = 5,
 	COLORFILTER_VCS    = 6,
 	COLORFILTER_GTAIV  = 7,
+	COLORFILTER_MODERN = 8,
 };
 
 struct CPostEffects
@@ -508,6 +536,7 @@ struct CPostEffects
 	static void Grain_PS2(int strength, bool generate);
 	static void ColourFilter(RwRGBA rgb1, RwRGBA rgb2);
 	static void ColourFilter_Mobile(RwRGBA rgb1, RwRGBA rgb2);
+	static void ColourFilter_Modern(RwRGBA rgb1, RwRGBA rgb2);
 	static void ColourFilter_PS2(RwRGBA rgb1, RwRGBA rgb2);
 	static void ColourFilter_Generic(RwRGBA rgb1, RwRGBA rgb2, void *ps);
 	static void ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2);
@@ -635,18 +664,22 @@ int EDEDPluginAttach(void);
 // ============================================================
 extern void VehShaders_Init(const char *gameDir);
 extern int  VehShaders_SelectPaintType(int modelID, unsigned int hash);
-extern void VehShaders_GetPaintPBR(int paintType, float *roughness, float *metalness, float *reflectance,
+extern void VehShaders_GetPaintPBR(int paintType, float *specular, float *glossiness,
+                                   float *specularTintR, float *specularTintG, float *specularTintB,
                                    float *noiseScale, float *edgeBlend);
 extern void VehShaders_GetHeadlightTint(int modelID, float *r, float *g, float *b);
 extern void VehShaders_GetTaillightTint(int modelID, float *r, float *g, float *b);
 extern void VehShaders_GetGlassTint(int modelID, float *r, float *g, float *b, float *strength);
-extern void VehShaders_GetTireProps(int modelID, float *roughness, float *reflectance,
+extern void VehShaders_GetTireProps(int modelID, float *specular, float *glossiness,
                                     float *tintR, float *tintG, float *tintB);
 extern bool VehShaders_IsTireTexture(const char *texName);
 extern bool VehShaders_IsHeadlightTexture(const char *texName);
 extern bool VehShaders_IsTaillightTexture(const char *texName);
 extern bool VehShaders_IsGlassTexture(const char *texName, bool hasAlpha, unsigned char alpha);
 extern int  VehShaders_GetModelIndex(void *atomic);
+extern int  VehShaders_GetSurfaceType(const char *texName);
+extern float VehShaders_GetDirtLevel(void *vehicle);
+extern void VehShaders_ApplyDirtToPBR(float dirtLevel, float *specular, float *glossiness, float *specularTintR, float *specularTintG, float *specularTintB);
 
 // Area-based color saturation system
 extern bool VehShaders_CheckColorSaturation(float r, float g, float b, int area);
@@ -672,17 +705,9 @@ extern RwInt32 pdsOffset;
 ///// Shaders
 // misc
 extern void *simplePS;
-extern void *simpleStochasticPS;
-// vehicles
-extern void *vehiclePipeVS, *ps2CarFxVS;
-extern void *ps2EnvSpecFxPS;	// also used by the building pipeline
-extern void *specCarFxVS, *specCarFxPS;
-extern void *envCarVS, *envCarPS;
-extern void *xboxCarVS;
-extern void *leedsCarFxVS;
-extern void *mobileVehiclePipeVS, *mobileVehiclePipePS;
 // postfx
-extern void *iiiTrailsPS, *vcTrailsPS;
+extern void *vcTrailsPS;
+extern void *modernColorFilterPS;
 extern void *gradingPS, *contrastPS;
 extern void *blurPS, *radiosityPS;
 extern void *SMAA;
@@ -698,33 +723,42 @@ extern void *SSAO;
 extern void *SSAO_VertexDepth;
 extern void *MotionBlur_Burnout;
 extern void *ColorFilter_CrossMix;
-extern void *EdgeTessellationVS;
-extern void *SSS_Blur;
-extern void *SkinEnhance;
-extern void *HairEnhance;
 extern void *VehiclePaint_GTAIV;
 extern void *Water_Parallax;
-extern void *Metalness_PBR;
+extern void *Water_VS;
 extern void *VehiclePBR_Modern;
 extern void *Glass_Vehicle;
+extern void *Rubber_Vehicle;
+extern void *CarPaint_Reflections;
+extern void *PBR_Lighting;
+extern void *ClampShader;
+extern void *DynamicSky;
+extern void *SkinPBR;
 extern void *GTAIV_PS;
-// GTA IV forward passes
-extern void *gtaivVehicleVS, *gtaivVehiclePS;
-extern void *gtaivBuildingVS, *gtaivBuildingPS;
-extern void *gtaivFPVS, *gtaivFPPS;
+
+// Vehicle legacy
+extern void *vehiclePipeVS;
+extern void *vehiclePBRVS;
+extern void *ps2CarFxVS;
+extern void *specCarFxVS, *specCarFxPS;
+extern void *xboxCarVS;
+
+// Wheel extender
+#include "wheels_extender.h"
+extern void *leedsCarFxVS;
+extern void *mobileVehiclePipeVS, *mobileVehiclePipePS;
+
+// Building legacy
+extern void *ps2BuildingVS, *ps2BuildingFxVS, *ps2BuildingWindVS;
+extern void *xboxBuildingVS, *xboxBuildingPS, *xboxBuildingStochasticPS, *xboxBuildingWindVS;
+extern void *sphereBuildingVS;
+extern void *simpleDetailPS, *simpleDetailStochasticPS, *simpleFogPS;
 
 void DrawUnifiedDebugMenu(IDirect3DDevice9 *device);
 void UploadUnifiedConstants(IDirect3DDevice9 *device);
 void UpdateVehicleRing();
 void RenderIBLBuffer(void);
 
-// building
-extern void *ps2BuildingVS, *ps2BuildingFxVS;
-extern void *xboxBuildingVS, *xboxBuildingPS, *xboxBuildingStochasticPS;
-extern void *simpleDetailPS, *simpleDetailStochasticPS;
-extern void *simpleFogPS;
-extern void *sphereBuildingVS;
-extern void *xboxBuildingWindVS, *ps2BuildingWindVS;
 void CreateShaders(void);
 void RwToD3DMatrix(void *d3d, RwMatrix *rw);
 void MakeProjectionMatrix(void *d3d, RwCamera *cam, float nbias = 0.0f, float fbias = 0.0f);
@@ -769,3 +803,42 @@ int gtaGetPipelineID(RpAtomic* atomic);
 RpAtomic *AtomicDefaultRenderCallBack(RpAtomic*);
 void CCustomCarEnvMapPipeline__CustomPipeRenderCB_exe(RwResEntry *repEntry, void *object, RwUInt8 type, RwUInt32 flags);
 void GTAfree(void *data);
+
+// ============================================================
+// Unified PBR constant upload — single source of truth for c22/c23 layout.
+// Both vehicle and building pipes MUST call this to avoid param-order bugs.
+//
+// c22 = {glossiness, specular, pipeParam3, pipeParam4}
+// c23 = {pipeParam5, pipeParam6, pipeParam7, 0}
+//
+// Vehicle: c22 = {glossiness, specular, tintR, tintG}
+//          c23 = {wheelFlag, noiseScale, edgeBlend, 0}
+// Building: c22 = {glossiness, specular, clearcoat, subsurface}
+//           c23 = {tintR, tintG, tintB, 0}
+// ============================================================
+void pipeUploadPBR(float glossiness, float specular, float c22_3, float c22_4,
+                   float c23_1, float c23_2, float c23_3);
+
+// ============================================================
+// Rendering mode interfaces (ps2_mode.cpp, xbox_mode.cpp, etc.)
+// Each mode provides: ApplyDefaults, GetPreset
+// ============================================================
+struct PresetConfig;
+
+void PS2Mode_ApplyDefaults(Config *c);
+const PresetConfig* PS2Mode_GetPreset(void);
+
+void XboxMode_ApplyDefaults(Config *c);
+const PresetConfig* XboxMode_GetPreset(void);
+
+void IVMode_ApplyDefaults(Config *c);
+const PresetConfig* IVMode_GetPreset(void);
+
+void MobileMode_ApplyDefaults(Config *c);
+const PresetConfig* MobileMode_GetPreset(void);
+
+void PCPatchedMode_ApplyDefaults(Config *c);
+const PresetConfig* PCPatchedMode_GetPreset(void);
+
+void CustomMode_ApplyDefaults(Config *c);
+const PresetConfig* CustomMode_GetPreset(void);

@@ -1,4 +1,38 @@
 @echo off
-call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" x86 >nul 2>&1
-MSBuild.exe "E:\dev(dave)\skygfx_plus_expIV\build\skygfx.vcxproj" /p:Configuration=Release /p:Platform=Win32 /m /nologo > "E:\dev(dave)\skygfx_plus_expIV\tools\build_log.txt" 2>&1
-echo EXIT_CODE=%ERRORLEVEL% >> "E:\dev(dave)\skygfx_plus_expIV\tools\build_log.txt"
+REM SkyGFX Plus - Build Wrapper
+REM Usage: build [fast|shaders|deploy|launch|clean|watch]
+REM Default: full build with checks
+
+setlocal
+cd /d E:\dev(dave)\skygfx_plus_expIV
+
+if "%1"=="fast" (
+    python tools\fast_build.py --fast
+    goto end
+)
+if "%1"=="shaders" (
+    python tools\fast_build.py --shaders
+    goto end
+)
+if "%1"=="deploy" (
+    python tools\fast_build.py --deploy
+    goto end
+)
+if "%1"=="launch" (
+    python tools\fast_build.py --fast --launch
+    goto end
+)
+if "%1"=="clean" (
+    python tools\fast_build.py --fast --clean
+    goto end
+)
+if "%1"=="watch" (
+    python tools\fast_build.py --watch
+    goto end
+)
+
+REM Default: full build with all checks
+python tools\fix_build.py
+
+:end
+endlocal
