@@ -28,43 +28,9 @@ typedef uint32_t uint32, uint;
 typedef int8_t int8;
 typedef int16_t int16;
 typedef int32_t int32;
-typedef bool bool8;
-
-// Fix for _mm_loadu_si64 intrinsic - x64 only, map to x86 equivalent
-#ifdef _M_X86
-#define _mm_loadu_si64 _mm_loadu_si32
-#endif
 
 extern HMODULE dllModule;
 void dbglog(const char *fmt, ...);
-
-enum LogLevel { LOG_TRACE = -1, LOG_INFO = 0, LOG_WARN = 1, LOG_ERROR = 2, LOG_FATAL = 3 };
-void dbglog_loc(int level, const char *file, int line, const char *func, const char *fmt, ...);
-
-#define dbglog_warn(...) dbglog_loc(LOG_WARN, __FILE__, __LINE__, __FUNCTION__, __VA_ARGS__)
-#define dbglog_err(...) dbglog_loc(LOG_ERROR, __FILE__, __LINE__, __FUNCTION__, __VA_ARGS__)
-
-// ---- Performance timing ----
-extern LARGE_INTEGER perfFreq;
-extern double perfFreqInv;
-inline void perfInit(){
-	if(!perfFreq.QuadPart){
-		QueryPerformanceFrequency(&perfFreq);
-		perfFreqInv = 1.0 / (double)perfFreq.QuadPart;
-	}
-}
-inline double perfNow(){
-	LARGE_INTEGER t;
-	QueryPerformanceCounter(&t);
-	return (double)t.QuadPart * perfFreqInv * 1000.0;
-}
-struct PerfTimer {
-	const char *name;
-	double startMs;
-	PerfTimer(const char *n) : name(n), startMs(perfNow()) {}
-	~PerfTimer(){ dbglog("PERF [%s] %.2f ms", name, perfNow() - startMs); }
-};
-#define PERF_SCOPE(name) PerfTimer _perf##__LINE__(name)
 
 #define nil NULL
 #define VERSION 0x370
@@ -84,7 +50,6 @@ enum CarPipeline
 	CAR_VCS,
 	CAR_ENV,
 	CAR_GTAIV,
-	CAR_MODERN, // PBR with glass, 4 color channels, GGX specular
 
 	NUMCARPIPES
 };
@@ -94,21 +59,8 @@ enum BuildingPipeline
 	BUILDING_PS2,
 	BUILDING_XBOX,
 	BUILDING_GTAIV,
-	BUILDING_PBR,
 
 	NUMBUILDINGPIPES
-};
-
-// Unified Pipeline - single setting controls all asset types
-enum Pipeline
-{
-	PIPELINE_PBR,      // Unified PBR for all assets (buildings, vehicles, peds, terrain, vegetation, water)
-	PIPELINE_PS2,      // PS2-style rendering (locked preset)
-	PIPELINE_XBOX,     // Xbox-style rendering (locked preset)
-	PIPELINE_MOBILE,   // Mobile-style rendering (locked preset)
-	PIPELINE_GTAIV,    // GTA IV-style rendering (locked preset)
-
-	NUMPIPELINES
 };
 
 enum DefinedVertexShader
@@ -119,82 +71,13 @@ enum DefinedVertexShader
 	NUMSHADERS
 };
 
-// Game presets - emulates specific game/platform combinations
-enum GamePreset
-{
-	PRESET_CUSTOM = -1,    // Manual settings (legacy behavior)
-
-	// GTA III presets
-	PRESET_III_PS2,
-	PRESET_III_XBOX,
-	PRESET_III_PC,
-
-	// GTA Vice City presets
-	PRESET_VC_PS2,
-	PRESET_VC_XBOX,
-	PRESET_VC_PC,
-
-	// GTA San Andreas presets
-	PRESET_SA_PS2,
-	PRESET_SA_XBOX,
-	PRESET_SA_PC,
-
-	// GTA Liberty City Stories
-	PRESET_LCS_PS2,
-
-	// GTA Vice City Stories
-	PRESET_VCS_PS2,
-
-	// GTA IV presets
-	PRESET_IV_XBOX360,
-	PRESET_IV_PC,
-
-	// Best-of-all default (PC pipe with best settings from all versions)
-	PRESET_BEST_PC,
-
-	// skygfxplusultramaxdeluxe — everything maxed, all features on
-	PRESET_SKYGFXPLUSULTRAMAXDELUXE,
-
-	NUM_PRESETS
-};
-
-// Preset configuration - defines what each preset sets
-struct PresetConfig
-{
-	const char *name;
-	int buildingPipe;
-	int vehiclePipe;
-	int colorFilter;
-	int ps2ModulateGlobal;
-	int dualPassGlobal;
-	int radiosity;
-	int doRadiosity;
-	int vcsTrails;
-	int pedShadows;
-	int stencilShadows;
-	int grainFilter;
-	int infraredVision;
-	int nightVision;
-	int ssaoEnable;
-	int smaaEnable;
-	int smaaPreset;
-	int ivMode;
-};
-
-extern const PresetConfig presetConfigs[NUM_PRESETS];
-extern const char *presetNames[NUM_PRESETS + 1];
-
 struct Config {
 	// these are at fixed offsets
 	int version;			// for other modules
-	int preset;				// GamePreset enum (-1 = custom/manual)
 	RwBool fixGrassPlacement;	// fixed for fixSeed in main.cpp
 	RwBool doglare;			// fixed for doglare in main.cpp
 
-	// Unified Pipeline - single setting controls all asset types
-	int pipeline;			// Pipeline enum (PBR, PS2, Xbox, Mobile, GTAIV)
-
-	int buildingPipe;		// Internal: mapped from pipeline
+	int buildingPipe;
 	int tagsBuildingPipe;
 	RwBool ps2ModulateBuilding;
 	RwBool dualPassBuilding;
@@ -247,10 +130,6 @@ struct Config {
 	float envPower;
 	float envFresnel;
 
-	// Normal mapping
-	float normalMapIntensity;
-	RwBool normalMapPlayerOnly;
-
 	// Subsurface Scattering
 	RwBool sssEnable;
 	float sssIntensity;		// global intensity multiplier (0..1)
@@ -271,59 +150,10 @@ struct Config {
 	RwBool smaaPredication;
 	RwBool smaaTemporal;
 
-	// Motion Blur (Burnout Paradise style)
-	RwBool motionBlurEnable;
-	float motionBlurStrength;		// 0.0-1.0, overall intensity
-	float motionBlurRadial;			// 0.0-1.0, radial component from screen center
-	float motionBlurSpeedFactor;		// 0.0-1.0, how much camera velocity affects blur
-	RwBool motionBlurCameraAware;	// reduce blur when camera is moving fast
-
-	// SSS Post-Process Blur (for skin translucency)
-	// NOTE: This is a screen-space effect, not per-material. It blurs the entire
-	// scene and preserves edges using depth. Best used with low strength values.
-	// Does NOT conflict with the per-material SSS fields above.
-	RwBool sssPostProcessEnable;
-	float sssPostProcessStrength;	// 0.0-1.0, how much SSS blur to apply
-	float sssPostProcessRadius;	// blur radius in pixels (higher = softer skin)
-	float sssPostProcessThreshold;	// depth threshold for edge preservation
-
-	// Skin Enhancement - wrap lighting for SSS approximation
-	// NOTE: Works ON TOP of existing Rpskin rendering. Does NOT replace it.
-	// Adds warm tint to shadow areas and improves specular highlights.
-	RwBool skinEnhanceEnable;
-	float skinWrapFactor;		// 0.0-1.0, how much light wraps around surface
-	float skinSpecularPower;	// specular highlight sharpness
-	float skinSpecularStrength;	// specular highlight intensity
-	float skinSSSStrength;		// 0.0-1.0, SSS effect strength
-
-	// Hair Enhancement - anisotropic highlights
-	// NOTE: Works ON TOP of existing hair rendering. Uses depth derivatives
-	// to estimate tangent direction for Kajiya-Kay anisotropic highlights.
-	RwBool hairEnhanceEnable;
-	float hairAnisotropicPower;		// highlight sharpness
-	float hairAnisotropicStrength;	// highlight intensity
-	float hairSSSStrength;			// 0.0-1.0, hair SSS strength
-
-	// Vegetation Enhancement - improved grass/plant rendering
-	// NOTE: Works ON TOP of existing grass rendering. Adds SSS-like translucency
-	// and improved ambient lighting to vegetation.
-	RwBool vegetationEnhanceEnable;
-	float vegetationSSSStrength;	// 0.0-1.0, translucency strength
-	float vegetationAmbientBoost;	// ambient light multiplier
-
-	// Edge Tessellation - smooths sharp edges
-	// NOTE: Displaces vertices along normals at edges. Works best on vehicles
-	// and characters with sharp polygon edges. Requires SMAA edge buffer.
-	RwBool edgeTessEnable;
-	float edgeTessStrength;		// displacement strength
-	float edgeTessThreshold;	// edge detection threshold
-
 	// GTA IV Mode
 	RwBool ivMode;
 	float ivDesaturation;
 	float ivGamma;
-	float ivSaturation;
-	float ivCurves;
 	float ivVignetteIntensity;
 	float ivVignetteRadius;
 	float ivVignetteContrast;
@@ -406,17 +236,6 @@ struct Config {
 	
 	// Water
 	float waterReflectionFarClip;
-	RwBool waterParallaxEnable;
-	float waterParallaxScale;
-	float waterNormalStrength;
-	float waterFresnelPower;
-	float waterSpecularPower;
-	float waterSpecularIntensity;
-	float waterUnderwaterFog;
-	float waterFoamThreshold;
-	float waterFoamSoftness;
-	float waterShallowR, waterShallowG, waterShallowB;
-	float waterDeepR, waterDeepG, waterDeepB;
 	
 	// Weather cycle control
 	int currentWeatherType;
@@ -443,15 +262,6 @@ struct Config {
 	bool unifiedEnableTimeOfDay, unifiedEnableVertexAO, unifiedEnablePointLightOverride;
 	bool unifiedEnablePostPass, unifiedEnableIBL, unifiedEnableIBLTint;
 	bool unifiedEnableSurfaceWeights, unifiedEnableGrading, unifiedEnableGamma;
-
-	// Faux Normal Buffer (stereo disparity)
-	RwBool normalBufferEnable;
-	float normalBufferOffset;
-	float normalBufferScale;
-
-	// 4-Pipe Chain
-	RwBool pipeChainEnable;
-	float pipeChainIntensity;
 };
 extern int numConfigs;
 extern int currentConfig;
@@ -475,13 +285,6 @@ extern bool iCanHasvehiclePipe;
 extern bool iCanHasSunGlare;
 extern bool iCanHasNeoDrops;
 extern int explicitBuildingPipe;
-extern bool gHasExternalNormalMapPlugin;
-
-/* Normal map */
-struct RxPipeline;
-extern RxPipeline *gNormalMapAtomicPipelines[2];
-void normalmap_init(void);
-void normalmap_shutdown(void);
 
 /* Env map */
 extern RwCamera *reflectionCam;
@@ -489,15 +292,6 @@ extern RwRaster *envFB, *envZB;
 extern RwTexture *reflectionTex;
 void MakeEnvmapRasters(void);
 void MakeEnvmapCam(void);
-
-/* Normal buffer (stereo disparity) */
-extern RwCamera *normalCam;
-extern RwRaster *normalFB, *normalZB;
-extern RwTexture *normalTex;
-void MakeNormalRasters(void);
-void MakeNormalCam(void);
-void RenderNormalBuffer(void);
-extern struct IDirect3DTexture9 *g_normalBufferTex;
 
 enum {
 	COLORFILTER_NONE   = 0,
@@ -508,7 +302,6 @@ enum {
 	COLORFILTER_VC     = 5,
 	COLORFILTER_VCS    = 6,
 	COLORFILTER_GTAIV  = 7,
-	COLORFILTER_MODERN = 8,
 };
 
 struct CPostEffects
@@ -536,7 +329,6 @@ struct CPostEffects
 	static void Grain_PS2(int strength, bool generate);
 	static void ColourFilter(RwRGBA rgb1, RwRGBA rgb2);
 	static void ColourFilter_Mobile(RwRGBA rgb1, RwRGBA rgb2);
-	static void ColourFilter_Modern(RwRGBA rgb1, RwRGBA rgb2);
 	static void ColourFilter_PS2(RwRGBA rgb1, RwRGBA rgb2);
 	static void ColourFilter_Generic(RwRGBA rgb1, RwRGBA rgb2, void *ps);
 	static void ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2);
@@ -659,35 +451,6 @@ RxPipeline *CCustomBuildingPipeline__CreateCustomObjPipe_PS2(void);
 RxPipeline *CCustomBuildingDNPipeline__CreateCustomObjPipe_PS2(void);
 int PDSPipePluginAttach(void);
 int EDEDPluginAttach(void);
-// ============================================================
-// Vehicle shader bridge (veh_shaders.cpp → vehicles.cpp)
-// ============================================================
-extern void VehShaders_Init(const char *gameDir);
-extern int  VehShaders_SelectPaintType(int modelID, unsigned int hash);
-extern void VehShaders_GetPaintPBR(int paintType, float *specular, float *glossiness,
-                                   float *specularTintR, float *specularTintG, float *specularTintB,
-                                   float *noiseScale, float *edgeBlend);
-extern void VehShaders_GetHeadlightTint(int modelID, float *r, float *g, float *b);
-extern void VehShaders_GetTaillightTint(int modelID, float *r, float *g, float *b);
-extern void VehShaders_GetGlassTint(int modelID, float *r, float *g, float *b, float *strength);
-extern void VehShaders_GetTireProps(int modelID, float *specular, float *glossiness,
-                                    float *tintR, float *tintG, float *tintB);
-extern bool VehShaders_IsTireTexture(const char *texName);
-extern bool VehShaders_IsHeadlightTexture(const char *texName);
-extern bool VehShaders_IsTaillightTexture(const char *texName);
-extern bool VehShaders_IsGlassTexture(const char *texName, bool hasAlpha, unsigned char alpha);
-extern int  VehShaders_GetModelIndex(void *atomic);
-extern int  VehShaders_GetSurfaceType(const char *texName);
-extern float VehShaders_GetDirtLevel(void *vehicle);
-extern void VehShaders_ApplyDirtToPBR(float dirtLevel, float *specular, float *glossiness, float *specularTintR, float *specularTintG, float *specularTintB);
-
-// Area-based color saturation system
-extern bool VehShaders_CheckColorSaturation(float r, float g, float b, int area);
-extern void VehShaders_GenerateColor(unsigned int hash, int area,
-                                     float *outR, float *outG, float *outB);
-extern int  VehShaders_GetColorArea(float posX, float posY);
-extern float VehShaders_GetMinSaturation(float posX, float posY);
-
 void hookVehiclePipe(void);
 void hookBuildingPipe(void);
 void D3D9Render(RxD3D9ResEntryHeader *resEntryHeader, RxD3D9InstanceData *instanceData);
@@ -705,60 +468,38 @@ extern RwInt32 pdsOffset;
 ///// Shaders
 // misc
 extern void *simplePS;
+extern void *simpleStochasticPS;
+// vehicles
+extern void *vehiclePipeVS, *ps2CarFxVS;
+extern void *ps2EnvSpecFxPS;	// also used by the building pipeline
+extern void *specCarFxVS, *specCarFxPS;
+extern void *envCarVS, *envCarPS;
+extern void *xboxCarVS;
+extern void *leedsCarFxVS;
+extern void *mobileVehiclePipeVS, *mobileVehiclePipePS;
 // postfx
-extern void *vcTrailsPS;
-extern void *modernColorFilterPS;
+extern void *iiiTrailsPS, *vcTrailsPS;
 extern void *gradingPS, *contrastPS;
 extern void *blurPS, *radiosityPS;
 extern void *SMAA;
-extern void *SMAA_Edge;
-extern void *SMAA_EdgeNormal;
-extern void *SMAA_EdgeDepth;
-extern void *SMAA_EdgeCombined;
-extern void *SMAA_EdgeMotionDepth;
-extern void *SMAA_BlendWeight;
-extern void *SMAA_BlendNeighbor;
-extern void *SMAA_Temporal;
 extern void *SSAO;
-extern void *SSAO_VertexDepth;
-extern void *MotionBlur_Burnout;
-extern void *ColorFilter_CrossMix;
-extern void *VehiclePaint_GTAIV;
-extern void *Water_Parallax;
-extern void *Water_VS;
-extern void *VehiclePBR_Modern;
-extern void *Glass_Vehicle;
-extern void *Rubber_Vehicle;
-extern void *CarPaint_Reflections;
-extern void *PBR_Lighting;
-extern void *ClampShader;
-extern void *DynamicSky;
-extern void *SkinPBR;
 extern void *GTAIV_PS;
-
-// Vehicle legacy
-extern void *vehiclePipeVS;
-extern void *vehiclePBRVS;
-extern void *ps2CarFxVS;
-extern void *specCarFxVS, *specCarFxPS;
-extern void *xboxCarVS;
-
-// Wheel extender
-#include "wheels_extender.h"
-extern void *leedsCarFxVS;
-extern void *mobileVehiclePipeVS, *mobileVehiclePipePS;
-
-// Building legacy
-extern void *ps2BuildingVS, *ps2BuildingFxVS, *ps2BuildingWindVS;
-extern void *xboxBuildingVS, *xboxBuildingPS, *xboxBuildingStochasticPS, *xboxBuildingWindVS;
-extern void *sphereBuildingVS;
-extern void *simpleDetailPS, *simpleDetailStochasticPS, *simpleFogPS;
+// GTA IV forward passes
+extern void *gtaivVehicleVS, *gtaivVehiclePS;
+extern void *gtaivBuildingVS, *gtaivBuildingPS;
+extern void *gtaivFPVS, *gtaivFPPS;
 
 void DrawUnifiedDebugMenu(IDirect3DDevice9 *device);
 void UploadUnifiedConstants(IDirect3DDevice9 *device);
 void UpdateVehicleRing();
-void RenderIBLBuffer(void);
 
+// building
+extern void *ps2BuildingVS, *ps2BuildingFxVS;
+extern void *xboxBuildingVS, *xboxBuildingPS, *xboxBuildingStochasticPS;
+extern void *simpleDetailPS, *simpleDetailStochasticPS;
+extern void *simpleFogPS;
+extern void *sphereBuildingVS;
+extern void *xboxBuildingWindVS, *ps2BuildingWindVS;
 void CreateShaders(void);
 void RwToD3DMatrix(void *d3d, RwMatrix *rw);
 void MakeProjectionMatrix(void *d3d, RwCamera *cam, float nbias = 0.0f, float fbias = 0.0f);
@@ -803,42 +544,3 @@ int gtaGetPipelineID(RpAtomic* atomic);
 RpAtomic *AtomicDefaultRenderCallBack(RpAtomic*);
 void CCustomCarEnvMapPipeline__CustomPipeRenderCB_exe(RwResEntry *repEntry, void *object, RwUInt8 type, RwUInt32 flags);
 void GTAfree(void *data);
-
-// ============================================================
-// Unified PBR constant upload — single source of truth for c22/c23 layout.
-// Both vehicle and building pipes MUST call this to avoid param-order bugs.
-//
-// c22 = {glossiness, specular, pipeParam3, pipeParam4}
-// c23 = {pipeParam5, pipeParam6, pipeParam7, 0}
-//
-// Vehicle: c22 = {glossiness, specular, tintR, tintG}
-//          c23 = {wheelFlag, noiseScale, edgeBlend, 0}
-// Building: c22 = {glossiness, specular, clearcoat, subsurface}
-//           c23 = {tintR, tintG, tintB, 0}
-// ============================================================
-void pipeUploadPBR(float glossiness, float specular, float c22_3, float c22_4,
-                   float c23_1, float c23_2, float c23_3);
-
-// ============================================================
-// Rendering mode interfaces (ps2_mode.cpp, xbox_mode.cpp, etc.)
-// Each mode provides: ApplyDefaults, GetPreset
-// ============================================================
-struct PresetConfig;
-
-void PS2Mode_ApplyDefaults(Config *c);
-const PresetConfig* PS2Mode_GetPreset(void);
-
-void XboxMode_ApplyDefaults(Config *c);
-const PresetConfig* XboxMode_GetPreset(void);
-
-void IVMode_ApplyDefaults(Config *c);
-const PresetConfig* IVMode_GetPreset(void);
-
-void MobileMode_ApplyDefaults(Config *c);
-const PresetConfig* MobileMode_GetPreset(void);
-
-void PCPatchedMode_ApplyDefaults(Config *c);
-const PresetConfig* PCPatchedMode_GetPreset(void);
-
-void CustomMode_ApplyDefaults(Config *c);
-const PresetConfig* CustomMode_GetPreset(void);

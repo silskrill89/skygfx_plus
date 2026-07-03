@@ -34,19 +34,6 @@ uint8 &CClock__ms_nGameClockHours = *(byte*)0xB70153;
 int16 &CWeather__OldWeatherType = *(short*)0xC81320;
 int16 &CWeather__NewWeatherType = *(short*)0xC8131C;
 float &CWeather__InterpolationValue = *(float*)0xC8130C;
-float &CWeather__CloudCoverage = *(float*)0xC81304;
-float &CWeather__Foggyness = *(float*)0xC81300;
-
-CColourSet &CTimeCycle__m_CurrentColours = *(CColourSet*)0xB7C4A0;
-
-// Get actual sun direction from timecycle
-void GetSunDirection(float &sx, float &sy, float &sz) {
-	int idx = *(int*)0xB79FD0 & 15;
-	CVector *sunVecs = (CVector*)0xB7CA50;
-	sx = sunVecs[idx].x;
-	sy = sunVecs[idx].y;
-	sz = sunVecs[idx].z;
-}
 
 void **rwengine = *(void***)0x58FFC0;
 RwInt32 &CCustomCarEnvMapPipeline__ms_envMapPluginOffset = *(RwInt32*)0x8D12C4;
@@ -151,9 +138,6 @@ WRAPPER RpAtomic *CCustomCarEnvMapPipeline__CustomPipeAtomicSetup(RpAtomic *atom
 WRAPPER char *GetFrameNodeName(RwFrame *frame) { EAXJMP(0x72FB30); }
 WRAPPER int gtaGetPipelineID(RpAtomic* atomic) { EAXJMP(0x72FC40); }
 WRAPPER RpAtomic *AtomicDefaultRenderCallBack(RpAtomic*) { EAXJMP(0x7491C0); };
-WRAPPER RpClump *RpClumpStreamRead(RwStream *stream) { EAXJMP(0x748A10); }
-WRAPPER RwBool RpClumpDestroy(RpClump *clump) { EAXJMP(0x748C50); }
-WRAPPER RpClump *RpClumpForAllAtomics(RpClump *clump, RpAtomicCallBack callBack, void *pData) { EAXJMP(0x748E90); }
 WRAPPER void CCustomCarEnvMapPipeline__CustomPipeRenderCB_exe(RwResEntry *repEntry, void *object, RwUInt8 type, RwUInt32 flags) { EAXJMP(0x5D9900) };
 WRAPPER void GTAfree(void *data) { EAXJMP(0x82413F); }
 

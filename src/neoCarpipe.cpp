@@ -205,9 +205,19 @@ CarPipe::Init(void)
 void
 CarPipe::CreateShaders(void)
 {
-	// Neo vehicle shaders removed - using unified PBR pipeline
-	vertexShaderPass1 = nullptr;
-	vertexShaderPass2 = nullptr;
+	HRSRC resource;
+	RwUInt32 *shader;
+	resource = FindResource(dllModule, MAKEINTRESOURCE(IDR_NEOVEHICLEONEVS), RT_RCDATA);
+	shader = (RwUInt32*)LoadResource(dllModule, resource);
+	RwD3D9CreateVertexShader(shader, &vertexShaderPass1);
+	assert(vertexShaderPass1);
+	FreeResource(shader);
+
+	resource = FindResource(dllModule, MAKEINTRESOURCE(IDR_NEOVEHICLETWOVS), RT_RCDATA);
+	shader = (RwUInt32*)LoadResource(dllModule, resource);
+	RwD3D9CreateVertexShader(shader, &vertexShaderPass2);
+	assert(vertexShaderPass2);
+	FreeResource(shader);
 }
 
 void
@@ -254,29 +264,14 @@ CarPipe::ShaderSetup(RpAtomic *atomic)
 	RwCamera *cam = (RwCamera*)RWSRCGLOBAL(curCamera);
 
 	pipeGetComposedTransformMatrix(atomic, combined);
-	RwFrame *atomicFrame = RpAtomicGetFrame(atomic);
-	if(atomicFrame){
-		RwMatrix *atomicLTM = RwFrameGetLTM(atomicFrame);
-		if(atomicLTM)
-			RwToD3DMatrix(&worldMat, atomicLTM);
-		else
-			memset(worldMat, 0, sizeof(worldMat));
-	}else
-		memset(worldMat, 0, sizeof(worldMat));
+	RwToD3DMatrix(&worldMat, RwFrameGetLTM(RpAtomicGetFrame(atomic)));
 	RwD3D9SetVertexShaderConstant(LOC_combined, (void*)&combined, 4);
 	RwD3D9SetVertexShaderConstant(LOC_world, (void*)&worldMat, 4);
 	texMat = DirectX::XMMatrixIdentity();
 	RwD3D9SetVertexShaderConstant(LOC_tex, (void*)&texMat, 4);
 
-	RwMatrix *camfrm = NULL;
-	RwFrame *camFrame = cam ? RwCameraGetFrame(cam) : NULL;
-	if(camFrame)
-		camfrm = RwFrameGetLTM(camFrame);
-	
-	RwV3d eyePos = {0, 0, 0};
-	if(camfrm)
-		eyePos = *RwMatrixGetPos(camfrm);
-	RwD3D9SetVertexShaderConstant(LOC_eye, (void*)&eyePos, 1);
+	RwMatrix *camfrm = RwFrameGetLTM(RwCameraGetFrame(cam));
+	RwD3D9SetVertexShaderConstant(LOC_eye, (void*)RwMatrixGetPos(camfrm), 1);
 
 	pipeUploadLightColor(pAmbient, LOC_ambient);		// Seems to work better without spec
 	UploadLightColorWithSpecular(pDirect, LOC_directCol);	// NOT actually used

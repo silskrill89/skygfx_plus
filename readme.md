@@ -13,7 +13,6 @@ A rewrite of [SkyGFX](https://github.com/aap/skygfx) by aap, bringing modern ren
 ![Screenshot 7](screenshots/07.jpg)
 ![Screenshot 8](screenshots/08.jpg)
 ![Screenshot 9](screenshots/09.jpg)
-![Screenshot 10](screenshots/10.jpg)
 
 ## Features
 
@@ -98,50 +97,86 @@ python tools\compile_shaders.py
 
 ## Credits
 
-### Core Contributors
-- **aap** - Original SkyGFX author
-- **Junior (JuniorDjjr)** - JuniorDjjr fork with extensive features
-- **DK22Pac** - Normal mapping plugin
-- **Silent** - SilentPatch and GTA SA fixes
-- **_AG** - RenderWare documentation
+### Original SkyGFX
+- **aap** - Original SkyGFX author, the foundation of this project
+- **Junior (JuniorDjjr)** - JuniorDjjr fork with extensive additional features and improvements
+- **DK22Pac** - Normal mapping plugin for GTA SA
+- **Silent** - SilentPatch and various GTA SA fixes
+- **_AG** - RenderWare documentation and reverse engineering
+- **The GTA Modding Community** - Reverse engineering, documentation, and countless hours of research
 
-### Community
-- **The GTA Modding Community** - Reverse engineering, documentation, countless hours of research
-- **GTAForums** - Community knowledge base
-- **Everyone who contributed** to SkyGFX and its forks
+### Anti-Aliasing (SMAA)
+- **Jorge Jimenez** - SMAA algorithm lead author, "Enhanced Subpixel Morphological Antialiasing" (2011)
+- **Jose I. Echevarria** - SMAA co-author
+- **Tiago Sousa** (Crytek) - SMAA co-author, later integrated into CryEngine
+- **Diego Gutierrez** - SMAA co-author
+- **Fernando Navarro** - SMAA co-author
+- **Belen Masia** - SMAA co-author
+- University of Zaragoza, Spain - SMAA research institution
 
-### SMAA Algorithm
-- Jorge Jimenez, Jose I. Echevarria, Tiago Sousa, Diego Gutierrez, Fernando Navarro, Belen Masia
-- University of Zaragoza, Spain
+### Anti-Aliasing (FXAA)
+- **Timothy Lottes** (NVIDIA) - FXAA 3.11 author, revolutionized post-process AA
+- **NVIDIA** - FXAA development and release
 
-### FXAA
-- Timothy Lottes (NVIDIA)
+### Crytek / CryEngine Impact
+- **Crytek GmbH** - CryEngine rendering techniques that influenced modern game graphics
+- **Tiago Sousa** (Crytek) - Brought SMAA into CryEngine, contributed to SSDO/SSGI
+- **Crysis** (2007) - Set the benchmark for real-time graphics, influenced:
+  - Screen-Space Directional Obscurance (SSDO)
+  - Deferred shading pipelines
+  - Material-based rendering systems
+  - Real-time reflection techniques
+- **CryEngine Reference Code** - SSS implementation, GGX BRDF, edge detection patterns
+- The "Crytek BRDF" approach to physically-based shading influenced the entire industry
 
-### Inspiration
-- **Crytek** - CryEngine rendering techniques (SSS, GGX BRDF, edge detection)
-- **Rockstar Games** - GTA IV, GTA V, RDR2 rendering techniques
-- **Criterion Games** - RenderWare Graphics engine
-- **O3DE Foundation** - Atom renderer PBR pipeline
+### Rockstar Games
+- **Rockstar North** - GTA San Andreas, the game this mod enhances
+- **Rockstar Games** - GTA IV, GTA V, RDR2 - rendering techniques inspired by their titles
+- The RAGE engine's approach to vehicle rendering, filmic tonemapping, and post-processing influenced our implementation
+
+### PBR / Modern Rendering
+- **O3DE Foundation** - Atom renderer reference for PBR pipeline architecture
+- **Epic Games** - Unreal Engine's material system influenced our approach
+- **The PBR Revolution** - The shift to physically-based rendering in games (2013+) influenced our material classification system
+
+### RenderWare
+- **Criterion Games** - RenderWare Graphics engine that powers GTA SA
+- **Criterion Software** - Original RW development
+
+### AMD / Intel
+- **AMD** - Mantle API (precursor to Vulkan/DX12), GPUOpen resources
+- **Intel** - ISPC and compiler optimizations
 
 ### Academic Research
-- Jensen et al. (2001) - Subsurface light transport
-- Walter et al. (2007) - GGX microfacet models
-- Hable (Uncharted 2) - Filmic tonemapping
-- Burley (Disney, 2012) - Disney BRDF
+- **"A Practical Model for Subsurface Light Transport"** (Jensen et al., 2001) - SSS theory
+- **"Microfacet Models for Refraction through Rough Surfaces"** (Walter et al., 2007) - GGX distribution
+- **"Filmic Tonemapping"** (Hable, Uncharted 2) - Tonemapping curves used in GTA IV/V
+- **"Physically-Based Shading at Disney" (Burley, 2012)** - Disney BRDF that influenced PBR
 
-### Open Source
-- Dear ImGui, stb libraries, Khronos Group, Microsoft DirectX SDK
+### Open Source Community
+- **Dear ImGui** - Debug menu interface
+- **stb libraries** - Image loading utilities
+- **The Khronos Group** - OpenGL/GLSL specifications
+- **Microsoft** - DirectX 9 SDK and documentation
 
-## Permissions
-
-**No source code from Crytek, Rockstar, or any commercial entity has been used.**
-
-All code is original work inspired by:
-- Published academic research
-- Public documentation (DirectX 9 SDK, RenderWare docs)
-- Community reverse engineering of GTA SA
-- Publicly known rendering techniques
+### Special Thanks
+- **The GTA SA Modding Community** - For reverse engineering and documentation
+- **GTAForums** - Community knowledge base
+- **Everyone who contributed** to the original SkyGFX and its forks
+- **Rockstar Games** - For creating the GTA series
+- **Crytek** - For pushing the boundaries of real-time rendering
+- **NVIDIA / AMD** - For GPU hardware and driver support
 
 ## License
 
-Based on SkyGFX by aap. SMAA is BSD licensed. See `SMAA_reference/LICENSE.txt`.
+This project is based on SkyGFX by aap. See the original SkyGFX license for details.
+
+SMAA is licensed under the BSD license. See `SMAA_reference/LICENSE.txt` for details.
+
+FXAA is property of NVIDIA Corporation.
+
+CryEngine reference code is property of Crytek GmbH.
+
+Rendering techniques inspired by Rockstar Games titles (GTA IV, GTA V, RDR2).
+
+O3DE reference code is licensed under the Apache 2.0 license.
