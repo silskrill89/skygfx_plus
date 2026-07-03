@@ -145,11 +145,9 @@
     <!-- <ClCompile Include="..\src\config.cpp" /> -->
     <ClCompile Include="..\src\custom_mode.cpp" />
     <ClCompile Include="..\src\defaultFuncs.cpp" />
-    <ClCompile Include="..\src\diagnostics.cpp" />
     <ClCompile Include="..\src\envmap.cpp" />
     <ClCompile Include="..\src\extendedplg.cpp" />
     <ClCompile Include="..\src\gta.cpp" />
-    <ClCompile Include="..\src\hooks.cpp" />
     <ClCompile Include="..\src\iv_mode.cpp" />
     <ClCompile Include="..\src\main.cpp" />
     <ClCompile Include="..\src\mobile.cpp" />

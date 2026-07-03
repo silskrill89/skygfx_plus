@@ -1,13 +1,14 @@
 #include "skygfx.h"
 #include "main_exports.h"
-#include "hooks.h"
 #include "neo.h"
 #include "waterPipe.h"
 #include "chars.h"
 #include "ini_parser.hpp"
 #include "debugmenu_public.h"
 #include "ModuleList.hpp"
-#include "diagnostics.h"
+#include <stdarg.h>
+#include <stdio.h>
+#include <excpt.h>
 
 // Stubs for debug menu (excluded for now - no imgui)
 void refreshMenu(void) {}
@@ -1829,7 +1830,326 @@ afterStreamIni(void)
 
 int (*IsAlreadyRunning_orig)();
 
-// InstallAllHooks and InjectDelayedPatches are in hooks.cpp
+// ============================================================
+// DIAGNOSTICS — inline from diagnostics.cpp
+// ============================================================
+
+static char s_logPath[MAX_PATH];
+static int  s_logInit = 0;
+
+const char* diag_getLogPath(void) { return s_logPath; }
+
+static const char *s_logLevelStr[] = { "INFO ", "WARN ", "ERROR", "FATAL" };
+
+static void
+dbglog_internal(LogLevel level, const char *file, int line, const char *func, const char *fmt, va_list ap)
+{
+	char msg[4096];
+	int len = vsnprintf(msg, sizeof(msg), fmt, ap);
+	if(len < 0) return;
+	if(len >= sizeof(msg)) len = sizeof(msg) - 1;
+
+	const char *shortFile = file;
+	for(const char *p = file; *p; p++)
+		if(*p == '\\' || *p == '/') shortFile = p + 1;
+
+	char buf[4096];
+	SYSTEMTIME st;
+	GetLocalTime(&st);
+	int hlen;
+	if(level >= 0)
+		hlen = snprintf(buf, sizeof(buf), "[%02d:%02d:%02d.%03d] [%s] %s:%d %s() - %s\n",
+			st.wHour, st.wMinute, st.wSecond, st.wMilliseconds,
+			s_logLevelStr[level], shortFile, line, func, msg);
+	else
+		hlen = snprintf(buf, sizeof(buf), "[%02d:%02d:%02d.%03d] [TRACE] %s:%d %s() - %s\n",
+			st.wHour, st.wMinute, st.wSecond, st.wMilliseconds,
+			shortFile, line, func, msg);
+	if(hlen < 0 || hlen >= sizeof(buf)) return;
+
+	HANDLE h = CreateFileA(s_logPath, FILE_APPEND_DATA, FILE_SHARE_READ,
+		NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+	if(h == INVALID_HANDLE_VALUE) return;
+	DWORD written;
+	WriteFile(h, buf, hlen, &written, NULL);
+	FlushFileBuffers(h);
+	CloseHandle(h);
+}
+
+void
+dbglog(const char *fmt, ...)
+{
+	va_list ap;
+	va_start(ap, fmt);
+	dbglog_internal(LOG_INFO, "", 0, "", fmt, ap);
+	va_end(ap);
+}
+
+void
+dbglog_loc(LogLevel level, const char *file, int line, const char *func, const char *fmt, ...)
+{
+	va_list ap;
+	va_start(ap, fmt);
+	dbglog_internal(level, file, line, func, fmt, ap);
+	va_end(ap);
+}
+
+static LONG WINAPI
+diag_crashHandler(EXCEPTION_POINTERS *ep)
+{
+	DWORD code = ep->ExceptionRecord->ExceptionCode;
+	if(code == 0xE06D7363)
+		return EXCEPTION_CONTINUE_SEARCH;
+
+	CONTEXT *ctx = ep->ContextRecord;
+	dbglog("CRASH: code=0x%08X at=0x%p EAX=%08X EBX=%08X ECX=%08X EDX=%08X ESI=%08X EDI=%08X EBP=%08X ESP=%08X",
+		code, ep->ExceptionRecord->ExceptionAddress,
+		ctx->Eax, ctx->Ebx, ctx->Ecx, ctx->Edx, ctx->Esi, ctx->Edi, ctx->Ebp, ctx->Esp);
+
+	HMODULE exeMod = GetModuleHandle(NULL);
+	MEMORY_BASIC_INFORMATION mbi = {};
+	VirtualQuery((void*)ctx->Eip, &mbi, sizeof(mbi));
+	HMODULE crashMod = NULL;
+	if(mbi.AllocationBase)
+		crashMod = (HMODULE)mbi.AllocationBase;
+	dbglog("  EIP module: %p (base=%p protect=0x%X)", crashMod, exeMod, mbi.Protect);
+
+	DWORD *frame = (DWORD*)ctx->Ebp;
+	dbglog("  Stack trace:");
+	for(int i = 0; i < 8 && frame && frame != (DWORD*)0xFFFFFFFF; i++){
+		DWORD retAddr = frame[1];
+		MEMORY_BASIC_INFORMATION fmbi = {};
+		VirtualQuery((void*)retAddr, &fmbi, sizeof(fmbi));
+		HMODULE fmod = fmbi.AllocationBase ? (HMODULE)fmbi.AllocationBase : NULL;
+		dbglog("    [%d] EBP=%08X RET=%08X (module=%p)", i, (DWORD)frame, retAddr, fmod);
+		DWORD *next = (DWORD*)frame[0];
+		if(next <= frame) break;
+		frame = next;
+	}
+
+	DWORD *sp = (DWORD*)ctx->Esp;
+	dbglog("  Stack dump (ESP):");
+	for(int i = 0; i < 16; i++)
+		dbglog("    [ESP+0x%02X] = %08X", i*4, sp[i]);
+
+	return EXCEPTION_CONTINUE_SEARCH;
+}
+
+static LONG_PTR s_oldVEH = 0;
+
+void diag_init(const char *logPath) {
+	if(logPath) strncpy(s_logPath, logPath, MAX_PATH - 1);
+	s_logInit = 1;
+	HANDLE hLog = CreateFileA(s_logPath, GENERIC_WRITE, FILE_SHARE_READ, NULL, TRUNCATE_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+	if(hLog != INVALID_HANDLE_VALUE) CloseHandle(hLog);
+}
+
+void diag_installVEH(void) {
+	s_oldVEH = (LONG_PTR)AddVectoredExceptionHandler(1, diag_crashHandler);
+}
+
+void diag_removeVEH(void) {
+	if(s_oldVEH){ RemoveVectoredExceptionHandler((HANDLE)s_oldVEH); s_oldVEH = 0; }
+}
+
+// ============================================================
+// HOOKS — inline from hooks.cpp
+// ============================================================
+
+void hooktexdb(void);
+
+// Forward declaration
+int InjectDelayedPatches(void);
+
+void
+InstallAllHooks(void)
+{
+	InjectHook(0x713C4C, renderMoonMask, PATCH_JUMP);
+	dbglog("  moon mask OK");
+
+	IsAlreadyRunning_orig = (int(*)())(*(int*)(0x74872D+1) + 0x74872D + 5);
+	InjectHook(0x74872D, InjectDelayedPatches);
+	dbglog("  IsAlreadyRunning hook OK");
+
+	InjectHook(0x5BCF14, afterStreamIni, PATCH_JUMP);
+	InjectHook(0x7491C0, myDefaultCallback, PATCH_JUMP);
+	InjectHook(0x5BF8EA, CPlantMgr_Initialise);
+	InjectHook(0x756DFE, rxD3D9DefaultRenderCallback_Hook, PATCH_JUMP);
+	InjectHook(0x5DADB7, fixSeed, PATCH_JUMP);
+	InjectHook(0x5DAE61, saveIntensity, PATCH_JUMP);
+	Patch(0x5DAEC8, setTextureAndColor);
+
+	extern void _rwD3D9VSGetComposedTransformMatrix(void *transformMatrix);
+	InjectHook(0x7646E0, _rwD3D9VSGetComposedTransformMatrix, PATCH_JUMP);
+
+	InjectHook(0x5D9EEB, D3D9RenderDefault_DUAL);
+	InjectHook(0x5D9EFB, D3D9RenderBlack_DUAL);
+	InjectHook(0x4C88F0, 0x5DA610, PATCH_JUMP);
+	InjectHook(0x553AD1, 0x553AE5, PATCH_JUMP);
+	InterceptCall(&CSkidmarks__Render_orig, CSkidmarks__Render, 0x53E175);
+	InterceptCall(&CTagManager__RenderTagForPC, CTagManager__RenderTag, 0x534335);
+	InterceptCall(&CTagManager__SetupAtomic_orig, CTagManager__SetupAtomic, 0x4C4412);
+	*(void**)0xA9AD78 = (void*)TagRenderCB;
+
+	InjectHook(0x704D1E, CPostEffects::ColourFilter_switch);
+	InjectHook(0x704D5D, CPostEffects::Radiosity);
+	InjectHook(0x704FB3, CPostEffects::Radiosity);
+	InjectHook(0x704D48, CPostEffects::DarknessFilter_fix);
+	InjectHook(0x704F4B, CPostEffects::InfraredVision_PS2);
+	InjectHook(0x704F59, CPostEffects::Grain_PS2);
+	InjectHook(0x704EDA, CPostEffects::NightVision_PS2);
+	InjectHook(0x704EE8, CPostEffects::Grain_PS2);
+	InjectHook(0x705078, CPostEffects::Grain_PS2);
+	InjectHook(0x705091, CPostEffects::Grain_PS2);
+	InjectHook(0x53EBE9, CPostEffects::DrawFinalEffects);
+	InjectHook(0x700B6B, CSprite__RenderBufferedOneXLUSprite_Rotate_Aspect);
+	InjectHook(0x44E82E, ps2rand);
+	InjectHook(0x44ECEE, ps2rand);
+	InjectHook(0x42453B, ps2rand);
+	InjectHook(0x42454D, ps2rand);
+	InterceptCall(&PipelinePluginAttach, myPluginAttach, 0x53D903);
+	InjectHook(0x5A3C7D, ps2srand);
+	InjectHook(0x5A3DFB, ps2srand);
+	InjectHook(0x5A3C75, ps2rand);
+	InjectHook(0x5A3CB9, ps2rand);
+	InjectHook(0x5A3CDB, ps2rand);
+	InjectHook(0x5A3CF2, ps2rand);
+	Patch(0x5A3CC8, &ps2randnormalize);
+	Patch(0x5A3CEA, &ps2randnormalize);
+	Patch(0x5A3D05, &ps2randnormalize);
+	InjectHook(0x5A3476, ps2rand);
+	InjectHook(0x5A34AB, ps2rand);
+	InjectHook(0x5A34E0, ps2rand);
+	InjectHook(0x5A3515, ps2rand);
+	Patch(0x5A348D + 2, &ps2randnormalize);
+	Patch(0x5A34C2 + 2, &ps2randnormalize);
+	Patch(0x5A34FB + 2, &ps2randnormalize);
+	Patch(0x5A352F + 2, &ps2randnormalize);
+
+	static float multipassMultiplier = 1000.0f;
+	Patch<float*>(0x73290A+2, &multipassMultiplier);
+
+	Nop(0x733313, 2);
+	Nop(0x73405A, 2);
+	Nop(0x733403, 2);
+	Nop(0x73431A, 2);
+	Nop(0x73444A, 2);
+
+	Patch<float>(0x5DDB3D+1, 78.0f);
+	Nop(0x6E716B, 6);
+	Nop(0x6E7176, 6);
+
+	static float zoffset = 0.0f;
+	Patch(0x553C7D + 2, &zoffset);
+	Nop(0x553C78, 5);
+	Nop(0x553C9A, 5);
+	Nop(0x553CD1, 5);
+	Nop(0x553CEC, 5);
+
+	Patch(0x726516 + 6, 216.1f);
+	Patch(0x726534 + 6, 216.1f);
+	Patch(0x726552 + 6, 216.1f);
+	Patch(0x726570 + 6, 216.1f);
+
+	hooktexdb();
+
+	dbglog("=== InstallAllHooks complete ===");
+}
+
+int
+InjectDelayedPatches()
+{
+	dbglog("InjectDelayedPatches entered");
+	findInis();
+	dbglog("  numConfigs=%d", numConfigs);
+	if(numConfigs == 0) readIni(0);
+	else readIni(1);
+	dbglog("  ini loaded");
+
+	fixingSAMP = ModuleList().Get(L"samp") || ModuleList().Get(L"SAMPGraphicRestore");
+	UG_mod = ModuleList().Get(L"Underground_Core");
+	if(UG_mod)
+		UG_RegisterEventCallback = (void (*)(const char*, bool(*)(void*)))GetProcAddress(UG_mod, "RegisterEventCallback");
+
+	if(UG_RegisterEventCallback){
+		dbglog("  UG EVENTS: initposteffects");
+		UG_RegisterEventCallback("EVENT_INITPOSTEFFECTS", CPostEffects::Initialise_skygfx);
+	}else{
+		dbglog("  InterceptCall Initialise at 0x5BD779");
+		InterceptCall(&CPostEffects::Initialise_orig, CPostEffects::Initialise, 0x5BD779);
+	}
+	InterceptCall(&InitialiseGame, InitialiseGame_hook, 0x748CFB);
+
+	installLCMV2Hooks();
+
+	Nop(0x5BBF6F, 2);
+	Nop(0x5BBF83, 2);
+
+	explicitBuildingPipe = explicitBuildingPipe_tmp;
+
+	if(iCanHasbuildingPipe) hookBuildingPipe();
+	if(iCanHasvehiclePipe) hookVehiclePipe();
+
+	InjectHook(0x5E675E, &FX::GetFxQuality_ped);
+	InjectHook(0x5E676D, &FX::GetFxQuality_ped);
+	InjectHook(0x706BC4, &FX::GetFxQuality_ped);
+	InjectHook(0x706BD3, &FX::GetFxQuality_ped);
+	InjectHook(0x7113B8, &FX::GetFxQuality_stencil);
+	InjectHook(0x711D95, &FX::GetFxQuality_stencil);
+	InjectHook(0x70F9B8, &FX::GetFxQuality_stencil);
+
+	if(fixPcCarLight){
+		Patch<uint>(0x5D88D1 +6, 0);
+		Patch<uint>(0x5D88DB +6, 0);
+		Patch<uint>(0x5D88E5 +6, 0);
+		Patch<uint>(0x5D88F9 +6, 0);
+		Patch<uint>(0x5D8903 +6, 0);
+		Patch<uint>(0x5D890D +6, 0);
+	}
+
+	if(disableClouds) InjectHook(0x714145, 0x71422A, PATCH_JUMP);
+	if(disableGamma) InjectHook(0x74721C, 0x7472F3, PATCH_JUMP);
+	if(iCanHasNeoDrops) hookWaterDrops();
+	if(iCanHasSunGlare) InjectHook(0x6ABCFD, doglare, PATCH_JUMP);
+
+	if(transparentLockon > 0){
+		InjectHook(0x742E33, 0x742EC1, PATCH_JUMP);
+		InjectHook(0x742FE0, 0x743085, PATCH_JUMP);
+	}
+
+	if(fixShadows){
+		static float shadowoffset = 0.0f;
+		Patch(0x709B2D + 2, &shadowoffset);
+		Patch(0x709B8C + 2, &shadowoffset);
+		Patch(0x709BC5 + 2, &shadowoffset);
+		Patch(0x709BF4 + 2, &shadowoffset);
+		Patch(0x709C91 + 2, &shadowoffset);
+		Patch(0x709E9C + 2, &shadowoffset);
+		Patch(0x709EBA + 2, &shadowoffset);
+		Patch(0x709ED5 + 2, &shadowoffset);
+		Patch(0x70B21F + 2, &shadowoffset);
+		Patch(0x70B371 + 2, &shadowoffset);
+		Patch(0x70B4CF + 2, &shadowoffset);
+		Patch(0x70B633 + 2, &shadowoffset);
+		Patch(0x7085A7 + 2, &shadowoffset);
+		*(float*)0x8CD4F0 = 256.0f;
+	}
+
+	if(privateHooks){
+		static const char *loadsc0 = "loadsc0";
+		Patch(0x5901BD + 1, loadsc0);
+		Nop(0x748AA8, 0x748AE7-0x748AA8);
+	}
+
+	InterceptCall(&CWaterLevel__RenderAndEmptyRenderBuffer, CWaterLevel__RenderAndEmptyRenderBuffer_hook, 0x6E8790);
+	InterceptCall(&CWaterLevel__RenderAndEmptyRenderBuffer, CWaterLevel__RenderAndEmptyRenderBuffer_hook, 0x6E8EF1);
+	InterceptCall(&CWaterLevel__RenderAndEmptyRenderBuffer, CWaterLevel__RenderAndEmptyRenderBuffer_hook, 0x6E91E4);
+	InterceptCall(&CWaterLevel__RenderAndEmptyRenderBuffer, CWaterLevel__RenderAndEmptyRenderBuffer_hook, 0x6E9963);
+
+	installMenu();
+	dbglog("=== InjectDelayedPatches complete ===");
+	return FALSE;
+}
 
 BOOL WINAPI
 DllMain(HINSTANCE hInst, DWORD reason, LPVOID)
