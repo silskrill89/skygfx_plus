@@ -23,24 +23,44 @@
 #include "skygfx.h"
 #include "PC_GrassRenderer.h"
 
-// GTA SA fx quality - default to high if not hooked
-int g_fxQuality = 2; // FX_QUALITY_HIGH
-#define FX_QUALITY_LOW  0
-#define FX_QUALITY_MED  1
-#define FX_QUALITY_HIGH 2
-
 extern float &CTimer__ms_fTimeStep;
 extern float &CWeather__Wind;
 extern CVector& CWeather__WindDir;
 
-// Game function wrappers via game memory addresses
-WRAPPER float CGeneral_GetRandomNumberInRange(float min, float max) { EAXJMP(0x4C5410); }
-WRAPPER float CGeneral_GetRandomNumber(void) { EAXJMP(0x4C5210); }
-WRAPPER void CGeneral_SetRandomSeed(uint32 seed) { EAXJMP(0x4C51A0); }
-WRAPPER float CMaths_Sin(float x) { EAXJMP(0x4C4E80); }
-WRAPPER int CMaths_Floor(float x) { EAXJMP(0x4C4F20); }
-WRAPPER int CMaths_Min(int a, int b) { EAXJMP(0x4C4D90); }
-WRAPPER int CMaths_Max(int a, int b) { EAXJMP(0x4C4DC0); }
+#ifndef ASSERT
+#define ASSERT(x)
+#endif
+
+#ifndef ASSERTMSG
+#define ASSERTMSG(x, msg)
+#endif
+
+#ifndef FX_QUALITY_HIGH
+#define FX_QUALITY_HIGH 2
+#endif
+
+static int g_fxQuality = FX_QUALITY_HIGH;
+
+// Stub implementations for missing GTA SA functions
+static uint32 g_randomSeed = 12345;
+
+float CGeneral_GetRandomNumber(void) {
+	g_randomSeed = g_randomSeed * 1103515245 + 12345;
+	return (float)(g_randomSeed & 0x7FFFFFFF) / (float)0x7FFFFFFF;
+}
+
+float CGeneral_GetRandomNumberInRange(float min, float max) {
+	return min + CGeneral_GetRandomNumber() * (max - min);
+}
+
+void CGeneral_SetRandomSeed(uint32 seed) {
+	g_randomSeed = seed;
+}
+
+float CMaths_Sin(float x) { return sinf(x); }
+int CMaths_Floor(float x) { return (int)floorf(x); }
+int CMaths_Min(int a, int b) { return a < b ? a : b; }
+int CMaths_Max(int a, int b) { return a > b ? a : b; }
 
 CVector	CGrassRenderer::m_vecCameraPos;
 float	CGrassRenderer::m_windBending	= 0.0f;
@@ -359,13 +379,13 @@ int32 TriIdx = 0;
 
 				// final_SclXY = SclXY + SclVarXY*rand01()
 				const float	variationXY	= pCurrTriPlant->scale_var_xy;
-				const float	scaleXY		= pCurrTriPlant->scale + variationXY*CGeneral_GetRandomNumberInRange(0.0f, 1.0f);	
+				const float	scaleXY		= pCurrTriPlant->scale.x + variationXY*CGeneral_GetRandomNumberInRange(0.0f, 1.0f);	
 				pRwMatrix->right.x	*= scaleXY;		// scale in XY
 				pRwMatrix->up.y		*= scaleXY;		// scale in XY
 
 				// calculate a z scaling value and apply to matrix
 				const float	variationZ	= pCurrTriPlant->scale_var_z;
-				const float	scaleZ		= pCurrTriPlant->scale + variationZ*CGeneral_GetRandomNumberInRange(0.0f, 1.0f);
+				const float	scaleZ		= pCurrTriPlant->scale.y + variationZ*CGeneral_GetRandomNumberInRange(0.0f, 1.0f);
 				pRwMatrix->at.z		*= scaleZ;			// scale in Z
 				// ----- end of scaling stuff ------
 

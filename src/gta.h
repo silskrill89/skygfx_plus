@@ -1,4 +1,3 @@
-#pragma once
 
 class CGeneral
 {
@@ -14,36 +13,16 @@ CBaseModelInfo *GetModelInfo(CEntity *e);
 struct CVector
 {
 	float x, y, z;
-
+	
 	CVector() : x(0), y(0), z(0) {}
-	CVector(float x, float y, float z) : x(x), y(y), z(z) {}
-
+	CVector(float _x, float _y, float _z) : x(_x), y(_y), z(_z) {}
+	
+	CVector operator-(const CVector &v) const { return CVector(x - v.x, y - v.y, z - v.z); }
+	CVector operator+(const CVector &v) const { return CVector(x + v.x, y + v.y, z + v.z); }
+	CVector operator*(float s) const { return CVector(x * s, y * s, z * s); }
+	
 	float Magnitude() const { return sqrtf(x*x + y*y + z*z); }
-	float MagnitudeSquared() const { return x*x + y*y + z*z; }
-	float Dot(const CVector& b) const { return x*b.x + y*b.y + z*b.z; }
-	CVector Cross(const CVector& b) const {
-		return CVector(y*b.z - z*b.y, z*b.x - x*b.z, x*b.y - y*b.x);
-	}
-	CVector Normalized() const {
-		float mag = Magnitude();
-		if(mag < 1e-6f) return CVector(0, 0, 0);
-		return CVector(x/mag, y/mag, z/mag);
-	}
-	float DistanceTo(const CVector& b) const {
-		float dx = x-b.x, dy = y-b.y, dz = z-b.z;
-		return sqrtf(dx*dx + dy*dy + dz*dz);
-	}
-	CVector Lerp(const CVector& b, float t) const {
-		return CVector(x + (b.x - x)*t, y + (b.y - y)*t, z + (b.z - z)*t);
-	}
-	CVector operator-(const CVector& b) const { return CVector(x-b.x, y-b.y, z-b.z); }
-	CVector operator+(const CVector& b) const { return CVector(x+b.x, y+b.y, z+b.z); }
-	CVector operator*(float s) const { return CVector(x*s, y*s, z*s); }
-	CVector operator/(float s) const { float inv = 1.0f/s; return CVector(x*inv, y*inv, z*inv); }
-	CVector& operator+=(const CVector& b) { x += b.x; y += b.y; z += b.z; return *this; }
-	CVector& operator-=(const CVector& b) { x -= b.x; y -= b.y; z -= b.z; return *this; }
 };
-inline CVector operator*(float s, const CVector& v) { return CVector(s*v.x, s*v.y, s*v.z); }
 
 struct CVector2D
 {
@@ -311,6 +290,29 @@ extern uint8 &CClock__ms_nGameClockHours;
 extern int16 &CWeather__OldWeatherType;
 extern int16 &CWeather__NewWeatherType;
 extern float &CWeather__InterpolationValue;
+extern float &CWeather__CloudCoverage;
+extern float &CWeather__Foggyness;
+
+struct CColourSet {
+	float ambientR, ambientG, ambientB;
+	float ambientObjR, ambientObjG, ambientObjB;
+	float directionalR, directionalG, directionalB;
+	short skyTopR, skyTopG, skyTopB;
+	short skyBotR, skyBotG, skyBotB;
+	short sunCoreR, sunCoreG, sunCoreB;
+	short sunCoronaR, sunCoronaG, sunCoronaB;
+	float sunSize, spriteSize, spriteBrightness;
+	short shadowStrength, lightShadowStrength, poleShadowStrength;
+	float farClip, fogStart, lightsOnGroundBrightness;
+	short lowCloudsR, lowCloudsG, lowCloudsB;
+	short fluffyBottomR, fluffyBottomG, fluffyBottomB;
+	float waterR, waterG, waterB, waterA;
+	float postFx1R, postFx1G, postFx1B, postFx1A;
+	float postFx2R, postFx2G, postFx2B, postFx2A;
+	float cloudAlpha;
+};
+extern CColourSet &CTimeCycle__m_CurrentColours;
+void GetSunDirection(float &sx, float &sy, float &sz);
 
 extern void **rwengine;
 extern RwInt32 &CCustomCarEnvMapPipeline__ms_envMapPluginOffset;

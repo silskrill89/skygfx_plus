@@ -313,3 +313,4 @@ external/microsoft.dxsdk.d3dx.9.29.952.8/
 external/normalmap/
 external/nm_matbuild/
 >>>>>>> master
+.cache/

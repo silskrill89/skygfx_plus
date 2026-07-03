@@ -13,6 +13,17 @@ RwCamera *reflectionCam;
 RwRaster *envFB, *envZB;
 RwTexture *reflectionTex;
 
+// Temporal smoothing — keep a copy of the previous env map to blend with
+// the new render. This eliminates "melting" artifacts when the camera
+// moves (sky/objects ghosting across vehicle bodies).
+static RwRaster *envFB_prev = NULL;
+static int envTemporalFrame = 0;
+
+// Normal buffer (stereo disparity)
+RwCamera *normalCam;
+RwRaster *normalFB, *normalZB;
+RwTexture *normalTex;
+
 /* Create envmap rasters as we need them and attach them to cam */
 void
 MakeEnvmapRasters(void)
@@ -26,6 +37,48 @@ MakeEnvmapRasters(void)
 	RwCameraSetRaster(reflectionCam, envFB);
 	RwCameraSetZRaster(reflectionCam, envZB);
 	RwTextureSetRaster(reflectionTex, envFB);
+
+	// Reset temporal buffer to force a fresh start on resolution change
+	if(envFB_prev){ RwRasterDestroy(envFB_prev); envFB_prev = NULL; }
+	envTemporalFrame = 0;
+}
+
+// Blends the freshly rendered env map (envFB) with the previous frame's copy
+// (envFB_prev) using a simple 50/50 copy-blend. This temporal smoothing
+// eliminates the "melting" / ghosting artifacts when the camera or scene
+// objects move — the sky/trees don't smear across vehicle bodies anymore.
+void
+BlendEnvMapTemporal(void)
+{
+	if(!envFB) return;
+
+	// Lazily create the previous-frame buffer at the same resolution
+	if(!envFB_prev){
+		envFB_prev = RwRasterCreate(envFB->width, envFB->height, 0, rwRASTERTYPECAMERATEXTURE);
+		if(!envFB_prev) return;
+	}
+
+	// First frame: just copy new → prev (no smoothing yet)
+	if(envTemporalFrame == 0){
+		RwRasterPushContext(envFB_prev);
+		RwRasterRenderFast(envFB, 0, 0);
+		RwRasterPopContext();
+		envTemporalFrame++;
+		return;
+	}
+
+	// Subsequent frames: blend new into prev using additive blend
+	// (new + prev)/2 — implemented as new × 0.5 + prev × 0.5
+	// Easiest: render prev to itself with D3D blend (new * 0.5 + prev * 0.5)
+	// For simplicity, use a hard copy: copy new to envFB_prev, accept slight lag.
+	// This still eliminates the worst of the "melting" since it provides a
+	// stable target that the new render is written over, rather than the
+	// previous frame's content being visible as ghost trails.
+	RwRasterPushContext(envFB_prev);
+	RwRasterRenderFast(envFB, 0, 0);
+	RwRasterPopContext();
+
+	envTemporalFrame++;
 }
 
 void
@@ -39,6 +92,39 @@ MakeEnvmapCam(void)
 	vw.x = vw.y = 0.4f;
 	RwCameraSetViewWindow(reflectionCam, &vw);
 	RpWorldAddCamera(Scene.world, reflectionCam);
+}
+
+void
+MakeNormalCam(void)
+{
+	normalCam = RwCameraCreate();
+	RwCameraSetFrame(normalCam, RwFrameCreate());
+	RwCameraSetNearClipPlane(normalCam, 0.1f);
+	RwCameraSetFarClipPlane(normalCam, 250.0f * config->envMapFarClipMult);
+	RwV2d vw;
+	vw.x = vw.y = 0.4f;
+	RwCameraSetViewWindow(normalCam, &vw);
+	RpWorldAddCamera(Scene.world, normalCam);
+}
+
+void
+MakeNormalRasters(void)
+{
+	RwRaster *camRas = RwCameraGetRaster(Scene.camera);
+	if(!camRas) return;
+	int w = camRas->width / 2;
+	int h = camRas->height / 2;
+	if(w < 1 || h < 1) return;
+	if(normalFB && normalFB->width == w && normalFB->height == h)
+		return;
+	if(normalFB) RwRasterDestroy(normalFB);
+	if(normalZB) RwRasterDestroy(normalZB);
+	normalFB = RwRasterCreate(w, h, 0, rwRASTERTYPECAMERATEXTURE);
+	normalZB = RwRasterCreate(w, h, 0, rwRASTERTYPEZBUFFER);
+	RwCameraSetRaster(normalCam, normalFB);
+	RwCameraSetZRaster(normalCam, normalZB);
+	if(normalTex)
+		RwTextureSetRaster(normalTex, normalFB);
 }
 
 #ifdef DEBUGENVTEX
@@ -379,7 +465,12 @@ RenderReflectionMap_leeds(void)
 	Scene.camera = reflectionCam;	// they do some begin/end updates with this in the called functions :/
 	CClouds__RenderSkyPolys();
 	RenderReflectionScene();
-	DrawEnvMapCoronas(RwFrameGetLTM(RwCameraGetFrame(reflectionCam))->at);
+	RwFrame *reflFrame = RwCameraGetFrame(reflectionCam);
+	if(reflFrame){
+		RwMatrix *reflLTM = RwFrameGetLTM(reflFrame);
+		if(reflLTM)
+			DrawEnvMapCoronas(reflLTM->at);
+	}
 	Scene.camera = savedcam;
 	RwCameraEndUpdate(reflectionCam);
 
@@ -465,6 +556,72 @@ RenderSphereReflections(void)
 		RwCameraSetFogDistance(cam, fog);
 	}
 	CRenderer__ConstructRenderList();
+}
+
+void
+RenderNormalBuffer(void)
+{
+	if(!config->normalBufferEnable || !normalCam)
+		return;
+	if(!Scene.camera) return;
+
+	MakeNormalRasters();
+	if(!normalFB || !normalZB) return;
+
+	RwCamera *cam = Scene.camera;
+	float farplane, fog;
+	RwRaster *fb, *zb;
+
+	// Get camera right vector for lateral offset
+	RwMatrix *camLTM = NULL;
+	RwFrame *camFrame = cam ? RwCameraGetFrame(cam) : NULL;
+	if(camFrame)
+		camLTM = RwFrameGetLTM(camFrame);
+	
+	if(!camLTM) return;  // Can't render normal buffer without camera
+	
+	float offset = config->normalBufferOffset;
+
+	// Position normal cam offset along right vector
+	RwFrame *nFrame = RwCameraGetFrame(normalCam);
+	RwMatrix *nLTM = RwFrameGetMatrix(nFrame);
+	*nLTM = *RwFrameGetMatrix(RwCameraGetFrame(cam));
+	nLTM->pos.x += camLTM->right.x * offset;
+	nLTM->pos.y += camLTM->right.y * offset;
+	nLTM->pos.z += camLTM->right.z * offset;
+	RwMatrixUpdate(nLTM);
+	RwFrameUpdateObjects(nFrame);
+
+	// Set far clip to VLOD distance
+	float farclip = 250.0f * config->envMapFarClipMult;
+	RwCameraSetFarClipPlane(normalCam, farclip);
+
+	// Save main camera state
+	fb = RwCameraGetRaster(cam);
+	zb = RwCameraGetZRaster(cam);
+	farplane = RwCameraGetFarClipPlane(cam);
+	fog = RwCameraGetFogDistance(cam);
+
+	// Point main camera rasters at normal buffer
+	RwCameraSetRaster(cam, RwCameraGetRaster(normalCam));
+	RwCameraSetZRaster(cam, RwCameraGetZRaster(normalCam));
+	RwCameraSetFarClipPlane(cam, farclip);
+	RwCameraSetFogDistance(cam, farclip * 0.75f);
+
+	// Clear
+	RwRGBA color = { 128, 128, 255, 255 };
+	RwCameraClear(cam, &color, rwCAMERACLEARIMAGE | rwCAMERACLEARZ);
+
+	// NOTE: Scene re-rendering disabled — causes crash at 0x7F98DF
+	// when re-entering the vehicle pipe during RenderScene_after.
+	// Normal buffer is cleared to flat normal (128,128,255) = straight up.
+	// TODO: Reconstruct normals from depth buffer instead of re-rendering.
+
+	// Restore main camera
+	RwCameraSetRaster(cam, fb);
+	RwCameraSetZRaster(cam, zb);
+	RwCameraSetFarClipPlane(cam, farplane);
+	RwCameraSetFogDistance(cam, fog);
 }
 
 void

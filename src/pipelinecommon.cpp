@@ -1,13 +1,38 @@
 
 #include "skygfx.h"
-#include "d3d9helper.h"
+#include <d3d9types.h>
 #include <DirectXMath.h>
 
 void *SMAA = nullptr;
+void *SMAA_Edge = nullptr;
+void *SMAA_EdgeNormal = nullptr;
+void *SMAA_EdgeDepth = nullptr;
+void *SMAA_EdgeCombined = nullptr;
+void *SMAA_EdgeMotionDepth = nullptr;
+void *SMAA_BlendWeight = nullptr;
+void *SMAA_BlendNeighbor = nullptr;
+void *SMAA_Temporal = nullptr;
 void *SSAO = nullptr;
+void *SSAO_VertexDepth = nullptr;
+void *MotionBlur_Burnout = nullptr;
+void *ColorFilter_CrossMix = nullptr;
+void *SSS_Blur = nullptr;
+void *VehiclePaint_GTAIV = nullptr;
+void *Water_Parallax = nullptr;
+void *Water_VS = nullptr;
+void *VehiclePBR_Modern = nullptr;
+void *Glass_Vehicle = nullptr;
+void *Rubber_Vehicle = nullptr;
+void *Rubber_Vehicle_Modern = nullptr;
+void *CarPaint_Reflections = nullptr;
+void *PBR_Lighting = nullptr;
+void *ClampShader = nullptr;
+void *DynamicSky = nullptr;
+void *SkinPBR = nullptr;
+void *NormalBufferShader = nullptr;
+void *PipeChainShader = nullptr;
 void *GTAIV_PS = nullptr;
-void *gtaivVehicleVS = nullptr, *gtaivVehiclePS = nullptr;
-void *gtaivBuildingVS = nullptr, *gtaivBuildingPS = nullptr;
+
 void *gtaivFPVS = nullptr, *gtaivFPPS = nullptr;
 
 typedef D3DMATRIX D3DXMATRIX;
@@ -126,7 +151,10 @@ static DirectX::XMMATRIX pipeWorldMat, pipeViewMat, pipeProjMat;
 void
 pipeGetComposedTransformMatrix(RpAtomic *atomic, float *out)
 {
-	RwMatrix *world = RwFrameGetLTM(RpAtomicGetFrame(atomic));
+	if(!atomic){ memset(out, 0, 64); return; }
+	RwFrame *frame = RpAtomicGetFrame(atomic);
+	if(!frame){ memset(out, 0, 64); return; }
+	RwMatrix *world = RwFrameGetLTM(frame);
 
 	RwToD3DMatrix(&pipeWorldMat, world);
 	transpose(&pipeViewMat, &_RwD3D9D3D9ViewTransform);
@@ -156,12 +184,22 @@ pipeGetLeedsEnvMapMatrix(RpAtomic *atomic, float *out)
 {
 	DirectX::XMMATRIX tmp;
 
-	RwMatrix *world = RwFrameGetLTM(RpAtomicGetFrame(atomic));
+	if(!atomic){ memset(out, 0, 64); return; }
+	RwFrame *frame = RpAtomicGetFrame(atomic);
+	if(!frame){ memset(out, 0, 64); return; }
+	RwMatrix *world = RwFrameGetLTM(frame);
 	RwCamera *cam = (RwCamera*)RWSRCGLOBAL(curCamera);
 
 	float view[16];
 	// Kill pitch in camera matrix
-	RwMatrix mat = *RwFrameGetLTM(RwCameraGetFrame(cam));
+	RwMatrix mat;
+	memset(&mat, 0, sizeof(mat));
+	RwFrame *camFrame = cam ? RwCameraGetFrame(cam) : NULL;
+	if(camFrame){
+		RwMatrix *camLTM = RwFrameGetLTM(camFrame);
+		if(camLTM)
+			mat = *camLTM;
+	}
 	mat.pos.x = 0.0f;
 	mat.pos.y = 0.0f;
 	mat.pos.z = 0.0f;
@@ -250,7 +288,9 @@ pipeUploadLightDirection(RpLight *light, int loc)
 {
 	float c[4];
 	if(RpLightGetFlags(light) & rpLIGHTLIGHTATOMICS){
-		RwV3d *at = RwMatrixGetAt(RwFrameGetLTM(RpLightGetFrame(light)));
+		RwFrame *lf = RpLightGetFrame(light);
+		if(!lf){ pipeUploadZero(loc); return; }
+		RwV3d *at = RwMatrixGetAt(RwFrameGetLTM(lf));
 		c[0] = at->x;
 		c[1] = at->y;
 		c[2] = at->z;
@@ -265,7 +305,9 @@ pipeUploadLightDirectionPS(RpLight *light, int loc)
 {
 	float c[4];
 	if(RpLightGetFlags(light) & rpLIGHTLIGHTATOMICS){
-		RwV3d *at = RwMatrixGetAt(RwFrameGetLTM(RpLightGetFrame(light)));
+		RwFrame *lf = RpLightGetFrame(light);
+		if(!lf){ pipeUploadZeroPS(loc); return; }
+		RwV3d *at = RwMatrixGetAt(RwFrameGetLTM(lf));
 		c[0] = at->x;
 		c[1] = at->y;
 		c[2] = at->z;
@@ -280,7 +322,9 @@ pipeUploadLightDirectionLocal(RpLight *light, RwMatrix *m, int loc)
 {
 	float c[4];
 	if(RpLightGetFlags(light) & rpLIGHTLIGHTATOMICS){
-		RwV3d *at = RwMatrixGetAt(RwFrameGetLTM(RpLightGetFrame(light)));
+		RwFrame *lf = RpLightGetFrame(light);
+		if(!lf){ pipeUploadZero(loc); return; }
+		RwV3d *at = RwMatrixGetAt(RwFrameGetLTM(lf));
 		RwV3dTransformVector((RwV3d*)c, at, m);
 		c[3] = 1.0f;
 		RwD3D9SetVertexShaderConstant(loc, (void*)c, 1);
@@ -292,7 +336,9 @@ void
 pipeUploadLightDirectionInv(RpLight *light, int loc)
 {
 	float c[4];
-	RwV3d *at = RwMatrixGetAt(RwFrameGetLTM(RpLightGetFrame(light)));
+	RwFrame *lf = RpLightGetFrame(light);
+	if(!lf){ pipeUploadZero(loc); return; }
+	RwV3d *at = RwMatrixGetAt(RwFrameGetLTM(lf));
 	c[0] = -at->x;
 	c[1] = -at->y;
 	c[2] = -at->z;
@@ -362,73 +408,107 @@ makeVSfromFile(char* fileName, void** sh)
 
 extern void dbglog(const char *fmt, ...);
 
+static bool shadersCreated = false;
+
 void
 CreateShaders(void)
 {
+	if(shadersCreated){
+		dbglog("CreateShaders: already created, skipping");
+		return;
+	}
 	dbglog("CreateShaders started");
 
-	// postfx
-	makePS(IDR_IIITRAILSPS, &iiiTrailsPS);
+	// PostFX
 	makePS(IDR_VCTRAILSPS, &vcTrailsPS);
+	makePS(IDR_MODERNCOLORFILTERPS, &modernColorFilterPS);
 	makePS(IDR_GRADINGPS, &gradingPS);
 	makePS(IDR_CONTRASTPS, &contrastPS);
 	makePS(IDR_BLURPS, &blurPS);
 	makePS(IDR_RADIOSITYPS, &radiosityPS);
 
-	makePS(IDR_SIMPLEPS, &simplePS);
-	makePS(IDR_SIMPLESTOCHASTICPS, &simpleStochasticPS);
-
 	// SSAO & SMAA
-	dbglog("  loading SSAO shader...");
 	makePS(IDR_SSAOPS, &SSAO);
-	dbglog("  SSAO=%p", SSAO);
-	dbglog("  loading SMAA shader...");
 	makePS(IDR_SMAAPS, &SMAA);
-	dbglog("  SMAA=%p", SMAA);
+	makePS(IDR_SMAAEDGEPS, &SMAA_Edge);
+	makePS(IDR_SMAAEDGENORMALPS, &SMAA_EdgeNormal);
+	makePS(IDR_SMAAEDGEDEPTHPS, &SMAA_EdgeDepth);
+	makePS(IDR_SMAAEDGECOMBINEDPS, &SMAA_EdgeCombined);
+	makePS(IDR_SMAAEDGEMOTIONDEPTHPS, &SMAA_EdgeMotionDepth);
+	makePS(IDR_SMAATEMPPS, &SMAA_Temporal);
+	makePS(IDR_SSAO_VERTEXDEPTH, &SSAO_VertexDepth);
 
-	// GTA IV Mode
-	dbglog("  loading GTAIV shader...");
+	// PostFX effects
+	makePS(IDR_MOTIONBLUR_BURNOUT, &MotionBlur_Burnout);
+	makePS(IDR_COLORFILTER_CROSSMIX, &ColorFilter_CrossMix);
+	makePS(IDR_SSS_BLUR, &SSS_Blur);
+	makePS(IDR_NORMALBUFFERPS, &NormalBufferShader);
+	makePS(IDR_PIPECHAINPS, &PipeChainShader);
+
+	// GTA IV
 	makePS(IDR_GTAIVPS, &GTAIV_PS);
-	dbglog("  GTAIV=%p", GTAIV_PS);
-	dbglog("  loading GTAIV forward pass shaders...");
-	makeVS(IDR_GTAIVVEHICLEVS, &gtaivVehicleVS);
-	makePS(IDR_GTAIVVEHICLEPS, &gtaivVehiclePS);
-	makeVS(IDR_GTAIVBUILDINGVS, &gtaivBuildingVS);
-	makePS(IDR_GTAIVBUILDINGPS, &gtaivBuildingPS);
-	dbglog("  GTAIV vehicle VS=%p PS=%p", gtaivVehicleVS, gtaivVehiclePS);
-	dbglog("  GTAIV building VS=%p PS=%p", gtaivBuildingVS, gtaivBuildingPS);
-	dbglog("  loading GTAIV Forward+ shaders...");
-	makeVS(IDR_GTAIVFPVS, &gtaivFPVS);
-	makePS(IDR_GTAIVFPPS, &gtaivFPPS);
-	dbglog("  GTAIV FP VS=%p PS=%p", gtaivFPVS, gtaivFPPS);
 
-	// vehicles
+	// SMAA blend
+	makePS(IDR_SMAABLENDWEIGHTPS, &SMAA_BlendWeight);
+	makePS(IDR_SMAABLENDNEIGHBORPS, &SMAA_BlendNeighbor);
+
+	// PBR / Modern
+	makePS(IDR_VEHICLEPAINT_GTAIV, &VehiclePaint_GTAIV);
+	makePS(IDR_WATER_PARALLAX, &Water_Parallax);
+	makeVS(IDR_WATER_VS, &Water_VS);
+	makePS(IDR_VEHICLEPBR_MODERN, &VehiclePBR_Modern);
+	makePS(IDR_GLASS_VEHICLE, &Glass_Vehicle);
+	makePS(IDR_RUBBER_VEHICLE, &Rubber_Vehicle);
+	makePS(IDR_RUBBER_VEHICLE_MODERN, &Rubber_Vehicle_Modern);
+	makePS(IDR_CARPAINT_REFL, &CarPaint_Reflections);
+	makePS(IDR_PBR_LIGHTING, &PBR_Lighting);
+	makePS(IDR_CLAMP, &ClampShader);
+	makePS(IDR_DYNAMICSKY, &DynamicSky);
+	makePS(IDR_SKINPBR, &SkinPBR);
+
+	// Utility shaders
+	makePS(IDR_SIMPLEPS, &simplePS);
+
+	// Vehicle legacy (needed by CAR_ENV/CAR_MODERN _Env path)
 	makeVS(IDR_VEHICLEVS, &vehiclePipeVS);
+	makeVS(IDR_VEHICLEPBRVS, &vehiclePBRVS);
 	makeVS(IDR_PS2CARFXVS, &ps2CarFxVS);
-	makePS(IDR_PS2ENVSPECFXPS, &ps2EnvSpecFxPS);	// also building
 	makeVS(IDR_SPECCARFXVS, &specCarFxVS);
 	makePS(IDR_SPECCARFXPS, &specCarFxPS);
 	makeVS(IDR_XBOXCARVS, &xboxCarVS);
 	makeVS(IDR_LEEDSCARFXVS, &leedsCarFxVS);
 	makeVS(IDR_MOBILEVEHICLEVS, &mobileVehiclePipeVS);
 	makePS(IDR_MOBILEVEHICLEPS, &mobileVehiclePipePS);
-	makeVS(IDR_ENVCARVS, &envCarVS);
-	makePS(IDR_ENVCARPS, &envCarPS);
 
-	// building
+	// Building legacy
 	makeVS(IDR_PS2BUILDINGVS, &ps2BuildingVS);
 	makeVS(IDR_PS2BUILDINGFXVS, &ps2BuildingFxVS);
+	makeVS(IDR_PS2BUILDINGWINDVS, &ps2BuildingWindVS);
 	makeVS(IDR_XBOXBUILDINGVS, &xboxBuildingVS);
 	makePS(IDR_XBOXBUILDINGPS, &xboxBuildingPS);
 	makePS(IDR_XBOXBUILDINGSTOCHASTICPS, &xboxBuildingStochasticPS);
+	makeVS(IDR_XBOXBUILDINGWINDVS, &xboxBuildingWindVS);
+	makeVS(IDR_SPHEREBUILDINGVS, &sphereBuildingVS);
 	makePS(IDR_SIMPLEDETAILPS, &simpleDetailPS);
 	makePS(IDR_SIMPLEDETAILSTOCHASTICPS, &simpleDetailStochasticPS);
 	makePS(IDR_SIMPLEFOGPS, &simpleFogPS);
-	makeVS(IDR_SPHEREBUILDINGVS, &sphereBuildingVS);
 
-	makeVS(IDR_XBOXBUILDINGWINDVS, &xboxBuildingWindVS);
-	makeVS(IDR_PS2BUILDINGWINDVS, &ps2BuildingWindVS);
+	shadersCreated = true;
+	dbglog("CreateShaders: done");
+}
 
-	// custom
-	//makeVSfromFile("test.fx", &xboxBuildingWindVS);
+// ============================================================
+// Unified PBR constant upload — single source of truth for c22/c23 layout.
+// Both vehicle and building pipes MUST call this to avoid param-order bugs.
+//
+// c22 = {glossiness, specular, pipeParam3, pipeParam4}
+// c23 = {pipeParam5, pipeParam6, pipeParam7, 0}
+// ============================================================
+void pipeUploadPBR(float glossiness, float specular, float c22_3, float c22_4,
+                   float c23_1, float c23_2, float c23_3)
+{
+	float c22[4] = { glossiness, specular, c22_3, c22_4 };
+	float c23[4] = { c23_1, c23_2, c23_3, 0.0f };
+	RwD3D9SetPixelShaderConstant(22, c22, 1);
+	RwD3D9SetPixelShaderConstant(23, c23, 1);
 }
