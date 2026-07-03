@@ -60,7 +60,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>rsc_CompanyName="aap";rsc_LegalCopyright="";rsc_FileVersion="4.2.0.0";rsc_ProductVersion="4.2.0.0";rsc_InternalName="skygfx";rsc_ProductName="skygfx";rsc_OriginalFilename="skygfx.dll";rsc_FileDescription="https://github.com/aap";rsc_UpdateUrl="https://github.com/aap/skygfx";NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>E:\SDKs\imgui-master;E:\SDKs\imgui-master\backends;E:\SDKs\plugin-sdk-master\plugin_sa;E:\SDKs\normalmap_byDK_1.01\normalmap_byDK_1.01\sources;E:\dev(dave)\Sa_dev\GTASource\GTA SA RE\source;..\external\injector\include;..\external;..\external\d3d9;..\resources;..\shaders;..\src;E:\SDKs\Renderware 3.7 SDK (For Windows) Full\RWSDK37\Graphics\rwsdk\include\d3d9;C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include;C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\um;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>E:\SDKs\imgui-master;E:\SDKs\imgui-master\backends;E:\SDKs\plugin-sdk-master\plugin_sa;E:\SDKs\normalmap_byDK_1.01\normalmap_byDK_1.01\sources;E:\dev(dave)\releases\GTASource\gta-reversed-master;..\external\injector\include;..\external;..\external\d3d9;..\resources;..\shaders;..\src;E:\SDKs\Renderware 3.7 SDK (For Windows) Full\RWSDK37\Graphics\rwsdk\include\d3d9;C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include;C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\um;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -72,7 +72,7 @@
     </ClCompile>
     <ResourceCompile>
       <PreprocessorDefinitions>rsc_CompanyName=\"aap\";rsc_LegalCopyright=\"\";rsc_FileVersion=\"4.2.0.0\";rsc_ProductVersion=\"4.2.0.0\";rsc_InternalName=\"skygfx\";rsc_ProductName=\"skygfx\";rsc_OriginalFilename=\"skygfx.dll\";rsc_FileDescription=\"https://github.com/aap\";rsc_UpdateUrl=\"https://github.com/aap/skygfx\";NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>E:\SDKs\imgui-master;E:\SDKs\imgui-master\backends;E:\SDKs\plugin-sdk-master\plugin_sa;E:\SDKs\normalmap_byDK_1.01\normalmap_byDK_1.01\sources;E:\dev(dave)\Sa_dev\GTASource\GTA SA RE\source;..\external\injector\include;..\external;..\external\d3d9;..\resources;..\shaders;..\src;E:\SDKs\Renderware 3.7 SDK (For Windows) Full\RWSDK37\Graphics\rwsdk\include\d3d9;C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>E:\SDKs\imgui-master;E:\SDKs\imgui-master\backends;E:\SDKs\plugin-sdk-master\plugin_sa;E:\SDKs\normalmap_byDK_1.01\normalmap_byDK_1.01\sources;E:\dev(dave)\releases\GTASource\gta-reversed-master;..\external\injector\include;..\external;..\external\d3d9;..\resources;..\shaders;..\src;E:\SDKs\Renderware 3.7 SDK (For Windows) Full\RWSDK37\Graphics\rwsdk\include\d3d9;C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -95,7 +95,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>rsc_CompanyName="aap";rsc_LegalCopyright="";rsc_FileVersion="4.2.0.0";rsc_ProductVersion="4.2.0.0";rsc_InternalName="skygfx";rsc_ProductName="skygfx";rsc_OriginalFilename="skygfx.dll";rsc_FileDescription="https://github.com/aap";rsc_UpdateUrl="https://github.com/aap/skygfx";DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>E:\SDKs\imgui-master;E:\SDKs\imgui-master\backends;E:\SDKs\plugin-sdk-master\plugin_sa;E:\SDKs\normalmap_byDK_1.01\normalmap_byDK_1.01\sources;E:\dev(dave)\Sa_dev\GTASource\GTA SA RE\source;..\external\injector\include;..\external;..\external\d3d9;..\resources;..\shaders;..\src;E:\SDKs\Renderware 3.7 SDK (For Windows) Full\RWSDK37\Graphics\rwsdk\include\d3d9;C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include;C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\um;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>E:\SDKs\imgui-master;E:\SDKs\imgui-master\backends;E:\SDKs\plugin-sdk-master\plugin_sa;E:\SDKs\normalmap_byDK_1.01\normalmap_byDK_1.01\sources;E:\dev(dave)\releases\GTASource\gta-reversed-master;..\external\injector\include;..\external;..\external\d3d9;..\resources;..\shaders;..\src;E:\SDKs\Renderware 3.7 SDK (For Windows) Full\RWSDK37\Graphics\rwsdk\include\d3d9;C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include;C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\um;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
@@ -104,7 +104,7 @@
     </ClCompile>
     <ResourceCompile>
       <PreprocessorDefinitions>rsc_CompanyName=\"aap\";rsc_LegalCopyright=\"\";rsc_FileVersion=\"4.2.0.0\";rsc_ProductVersion=\"4.2.0.0\";rsc_InternalName=\"skygfx\";rsc_ProductName=\"skygfx\";rsc_OriginalFilename="skygfx.dll";rsc_FileDescription=\"https://github.com/aap\";rsc_UpdateUrl=\"https://github.com/aap/skygfx\";DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>E:\SDKs\imgui-master;E:\SDKs\imgui-master\backends;E:\SDKs\plugin-sdk-master\plugin_sa;E:\SDKs\normalmap_byDK_1.01\normalmap_byDK_1.01\sources;E:\dev(dave)\Sa_dev\GTASource\GTA SA RE\source;..\external\injector\include;..\external;..\external\d3d9;..\resources;..\shaders;..\src;E:\SDKs\Renderware 3.7 SDK (For Windows) Full\RWSDK37\Graphics\rwsdk\include\d3d9;C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>E:\SDKs\imgui-master;E:\SDKs\imgui-master\backends;E:\SDKs\plugin-sdk-master\plugin_sa;E:\SDKs\normalmap_byDK_1.01\normalmap_byDK_1.01\sources;E:\dev(dave)\releases\GTASource\gta-reversed-master;..\external\injector\include;..\external;..\external\d3d9;..\resources;..\shaders;..\src;E:\SDKs\Renderware 3.7 SDK (For Windows) Full\RWSDK37\Graphics\rwsdk\include\d3d9;C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -143,38 +143,38 @@
     <ClCompile Include="..\src\buildingPipe.cpp" />
     <ClCompile Include="..\src\chars.cpp" />
     <!-- <ClCompile Include="..\src\config.cpp" /> -->
-    <ClCompile Include="..\src\custom_mode.cpp" />
+    <!-- <ClCompile Include="..\src\custom_mode.cpp" /> -->
     <ClCompile Include="..\src\defaultFuncs.cpp" />
-    <ClCompile Include="..\src\diagnostics.cpp" />
+    <!-- <ClCompile Include="..\src\diagnostics.cpp" /> -->
     <ClCompile Include="..\src\envmap.cpp" />
     <ClCompile Include="..\src\extendedplg.cpp" />
     <ClCompile Include="..\src\gta.cpp" />
-    <ClCompile Include="..\src\hooks.cpp" />
-    <ClCompile Include="..\src\iv_mode.cpp" />
+    <!-- <ClCompile Include="..\src\hooks.cpp" /> -->
+    <!-- <ClCompile Include="..\src\iv_mode.cpp" /> -->
     <ClCompile Include="..\src\main.cpp" />
-    <ClCompile Include="..\src\mobile.cpp" />
+    <!-- <ClCompile Include="..\src\mobile.cpp" /> -->
     <ClCompile Include="..\src\neo.cpp" />
     <ClCompile Include="..\src\neoCarpipe.cpp" />
     <ClCompile Include="..\src\neoWaterdrops.cpp" />
     <ClCompile Include="..\src\normalmap.cpp" />
     <ClCompile Include="..\src\normmap_stubs.cpp" />
     <ClCompile Include="..\src\PC_GrassRenderer.cpp" />
-    <ClCompile Include="..\src\pc_patched_mode.cpp" />
+    <!-- <ClCompile Include="..\src\pc_patched_mode.cpp" /> -->
     <ClCompile Include="..\src\pipelinecommon.cpp" />
     <ClCompile Include="..\src\pipeplg.cpp" />
     <ClCompile Include="..\src\postfx.cpp" />
     <ClCompile Include="..\src\presets.cpp" />
-    <ClCompile Include="..\src\ps2_mode.cpp" />
+    <!-- <ClCompile Include="..\src\ps2_mode.cpp" /> -->
     <ClCompile Include="..\src\test.cpp" />
     <ClCompile Include="..\src\texdb.cpp" />
     <ClCompile Include="..\src\vehiclePipe.cpp" />
     <ClCompile Include="..\src\vehicles.cpp" />
     <ClCompile Include="..\src\veh_shaders.cpp" />
-    <ClCompile Include="..\src\waterPipe.cpp" />
-    <ClCompile Include="..\src\weather.cpp" />
+    <!-- <ClCompile Include="..\src\waterPipe.cpp" /> -->
+    <!-- <ClCompile Include="..\src\weather.cpp" /> -->
     <ClCompile Include="..\src\wheels.cpp" />
     <ClCompile Include="..\src\wheels_extender.cpp" />
-    <ClCompile Include="..\src\xbox_mode.cpp" />
+    <!-- <ClCompile Include="..\src\xbox_mode.cpp" /> -->
     <!-- <ClCompile Include="..\src\debugmenu_ui.cpp" /> -->
     <!-- <ClCompile Include="..\src\normalmap_plugin.cpp" /> -->
     <!-- <ClCompile Include="..\src\SMAA.cpp" /> -->

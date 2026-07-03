@@ -3,6 +3,10 @@
 #include <string>
 #include <map>
 
+// SSS stubs — disabled for now, kept for future re-enable
+void *SSS_Blur = NULL;
+IDirect3DTexture9 *g_ssaoDepthTex = NULL;
+
 // ============================================================
 // BRDF database for character parts
 // ============================================================

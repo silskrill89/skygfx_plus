@@ -81,7 +81,9 @@ using namespace std;
 class ID3D10IncludeResource : public ID3DXInclude {
     public:
         STDMETHOD(Open)(THIS_ D3DXINCLUDE_TYPE, LPCSTR pFileName, LPCVOID, LPCVOID *ppData, UINT *pBytes)  {
-            HRSRC src = FindResource(GetModuleHandle(nullptr), pFileName, RT_RCDATA);
+            wstringstream s;
+            s << pFileName;
+            HRSRC src = FindResource(GetModuleHandle(nullptr), s.str().c_str(), RT_RCDATA);
             HGLOBAL res = LoadResource(GetModuleHandle(nullptr), src);
 
             *pBytes = SizeofResource(GetModuleHandle(nullptr), src);
@@ -141,7 +143,7 @@ SMAA::SMAA(IDirect3DDevice9 *device, int width, int height, Preset preset, const
      * In case you want it to be loaded from other place change this line accordingly.
      */
     ID3D10IncludeResource includeResource;
-    V(D3DXCreateEffectFromResource(device, nullptr, "SMAA.fx", &defines.front(), &includeResource, flags, nullptr, &effect, nullptr));
+    V(D3DXCreateEffectFromResource(device, nullptr, L"SMAA.fx", &defines.front(), &includeResource, flags, nullptr, &effect, nullptr));
 
     // Vertex declaration for rendering the typical fullscreen quad later on.
     const D3DVERTEXELEMENT9 vertexElements[3] = {

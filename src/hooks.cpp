@@ -183,6 +183,15 @@ InjectDelayedPatches()
 	}
 	InterceptCall(&InitialiseGame, InitialiseGame_hook, 0x748CFB);
 
+	// RenderScene hook — intercept main render function
+	extern uint32_t RenderScene_A;
+	extern void RenderScene_hook(void);
+	InterceptCall(&RenderScene_A, RenderScene_hook, 0x53EABF);
+
+	// Normal map pipeline hook — capture normal map textures
+	extern RpAtomic* CustomPipeAtomicSetup_Hook(RpAtomic* atomic);
+	InjectHook(0x5DA610, CustomPipeAtomicSetup_Hook, PATCH_JUMP);
+
 	// Hook LoadCollisionModelVer2 at entry point to catch collision crashes
 	// from ALL paths (streaming system, COLFILE handler, etc.)
 	installLCMV2Hooks();
