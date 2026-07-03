@@ -34,9 +34,12 @@ MakeEnvmapRasters(void)
 	if(envZB) RwRasterDestroy(envZB);
 	envFB = RwRasterCreate(config->envMapSize, config->envMapSize, 0, rwRASTERTYPECAMERATEXTURE);
 	envZB = RwRasterCreate(config->envMapSize, config->envMapSize, 0, rwRASTERTYPEZBUFFER);
-	RwCameraSetRaster(reflectionCam, envFB);
-	RwCameraSetZRaster(reflectionCam, envZB);
-	RwTextureSetRaster(reflectionTex, envFB);
+	if(reflectionCam){
+		RwCameraSetRaster(reflectionCam, envFB);
+		RwCameraSetZRaster(reflectionCam, envZB);
+	}
+	if(reflectionTex)
+		RwTextureSetRaster(reflectionTex, envFB);
 
 	// Reset temporal buffer to force a fresh start on resolution change
 	if(envFB_prev){ RwRasterDestroy(envFB_prev); envFB_prev = NULL; }
@@ -85,26 +88,34 @@ void
 MakeEnvmapCam(void)
 {
 	reflectionCam = RwCameraCreate();
-	RwCameraSetFrame(reflectionCam, RwFrameCreate());
+	if(!reflectionCam) return;
+	RwFrame *frame = RwFrameCreate();
+	if(!frame) return;
+	RwCameraSetFrame(reflectionCam, frame);
 	RwCameraSetNearClipPlane(reflectionCam, 0.1f);
 	RwCameraSetFarClipPlane(reflectionCam, 250.0f * config->envMapFarClipMult);
 	RwV2d vw;
 	vw.x = vw.y = 0.4f;
 	RwCameraSetViewWindow(reflectionCam, &vw);
-	RpWorldAddCamera(Scene.world, reflectionCam);
+	if(Scene.world)
+		RpWorldAddCamera(Scene.world, reflectionCam);
 }
 
 void
 MakeNormalCam(void)
 {
 	normalCam = RwCameraCreate();
-	RwCameraSetFrame(normalCam, RwFrameCreate());
+	if(!normalCam) return;
+	RwFrame *frame = RwFrameCreate();
+	if(!frame) return;
+	RwCameraSetFrame(normalCam, frame);
 	RwCameraSetNearClipPlane(normalCam, 0.1f);
 	RwCameraSetFarClipPlane(normalCam, 250.0f * config->envMapFarClipMult);
 	RwV2d vw;
 	vw.x = vw.y = 0.4f;
 	RwCameraSetViewWindow(normalCam, &vw);
-	RpWorldAddCamera(Scene.world, normalCam);
+	if(Scene.world)
+		RpWorldAddCamera(Scene.world, normalCam);
 }
 
 void
