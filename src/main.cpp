@@ -1828,7 +1828,106 @@ afterStreamIni(void)
 
 // Debug menu functions are in debugmenu_ui.cpp (installMenu, refreshMenu, etc.)
 
-int (*IsAlreadyRunning_orig)();
+// ============================================================
+// HOOKS — inline, matching backup_original DllMain pattern
+// ============================================================
+
+void hooktexdb(void);
+void installMenu(void);
+extern "C" bool RpNormMapPluginAttach(void);
+
+int
+InjectDelayedPatches()
+{
+	dbglog("InjectDelayedPatches entered");
+
+	findInis();
+	dbglog("  numConfigs=%d", numConfigs);
+	if(numConfigs == 0)
+		readIni(0);
+	else
+		readIni(1);
+	dbglog("  ini loaded");
+
+	fixingSAMP = ModuleList().Get(L"samp") || ModuleList().Get(L"SAMPGraphicRestore");
+	UG_mod = ModuleList().Get(L"Underground_Core");
+	if(UG_mod)
+		UG_RegisterEventCallback = (void (*)(const char*, UG_EventHook))GetProcAddress(UG_mod, "RegisterEventCallback");
+
+	if(UG_RegisterEventCallback){
+		dbglog("  UG EVENTS: initposteffects");
+		UG_RegisterEventCallback("EVENT_INITPOSTEFFECTS", CPostEffects::Initialise_skygfx);
+	}else{
+		dbglog("  InterceptCall Initialise at 0x5BD779");
+		InterceptCall(&CPostEffects::Initialise_orig, CPostEffects::Initialise, 0x5BD779);
+	}
+	InterceptCall(&InitialiseGame, InitialiseGame_hook, 0x748CFB);
+
+	installLCMV2Hooks();
+
+	Nop(0x5BBF6F, 2);
+	Nop(0x5BBF83, 2);
+
+	explicitBuildingPipe = explicitBuildingPipe_tmp;
+
+	if(iCanHasbuildingPipe) hookBuildingPipe();
+	if(iCanHasvehiclePipe) hookVehiclePipe();
+
+	InjectHook(0x5E675E, &FX::GetFxQuality_ped);
+	InjectHook(0x5E676D, &FX::GetFxQuality_ped);
+	InjectHook(0x706BC4, &FX::GetFxQuality_ped);
+	InjectHook(0x706BD3, &FX::GetFxQuality_ped);
+	InjectHook(0x7113B8, &FX::GetFxQuality_stencil);
+	InjectHook(0x711D95, &FX::GetFxQuality_stencil);
+	InjectHook(0x70F9B8, &FX::GetFxQuality_stencil);
+
+	if(fixPcCarLight){
+		Patch<uint>(0x5D88D1 +6, 0);
+		Patch<uint>(0x5D88DB +6, 0);
+		Patch<uint>(0x5D88E5 +6, 0);
+		Patch<uint>(0x5D88F9 +6, 0);
+		Patch<uint>(0x5D8903 +6, 0);
+		Patch<uint>(0x5D890D +6, 0);
+	}
+
+	if(disableClouds) InjectHook(0x714145, 0x71422A, PATCH_JUMP);
+	if(disableGamma) InjectHook(0x74721C, 0x7472F3, PATCH_JUMP);
+	if(iCanHasNeoDrops) hookWaterDrops();
+	if(iCanHasSunGlare) InjectHook(0x6ABCFD, doglare, PATCH_JUMP);
+
+	if(transparentLockon > 0){
+		InjectHook(0x742E33, 0x742EC1, PATCH_JUMP);
+		InjectHook(0x742FE0, 0x743085, PATCH_JUMP);
+	}
+
+	if(fixShadows){
+		static float shadowoffset = 0.0f;
+		Patch(0x709B2D + 2, &shadowoffset);
+		Patch(0x709B8C + 2, &shadowoffset);
+		Patch(0x709BC5 + 2, &shadowoffset);
+		Patch(0x709BF4 + 2, &shadowoffset);
+		Patch(0x709C91 + 2, &shadowoffset);
+		Patch(0x709E9C + 2, &shadowoffset);
+		Patch(0x709EBA + 2, &shadowoffset);
+		Patch(0x709ED5 + 2, &shadowoffset);
+		Patch(0x70B21F + 2, &shadowoffset);
+		Patch(0x70B371 + 2, &shadowoffset);
+		Patch(0x70B4CF + 2, &shadowoffset);
+		Patch(0x70B633 + 2, &shadowoffset);
+		Patch(0x7085A7 + 2, &shadowoffset);
+		*(float*)0x8CD4F0 = 256.0f;
+	}
+
+	if(privateHooks){
+		static const char *loadsc0 = "loadsc0";
+		Patch(0x5901BD + 1, loadsc0);
+		Nop(0x748AA8, 0x748AE7-0x748AA8);
+	}
+
+	installMenu();
+	dbglog("=== InjectDelayedPatches complete ===");
+	return FALSE;
+}
 
 // ============================================================
 // DIAGNOSTICS — inline from diagnostics.cpp
@@ -1952,203 +2051,32 @@ void diag_removeVEH(void) {
 	if(s_oldVEH){ RemoveVectoredExceptionHandler((HANDLE)s_oldVEH); s_oldVEH = 0; }
 }
 
-// ============================================================
-// HOOKS — inline from hooks.cpp
-// ============================================================
-
-void hooktexdb(void);
-
-// Forward declaration
-int InjectDelayedPatches(void);
-
-void
-InstallAllHooks(void)
-{
-	InjectHook(0x713C4C, renderMoonMask, PATCH_JUMP);
-	dbglog("  moon mask OK");
-
-	IsAlreadyRunning_orig = (int(*)())(*(int*)(0x74872D+1) + 0x74872D + 5);
-	InjectHook(0x74872D, InjectDelayedPatches);
-	dbglog("  IsAlreadyRunning hook OK");
-
-	InjectHook(0x5BCF14, afterStreamIni, PATCH_JUMP);
-	InjectHook(0x7491C0, myDefaultCallback, PATCH_JUMP);
-	InjectHook(0x5BF8EA, CPlantMgr_Initialise);
-	InjectHook(0x756DFE, rxD3D9DefaultRenderCallback_Hook, PATCH_JUMP);
-	InjectHook(0x5DADB7, fixSeed, PATCH_JUMP);
-	InjectHook(0x5DAE61, saveIntensity, PATCH_JUMP);
-	Patch(0x5DAEC8, setTextureAndColor);
-
-	extern void _rwD3D9VSGetComposedTransformMatrix(void *transformMatrix);
-	InjectHook(0x7646E0, _rwD3D9VSGetComposedTransformMatrix, PATCH_JUMP);
-
-	InjectHook(0x5D9EEB, D3D9RenderDefault_DUAL);
-	InjectHook(0x5D9EFB, D3D9RenderBlack_DUAL);
-	InjectHook(0x4C88F0, 0x5DA610, PATCH_JUMP);
-	InjectHook(0x553AD1, 0x553AE5, PATCH_JUMP);
-	InterceptCall(&CSkidmarks__Render_orig, CSkidmarks__Render, 0x53E175);
-	InterceptCall(&CTagManager__RenderTagForPC, CTagManager__RenderTag, 0x534335);
-	InterceptCall(&CTagManager__SetupAtomic_orig, CTagManager__SetupAtomic, 0x4C4412);
-	*(void**)0xA9AD78 = (void*)TagRenderCB;
-
-	InjectHook(0x704D1E, CPostEffects::ColourFilter_switch);
-	InjectHook(0x704D5D, CPostEffects::Radiosity);
-	InjectHook(0x704FB3, CPostEffects::Radiosity);
-	InjectHook(0x704D48, CPostEffects::DarknessFilter_fix);
-	InjectHook(0x704F4B, CPostEffects::InfraredVision_PS2);
-	InjectHook(0x704F59, CPostEffects::Grain_PS2);
-	InjectHook(0x704EDA, CPostEffects::NightVision_PS2);
-	InjectHook(0x704EE8, CPostEffects::Grain_PS2);
-	InjectHook(0x705078, CPostEffects::Grain_PS2);
-	InjectHook(0x705091, CPostEffects::Grain_PS2);
-	InjectHook(0x53EBE9, CPostEffects::DrawFinalEffects);
-	InjectHook(0x700B6B, CSprite__RenderBufferedOneXLUSprite_Rotate_Aspect);
-	InjectHook(0x44E82E, ps2rand);
-	InjectHook(0x44ECEE, ps2rand);
-	InjectHook(0x42453B, ps2rand);
-	InjectHook(0x42454D, ps2rand);
-	InterceptCall(&PipelinePluginAttach, myPluginAttach, 0x53D903);
-	InjectHook(0x5A3C7D, ps2srand);
-	InjectHook(0x5A3DFB, ps2srand);
-	InjectHook(0x5A3C75, ps2rand);
-	InjectHook(0x5A3CB9, ps2rand);
-	InjectHook(0x5A3CDB, ps2rand);
-	InjectHook(0x5A3CF2, ps2rand);
-	Patch(0x5A3CC8, &ps2randnormalize);
-	Patch(0x5A3CEA, &ps2randnormalize);
-	Patch(0x5A3D05, &ps2randnormalize);
-	InjectHook(0x5A3476, ps2rand);
-	InjectHook(0x5A34AB, ps2rand);
-	InjectHook(0x5A34E0, ps2rand);
-	InjectHook(0x5A3515, ps2rand);
-	Patch(0x5A348D + 2, &ps2randnormalize);
-	Patch(0x5A34C2 + 2, &ps2randnormalize);
-	Patch(0x5A34FB + 2, &ps2randnormalize);
-	Patch(0x5A352F + 2, &ps2randnormalize);
-
-	static float multipassMultiplier = 1000.0f;
-	Patch<float*>(0x73290A+2, &multipassMultiplier);
-
-	Nop(0x733313, 2);
-	Nop(0x73405A, 2);
-	Nop(0x733403, 2);
-	Nop(0x73431A, 2);
-	Nop(0x73444A, 2);
-
-	Patch<float>(0x5DDB3D+1, 78.0f);
-	Nop(0x6E716B, 6);
-	Nop(0x6E7176, 6);
-
-	static float zoffset = 0.0f;
-	Patch(0x553C7D + 2, &zoffset);
-	Nop(0x553C78, 5);
-	Nop(0x553C9A, 5);
-	Nop(0x553CD1, 5);
-	Nop(0x553CEC, 5);
-
-	Patch(0x726516 + 6, 216.1f);
-	Patch(0x726534 + 6, 216.1f);
-	Patch(0x726552 + 6, 216.1f);
-	Patch(0x726570 + 6, 216.1f);
-
-	hooktexdb();
-
-	dbglog("=== InstallAllHooks complete ===");
+// Normal map plugin hook — captures normal map textures on vehicle atomics
+extern "C" {
+	extern bool RpNormMapAtomicIsInitialized(const RpAtomic *atomic);
+	extern RpMaterial* RpNormMapMaterialSetNormMapTexture(RpMaterial* material, RwTexture* normalmap);
+	extern RwTexture* RpNormMapMaterialGetNormMapTexture(const RpMaterial* material);
 }
 
-int
-InjectDelayedPatches()
+RpAtomic* CustomPipeAtomicSetup_Hook(RpAtomic* atomic)
 {
-	dbglog("InjectDelayedPatches entered");
-	findInis();
-	dbglog("  numConfigs=%d", numConfigs);
-	if(numConfigs == 0) readIni(0);
-	else readIni(1);
-	dbglog("  ini loaded");
-
-	fixingSAMP = ModuleList().Get(L"samp") || ModuleList().Get(L"SAMPGraphicRestore");
-	UG_mod = ModuleList().Get(L"Underground_Core");
-	if(UG_mod)
-		UG_RegisterEventCallback = (void (*)(const char*, bool(*)(void*)))GetProcAddress(UG_mod, "RegisterEventCallback");
-
-	if(UG_RegisterEventCallback){
-		dbglog("  UG EVENTS: initposteffects");
-		UG_RegisterEventCallback("EVENT_INITPOSTEFFECTS", CPostEffects::Initialise_skygfx);
-	}else{
-		dbglog("  InterceptCall Initialise at 0x5BD779");
-		InterceptCall(&CPostEffects::Initialise_orig, CPostEffects::Initialise, 0x5BD779);
+	RpAtomic* result = CCustomCarEnvMapPipeline__CustomPipeAtomicSetup(atomic);
+	if(RpNormMapAtomicIsInitialized && RpNormMapAtomicIsInitialized(atomic)){
+		RpGeometry* geo = RpAtomicGetGeometry(atomic);
+		if(geo){
+			int matCount = RpGeometryGetNumMaterials(geo);
+			for(int i = 0; i < matCount; i++){
+				RpMaterial* mat = RpGeometryGetMaterial(geo, i);
+				if(mat){
+					RwTexture* normalMap = RpNormMapMaterialGetNormMapTexture(mat);
+					if(normalMap){
+						dbglog("Normal map found on vehicle atomic: %s", normalMap->name);
+					}
+				}
+			}
+		}
 	}
-	InterceptCall(&InitialiseGame, InitialiseGame_hook, 0x748CFB);
-
-	installLCMV2Hooks();
-
-	Nop(0x5BBF6F, 2);
-	Nop(0x5BBF83, 2);
-
-	explicitBuildingPipe = explicitBuildingPipe_tmp;
-
-	if(iCanHasbuildingPipe) hookBuildingPipe();
-	if(iCanHasvehiclePipe) hookVehiclePipe();
-
-	InjectHook(0x5E675E, &FX::GetFxQuality_ped);
-	InjectHook(0x5E676D, &FX::GetFxQuality_ped);
-	InjectHook(0x706BC4, &FX::GetFxQuality_ped);
-	InjectHook(0x706BD3, &FX::GetFxQuality_ped);
-	InjectHook(0x7113B8, &FX::GetFxQuality_stencil);
-	InjectHook(0x711D95, &FX::GetFxQuality_stencil);
-	InjectHook(0x70F9B8, &FX::GetFxQuality_stencil);
-
-	if(fixPcCarLight){
-		Patch<uint>(0x5D88D1 +6, 0);
-		Patch<uint>(0x5D88DB +6, 0);
-		Patch<uint>(0x5D88E5 +6, 0);
-		Patch<uint>(0x5D88F9 +6, 0);
-		Patch<uint>(0x5D8903 +6, 0);
-		Patch<uint>(0x5D890D +6, 0);
-	}
-
-	if(disableClouds) InjectHook(0x714145, 0x71422A, PATCH_JUMP);
-	if(disableGamma) InjectHook(0x74721C, 0x7472F3, PATCH_JUMP);
-	if(iCanHasNeoDrops) hookWaterDrops();
-	if(iCanHasSunGlare) InjectHook(0x6ABCFD, doglare, PATCH_JUMP);
-
-	if(transparentLockon > 0){
-		InjectHook(0x742E33, 0x742EC1, PATCH_JUMP);
-		InjectHook(0x742FE0, 0x743085, PATCH_JUMP);
-	}
-
-	if(fixShadows){
-		static float shadowoffset = 0.0f;
-		Patch(0x709B2D + 2, &shadowoffset);
-		Patch(0x709B8C + 2, &shadowoffset);
-		Patch(0x709BC5 + 2, &shadowoffset);
-		Patch(0x709BF4 + 2, &shadowoffset);
-		Patch(0x709C91 + 2, &shadowoffset);
-		Patch(0x709E9C + 2, &shadowoffset);
-		Patch(0x709EBA + 2, &shadowoffset);
-		Patch(0x709ED5 + 2, &shadowoffset);
-		Patch(0x70B21F + 2, &shadowoffset);
-		Patch(0x70B371 + 2, &shadowoffset);
-		Patch(0x70B4CF + 2, &shadowoffset);
-		Patch(0x70B633 + 2, &shadowoffset);
-		Patch(0x7085A7 + 2, &shadowoffset);
-		*(float*)0x8CD4F0 = 256.0f;
-	}
-
-	if(privateHooks){
-		static const char *loadsc0 = "loadsc0";
-		Patch(0x5901BD + 1, loadsc0);
-		Nop(0x748AA8, 0x748AE7-0x748AA8);
-	}
-
-	InterceptCall(&CWaterLevel__RenderAndEmptyRenderBuffer, CWaterLevel__RenderAndEmptyRenderBuffer_hook, 0x6E8790);
-	InterceptCall(&CWaterLevel__RenderAndEmptyRenderBuffer, CWaterLevel__RenderAndEmptyRenderBuffer_hook, 0x6E8EF1);
-	InterceptCall(&CWaterLevel__RenderAndEmptyRenderBuffer, CWaterLevel__RenderAndEmptyRenderBuffer_hook, 0x6E91E4);
-	InterceptCall(&CWaterLevel__RenderAndEmptyRenderBuffer, CWaterLevel__RenderAndEmptyRenderBuffer_hook, 0x6E9963);
-
-	installMenu();
-	dbglog("=== InjectDelayedPatches complete ===");
-	return FALSE;
+	return result;
 }
 
 BOOL WINAPI
@@ -2157,14 +2085,13 @@ DllMain(HINSTANCE hInst, DWORD reason, LPVOID)
 	if(reason == DLL_PROCESS_ATTACH){
 		dllModule = hInst;
 
-		// Initialize diagnostics (log file + crash handler)
+		// Construct log path from DLL path (matching backup_original pattern)
 		char logPath[MAX_PATH];
-		GetModuleFileNameA(NULL, logPath, MAX_PATH);
-		char *sl = strrchr(logPath, '\\');
-		if(!sl) sl = strrchr(logPath, '/');
-		if(sl) sl++;
-		else sl = logPath + strlen(logPath);
-		strcpy(sl, "scripts\\skygfx_dbg.log");
+		GetModuleFileNameA(dllModule, logPath, MAX_PATH);
+		char *p = strrchr(logPath, '.');
+		if(p) strcpy(p, "_dbg.log");
+		else strcat(logPath, "_dbg.log");
+
 		diag_init(logPath);
 		diag_installVEH();
 
@@ -2177,10 +2104,10 @@ DllMain(HINSTANCE hInst, DWORD reason, LPVOID)
 		dbglog("ver check: 0x82457C=%08X, 0x8245BC=%08X (expect 0x94BF)", v1, v2);
 
 		if(v1 != 0x94BF && v2 == 0x94BF){
-			dbglog("version check FAIL - v1 mismatch (0x%08X != 0x94BF), aborting", v1);
-			return FALSE;
+			dbglog("version check WARNING - v1 mismatch (0x%08X != 0x94BF), continuing anyway", v1);
+		}else{
+			dbglog("version check OK");
 		}
-		dbglog("version check OK");
 
 		if(GetAsyncKeyState(VK_F8) & 0x8000){
 			AllocConsole();
@@ -2193,7 +2120,143 @@ DllMain(HINSTANCE hInst, DWORD reason, LPVOID)
 			configs[i].version = VERSION;
 
 		dbglog("applying hooks...");
-		InstallAllHooks();
+
+		/* Fix order of multiplication */
+		extern void _rwD3D9VSGetComposedTransformMatrix(void *transformMatrix);
+		InjectHook(0x7646E0, _rwD3D9VSGetComposedTransformMatrix, PATCH_JUMP);
+
+		defaultColourLeftUOffset = CPostEffects::m_colourLeftUOffset;
+		defaultColourRightUOffset = CPostEffects::m_colourRightUOffset;
+		defaultColourTopVOffset = CPostEffects::m_colourTopVOffset;
+		defaultColourBottomVOffset = CPostEffects::m_colourBottomVOffset;
+
+		// moon mask
+		InjectHook(0x713C4C, renderMoonMask, PATCH_JUMP);
+		dbglog("  moon mask OK");
+
+		// Apply delayed patches directly from DllMain instead of hooking 0x74872D (IsAlreadyRunning).
+		// This avoids clashing with SilentPatch which hooks the exact same address.
+		dbglog("  applying delayed patches directly...");
+		InjectDelayedPatches();
+		dbglog("  delayed patches OK");
+
+		InjectHook(0x5BCF14, afterStreamIni, PATCH_JUMP);
+		InjectHook(0x7491C0, myDefaultCallback, PATCH_JUMP);
+		InjectHook(0x5BF8EA, CPlantMgr_Initialise);
+		InjectHook(0x756DFE, rxD3D9DefaultRenderCallback_Hook, PATCH_JUMP);
+		InjectHook(0x5DADB7, fixSeed, PATCH_JUMP);
+
+		// Attach normal map plugin for vehicle/vegetation normal maps
+		if(RpNormMapPluginAttach()){
+			dbglog("RpNormMapPluginAttach: success");
+		}else{
+			dbglog("RpNormMapPluginAttach: failed");
+		}
+
+		// Hook normal map pipeline creation to capture normal map textures
+		extern RpAtomic* CustomPipeAtomicSetup_Hook(RpAtomic* atomic);
+		InjectHook(0x5DA610, CustomPipeAtomicSetup_Hook, PATCH_JUMP);
+		InjectHook(0x5DAE61, saveIntensity, PATCH_JUMP);
+		Patch(0x5DAEC8, setTextureAndColor);
+
+		// add dual pass for PC pipeline
+		InjectHook(0x5D9EEB, D3D9RenderDefault_DUAL);
+		InjectHook(0x5D9EFB, D3D9RenderBlack_DUAL);
+
+		// give vehicle pipe to upgrade parts
+		InjectHook(0x4C88F0, 0x5DA610, PATCH_JUMP);
+
+		// jump over code that sets alpha ref to 140 (not on PS2)
+		InjectHook(0x553AD1, 0x553AE5, PATCH_JUMP);
+		InterceptCall(&CSkidmarks__Render_orig, CSkidmarks__Render, 0x53E175);
+
+		/* Don't change tag material */
+		InterceptCall(&CTagManager__RenderTagForPC, CTagManager__RenderTag, 0x534335);
+		InterceptCall(&CTagManager__SetupAtomic_orig, CTagManager__SetupAtomic, 0x4C4412);
+		*(void**)0xA9AD78 = (void*)TagRenderCB;
+
+		// postfx
+		InjectHook(0x704D1E, CPostEffects::ColourFilter_switch);
+		InjectHook(0x704D5D, CPostEffects::Radiosity);
+		InjectHook(0x704FB3, CPostEffects::Radiosity);
+		InjectHook(0x704D48, CPostEffects::DarknessFilter_fix);
+
+		// infrared vision
+		InjectHook(0x704F4B, CPostEffects::InfraredVision_PS2);
+		InjectHook(0x704F59, CPostEffects::Grain_PS2);
+		// night vision
+		InjectHook(0x704EDA, CPostEffects::NightVision_PS2);
+		InjectHook(0x704EE8, CPostEffects::Grain_PS2);
+		// rain
+		InjectHook(0x705078, CPostEffects::Grain_PS2);
+		// unused
+		InjectHook(0x705091, CPostEffects::Grain_PS2);
+
+		InjectHook(0x53EBE9, CPostEffects::DrawFinalEffects);
+
+		// fix pointlight fog
+		InjectHook(0x700B6B, CSprite__RenderBufferedOneXLUSprite_Rotate_Aspect);
+
+		InjectHook(0x44E82E, ps2rand);
+		InjectHook(0x44ECEE, ps2rand);
+		InjectHook(0x42453B, ps2rand);
+		InjectHook(0x42454D, ps2rand);
+
+		InterceptCall(&PipelinePluginAttach, myPluginAttach, 0x53D903);
+
+		// procobj placement
+		InjectHook(0x5A3C7D, ps2srand);
+		InjectHook(0x5A3DFB, ps2srand);
+		InjectHook(0x5A3C75, ps2rand);
+		InjectHook(0x5A3CB9, ps2rand);
+		InjectHook(0x5A3CDB, ps2rand);
+		InjectHook(0x5A3CF2, ps2rand);
+		Patch(0x5A3CC8, &ps2randnormalize);
+		Patch(0x5A3CEA, &ps2randnormalize);
+		Patch(0x5A3D05, &ps2randnormalize);
+		InjectHook(0x5A3476, ps2rand);
+		InjectHook(0x5A34AB, ps2rand);
+		InjectHook(0x5A34E0, ps2rand);
+		InjectHook(0x5A3515, ps2rand);
+		Patch(0x5A348D + 2, &ps2randnormalize);
+		Patch(0x5A34C2 + 2, &ps2randnormalize);
+		Patch(0x5A34FB + 2, &ps2randnormalize);
+		Patch(0x5A352F + 2, &ps2randnormalize);
+
+		// increase multipass distance
+		static float multipassMultiplier = 1000.0f;
+		Patch<float*>(0x73290A+2, &multipassMultiplier);
+
+		// Get rid of the annoying dotproduct check in visibility renderCBs
+		Nop(0x733313, 2);
+		Nop(0x73405A, 2);
+		Nop(0x733403, 2);
+		Nop(0x73431A, 2);
+		Nop(0x73444A, 2);
+
+		// change grass close far to ps2 values
+		Patch<float>(0x5DDB3D+1, 78.0f);
+
+		// High detail water color multiplier
+		Nop(0x6E716B, 6);
+		Nop(0x6E7176, 6);
+
+		// Camera planes in CRenderer::RenderEverythingBarRoads
+		static float zoffset = 0.0f;
+		Patch(0x553C7D + 2, &zoffset);
+		Nop(0x553C78, 5);
+		Nop(0x553C9A, 5);
+		Nop(0x553CD1, 5);
+		Nop(0x553CEC, 5);
+
+		// Fix mirrors
+		Patch(0x726516 + 6, 216.1f);
+		Patch(0x726534 + 6, 216.1f);
+		Patch(0x726552 + 6, 216.1f);
+		Patch(0x726570 + 6, 216.1f);
+
+		hooktexdb();
+
 		dbglog("=== DllMain complete, all hooks applied ===");
 	}
 
