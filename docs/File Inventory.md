@@ -4,31 +4,53 @@
 
 ## Source Files (src/)
 
-### Core
+### Root
 | File | Lines | Purpose |
 |------|-------|---------|
+| `skygfx.h` | ~770 | Root umbrella header, Config struct, externs |
 | `main.cpp` | ~2200 | Entry point, hooks, config, crash handler |
-| `pipelinecommon.cpp` | ~475 | Matrix helpers, shader loading, light uploaders |
-| `skygfx.h` | ~770 | Main header, Config struct, externs |
-| `vehiclePipe.cpp` | ~1675 | All vehicle pipeline render callbacks |
-| `buildingPipe.cpp` | ~950 | Building pipeline render callbacks |
-| `postfx.cpp` | ~800 | SSAO, SMAA, color filters, SSS |
+
+### Core (src/Core/)
+| File | Lines | Purpose |
+|------|-------|---------|
+| `config.cpp` | — | INI parsing, preset configs |
+| `debugmenu_ui.cpp` | — | ImGui debug menu (deferred) |
 | `envmap.cpp` | ~500 | Reflection map rendering, normal camera |
+| `pipelinecommon.cpp` | ~475 | Matrix helpers, shader loading, light uploaders |
+| `postfx.cpp` | ~800 | SSAO, SMAA, color filters, SSS |
+| `presets.cpp` | — | Game preset definitions |
+| `texdb.cpp` | — | Texture database |
+| `veh_shaders.cpp` | — | Vehicle shader data bridge |
+| `vehicles.cpp` | — | Vehicle registry |
+| `wheels_extender.cpp` | — | Wheel extension logic |
+| `RenderPipeline.h/cpp` | — | Unified pipeline controller |
 
-### Configuration
+### Entities (src/entities/)
 | File | Purpose |
 |------|---------|
-| `config.cpp` | INI parsing, preset configs |
-| `presets.cpp` | Game preset definitions |
-| `veh_shaders.cpp` | Vehicle shader data bridge |
-| `vehicles.cpp` | Vehicle registry |
-| `texdb.cpp` | Texture database |
+| `ped.cpp` | Pedestrian rendering |
+| `vehiclePipe.cpp` | All vehicle pipeline render callbacks (~1675 lines) |
+| `buildingPipe.cpp` | Building pipeline render callbacks (~950 lines) |
 
-### Supporting
+### Extras (src/extras/)
 | File | Purpose |
 |------|---------|
-| `RenderPipeline.h/cpp` | Unified pipeline controller |
-| `shaders.h` | Central shader hub header |
+| `normalmap.cpp` | Normal map integration (deferred) |
+| `normalmap_plugin.cpp` | Normal map plugin (deferred) |
+| `carpaint.cpp` | Car paint extras |
+| `clouds.cpp` | Cloud rendering |
+| `deferred.cpp` | Deferred rendering helpers |
+| `edge_detection.cpp` | Edge detection for SMAA |
+| `ssao_extras.cpp` | SSAO enhancements |
+| `vegetation.cpp` | Vegetation rendering |
+| `wind.cpp` | Wind animation |
+| `yuv.cpp` | YCbCr color correction |
+
+### Render (src/render/)
+30 files covering pipeline implementations, shader management, and rendering passes.
+
+### RenderWare (src/rw/)
+14 files for RW engine integration and hooks.
 
 ## Shaders (shaders/)
 
@@ -67,6 +89,7 @@
 | `HairEnhance.hlsl` | Hair anisotropic highlights |
 | `NormalBuffer.hlsl` | Stereo disparity normals |
 | `PipeChain.hlsl` | 4-pass post-processing |
+| `unifiedPipe.hlsl` | Forward+ unified pipeline (WIP) |
 
 ### Includes
 | File | Purpose |
@@ -76,11 +99,21 @@
 | `SubsurfaceScattering.hlsl` | SSS material IDs |
 | `CarPaintNoise.hlsl` | Paint noise functions |
 
+### Additional Shaders (80+ total)
+80+ HLSL files covering building, vehicle, post-processing, and utility shaders.
+
+## Installer
+| File | Purpose |
+|------|---------|
+| `installer/sas_1987.py` | Python SAS 1987 installer |
+
 ## Resources
 | File | Purpose |
 |------|---------|
 | `resources/resource.h` | IDR defines |
 | `resources/Resource.rc` | CSO → IDR mappings |
+| `resources/*.cso` | Pre-compiled shader objects |
+| `resources/*.png` | Texture assets |
 
 ## Build
 | File | Purpose |
@@ -92,3 +125,4 @@
 ## See Also
 - [[Shader Architecture]] — How shaders are organized
 - [[Build System]] — How to build
+- [[Roadmap to Ultimate Mod]] — Development roadmap
