@@ -6,6 +6,8 @@
 #include "ini_parser.hpp"
 #include "debugmenu_public.h"
 #include "ModuleList.hpp"
+#include "diagnostics.h"
+#include <injector\hooking.hpp>
 #include <stdarg.h>
 #include <stdio.h>
 #include <excpt.h>
@@ -940,10 +942,10 @@ InitialiseGame_hook(void)
 	dbglog("InitialiseGame_hook: entered (call #%d)", initCount);
 
 	if(initCount == 1){
-		// Initialize normal map plugin — must run AFTER RwEngineInit()
+		// DISABLED FOR TESTING: Initialize normal map plugin — must run AFTER RwEngineInit()
 		// (InjectDelayedPatches runs at IsAlreadyRunning hook, before RW is ready)
-		normalmap_init();
-		dbglog("InitialiseGame_hook: normalmap_init done");
+		// normalmap_init();
+		// dbglog("InitialiseGame_hook: normalmap_init done");
 
 		if(!UG_RegisterEventCallback)
 			InterceptCall(&RenderScene_A, RenderScene_hook, 0x53EABF);
@@ -960,8 +962,8 @@ InitialiseGame_hook(void)
 		dbglog("InitialiseGame_hook: neoInit done");
 		initTexDB();
 		dbglog("InitialiseGame_hook: initTexDB done");
-		chars_init();
-		dbglog("InitialiseGame_hook: chars_init done");
+		// DISABLED FOR TESTING: chars_init();
+		// dbglog("InitialiseGame_hook: chars_init done");
 	}else{
 		dbglog("InitialiseGame_hook: re-entry detected (call #%d), skipping hooks", initCount);
 	}
@@ -981,6 +983,7 @@ InitialiseGame_hook(void)
 		DWORD storeCount = *(DWORD*)0xB1F650;
 		dbglog("InitialiseGame_hook: CRASH in original! code=0x%08X addr=%p",
 			s_initCrashCode, s_initCrashPtrs->ExceptionRecord->ExceptionAddress);
+		diag_writeMinidump(s_initCrashPtrs);
 		dbglog("  EAX=%08X EBX=%08X ECX=%08X EDX=%08X", ctx->Eax, ctx->Ebx, ctx->Ecx, ctx->Edx);
 		dbglog("  ESI=%08X EDI=%08X EBP=%08X ESP=%08X", ctx->Esi, ctx->Edi, ctx->Ebp, ctx->Esp);
 		dbglog("  EIP=%08X vehicleStoreCount=%d (0x%X)", ctx->Eip, storeCount, storeCount);
@@ -1870,8 +1873,8 @@ InjectDelayedPatches()
 
 	explicitBuildingPipe = explicitBuildingPipe_tmp;
 
-	if(iCanHasbuildingPipe) hookBuildingPipe();
-	if(iCanHasvehiclePipe) hookVehiclePipe();
+	// DISABLED FOR TESTING: if(iCanHasbuildingPipe) hookBuildingPipe();
+	// DISABLED FOR TESTING: if(iCanHasvehiclePipe) hookVehiclePipe();
 
 	InjectHook(0x5E675E, &FX::GetFxQuality_ped);
 	InjectHook(0x5E676D, &FX::GetFxQuality_ped);
@@ -1933,124 +1936,6 @@ InjectDelayedPatches()
 // DIAGNOSTICS — inline from diagnostics.cpp
 // ============================================================
 
-static char s_logPath[MAX_PATH];
-static int  s_logInit = 0;
-
-const char* diag_getLogPath(void) { return s_logPath; }
-
-static const char *s_logLevelStr[] = { "INFO ", "WARN ", "ERROR", "FATAL" };
-
-static void
-dbglog_internal(LogLevel level, const char *file, int line, const char *func, const char *fmt, va_list ap)
-{
-	char msg[4096];
-	int len = vsnprintf(msg, sizeof(msg), fmt, ap);
-	if(len < 0) return;
-	if(len >= sizeof(msg)) len = sizeof(msg) - 1;
-
-	const char *shortFile = file;
-	for(const char *p = file; *p; p++)
-		if(*p == '\\' || *p == '/') shortFile = p + 1;
-
-	char buf[4096];
-	SYSTEMTIME st;
-	GetLocalTime(&st);
-	int hlen;
-	if(level >= 0)
-		hlen = snprintf(buf, sizeof(buf), "[%02d:%02d:%02d.%03d] [%s] %s:%d %s() - %s\n",
-			st.wHour, st.wMinute, st.wSecond, st.wMilliseconds,
-			s_logLevelStr[level], shortFile, line, func, msg);
-	else
-		hlen = snprintf(buf, sizeof(buf), "[%02d:%02d:%02d.%03d] [TRACE] %s:%d %s() - %s\n",
-			st.wHour, st.wMinute, st.wSecond, st.wMilliseconds,
-			shortFile, line, func, msg);
-	if(hlen < 0 || hlen >= sizeof(buf)) return;
-
-	HANDLE h = CreateFileA(s_logPath, FILE_APPEND_DATA, FILE_SHARE_READ,
-		NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-	if(h == INVALID_HANDLE_VALUE) return;
-	DWORD written;
-	WriteFile(h, buf, hlen, &written, NULL);
-	FlushFileBuffers(h);
-	CloseHandle(h);
-}
-
-void
-dbglog(const char *fmt, ...)
-{
-	va_list ap;
-	va_start(ap, fmt);
-	dbglog_internal(LOG_INFO, "", 0, "", fmt, ap);
-	va_end(ap);
-}
-
-void
-dbglog_loc(LogLevel level, const char *file, int line, const char *func, const char *fmt, ...)
-{
-	va_list ap;
-	va_start(ap, fmt);
-	dbglog_internal(level, file, line, func, fmt, ap);
-	va_end(ap);
-}
-
-static LONG WINAPI
-diag_crashHandler(EXCEPTION_POINTERS *ep)
-{
-	DWORD code = ep->ExceptionRecord->ExceptionCode;
-	if(code == 0xE06D7363)
-		return EXCEPTION_CONTINUE_SEARCH;
-
-	CONTEXT *ctx = ep->ContextRecord;
-	dbglog("CRASH: code=0x%08X at=0x%p EAX=%08X EBX=%08X ECX=%08X EDX=%08X ESI=%08X EDI=%08X EBP=%08X ESP=%08X",
-		code, ep->ExceptionRecord->ExceptionAddress,
-		ctx->Eax, ctx->Ebx, ctx->Ecx, ctx->Edx, ctx->Esi, ctx->Edi, ctx->Ebp, ctx->Esp);
-
-	HMODULE exeMod = GetModuleHandle(NULL);
-	MEMORY_BASIC_INFORMATION mbi = {};
-	VirtualQuery((void*)ctx->Eip, &mbi, sizeof(mbi));
-	HMODULE crashMod = NULL;
-	if(mbi.AllocationBase)
-		crashMod = (HMODULE)mbi.AllocationBase;
-	dbglog("  EIP module: %p (base=%p protect=0x%X)", crashMod, exeMod, mbi.Protect);
-
-	DWORD *frame = (DWORD*)ctx->Ebp;
-	dbglog("  Stack trace:");
-	for(int i = 0; i < 8 && frame && frame != (DWORD*)0xFFFFFFFF; i++){
-		DWORD retAddr = frame[1];
-		MEMORY_BASIC_INFORMATION fmbi = {};
-		VirtualQuery((void*)retAddr, &fmbi, sizeof(fmbi));
-		HMODULE fmod = fmbi.AllocationBase ? (HMODULE)fmbi.AllocationBase : NULL;
-		dbglog("    [%d] EBP=%08X RET=%08X (module=%p)", i, (DWORD)frame, retAddr, fmod);
-		DWORD *next = (DWORD*)frame[0];
-		if(next <= frame) break;
-		frame = next;
-	}
-
-	DWORD *sp = (DWORD*)ctx->Esp;
-	dbglog("  Stack dump (ESP):");
-	for(int i = 0; i < 16; i++)
-		dbglog("    [ESP+0x%02X] = %08X", i*4, sp[i]);
-
-	return EXCEPTION_CONTINUE_SEARCH;
-}
-
-static LONG_PTR s_oldVEH = 0;
-
-void diag_init(const char *logPath) {
-	if(logPath) strncpy(s_logPath, logPath, MAX_PATH - 1);
-	s_logInit = 1;
-	HANDLE hLog = CreateFileA(s_logPath, GENERIC_WRITE, FILE_SHARE_READ, NULL, TRUNCATE_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-	if(hLog != INVALID_HANDLE_VALUE) CloseHandle(hLog);
-}
-
-void diag_installVEH(void) {
-	s_oldVEH = (LONG_PTR)AddVectoredExceptionHandler(1, diag_crashHandler);
-}
-
-void diag_removeVEH(void) {
-	if(s_oldVEH){ RemoveVectoredExceptionHandler((HANDLE)s_oldVEH); s_oldVEH = 0; }
-}
-
 // Normal map plugin hook — captures normal map textures on vehicle atomics
 extern "C" {
 	extern bool RpNormMapAtomicIsInitialized(const RpAtomic *atomic);
@@ -2058,26 +1943,15 @@ extern "C" {
 	extern RwTexture* RpNormMapMaterialGetNormMapTexture(const RpMaterial* material);
 }
 
-RpAtomic* CustomPipeAtomicSetup_Hook(RpAtomic* atomic)
-{
-	RpAtomic* result = CCustomCarEnvMapPipeline__CustomPipeAtomicSetup(atomic);
-	if(RpNormMapAtomicIsInitialized && RpNormMapAtomicIsInitialized(atomic)){
-		RpGeometry* geo = RpAtomicGetGeometry(atomic);
-		if(geo){
-			int matCount = RpGeometryGetNumMaterials(geo);
-			for(int i = 0; i < matCount; i++){
-				RpMaterial* mat = RpGeometryGetMaterial(geo, i);
-				if(mat){
-					RwTexture* normalMap = RpNormMapMaterialGetNormMapTexture(mat);
-					if(normalMap){
-						dbglog("Normal map found on vehicle atomic: %s", normalMap->name);
-					}
-				}
-			}
-		}
-	}
-	return result;
-}
+// Proper trampoline for CustomPipeAtomicSetup (0x5DA610) via the injector
+// library's function_hooker. 0x5DA610 is a function ENTRY (not a call site),
+// so InterceptCall captured a bogus original and recursed into itself
+// (CCustomCarEnvMapPipeline__CustomPipeAtomicSetup is a WRAPPER that
+//  EAXJMP(0x5DA610)). function_hooker builds an instruction-accurate trampoline
+// and passes the real original as the first functor argument — the same
+// discipline SilentPatch uses — so the RW rwnormal plugin handles normals from
+// the attached plugin without any recursion and the frame exits cleanly.
+static injector::function_hooker<0x5DA610, RpAtomic*(RpAtomic*)> s_CustomPipeAtomicSetup_hook;
 
 BOOL WINAPI
 DllMain(HINSTANCE hInst, DWORD reason, LPVOID)
@@ -2094,6 +1968,7 @@ DllMain(HINSTANCE hInst, DWORD reason, LPVOID)
 
 		diag_init(logPath);
 		diag_installVEH();
+		dbglog("VEH handler installed");
 
 		dbglog("=== skygfx loading ===");
 		dbglog("dllModule=%p, logPath=%s", dllModule, diag_getLogPath());
@@ -2153,9 +2028,16 @@ DllMain(HINSTANCE hInst, DWORD reason, LPVOID)
 			dbglog("RpNormMapPluginAttach: failed");
 		}
 
-		// Hook normal map pipeline creation to capture normal map textures
-		extern RpAtomic* CustomPipeAtomicSetup_Hook(RpAtomic* atomic);
-		InjectHook(0x5DA610, CustomPipeAtomicSetup_Hook, PATCH_JUMP);
+		// Hook CustomPipeAtomicSetup (0x5DA610) with a proper trampoline.
+		// With the rwnormal plugin attached, RenderWare handles normal maps
+		// itself — this hook just forwards to the real original (no recursion,
+		// clean frame exit, matching SilentPatch's trampoline discipline).
+		// (txd "_n" normal-map feature is future work.)
+		s_CustomPipeAtomicSetup_hook.make_call(
+			[](std::function<RpAtomic*(RpAtomic*)> orig, RpAtomic*& atomic) -> RpAtomic*
+			{
+				return orig(atomic);
+			});
 		InjectHook(0x5DAE61, saveIntensity, PATCH_JUMP);
 		Patch(0x5DAEC8, setTextureAndColor);
 

@@ -33,6 +33,10 @@ void diag_removeVEH(void);
 // Get the current log file path (for external code that needs it).
 const char* diag_getLogPath(void);
 
+// Write a minidump of the current crash (best-effort). Pass the
+// EXCEPTION_POINTERS from a VEH or SEH handler. Safe to call any time.
+void diag_writeMinidump(EXCEPTION_POINTERS *exceptionPointers);
+
 #endif // DIAGNOSTICS_DISABLED
 
 #endif // DIAGNOSTICS_H

@@ -79,7 +79,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
-      <AdditionalDependencies>d3d9.lib;d3dx9.lib;winmm.lib;rpnormmap.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d9.lib;d3dx9.lib;winmm.lib;rpnormmap.lib;dbghelp.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Lib\x86;E:\SDKs\normalmap_byDK_1.01\normalmap_byDK_1.01\sources;E:\SDKs\Renderware 3.7 SDK (For Windows) Full\RWSDK37\Graphics\rwsdk\lib\d3d9\release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <ImportLibrary>E:\games\gtasa_skygfx_plus\skygfx.lib</ImportLibrary>
     </Link>
@@ -103,14 +103,14 @@
       <ExternalWarningLevel>Level3</ExternalWarningLevel>
     </ClCompile>
     <ResourceCompile>
-      <PreprocessorDefinitions>rsc_CompanyName=\"aap\";rsc_LegalCopyright=\"\";rsc_FileVersion=\"4.2.0.0\";rsc_ProductVersion=\"4.2.0.0\";rsc_InternalName=\"skygfx\";rsc_ProductName=\"skygfx\";rsc_OriginalFilename="skygfx.dll";rsc_FileDescription=\"https://github.com/aap\";rsc_UpdateUrl=\"https://github.com/aap/skygfx\";DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>rsc_CompanyName=\"aap\";rsc_LegalCopyright=\"\";rsc_FileVersion=\"4.2.0.0\";rsc_ProductVersion=\"4.2.0.0\";rsc_InternalName=\"skygfx\";rsc_ProductName=\"skygfx\";rsc_OriginalFilename=\"skygfx.dll\";rsc_FileDescription=\"https://github.com/aap\";rsc_UpdateUrl=\"https://github.com/aap/skygfx\";DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>E:\SDKs\imgui-master;E:\SDKs\imgui-master\backends;E:\SDKs\plugin-sdk-master\plugin_sa;E:\SDKs\normalmap_byDK_1.01\normalmap_byDK_1.01\sources;E:\dev(dave)\Sa_dev\GTASource\GTA SA RE\source;..\external\injector\include;..\external;..\external\d3d9;..\resources;..\shaders;..\src;E:\SDKs\Renderware 3.7 SDK (For Windows) Full\RWSDK37\Graphics\rwsdk\include\d3d9;C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
-      <AdditionalDependencies>d3d9.lib;d3dx9.lib;winmm.lib;rpnormmap.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d9.lib;d3dx9.lib;winmm.lib;rpnormmap.lib;dbghelp.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Lib\x86;E:\SDKs\normalmap_byDK_1.01\normalmap_byDK_1.01\sources;E:\SDKs\Renderware 3.7 SDK (For Windows) Full\RWSDK37\Graphics\rwsdk\lib\d3d9\release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <ImportLibrary>E:\games\gtasa_skygfx_plus\skygfx.lib</ImportLibrary>
     </Link>
@@ -142,6 +142,7 @@
     <ClCompile Include="..\src\HLSL_hook.cpp" />
     <ClCompile Include="..\src\buildingPipe.cpp" />
     <ClCompile Include="..\src\chars.cpp" />
+    <ClCompile Include="..\src\core\diagnostics.cpp" />
     <!-- <ClCompile Include="..\src\config.cpp" /> -->
     <ClCompile Include="..\src\custom_mode.cpp" />
     <ClCompile Include="..\src\defaultFuncs.cpp" />
