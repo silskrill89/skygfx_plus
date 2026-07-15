@@ -17,8 +17,10 @@
 // creating clumps is wasted
 //
 //
-//\$#include <rwcore.h>
-//\$#include <rpworld.h>
+
+
+#include <rwcore.h>
+#include <rpworld.h>
 
 #include "skygfx.h"
 #include "PC_GrassRenderer.h"
