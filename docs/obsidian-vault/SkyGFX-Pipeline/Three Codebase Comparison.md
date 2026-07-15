@@ -6,6 +6,9 @@ updated: 2026-07-15
 
 # Three-Codebase Comparison
 
+> [!info] Full documentation
+> See `docs/Three-Codebase Comparison.md` for the complete 595-line file-by-file mapping across all three codebases.
+
 Comprehensive comparison of all three skygfx codebases — the foundation of SkyGFX Plus development.
 
 ## Lineage
@@ -48,13 +51,6 @@ aap (original v4.2b) → junior_dr (fork) → skygfx_plus (expIV rewrite)
 - Wheel extender system
 - ~10x code growth from aap
 
-## Source File Mapping
-
-See the full detailed comparison in the main docs:
-
-> [!info] Full Reference
-> See [[Three-Codebase Comparison|Three Codebase Comparison]] in `docs/Three-Codebase Comparison.md` for the complete 595-line file-by-file mapping across all three codebases.
-
 ## Related
 
 - [[SkyGFX Pipeline Overview]] — current rendering architecture
@@ -65,4 +61,4 @@ See the full detailed comparison in the main docs:
 
 ## Main Docs
 
-- [[Project Lineage]] — aap → junior → expIV evolution (main docs)
+- `docs/Project Lineage.md` — aap → junior → expIV evolution

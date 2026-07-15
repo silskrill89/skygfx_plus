@@ -4,7 +4,7 @@
 
 ## Location
 - `external/d3d9/` — RW SDK 3.7 (D3D9 plugin)
-- Key headers: `rwcore.h`, `rpworld.h`, `rpmatfx.h`
+- Key headers: `rwcore.h`, `rpworld.h`, `rpmatfx.h`, `rpnormmap.h`
 
 ## Key Function Signatures
 
@@ -38,8 +38,6 @@ void RwRenderStateGet(RwRenderState state, void *value);
 ```c
 RwFrame* RwCameraGetFrame(RwCamera *camera);
 RwMatrix* RwFrameGetLTM(RwFrame *frame);  // Local-to-World matrix
-float RwCameraGetNearClipPlane(RwCamera *camera);
-float RwCameraGetFarClipPlane(RwCamera *camera);
 ```
 
 ### D3D9 Device
@@ -72,6 +70,19 @@ struct RwRaster {
 WRAPPER void MyFunction(args) { EAXJMP(0x7FA100); }
 ```
 
+## GTA SA D3D9 Function Addresses
+```
+RwD3D9SetPixelShader              = 0x7FA100
+RwD3D9SetVertexShader             = 0x7FA0C0
+RwD3D9SetTexture                  = 0x7FDE70
+RwD3D9SetRenderState              = 0x7FC2D0
+RwD3D9SetTextureStageState        = 0x7FC340
+RwD3D9SetSamplerState             = 0x7FC3C0
+_rwD3D9RenderStateFlushCache      = 0x7FC200
+_rwD3D9VSGetComposedTransformMatrix = 0x7646E0
+```
+
 ## See Also
 - [[Feature Hook Pattern]] — How to use RW functions
 - [[BRDF Reference]] — PBR implementation
+- [[Project Paths]] — SDK locations and file paths

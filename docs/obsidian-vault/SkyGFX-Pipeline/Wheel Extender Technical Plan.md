@@ -1,3 +1,9 @@
+---
+tags: [wheels, technical-plan, transfender]
+created: 2025-01-02
+updated: 2026-07-15
+---
+
 # Wheel Extender — Technical Plan
 
 ## Current SA Wheel System
@@ -119,5 +125,5 @@ void Hooked_AddWheelUpgrade(int wheelClass, int modelId) {
 
 ## Related
 - [[SkyGFX Pipeline Overview]] — rendering pipeline
-- [[BRDF Reference]] — material values
+- [[Wheel System Architecture]] — Wheel system overview
 - [[Weather System Architecture]] — similar hash-based selection pattern

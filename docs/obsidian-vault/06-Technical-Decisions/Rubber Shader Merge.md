@@ -1,7 +1,7 @@
 ---
 tags: [technical-decision, rubber-shader, merge, tires]
 created: 2025-01-02
-updated: 2025-01-02
+updated: 2026-07-15
 ---
 
 # Rubber Shader Merge
@@ -57,7 +57,7 @@ Merge rubber shader as `main_rubber` entry point in `VehiclePBR_Modern.hlsl`:
 
 4. **Added resource entry** in `Resource.rc`:
    ```rc
-   IDR_RUBBER_VEHICLE_MODERN RCDATA "cso/Rubber_Vehicle_Modern.cso"
+   IDR_RUBBER_VEHICLE_MODERN RCDATA "resources/cso/Rubber_Vehicle_Modern.cso"
    ```
 
 5. **Added shader pointer** in `pipelinecommon.cpp`:
@@ -94,12 +94,11 @@ Merge rubber shader as `main_rubber` entry point in `VehiclePBR_Modern.hlsl`:
 - **Universal dirt system**: Share dirt/wear logic across all shaders
 
 ## Related Decisions
-- [[06-Technical-Decisions/IBL Env Map Decision]] — IBL tints env map
-- [[06-Technical-Decisions/C22 C23 Layout]] — Unified PBR constant layout
-- [[03-Shaders/VehiclePBR Modern]] — Implementation details
+- [[IBL Env Map Decision]] — IBL tints env map
+- [[VehiclePBR Modern]] — Implementation details
 
 ## Code References
-- `shaders/ps/VehiclePBR_Modern.hlsl:429-506` — main_rubber entry point
-- `src/vehiclePipe.cpp:1455-1486` — Tire render path
-- `src/pipelinecommon.cpp:438-440` — Shader loading
+- `shaders/ps/VehiclePBR_Modern.hlsl:460-506` — main_rubber entry point
+- `src/render/vehiclePipe.cpp` — Tire render path
+- `src/render/pipelinecommon.cpp` — Shader loading
 - `tools/fix_build.py:320-322` — Shader compilation

@@ -1,7 +1,7 @@
 ---
 tags: [technical-decision, ibl, env-map, reflections]
 created: 2025-01-02
-updated: 2025-01-02
+updated: 2026-07-15
 ---
 
 # IBL Env Map Decision
@@ -50,11 +50,9 @@ float3 layer2 = envRefl * iblTint * paintTint * clearCoatF * envFresnel;
 - **Future improvement**: Could increase env map resolution or use temporal smoothing
 
 ## Related Decisions
-- [[06-Technical-Decisions/C22 C23 Layout]] — Unified PBR constant layout
-- [[06-Technical-Decisions/Rubber Shader Merge]] — Merged rubber shader into VehiclePBR_Modern
-- [[03-Shaders/VehiclePBR Modern]] — Implementation details
+- [[Rubber Shader Merge]] — Merged rubber shader into VehiclePBR_Modern
+- [[VehiclePBR Modern]] — Implementation details
 
 ## Code References
 - `shaders/ps/VehiclePBR_Modern.hlsl:154-175` — Layer 2 env reflection code
-- `src/vehiclePipe.cpp:1567` — Env map texture binding (s1)
-- `src/vehiclePipe.cpp:1573-1579` — IBL texture binding (s3)
+- `src/render/vehiclePipe.cpp` — Env map texture binding (s1) and IBL texture binding (s3)

@@ -1,5 +1,15 @@
+---
+tags: [quiz, architecture, decisions]
+created: 2025-01-02
+updated: 2026-07-15
+---
+
 # SkyGFX Plus — Workflow Quiz
-# 20 questions, 2 answers each. Pick A or B.
+
+> [!info] Answers
+> See [[Decided Architecture]] for the decided answers to all 20 questions.
+
+20 questions, 2 answers each. Pick A or B.
 
 ---
 
@@ -82,3 +92,7 @@ B. Replace CLEO with custom scripting system
 ## Q20: Release
 A. Single ASI with all features enabled
 B. Separate ASIs per feature (modular)
+
+## Related
+- [[Decided Architecture]] — The decided answers
+- [[SkyGFX Pipeline Overview]] — Current rendering architecture

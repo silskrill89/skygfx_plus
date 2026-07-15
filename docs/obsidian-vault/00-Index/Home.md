@@ -6,7 +6,7 @@ updated: 2026-07-15
 
 # SkyGFX Plus — Technical Vault
 
-> **GTA San Andreas Enhanced Edition** — A modern rendering overhaul built on [[Project Lineage|aap's skygfx]].
+> **GTA San Andreas Enhanced Edition** — A modern rendering overhaul built on [[../docs/Project Lineage|aap's skygfx]].
 > Hybrid deferred→forward pipeline moving toward forward+. All code in one ASI, all features toggleable via INI.
 
 ---
@@ -60,31 +60,30 @@ updated: 2026-07-15
 
 ## Cross-References to Main docs/
 
-The main `docs/` directory contains project-level documentation. Use these wikilinks to navigate:
+The main `docs/` directory contains project-level documentation. Use these links to navigate:
 
-- [[Project Lineage]] — aap → junior → expIV evolution
-- [[Project Paths]] — All SDK/game/script paths
-- [[Vehicle Pipeline]] — All vehicle pipe modes
-- [[Building Pipeline]] — PS2, PBR building pipes
-- [[PostFX Pipeline]] — SSAO, SMAA, motion blur, color filters
-- [[Weather Timecycle]] — Sky, sun, moon, clouds, lighting
-- [[Water Rendering]] — Gerstner waves, PBR water
-- [[Shader Architecture]] — How shaders are organized, compiled, loaded
-- [[PBR Common]] — Shared PBR functions
-- [[Glass Shader]] — Vehicle glass with Fresnel
-- [[BRDF Reference]] — Disney BSDF, Callisto, O3DE reference
-- [[INI Configuration]] — All config fields, quality presets
-- [[Vehicle Classification]] — Per-vehicle paint, glass, tire detection
-- [[Color Grading]] — Three-point grading system
-- [[Lens Effects]] — Distortion, chromatic aberration, grain
-- [[Implemented Features]] — What's done
-- [[Future Features]] — What's deferred
-- [[Build System]] — fix_build.py, MSVC/SDK setup
-- [[File Inventory]] — Every source/shader/resource file
-- [[Credits]] — Contributors and academic references
-- [[wheel_naming_convention]] — wheel_class_style_variant format
-- [[wheel_lod_system]] — Distance-based LOD switching
-- [[wheel_texture_atlas]] — Combined texture optimization
+- [[../docs/Project Lineage]] — aap → junior → expIV evolution
+- [[../docs/Project Paths]] — All SDK/game/script paths
+- [[../docs/Vehicle Pipeline]] — All vehicle pipe modes
+- [[../docs/Building Pipeline]] — PS2, PBR building pipes
+- [[../docs/PostFX Pipeline]] — SSAO, SMAA, motion blur, color filters
+- [[../docs/Weather Timecycle]] — Sky, sun, moon, clouds, lighting
+- [[../docs/Water Rendering]] — Gerstner waves, PBR water
+- [[../docs/Shader Architecture]] — How shaders are organized, compiled, loaded
+- [[../docs/PBR Common]] — Shared PBR functions
+- [[../docs/Glass Shader]] — Vehicle glass with Fresnel
+- [[../docs/BRDF Reference]] — Disney BSDF, Callisto, O3DE reference
+- [[../docs/INI Configuration]] — All config fields, quality presets
+- [[../docs/Vehicle Classification]] — Per-vehicle paint, glass, tire detection
+- [[../docs/Color Grading]] — Three-point grading system
+- [[../docs/Lens Effects]] — Distortion, chromatic aberration, grain
+- [[../docs/Implemented Features]] — What's done
+- [[../docs/Future Features]] — What's deferred
+- [[../docs/File Inventory]] — Every source/shader/resource file
+- [[../docs/Credits]] — Contributors and academic references
+- [[../docs/wheel_naming_convention]] — wheel_class_style_variant format
+- [[../docs/wheel_lod_system]] — Distance-based LOD switching
+- [[../docs/wheel_texture_atlas]] — Combined texture optimization
 
 ---
 
@@ -123,11 +122,11 @@ The main `docs/` directory contains project-level documentation. Use these wikil
 ## Quick Links
 
 ### Code
-- `src/vehiclePipe.cpp` — Vehicle rendering pipeline
-- `src/buildingPipe.cpp` — Building rendering pipeline
-- `src/veh_shaders.cpp` — Vehicle shader bridge
-- `src/wheels_extender.cpp` — Wheel extender system
-- `src/weather.cpp` — Weather system implementation
+- `src/render/vehiclePipe.cpp` — Vehicle rendering pipeline
+- `src/render/buildingPipe.cpp` — Building rendering pipeline
+- `src/extras/veh_shaders.cpp` — Vehicle shader bridge
+- `src/extras/wheels_extender.cpp` — Wheel extender system
+- `src/extras/wheels.cpp` — Wheel system implementation
 
 ### Shaders
 - `shaders/ps/VehiclePBR_Modern.hlsl` — Unified vehicle shader

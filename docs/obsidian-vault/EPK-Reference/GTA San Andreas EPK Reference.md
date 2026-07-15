@@ -1,5 +1,13 @@
+---
+tags: [epk, visual-reference, screenshots]
+created: 2025-01-02
+updated: 2026-07-15
+---
+
 # GTA San Andreas EPK Reference
-# Source: `E:\docs\VC and SA EPKs\San Andreas EPK\`
+
+> [!info] Source
+> `E:\docs\VC and SA EPKs\San Andreas EPK\`
 
 ## Official Rockstar PC Screenshots
 High-quality TIFF reference images showing intended visual look.
@@ -50,3 +58,4 @@ Key scenes for visual reference:
 ## Related
 - [[SkyGFX Pipeline Overview]] — rendering pipeline
 - [[Non-Parametric Sparse BRDF]] — material values
+- [[EPK Visual Reference - Quick Look]] — Quick visual reference

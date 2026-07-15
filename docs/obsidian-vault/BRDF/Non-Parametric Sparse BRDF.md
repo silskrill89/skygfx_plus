@@ -1,5 +1,13 @@
+---
+tags: [brdf, research, paper]
+created: 2025-01-02
+updated: 2026-07-15
+---
+
 # Non-Parametric Sparse BRDF (TOG 2021)
-# Source: `E:\docs\TOG2021_non_parametric_sparse_brdf_final.pdf`
+
+> [!info] Source paper
+> `E:\docs\TOG2021_non_parametric_sparse_brdf_final.pdf`
 
 ## Overview
 - Fits measured BRDF data using **Gaussian basis functions** (2-32 lobes)
@@ -40,6 +48,9 @@ f(θi, φi, θr, φr) = Σ wⱼ · G(μᵢ, μᵣ, σⱼ)  (j = 1..N lobes)
 - For GTA SA: most surfaces are simple dielectrics — 2-lobe model sufficient
 
 ## Related Papers in Vault
-- [[SMAA_Enhanced_Subpixel_Morphological_Antialiasing]]
-- [[Dynamic_Temporal_Antialiasing_Call_of_Duty]]
-- [[Conservative_Morphological_Antialiasing]]
+- [[SMAA Enhanced Subpixel Morphological AA]]
+- [[Dynamic Temporal AA Call of Duty]]
+- [[Conservative Morphological AA]]
+
+## Full docs
+- `docs/BRDF Reference.md`, `docs/BRDF_REFERENCE.md`

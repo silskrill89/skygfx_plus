@@ -6,6 +6,9 @@ updated: 2026-07-15
 
 # SkyGFX Plus Roadmap
 
+> [!info] Full documentation
+> See `docs/Future Features.md` and `docs/Roadmap to Ultimate Mod.md` for detailed planning.
+
 ## Vision
 
 Full forward+ rendering with all original aap/junior features preserved, platform/game style selection, GTA V/IV-style quality settings menu, advanced per-pipe blending. All modern features that fit in SM3.0.
@@ -77,5 +80,5 @@ Features that fit in ps_3_0/vs_3_0:
 
 ## Main Docs
 
-- [[Future Features]] — deferred features list (main docs)
-- [[Implemented Features]] — what's done (main docs)
+- `docs/Future Features.md` — deferred features list
+- `docs/Implemented Features.md` — what's done

@@ -1,19 +1,16 @@
 # Project Lineage
 
-#history #architecture
-
 ## Version Evolution
 ```
-aap (original) → junior_dr (fork) → zeneric → plk4 → expIV (current skygfx_plus)
+aap (original) → junior_dr (fork) → skygfx_plus (expIV, current)
 ```
 
 This document traces the complete lineage of the skygfx mod across three major codebases: the original by aap, the junior_dr fork that extended it, and the skygfx_plus rewrite that merged and expanded both into a modern architecture.
 
 ## aap Original (v4.2b)
 
-- **Path**: E:\SDKs\skygfx_original
-- **Binary**: E:\SDKs\skygfx_aap_v4.2b\SkyGfx_SA_4.2b
-- ~500 LOC, 22 source files
+- **Binary**: SkyGfx_SA_4.2b
+- ~22 source files, flat directory layout
 - 9 car pipelines: PS2, PC, Xbox, Spec, Mobile, Neo, LCS, VCS, Env
 - 2 building pipelines: PS2, Xbox
 - 30 HLSL shaders (15 PS, 15 VS)
@@ -25,8 +22,7 @@ The original aap release established the core architecture: a hook-based DLL inj
 
 ## junior_dr Fork
 
-- **Path**: E:\SDKs\skygfx_junior
-- ~1500 LOC, 23 source files
+- Backed up in this repo as `backup_original/` (33 files, ~10K LOC)
 - Added CAR_ENV vehicle pipe with per-pixel Fresnel reflection
 - Added stochastic texturing (StochasticSamplerPS.hlsl + ps/2_a/ variants)
 - Added wind animation shaders (ps2BuildingWindVS, xboxBuildingWindVS)
@@ -45,14 +41,13 @@ The original aap release established the core architecture: a hook-based DLL inj
 
 The junior_dr fork tripled the codebase size and introduced several technologies that would become foundational: stochastic texturing for grain-free detail, wind animation for buildings, and a texdb system for per-texture material overrides. The EDED plugin allowed per-atomic shader assignment — a significant step toward per-object rendering control.
 
-## skygfx_plus expIV (current)
+## skygfx_plus (current, expIV rewrite)
 
-- **Path**: E:\Dev(dave)\skygfx_plus_expIV (restructured to match experimental)
-- **Remote**: https://github.com/silskrill89/skygfx_plus.git (experimental branch)
-- ~15,000 LOC, 73 source files in organized subdirectories
+- 67 source files organized in `src/{Core,entities,extras,render,rw}/` + `src/skygfx.h` at root
+- ~18K LOC (.cpp), ~36K total (including headers)
 - 11 car pipelines: PS2, PC, Xbox, Spec, Mobile, Neo, LCS, VCS, Env, GTAIV, Modern (PBR)
 - 4 building pipelines: PS2, Xbox, GTAIV, PBR
-- 80+ HLSL shaders + 8 pre-compiled GTAIV CSOs
+- 69 HLSL shaders across `shaders/{ps,vs,include}/` + root + 8 pre-compiled GTAIV CSOs in `resources/cso/`
 - Added: GTA IV vehicle/building pipes, Modern PBR (GGX/Smith/Schlick)
 - Added: SMAA (4 quality levels), SSAO, motion blur (Burnout style)
 - Added: SSS (skin/hair/vegetation), parallax water, normal buffer
@@ -61,18 +56,17 @@ The junior_dr fork tripled the codebase size and introduced several technologies
 - Added: 239+ config fields, unified pipeline (forward+)
 - Added: Weather/timecycle expansion (GTA V style sky, sun, moon, clouds)
 - Added: Debug logging, performance timers, crash handler
-- **Source layout**: `src/{Core,entities,extras,render,rw}/` + `src/skygfx.h` at root
 - Config: 239+ fields
 
 skygfx_plus is a ground-up rewrite that merges the aap and junior_dr foundations into a modern, modular architecture. The flat source tree was replaced with a subdirectory structure organized by responsibility. The rendering pipeline was unified into a forward+ model with material classification, and the post-processing chain was expanded with SMAA, SSAO, motion blur, and SSS. GTA IV support was added for both vehicles and buildings, and a full PBR pipeline (Modern) was introduced alongside the legacy paths.
 
 ## Feature Parity Matrix
 
-| Feature | aap (v4.2b) | junior_dr | skygfx_plus (expIV) |
+| Feature | aap (v4.2b) | junior_dr | skygfx_plus |
 |---|---|---|---|
 | Car Pipelines | 9 | 10 | **11** |
 | Building Pipelines | 2 | 2 | **4** |
-| HLSL Shaders | 30 | 38 | **80+ (+ 8 CSO)** |
+| HLSL Shaders | 30 | 38 | **69 (+ 8 CSO)** |
 | Post-FX Effects | 3 | 5 | **15+** |
 | Config Fields | ~40 | ~80 | **239+** |
 | Stochastic Texturing | — | Yes | Yes |
@@ -96,7 +90,7 @@ skygfx_plus is a ground-up rewrite that merges the aap and junior_dr foundations
 
 ### Subdirectory Structure
 
-The original aap and junior_dr codebases used a flat source layout — every `.cpp` and `.h` file sat in a single directory. skygfx_plus adopted a hierarchical structure (`src/Core/`, `src/entities/`, `src/extras/`, `src/render/`, `src/rw/`) to manage the 73-file codebase. This separation makes it straightforward to locate code by responsibility and prevents the "everything in one folder" problem that made the earlier codebases difficult to navigate as they grew.
+The original aap and junior_dr codebases used a flat source layout — every `.cpp` and `.h` file sat in a single directory. skygfx_plus adopted a hierarchical structure (`src/Core/`, `src/entities/`, `src/extras/`, `src/render/`, `src/rw/`) to manage the 67-file codebase. This separation makes it straightforward to locate code by responsibility and prevents the "everything in one folder" problem that made the earlier codebases difficult to navigate as they grew.
 
 ### hooks.cpp and diagnostics.cpp Kept Separate
 
@@ -104,8 +98,9 @@ In expIV, hooks and diagnostics were inlined into other translation units. skygf
 
 ### config.cpp vs Core.cpp
 
-Core.cpp is the original aap configuration loader (~40 fields). config.cpp is the expIV evolution (239+ fields). Both exist because Core.cpp handles the legacy INI parsing path that some users still rely on, while config.cpp manages the full modern config surface including quality presets, per-vehicle classification rules, and weather/timecycle overrides. They share no code — config.cpp is a ground-up rewrite, not an extension. The dual existence allows backward compatibility with old INI files while supporting the expanded configuration that the modern pipeline requires.
+Core.cpp is the original aap configuration loader (~40 fields). config.cpp is the skygfx_plus evolution (239+ fields). Both exist because Core.cpp (in main.cpp) handles the legacy INI parsing path that some users still rely on, while config.cpp manages the full modern config surface including quality presets, per-vehicle classification rules, and weather/timecycle overrides. They share no code — config.cpp is a ground-up rewrite, not an extension. The dual existence allows backward compatibility with old INI files while supporting the expanded configuration that the modern pipeline requires.
 
 ## See Also
 - [[Implemented Features]] — What's built on this foundation
 - [[Credits]] — Who contributed
+- [[Three-Codebase Comparison]] — Detailed file-by-file and feature-by-feature comparison

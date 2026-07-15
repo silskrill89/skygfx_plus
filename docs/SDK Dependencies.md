@@ -1,4 +1,4 @@
-# SkyGFX Plus — SDK Dependencies & Build Environment
+# SDK Dependencies
 
 ## Core SDKs
 
@@ -19,7 +19,7 @@
 |---------|------|---------|
 | **imgui** | `external/imgui/` | Debug menu, UI overlay |
 | **injector** | `external/injector/` | Hook injection (InjectHook, InterceptCall) |
-| **d3d9 headers** | `external/d3d9/` | D3D9 type definitions |
+| **d3d9 headers** | `external/d3d9/` | RW 3.7 D3D9 type definitions |
 
 ## Linked Libraries (from vcxproj)
 
@@ -33,7 +33,7 @@ odbc32.lib  odbccp32.lib
 ## Shader Compiler
 
 - **fxc.exe**: `C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Utilities\bin\x86\fxc.exe`
-- **Profiles**: ps_3_0 (pixel), vs_3_0 (vertex)
+- **Profiles**: ps_3_0 / vs_3_0 (vehicle, PBR, water), ps_2_0 / vs_2_0 (building, legacy)
 - **CSO output**: `resources/cso/`
 
 ## Target Platform
@@ -41,7 +41,6 @@ odbc32.lib  odbccp32.lib
 | Property | Value |
 |----------|-------|
 | **Game** | Grand Theft Auto San Andreas v1.0 US |
-| **Game dir** | `E:\games\gtasa_skygfx_plus` |
 | **ASI target** | `skygfx.asi` (x86, MSVC 2022) |
 | **Deploy** | `fast_build.py` copies ASI + INI + DLL to game dir |
 
@@ -63,5 +62,3 @@ All hooks target GTA SA v1.0 US (steam/retail executable). Hook methods:
 - **MoonLoader**: Lua scripting runtime for GTA SA
 - **Purpose**: TransFender replacement script (extra wheels, spoilers via clump manipulation)
 - **Packaging**: Shipped as optional .lua file; game runs normally without it
-- **Scope**: Clump geometry scaling/stretching for universal spoiler fitment
-- **Mounting**: Mark mounting spots on vehicles, scale/rotate spoiler geometry to fit

@@ -6,6 +6,9 @@ updated: 2026-07-15
 
 # Build System
 
+> [!info] Full documentation
+> See `docs/Build System.md` for the complete build system reference.
+
 ## Overview
 
 `fix_build.py` handles everything: SDK path detection, shader compilation, MSBuild, and deployment.
@@ -38,16 +41,17 @@ skygfx_plus/
 │   ├── Core/               # Entry point, hooks, crash handler
 │   ├── render/             # Vehicle, building, postfx, weather pipes
 │   ├── rw/                 # RenderWare wrappers, gta types
-│   ├── extras/             # TexDB, debug menu, extras
-│   └── wheels/             # Wheel system
+│   ├── extras/             # TexDB, debug menu, wheels, veh_shaders
+│   └── entities/           # Character rendering, plant surfaces
 ├── shaders/
 │   ├── ps/                 # Pixel shaders (VehiclePBR_Modern.hlsl, etc.)
 │   ├── vs/                 # Vertex shaders
 │   └── include/            # Shared includes (PBR_Common.hlsl, etc.)
 ├── tools/                  # Python tools (fix_build.py, wheel_extractor.py, etc.)
 ├── build/                  # MSBuild output
-│   ├── skygfx.vcxproj      # Main project file
-│   └── cso/                # Compiled shader objects
+│   └── skygfx.vcxproj      # Main project file
+├── resources/
+│   └── cso/                # Compiled shader objects (embedded in ASI)
 ├── data/                   # Runtime data (timecyc, wheels, etc.)
 └── docs/                   # Documentation
     ├── obsidian-vault/     # This vault
@@ -59,24 +63,18 @@ skygfx_plus/
 Each HLSL file compiles to one CSO per entry point:
 
 ```bash
-fxc /E main_envCar /T ps_2_0 /Fo cso/envCarPS.cso ps/envCarPS.hlsl
+fxc /E main /T ps_3_0 /Fo resources/cso/VehiclePBR_Modern.cso ps/VehiclePBR_Modern.hlsl
 ```
-
-Wrapper HLSL files `#include` the merged source, so `envCarPS.hlsl` → `VehiclePBR_Modern.hlsl` → compiled with `/E main_envCar`.
 
 ### Multi-Entry Shaders
 
-Some shaders have multiple entry points compiled separately:
+VehiclePBR_Modern.hlsl has multiple entry points compiled separately:
 
 ```python
 # From fix_build.py multi_entry list:
-('ps_3_0', 'VehiclePBR_Modern.hlsl', 'main', 'VehiclePBR_Modern.cso', False),
-('ps_3_0', 'VehiclePBR_Modern.hlsl', 'main_envCar', 'envCarPS.cso', False),
 ('ps_3_0', 'VehiclePBR_Modern.hlsl', 'main_specCarFx', 'specCarFxPS.cso', False),
 ('ps_3_0', 'VehiclePBR_Modern.hlsl', 'main_mobileVehicle', 'mobileVehiclePS.cso', False),
 ('ps_3_0', 'VehiclePBR_Modern.hlsl', 'main_rubber', 'Rubber_Vehicle_Modern.cso', False),
-('ps_3_0', 'VehiclePBR_Modern.hlsl', 'main_glass', 'Glass_Vehicle.cso', False),
-('ps_3_0', 'VehiclePBR_Modern.hlsl', 'main_leeds', 'leedsPS.cso', False),
 ```
 
 ### Shader Entry Points Summary
@@ -84,12 +82,15 @@ Some shaders have multiple entry points compiled separately:
 | Entry Point | CSO Output | Purpose |
 |------------|-----------|---------|
 | `main` | VehiclePBR_Modern.cso | Full PBR vehicle |
-| `main_envCar` | envCarPS.cso | Env map car |
+| `main_rubber` | Rubber_Vehicle_Modern.cso | Tire/rubber |
+| `main_ps2EnvSpecFx` | (compiled separately) | PS2 env+spec dual-layer |
 | `main_specCarFx` | specCarFxPS.cso | Specular car FX |
 | `main_mobileVehicle` | mobileVehiclePS.cso | Mobile vehicle |
-| `main_rubber` | Rubber_Vehicle_Modern.cso | Tire/rubber |
-| `main_glass` | Glass_Vehicle.cso | Vehicle glass |
-| `main_leeds` | leedsPS.cso | Leeds pipe |
+| `main_normMapVehicle` | (compiled separately) | Normal-mapped vehicle |
+| `main_building` | (compiled separately) | Building PBR |
+
+> [!note]
+> `main_glass`, `main_envCar`, and `main_leeds` do NOT exist in VehiclePBR_Modern.hlsl. Glass has its own file (`Glass_Vehicle.hlsl`). See `shaders/ps/VehiclePBR_Modern.hlsl` for the actual entry points.
 
 ## Deployment
 
@@ -104,9 +105,9 @@ E:\games\gtasa_skygfx_plus\
 Compiled CSOs are embedded as RCDATA in `Resource.rc`:
 
 ```rc
-IDR_VEHICLEPBR_MODERN    RCDATA "cso/VehiclePBR_Modern.cso"
-IDR_RUBBER_VEHICLE_MODERN RCDATA "cso/Rubber_Vehicle_Modern.cso"
-IDR_GLASS_VEHICLE        RCDATA "cso/Glass_Vehicle.cso"
+IDR_VEHICLEPBR_MODERN    RCDATA "resources/cso/VehiclePBR_Modern.cso"
+IDR_RUBBER_VEHICLE_MODERN RCDATA "resources/cso/Rubber_Vehicle_Modern.cso"
+IDR_GLASS_VEHICLE        RCDATA "resources/cso/Glass_Vehicle.cso"
 ```
 
 Shader pointers are loaded at runtime in `pipelinecommon.cpp` via `makePS()`.
@@ -121,8 +122,8 @@ Shader pointers are loaded at runtime in `pipelinecommon.cpp` via `makePS()`.
 
 ## See Also
 
-- [[03-Shaders/VehiclePBR Modern]] — Vehicle shader details and entry points
-- [[08-Build-Deploy/SDK Dependencies]] — External SDK paths
-- [[06-Technical-Decisions/Rubber Shader Merge]] — How rubber shader was merged
-- [[06-Technical-Decisions/IBL Env Map Decision]] — IBL env map approach
-- Main docs: [[Build System]], [[File Inventory]], [[Shader Architecture]]
+- [[VehiclePBR Modern]] — Vehicle shader details and entry points
+- [[SDK Dependencies]] — External SDK paths
+- [[Rubber Shader Merge]] — How rubber shader was merged
+- [[IBL Env Map Decision]] — IBL env map approach
+- Full docs: `docs/Build System.md`, `docs/File Inventory.md`, `docs/Shader Architecture.md`

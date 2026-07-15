@@ -1,7 +1,5 @@
 # Future Features
 
-#status #deferred #roadmap
-
 ## Roadmap Phases
 
 See [[Roadmap to Ultimate Mod]] for the full development roadmap.
@@ -34,11 +32,9 @@ See [[Roadmap to Ultimate Mod]] for the full development roadmap.
 - IBL with pre-computed environment maps
 
 ### Phase 5: SM3.0 Feature Fit
-Features that fit in ps_3_0/vs_3_0:
-- PBR (GGX/Smith/Schlick)
-- SMAA, SSAO, Motion blur, SSS
-- Stochastic sampling, Wind animation
-- Parallax water, Normal buffer
+Most features are already implemented (see [[Implemented Features]]). Remaining:
+- Wire skin/hair/vegetation enhancement passes into main pipeline
+- Wire normal buffer into building pipe for enhanced AO
 
 ### Phase 6: Multi-Agent Development Plan
 - Parallel feature development
@@ -50,13 +46,12 @@ Features that fit in ps_3_0/vs_3_0:
 ### Normal Map Plugin Integration
 - **Status:** Deferred
 - **Reason:** Requires DK22Pac normalmap SDK, complex dependencies
-- **Dependencies:** normalmap_byDK SDK (E:\SDKs\normalmap_byDK_1.01)
-- **Notes:** Code exists in normalmap.cpp/normalmap_plugin.cpp but excluded from build
+- **Notes:** Code exists in `src/rw/normalmap.cpp` but excluded from build
 
 ### Edge Tessellation
 - **Status:** Experimental
 - **Reason:** Can cause visual artifacts, needs more work
-- **Notes:** Shader exists (EdgeTessellationVS.hlsl) but disabled in config
+- **Notes:** Shader exists (`EdgeTessellationVS.hlsl`) but disabled in config
 
 ### Multi-pass Vehicle Glass with Parallax
 - **Status:** Partially implemented
@@ -68,8 +63,6 @@ Features that fit in ps_3_0/vs_3_0:
 
 ## Potential Future Work
 - Cloud bleeding on trees fix (IBL buffer projecting onto vegetation)
-- Wire skin/hair/vegetation enhancement passes into pipeline
-- Wire normal buffer into building pipe for enhanced AO
 - Ray tracing (needs DXR — out of scope for SM3.0)
 - Volumetric fog (simplified version possible)
 

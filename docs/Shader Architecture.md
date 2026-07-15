@@ -34,9 +34,9 @@ shaders/
 ├── ps/                         # Pixel shaders (35 files)
 │   ├── simplePS.hlsl           # Basic texture * color
 │   ├── grassPS.hlsl            # Grass rendering
-│   ├── vehiclePBR_Modern.hlsl  # Unified vehicle PBR (6 entry points)
+│   ├── VehiclePBR_Modern.hlsl  # Unified vehicle PBR (7 entry points)
 │   ├── Glass_Vehicle.hlsl      # Vehicle glass rendering
-│   ├── Rubber_Vehicle.hlsl     # Tire rendering
+│   ├── Rubber_Vehicle.hlsl     # Tire rendering (standalone)
 │   ├── CarPaint_Reflections.hlsl # Car paint reflection
 │   ├── VehiclePaint_GTAIV.hlsl # GTA IV vehicle paint
 │   ├── normMapVehiclePS.hlsl   # Normal-mapped vehicle
@@ -76,7 +76,6 @@ shaders/
 │   ├── ModernColorFilterPS.hlsl # Modern color filter
 │   ├── GTA_SA_ModernColor.hlsl # GTA SA modern color
 │   └── Clamp.hlsl              # Color clamping
-├── 2_a/                        # Stochastic building variants (legacy wrappers)
 ├── buildingPipePS.hlsl         # Consolidated building PS (5 entry points)
 ├── stochasticBuildingPS.hlsl   # Consolidated stochastic building PS (3 entry points)
 ├── vehiclePipeVS.hlsl          # Consolidated vehicle VS (10 entry points)
@@ -106,7 +105,7 @@ This preserves backwards compatibility — `fix_build.py` compiles each wrapper 
 ## Compilation
 See [[Build System]]. Each HLSL compiles with:
 ```
-fxc /E <entry> /T ps_3_0 /Fo cso/<name>.cso <name>.hlsl
+fxc /E <entry> /T <profile> /Fo cso/<name>.cso <name>.hlsl
 ```
 - Vehicle PBR shaders: `ps_3_0` / `vs_3_0`
 - Building shaders: `ps_2_0` / `vs_2_0`
@@ -221,21 +220,20 @@ fxc /E <entry> /T ps_3_0 /Fo cso/<name>.cso <name>.hlsl
 | HLSL File | Entry Point | Pipeline | Target |
 |---|---|---|---|
 | `VehiclePBR_Modern.hlsl` | `main` | Modern PBR | ps_3_0 |
+| `VehiclePBR_Modern.hlsl` | `main_rubber` | PBR rubber/tire | ps_3_0 |
 | `VehiclePBR_Modern.hlsl` | `main_ps2EnvSpecFx` | PS2 env+spec | ps_2_0 |
 | `VehiclePBR_Modern.hlsl` | `main_specCarFx` | Specular car FX | ps_2_0 |
 | `VehiclePBR_Modern.hlsl` | `main_mobileVehicle` | Mobile vehicle | ps_2_0 |
 | `VehiclePBR_Modern.hlsl` | `main_normMapVehicle` | Normal-mapped vehicle | ps_3_0 |
 | `VehiclePBR_Modern.hlsl` | `main_building` | PBR building | ps_3_0 |
-| `VehiclePBR_Modern.hlsl` | `main_rubber` | Rubber/tire | ps_3_0 |
 | `Glass_Vehicle.hlsl` | `main` | Vehicle glass | ps_3_0 |
-| `Rubber_Vehicle.hlsl` | `main` | Tire rendering | ps_3_0 |
+| `Rubber_Vehicle.hlsl` | `main` | Tire rendering (standalone) | ps_3_0 |
 | `CarPaint_Reflections.hlsl` | `main` | Car paint reflections | ps_3_0 |
 | `VehiclePaint_GTAIV.hlsl` | `main` | GTA IV vehicle paint | ps_3_0 |
 | `GTAIV_ps20.hlsl` | `main` | GTA IV post-process | ps_2_0 |
 | `simplePS.hlsl` | `main` | Basic texture * color | ps_2_0 |
 | `mobileVehiclePS.hlsl` | `main` | Mobile vehicle PS | ps_2_0 |
 | `normMapVehiclePS.hlsl` | `main` | Normal-mapped vehicle | ps_3_0 |
-| `specCarFxPS.hlsl` | `main` | Specular car FX (standalone) | ps_2_0 |
 
 ### Pixel Shaders — Building
 
@@ -308,16 +306,16 @@ fxc /E <entry> /T ps_3_0 /Fo cso/<name>.cso <name>.hlsl
 
 | File | Purpose | Used By |
 |---|---|---|
-| `PBR_Common.hlsl` | GGX/Smith/Schlick, SchlickFresnel, cloud FBM, sun contribution | VehiclePBR_Modern, Glass_Vehicle, CarPaint_Reflections, Rubber_Vehicle |
+| `PBR_Common.hlsl` | GGX/Smith/Schlick, SchlickFresnelScalar, cloud FBM, sun contribution | VehiclePBR_Modern, Glass_Vehicle, CarPaint_Reflections, Rubber_Vehicle |
 | `StochasticSamplerPS.hlsl` | Hash-based stochastic texture sampling | stochasticBuildingPS, buildingPipePS |
-| `colorSpace.hlsl` | YCbCr conversion, linear/gamma, tonemapping | unifiedPipe, GTA_SA_ModernColor, ColorFilter_CrossMix |
-| `SubsurfaceScattering.hlsl` | SSS material IDs, wrap lighting curve | SkinSSS, SkinEnhance, HairEnhance, VegetationEnhance |
+| `colorSpace.hlsl` | YCbCr conversion, linear/gamma, grading, SSAO, edge detect | unifiedPipe, GTA_SA_ModernColor, ColorFilter_CrossMix |
+| `SubsurfaceScattering.hlsl` | SSS material IDs, wrap lighting, Crysis vegetation bending | SkinSSS, SkinEnhance, HairEnhance |
 | `CarPaintNoise.hlsl` | Paint noise functions | CarPaint_Reflections, VehiclePBR_Modern |
 | `PerlinNoise.hlsl` | Procedural Perlin noise | DynamicSky, IBL_SkyCloud, Water_Parallax |
 
 ## Pre-compiled CSOs
 
-8 pre-compiled CSOs from GTA IV exist in `resources/cso/`:
+Pre-compiled CSOs from GTA IV exist in `resources/cso/`:
 - `GTAIV_ps20.cso` — GTA IV post-process tonemapping
 - `VehiclePaint_GTAIV.cso` — GTA IV vehicle paint shader
 - `gtaivVehiclePS.cso` — GTA IV vehicle pixel shader

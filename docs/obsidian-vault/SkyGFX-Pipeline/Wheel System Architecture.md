@@ -1,7 +1,17 @@
-# Wheel System Architecture
-# VC-style shared wheels + hash-based selection
+---
+tags: [wheels, hash, shared-pool]
+created: 2025-01-02
+updated: 2026-07-15
+---
 
-## GTA SA wheels.DFF Structure (Analyzed)
+# Wheel System Architecture
+
+> [!info] Full documentation
+> See `docs/wheel_lod_system.md`, `docs/wheel_naming_convention.md`, `docs/wheel_texture_atlas.md` for wheel system docs.
+
+## VC-style shared wheels + hash-based selection
+
+### GTA SA wheels.DFF Structure (Analyzed)
 ```
 models/generic/wheels.DFF (129,843 bytes)
 ├── Clump (20 atomics, 31 frames, 20 geometries)
@@ -38,7 +48,7 @@ models/generic/wheels.DFF (129,843 bytes)
 │   │       └── Frame[12]: 'wheel_sport_l0' → Atomic → Geom[19]
 ```
 
-## 10 Wheel Styles (SA stock)
+### 10 Wheel Styles (SA stock)
 | Style | Frame Name | Description |
 |-------|-----------|-------------|
 | 0 | wheel_smallcar | Small compact wheels |
@@ -52,7 +62,7 @@ models/generic/wheels.DFF (129,843 bytes)
 | 8 | wheel_saloon | Sedan/saloon wheels |
 | 9 | wheel_sport | Sport/performance wheels |
 
-## How SA Actually Works
+### How SA Actually Works
 1. **Each vehicle DFF has wheels baked in** as atomics with frame names `wheel_lf`, `wheel_rf`, `wheel_lr`, `wheel_rr`
 2. **vehicles.ide** `wheelModel` field:
    - `-1` = use baked-in wheels from vehicle DFF (most SA vehicles)
@@ -62,9 +72,9 @@ models/generic/wheels.DFF (129,843 bytes)
 5. **`m_nWheelUpgradeClass`** determines which wheel set is available at TransFender
 6. **`m_fWheelSizeFront/Rear`** from vehicles.ide sets wheel scale
 
-## Plan: Extract + Extend + Replace
+### Plan: Extract + Extend + Replace
 
-### Phase 1: Extract Baked Wheels
+#### Phase 1: Extract Baked Wheels
 1. ✅ Parse wheels.DFF — found 10 styles × 2 LODs
 2. ✅ Analyze DFF binary format
 3. Extract wheel atomics (frame=`wheel_lf/rf/lr/rr`) from ALL vehicle DFFs
@@ -73,7 +83,7 @@ models/generic/wheels.DFF (129,843 bytes)
 6. Group: standard wheels (4 per car), special wheels (planes, bikes, etc.)
 7. Create `extended_wheels.dff` with all extracted wheels
 
-### Phase 2: VC-style Shared System
+#### Phase 2: VC-style Shared System
 1. Extended wheels.dff contains:
    - SA's 10 original styles (smallcar, offroad, truck, rim, alloy, lightvan, lighttruck, classic, saloon, sport)
    - All unique wheels extracted from vehicle DFFs (wheel_cadrona, wheel_infernus, etc.)
@@ -82,13 +92,13 @@ models/generic/wheels.DFF (129,843 bytes)
 3. Keep baked-in wheels for legacy (optional strip later)
 4. TransFender uses extended pool
 
-### Phase 3: Strip + Replace
+#### Phase 3: Strip + Replace
 1. Strip wheel meshes from vehicle DFFs (optional)
 2. All wheels from shared extended_wheels.dff
 3. Hash-based selection with more variety
 4. Per-vehicle wheel overrides via config
 
-## Hash-Based Selection Pattern (Same as Paint/Tire)
+### Hash-Based Selection Pattern (Same as Paint/Tire)
 ```cpp
 unsigned int hash = modelID * 2654435761u;
 float r = (float)(hash & 0xFFFF) / 65535.0f;
@@ -96,7 +106,7 @@ float r = (float)(hash & 0xFFFF) / 65535.0f;
 // Then select specific wheel within class
 ```
 
-## Vehicle Group → Wheel Class Mapping
+### Vehicle Group → Wheel Class Mapping
 | Vehicle Group | Sport | Muscle | SUV | Sedan | Bike | Truck | Lowrider | Tuner |
 |--------------|-------|--------|-----|-------|------|-------|----------|-------|
 | Standard     | 5%    | 10%    | 10% | 50%   | 0%   | 10%   | 5%       | 10%   |
@@ -109,3 +119,4 @@ float r = (float)(hash & 0xFFFF) / 65535.0f;
 ## Related
 - [[Weather System Architecture]] — similar hash-based selection pattern
 - [[SkyGFX Pipeline Overview]] — vehicle rendering pipeline
+- [[Wheel Extender Technical Plan]] — Extended wheel system details

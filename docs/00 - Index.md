@@ -7,7 +7,7 @@
 
 ## Architecture
 - [[Project Paths]] — All SDK/game/script paths in one place
-- [[Project Lineage]] — aap → junior → expIV evolution, feature parity matrix, key decisions
+- [[Project Lineage]] — aap → junior → skygfx_plus evolution, feature parity matrix, key decisions
 - [[Build System]] — fix_build.py, MSVC/SDK setup, shader compilation
 - [[INI Configuration]] — All 100+ config fields, quality presets, INI blocks, unified pipeline keys
 - [[Debug Tools]] — Hotkeys, profiling, crash handler
@@ -29,7 +29,7 @@
 - [[GTA IV Mode]] — GTA IV filmic tonemapping, vignette, bloom
 
 ## Shaders
-- [[Shader Architecture]] — Directory layout, compilation, loading, complete entry point catalog
+- [[Shader Architecture]] — Directory layout, compilation, loading, entry point catalog
 - [[PBR Common]] — Shared GGX/Smith/Schlick functions include
 - [[Glass Shader]] — Vehicle glass with Fresnel, tint system
 - [[Color Grading]] — Three-point grading system
@@ -39,10 +39,11 @@
 
 ## Systems
 - [[Vehicle Classification]] — Per-vehicle paint, glass, tire detection
-- [[Vehicle Pipeline]] — Neo, Leeds, Mobile, Env, GTAIV pipe details
 - [[Neo Vehicle Pipe]] — Neo pipe implementation
 - [[Leeds Vehicle Pipes]] — Leeds/VCS engine pipes
-- [[Wheel Extender]] — Extended wheel system (wheel_lod_system, wheel_naming_convention, wheel_texture_atlas)
+- [[wheel_texture_atlas]] — Texture atlas system for vehicle wheels
+- [[wheel_naming_convention]] — Wheel mesh naming standards
+- [[wheel_lod_system]] — Wheel LOD management
 
 ## Status
 - [[Implemented Features]] — What's done across all three codebases
@@ -51,5 +52,5 @@
 
 ## Reference
 - [[Credits]] — Contributors and academic references
-- [[File Inventory]] — Every source/shader/resource file across all three codebases
-- [[SDK_Dependecies]] — SDK dependencies and versions
+- [[File Inventory]] — Every source/shader/resource file in skygfx_plus
+- [[SDK Dependencies]] — SDK dependencies and versions

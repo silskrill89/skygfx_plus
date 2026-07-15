@@ -1,18 +1,16 @@
 # Three-Codebase Comparison
 
-#reference #comparison #architecture
-
 A comprehensive comparison of all three skygfx codebases for multi-agent reference.
 
 ## Lineage
 
 ```
-aap (original v4.2b) → junior_dr (fork) → skygfx_plus (expIV rewrite)
+aap (original v4.2b) → junior_dr (fork, backup_original/) → skygfx_plus (expIV rewrite)
 ```
 
-- **aap Original**: ~500 LOC, 22 source files, flat directory, 9 vehicle pipes, 2 building pipes
-- **junior Fork (backup_original/)**: ~1500 LOC, 23 source files, flat directory, 10 vehicle pipes, 2 building pipes
-- **skygfx_plus expIV**: ~15,000 LOC, 73 source files, organized subdirectories, 11 vehicle pipes, 4 building pipes
+- **aap Original**: ~22 source files, flat directory, 9 vehicle pipes, 2 building pipes
+- **junior Fork (backup_original/)**: 33 files, ~10K LOC (.cpp), flat directory, 10 vehicle pipes, 2 building pipes
+- **skygfx_plus**: 67 source files, ~18K LOC (.cpp), organized subdirectories, 11 vehicle pipes, 4 building pipes
 
 ---
 
@@ -22,64 +20,83 @@ aap (original v4.2b) → junior_dr (fork) → skygfx_plus (expIV rewrite)
 
 | File Name | aap Original | junior Fork (backup_original/) | skygfx_plus (src/) | Notes |
 |-----------|-------------|-------------------------------|-------------------|-------|
-| main.cpp | `src/main.cpp` ~800 LOC | `src/main.cpp` ~1982 LOC | `src/Core/main.cpp` ~1996 LOC | Entry point, hooks, crash handler. junior+expIV add crash handler, debug logging |
-| skygfx.h | `src/skygfx.h` ~300 LOC | `src/skygfx.h` ~484 LOC | `src/skygfx.h` ~844 LOC | Main header, Config struct. expIV adds Pipeline enum, GamePreset, PresetConfig, performance timing |
-| gta.h | `src/gta.h` ~200 LOC | `src/gta.h` ~332 LOC | `src/rw/gta.h` ~335 LOC | GTA SA type definitions, reversed functions |
-| gta.cpp | `src/gta.cpp` ~100 LOC | `src/gta.cpp` ~157 LOC | `src/rw/gta.cpp` ~171 LOC | GTA SA function hooks and wrappers |
-| vehiclePipe.cpp | `src/vehiclePipe.cpp` ~500 LOC | `src/vehiclePipe.cpp` ~1287 LOC | `src/render/vehiclePipe.cpp` ~1608 LOC | Vehicle render callbacks. junior adds Env pipe. expIV adds GTAIV + Modern PBR |
-| buildingPipe.cpp | `src/buildingPipe.cpp` ~200 LOC | `src/buildingPipe.cpp` ~808 LOC | `src/render/buildingPipe.cpp` ~948 LOC | Building render callbacks. expIV adds GTAIV + PBR |
-| pipelinecommon.cpp | `src/pipelinecommon.cpp` ~150 LOC | `src/pipelinecommon.cpp` ~385 LOC | `src/render/pipelinecommon.cpp` ~460 LOC | Matrix helpers, shader loading, light uploaders |
-| postfx.cpp | `src/postfx.cpp` ~200 LOC | `src/postfx.cpp` ~1639 LOC | `src/render/postfx.cpp` ~2387 LOC | Post-processing effects. junior adds VCS/III/VC filters. expIV adds SSAO, SMAA, motion blur, SSS |
-| envmap.cpp | `src/envmap.cpp` ~150 LOC | `src/envmap.cpp` ~413 LOC | `src/render/envmap.cpp` ~560 LOC | Reflection map rendering |
-| pipeplg.cpp | `src/pipeplg.cpp` ~60 LOC | `src/pipeplg.cpp` ~63 LOC | `src/rw/pipeplg.cpp` ~63 LOC | Pipeline plugin attach |
-| defaultFuncs.cpp | `src/defaultFuncs.cpp` ~200 LOC | `src/defaultFuncs.cpp` ~439 LOC | `src/rw/defaultFuncs.cpp` ~439 LOC | Default render callback functions |
-| texdb.cpp | `src/texdb.cpp` ~100 LOC | `src/texdb.cpp` ~260 LOC | `src/extras/texdb.cpp` ~251 LOC | Texture database with per-texture overrides |
-| neo.cpp | `src/neo.cpp` ~100 LOC | `src/neo.cpp` ~187 LOC | `src/render/neo.cpp` ~187 LOC | Neo vehicle pipe implementation |
-| neo.h | `src/neo.h` ~80 LOC | `src/neo.h` ~171 LOC | `src/render/neo.h` ~171 LOC | Neo pipe header |
-| neoCarpipe.cpp | `src/neoCarpipe.cpp` ~200 LOC | `src/neoCarpipe.cpp` ~401 LOC | `src/render/neoCarpipe.cpp` ~407 LOC | Neo car pipe render callbacks |
-| neoWaterdrops.cpp | `src/neoWaterdrops.cpp` ~300 LOC | `src/neoWaterdrops.cpp` ~693 LOC | `src/render/neoWaterdrops.cpp` ~693 LOC | Neo water/blood drop effects |
-| MemoryMgr.h | `src/MemoryMgr.h` ~89 LOC | `src/MemoryMgr.h` ~89 LOC | `src/rw/MemoryMgr.h` ~89 LOC | Memory management utilities |
-| Pools.h | `src/Pools.h` ~136 LOC | `src/Pools.h` ~136 LOC | `src/rw/Pools.h` ~136 LOC | Object pool management |
-| LinkList.h | `src/LinkList.h` ~115 LOC | `src/LinkList.h` ~115 LOC | `src/rw/LinkList.h` ~115 LOC | Linked list implementation |
-| ModuleList.hpp | `src/ModuleList.hpp` ~185 LOC | `src/ModuleList.hpp` ~185 LOC | *(embedded in main.cpp)* | Module enumeration for hooking |
-| debugmenu_public.h | `src/debugmenu_public.h` ~141 LOC | `src/debugmenu_public.h` ~141 LOC | `src/extras/debugmenu_public.h` ~141 LOC | Debug menu API |
-| normmap_stubs.cpp | `src/normmap_stubs.cpp` ~47 LOC | `src/normmap_stubs.cpp` ~47 LOC | `src/rw/normmap_stubs.cpp` ~70 LOC | Normal map stubs |
+| main.cpp | `src/main.cpp` | `src/main.cpp` 1982 LOC | `src/Core/main.cpp` 1996 LOC | Entry point, hooks, config, crash handler |
+| skygfx.h | `src/skygfx.h` | `src/skygfx.h` 484 LOC | `src/skygfx.h` 739 LOC | Main header, Config struct, Pipeline enum |
+| gta.h | `src/gta.h` | `src/gta.h` 332 LOC | `src/rw/gta.h` 335 LOC | GTA SA type definitions, reversed functions |
+| gta.cpp | `src/gta.cpp` | `src/gta.cpp` 157 LOC | `src/rw/gta.cpp` 171 LOC | GTA SA function hooks and wrappers |
+| vehiclePipe.cpp | `src/vehiclePipe.cpp` | `src/vehiclePipe.cpp` 1287 LOC | `src/render/vehiclePipe.cpp` 1608 LOC | Vehicle render callbacks. junior adds Env pipe. expIV adds GTAIV + Modern PBR |
+| buildingPipe.cpp | `src/buildingPipe.cpp` | `src/buildingPipe.cpp` 808 LOC | `src/render/buildingPipe.cpp` 948 LOC | Building render callbacks. expIV adds GTAIV + PBR |
+| pipelinecommon.cpp | `src/pipelinecommon.cpp` | `src/pipelinecommon.cpp` 385 LOC | `src/render/pipelinecommon.cpp` 460 LOC | Matrix helpers, shader loading, light uploaders |
+| postfx.cpp | `src/postfx.cpp` | `src/postfx.cpp` 1639 LOC | `src/render/postfx.cpp` 2387 LOC | Post-processing effects |
+| envmap.cpp | `src/envmap.cpp` | `src/envmap.cpp` 413 LOC | `src/render/envmap.cpp` 560 LOC | Reflection map rendering |
+| pipeplg.cpp | `src/pipeplg.cpp` | `src/pipeplg.cpp` 63 LOC | `src/rw/pipeplg.cpp` 63 LOC | Pipeline plugin attach |
+| defaultFuncs.cpp | `src/defaultFuncs.cpp` | `src/defaultFuncs.cpp` 439 LOC | `src/rw/defaultFuncs.cpp` 439 LOC | Default render callback functions |
+| texdb.cpp | `src/texdb.cpp` | `src/texdb.cpp` 260 LOC | `src/extras/texdb.cpp` 251 LOC | Texture database with per-texture overrides |
+| neo.cpp | `src/neo.cpp` | `src/neo.cpp` 187 LOC | `src/render/neo.cpp` 187 LOC | Neo vehicle pipe implementation |
+| neo.h | `src/neo.h` | `src/neo.h` 171 LOC | `src/render/neo.h` 171 LOC | Neo pipe header |
+| neoCarpipe.cpp | `src/neoCarpipe.cpp` | `src/neoCarpipe.cpp` 401 LOC | `src/render/neoCarpipe.cpp` 407 LOC | Neo car pipe render callbacks |
+| neoWaterdrops.cpp | `src/neoWaterdrops.cpp` | `src/neoWaterdrops.cpp` 693 LOC | `src/render/neoWaterdrops.cpp` 693 LOC | Neo water/blood drop effects |
+| MemoryMgr.h | `src/MemoryMgr.h` | `src/MemoryMgr.h` 89 LOC | `src/rw/MemoryMgr.h` 89 LOC | Memory management utilities |
+| Pools.h | `src/Pools.h` | `src/Pools.h` 136 LOC | `src/rw/Pools.h` 136 LOC | Object pool management |
+| LinkList.h | `src/LinkList.h` | `src/LinkList.h` 115 LOC | `src/rw/LinkList.h` 115 LOC | Linked list implementation |
+| ModuleList.hpp | `src/ModuleList.hpp` | `src/ModuleList.hpp` 185 LOC | `src/rw/ModuleList.hpp` 185 LOC | Module enumeration for hooking |
+| debugmenu_public.h | `src/debugmenu_public.h` | `src/debugmenu_public.h` 141 LOC | `src/extras/debugmenu_public.h` 141 LOC | Debug menu API |
+| normmap_stubs.cpp | `src/normmap_stubs.cpp` | `src/normmap_stubs.cpp` 47 LOC | `src/rw/normmap_stubs.cpp` 70 LOC | Normal map stubs |
 
 ### junior-only Files
 
 | File Name | Path | LOC | Notes |
 |-----------|------|-----|-------|
-| extendedplg.cpp | `src/extendedplg.cpp` | ~42 LOC | EDED plugin for per-atomic shader assignment |
+| extendedplg.cpp | `src/extendedplg.cpp` | 42 LOC | EDED plugin for per-atomic shader assignment |
 
 ### skygfx_plus-only Files (expIV additions)
 
 | File Name | Path | LOC | Notes |
 |-----------|------|-----|-------|
-| hooks.cpp | `src/Core/hooks.cpp` | ~243 LOC | Standalone hook installation (separated from main.cpp) |
-| diagnostics.cpp | `src/Core/diagnostics.cpp` | ~145 LOC | Debug logging, performance timers, crash handler |
-| config.cpp | `src/Core/config.cpp` | ~483 LOC | Expanded INI parsing (239+ config fields) |
-| weather.cpp | `src/Core/weather.cpp` | ~282 LOC | Weather/timecycle expansion (GTA V style) |
-| presets.cpp | `src/Core/presets.cpp` | ~133 LOC | Game preset definitions (16 presets) |
-| debugmenu_ui.cpp | `src/Core/debugmenu_ui.cpp` | ~514 LOC | Debug menu UI |
-| SMAA.cpp | `src/render/SMAA.cpp` | ~316 LOC | SMAA anti-aliasing implementation |
-| waterPipe.cpp | `src/render/waterPipe.cpp` | ~138 LOC | Parallax water rendering |
-| PC_PlantsMgr.cpp | `src/render/PC_PlantsMgr.cpp` | ~1736 LOC | Plant/vegetation management |
-| PC_PlantsMgr_overlay.cpp | `src/render/PC_PlantsMgr_overlay.cpp` | ~857 LOC | Plant overlay rendering |
-| PC_GrassRenderer.cpp | `src/render/PC_GrassRenderer.cpp` | ~468 LOC | Grass rendering |
-| normalmap.cpp | `src/rw/normalmap.cpp` | ~280 LOC | Normal map pipeline implementation |
-| HLSL_hook.cpp | `src/rw/HLSL_hook.cpp` | ~32 LOC | HLSL shader hook |
-| wheels.cpp | `src/extras/wheels.cpp` | ~139 LOC | Wheel rendering |
-| wheels_extender.cpp | `src/extras/wheels_extender.cpp` | ~283 LOC | Extended wheel system |
-| vehicles.cpp | `src/extras/vehicles.cpp` | ~314 LOC | Vehicle registry |
-| veh_shaders.cpp | `src/extras/veh_shaders.cpp` | ~375 LOC | Vehicle shader data bridge |
-| chars.cpp | `src/entities/chars.cpp` | ~368 LOC | Character rendering |
-| skygfx_bridge.cpp | `src/extras/skygfx_bridge.cpp` | ~108 LOC | Shared memory IPC bridge |
-| iv_mode.cpp | `src/render/iv_mode.cpp` | ~102 LOC | GTA IV rendering mode |
-| ps2_mode.cpp | `src/render/ps2_mode.cpp` | ~99 LOC | PS2 rendering mode defaults |
-| xbox_mode.cpp | `src/render/xbox_mode.cpp` | ~95 LOC | Xbox rendering mode defaults |
-| mobile.cpp | `src/render/mobile.cpp` | ~95 LOC | Mobile rendering mode defaults |
-| custom_mode.cpp | `src/render/custom_mode.cpp` | ~142 LOC | Custom rendering mode |
-| pc_patched_mode.cpp | `src/render/pc_patched_mode.cpp` | ~96 LOC | PC patched mode defaults |
+| hooks.cpp | `src/Core/hooks.cpp` | 243 LOC | Standalone hook installation |
+| hooks.h | `src/Core/hooks.h` | — | Hooks header |
+| diagnostics.cpp | `src/Core/diagnostics.cpp` | 145 LOC | Debug logging, performance timers, crash handler |
+| diagnostics.h | `src/Core/diagnostics.h` | — | Diagnostics header |
+| main_exports.h | `src/Core/main_exports.h` | — | Main exports header |
+| config.cpp | `src/Core/config.cpp` | 483 LOC | Expanded INI parsing (239+ config fields) |
+| weather.cpp | `src/Core/weather.cpp` | 282 LOC | Weather/timecycle expansion (GTA V style) |
+| weather.h | `src/Core/weather.h` | — | Weather header |
+| presets.cpp | `src/Core/presets.cpp` | 133 LOC | Game preset definitions (16 presets) |
+| debugmenu_ui.cpp | `src/Core/debugmenu_ui.cpp` | 514 LOC | Debug menu UI |
+| chars.cpp | `src/entities/chars.cpp` | 368 LOC | Character rendering |
+| chars.h | `src/entities/chars.h` | — | Character header |
+| PlantSurfPropMgr.h | `src/entities/PlantSurfPropMgr.h` | — | Plant surface property manager |
+| brdfLibrary.h | `src/extras/brdfLibrary.h` | — | BRDF library header |
+| wheels.cpp | `src/extras/wheels.cpp` | 139 LOC | Wheel rendering |
+| wheels.h | `src/extras/wheels.h` | — | Wheels header |
+| wheels_extender.cpp | `src/extras/wheels_extender.cpp` | 283 LOC | Extended wheel system |
+| wheels_extender.h | `src/extras/wheels_extender.h` | — | Wheel extender header |
+| vehicles.cpp | `src/extras/vehicles.cpp` | 314 LOC | Vehicle registry |
+| veh_shaders.cpp | `src/extras/veh_shaders.cpp` | 375 LOC | Vehicle shader data bridge |
+| skygfx_bridge.cpp | `src/extras/skygfx_bridge.cpp` | 108 LOC | Shared memory IPC bridge |
+| SMAA.cpp | `src/render/SMAA.cpp` | 316 LOC | SMAA anti-aliasing implementation |
+| SMAA.h | `src/render/SMAA.h` | — | SMAA header |
+| AreaTex.h | `src/render/AreaTex.h` | — | SMAA area texture |
+| SearchTex.h | `src/render/SearchTex.h` | — | SMAA search texture |
+| waterPipe.cpp | `src/render/waterPipe.cpp` | 138 LOC | Parallax water rendering |
+| waterPipe.h | `src/render/waterPipe.h` | — | Water pipe header |
+| PC_PlantsMgr.cpp | `src/render/PC_PlantsMgr.cpp` | 1736 LOC | Plant/vegetation management |
+| PC_PlantsMgr.h | `src/render/PC_PlantsMgr.h` | — | Plants manager header |
+| PC_PlantsMgr_overlay.cpp | `src/render/PC_PlantsMgr_overlay.cpp` | 857 LOC | Plant overlay rendering |
+| PC_GrassRenderer.cpp | `src/render/PC_GrassRenderer.cpp` | 468 LOC | Grass rendering |
+| PC_GrassRenderer.h | `src/render/PC_GrassRenderer.h` | — | Grass renderer header |
+| GrassSystem.h | `src/render/GrassSystem.h` | — | Grass system header |
+| postfx.h | `src/render/postfx.h` | — | PostFX header |
+| iv_mode.cpp | `src/render/iv_mode.cpp` | 102 LOC | GTA IV rendering mode |
+| ps2_mode.cpp | `src/render/ps2_mode.cpp` | 99 LOC | PS2 rendering mode defaults |
+| xbox_mode.cpp | `src/render/xbox_mode.cpp` | 95 LOC | Xbox rendering mode defaults |
+| mobile.cpp | `src/render/mobile.cpp` | 95 LOC | Mobile rendering mode defaults |
+| custom_mode.cpp | `src/render/custom_mode.cpp` | 142 LOC | Custom rendering mode |
+| pc_patched_mode.cpp | `src/render/pc_patched_mode.cpp` | 96 LOC | PC patched mode defaults |
+| normalmap.cpp | `src/rw/normalmap.cpp` | 280 LOC | Normal map pipeline implementation |
+| HLSL_hook.cpp | `src/rw/HLSL_hook.cpp` | 32 LOC | HLSL shader hook |
+| HLSL_hook.h | `src/rw/HLSL_hook.h` | — | HLSL hook header |
+| ColData.h | `src/rw/ColData.h` | — | Collision data header |
 
 ---
 
@@ -111,28 +128,17 @@ aap (original v4.2b) → junior_dr (fork) → skygfx_plus (expIV rewrite)
 | Shader Name | aap? | junior? | skygfx_plus? | Entry Points | Purpose |
 |-------------|------|---------|--------------|--------------|---------|
 | simplePS.hlsl | Y (inline) | Y | Y | `main_simple` | Basic texture * color |
-| simpleDetailPS.hlsl | — | Y | — (merged) | *(in buildingPipePS)* | Texture * color * detail |
-| simpleFogPS.hlsl | — | Y | — (merged) | *(in buildingPipePS)* | Distance fog blending |
-| simpleStochasticPS.hlsl | — | Y | — (merged) | *(in stochasticBuildingPS)* | Stochastic sampling |
-| simpleDetailStochasticPS.hlsl | — | Y | — (merged) | *(in stochasticBuildingPS)* | Stochastic + detail |
-| xboxBuildingPS.hlsl | — | Y | — (merged) | *(in buildingPipePS)* | Xbox dual-layer env |
-| xboxBuildingStochasticPS.hlsl | — | Y | — (merged) | *(in stochasticBuildingPS)* | Stochastic Xbox env |
-| normMapBuildingPS.hlsl | — | — | — (merged) | *(in buildingPipePS)* | Normal-mapped building |
 | buildingPipePS.hlsl | — | — | Y | `main_simple`, `main_simpleDetail`, `main_simpleFog`, `main_xboxBuilding`, `main_normMapBuilding` | Consolidated building PS (5 entry points) |
 | stochasticBuildingPS.hlsl | — | — | Y | `main_simpleStochastic`, `main_simpleDetailStochastic`, `main_xboxBuildingStochastic` | Consolidated stochastic building PS (3 entry points) |
 | grassPS.hlsl | — | — | Y | `main_grass` | Grass rendering |
-| ps2CarFxVS.hlsl (PS) | Y | Y | — (merged) | *(in VehiclePBR_Modern)* | PS2 car effects |
-| ps2EnvSpecFxPS.hlsl | Y | Y | — (merged) | *(in VehiclePBR_Modern)* | PS2 env+spec |
-| specCarFxPS.hlsl | Y | Y | — (merged) | *(in VehiclePBR_Modern)* | Specular car FX |
-| envCarPS.hlsl | — | Y | — (merged) | *(in VehiclePBR_Modern)* | Environment mapping |
-| mobileVehiclePS.hlsl | — | — | Y (+ merged) | `main_mobileVehicle` | Mobile vehicle rendering |
-| normMapVehiclePS.hlsl | — | — | Y (+ merged) | `main_normMapVehicle` | Normal-mapped vehicle |
 | VehiclePBR_Modern.hlsl | — | — | Y | `main`, `main_envCar`, `main_ps2EnvSpecFx`, `main_specCarFx`, `main_mobileVehicle`, `main_normMapVehicle` | Unified vehicle PBR (6 entry points) |
 | Glass_Vehicle.hlsl | — | — | Y | `main_glass` | Vehicle glass rendering |
 | Rubber_Vehicle.hlsl | — | — | Y | `main_rubber` | Tire rendering |
 | CarPaint_Reflections.hlsl | — | — | Y | `main_carPaintReflections` | Car paint reflection |
 | VehiclePaint_GTAIV.hlsl | — | — | Y | `main_vehiclePaintGTAIV` | GTA IV vehicle paint |
 | GTAIV_ps20.hlsl | — | — | Y | `main_gtaiv` | GTA IV post-process |
+| mobileVehiclePS.hlsl | — | — | Y | `main_mobileVehicle` | Mobile vehicle rendering |
+| normMapVehiclePS.hlsl | — | — | Y | `main_normMapVehicle` | Normal-mapped vehicle |
 | iiiTrailsPS.hlsl | — | Y | Y | `main_iiiTrails` | GTA III trails |
 | vcTrailsPS.hlsl | — | Y | Y | `main_vcTrails` | GTA VC trails |
 | radiosityPS.hlsl | — | Y | Y | `main_radiosity` | Shader-based radiosity |
@@ -165,9 +171,9 @@ aap (original v4.2b) → junior_dr (fork) → skygfx_plus (expIV rewrite)
 | SkinSSS.hlsl | — | — | Y | `main_skinSSS` | Skin subsurface scattering |
 | SSS_Blur.hlsl | — | — | Y | `main_sssBlur` | SSS blur pass |
 | vectorMotionBlur.hlsl | — | — | Y | `main_vectorMotionBlur` | Vector motion blur |
-| vcTrailsPS.hlsl | — | — | Y | `main_vcTrails` | VC trails (expIV version) |
 | Water_Parallax.hlsl | — | — | Y | `main_waterParallax` | Parallax water |
 | unifiedPipe.hlsl | — | — | Y | `main_unified` | 4-pass unified pipeline |
+| Clamp.hlsl | — | — | Y | — | Clamp utility |
 
 ### Shader Includes
 
@@ -179,6 +185,19 @@ aap (original v4.2b) → junior_dr (fork) → skygfx_plus (expIV rewrite)
 | CarPaintNoise.hlsl | — | — | Y | Paint noise functions |
 | colorSpace.hlsl | — | — | Y | Color space conversions |
 | PerlinNoise.hlsl | — | — | Y | Procedural noise |
+
+### GTA IV CSOs (pre-compiled, in shaders/)
+
+| CSO Name | Location | Notes |
+|----------|----------|-------|
+| GTAIVBuilding_ps.cso | `shaders/ps/` | GTA IV building pixel shader |
+| GTAIVForwardPlus_ps.cso | `shaders/ps/` | GTA IV forward+ pixel shader |
+| GTAIVVehicle_ps.cso | `shaders/ps/` | GTA IV vehicle pixel shader |
+| GTAIVBuilding_vs.cso | `shaders/vs/` | GTA IV building vertex shader |
+| GTAIVForwardPlus_vs.cso | `shaders/vs/` | GTA IV forward+ vertex shader |
+| GTAIVVehicle_vs.cso | `shaders/vs/` | GTA IV vehicle vertex shader |
+| normMapBuildingPS.cso | `shaders/ps/` | Normal-mapped building |
+| normMapVehiclePS.cso | `shaders/ps/` | Normal-mapped vehicle |
 
 ---
 
@@ -206,7 +225,7 @@ aap (original v4.2b) → junior_dr (fork) → skygfx_plus (expIV rewrite)
 |------|------|---------|--------------|-----------|-------------|-------------|
 | PS2 | Y | Y | Y | `PS2` | `ps2BuildingVS` + `simplePS` | Classic PS2 building |
 | Xbox/PC | Y | Y | Y | `PC`/`Xbox` | `xboxBuildingVS` + `xboxBuildingPS` | Xbox/PC enhanced with env maps |
-| GTAIV | — | — | Y | `GTAIV` | `gtaivBuildingVS` + `gtaivBuildingPS` | GTA IV forward pass |
+| GTAIV | — | — | Y | `GTAIV` | GTAIV CSOs | GTA IV forward pass |
 | PBR | — | — | Y | `PBR` | PBR building shaders | Physically-based rendering |
 
 ### Unified Pipeline Modes (skygfx_plus only)
@@ -238,12 +257,6 @@ aap (original v4.2b) → junior_dr (fork) → skygfx_plus (expIV rewrite)
 |---------|-------------|---------------|-------------------|-------|
 | `ps2Modulate` | 0 | 0 | 0 | Global PS2 modulate |
 | `dualPass` | 0 | 0 | 0 | Global dual-pass |
-| `ps2ModulateBuilding` | *(from ps2Modulate)* | *(from ps2Modulate)* | *(from ps2Modulate)* | Per-type override |
-| `dualPassBuilding` | *(from dualPass)* | *(from dualPass)* | *(from dualPass)* | Per-type override |
-| `ps2ModulateVehicle` | *(from ps2Modulate)* | *(from ps2Modulate)* | *(from ps2Modulate)* | Per-type override |
-| `dualPassVehicle` | *(from dualPass)* | *(from dualPass)* | *(from dualPass)* | Per-type override |
-| `ps2ModulateGrass` | *(from ps2Modulate)* | *(from ps2Modulate)* | *(from ps2Modulate)* | Per-type override |
-| `dualPassGrass` | *(from dualPass)* | *(from dualPass)* | *(from dualPass)* | Per-type override |
 | `detailMaps` | 0 | 1 | 1 | Detail map rendering |
 | `stochasticTexturing` | — | 1 | — (in config) | Stochastic sampling |
 | `sunGlare` | -1 | 0 | -1 | Sun glare effect |
@@ -253,8 +266,6 @@ aap (original v4.2b) → junior_dr (fork) → skygfx_plus (expIV rewrite)
 | `grassAddAmbient` | 0 | 1 | 0 | Grass add ambient |
 | `grassBackfaceCull` | 1 | 1 | 1 | Grass backface culling |
 | `grassFixPlacement` | *(none)* | *(none)* | 0 | Grass placement fix |
-| `pedShadows` | *(bool)* | *(bool)* | *(bool)* | Ped shadows |
-| `stencilShadows` | *(bool)* | *(bool)* | *(bool)* | Stencil shadows |
 | `disableClouds` | 0 | 0 | 0 | Disable clouds |
 | `disableGamma` | 0 | 0 | 0 | Disable gamma |
 | `fixPcCarLight` | 0 | 0 | 0 | Fix PC car lighting |
@@ -265,8 +276,6 @@ aap (original v4.2b) → junior_dr (fork) → skygfx_plus (expIV rewrite)
 | INI Key | aap Default | junior Default | skygfx_plus Default | Notes |
 |---------|-------------|---------------|-------------------|-------|
 | `envMapSize` | 256 | 256 | 256 | Reflection map size (power of 2) |
-| `envMapUseLODs` | — | 0 | — (in config) | Use LODs for env map |
-| `envMapFarClipMult` | — | 1.0 | — (in config) | Far clip multiplier |
 | `envShininessMult` | 1.0 | 1.0 | 1.0 | Environment shininess |
 | `envSpecularityMult` | 1.0 | 1.0 | 1.0 | Environment specularity |
 | `envPower` | 20.0 | 20.0 | 20.0 | Environment power |
@@ -274,28 +283,6 @@ aap (original v4.2b) → junior_dr (fork) → skygfx_plus (expIV rewrite)
 | `neoShininessMult` | 1.0 | 1.0 | 1.0 | Neo shininess |
 | `neoSpecularityMult` | 1.0 | 1.0 | 1.0 | Neo specularity |
 | `leedsShininessMult` | 1.0 | 1.0 | 1.0 | Leeds shininess |
-
-### Color Filters
-
-| INI Key | aap Default | junior Default | skygfx_plus Default | Notes |
-|---------|-------------|---------------|-------------------|-------|
-| `colorFilter` | PC | VCS | PC | Filter mode (PS2/PC/Mobile/III/VC/VCS/GTAIV) |
-| `rgb1Mult` | — | 1.0 | — (in config) | RGB filter 1 multiplier |
-| `rgb2Mult` | — | 1.0 | — (in config) | RGB filter 2 multiplier |
-| `infraredVision` | PS2 | PS2 | PS2 | Infrared vision mode |
-| `nightVision` | PS2 | PS2 | PS2 | Night vision mode |
-| `grainFilter` | PS2 | PS2 | PS2 | Grain filter mode |
-| `blurLeft` | *(default)* | *(default)* | *(default)* | Blur offset left |
-| `blurRight` | *(default)* | *(default)* | *(default)* | Blur offset right |
-| `blurTop` | *(default)* | *(default)* | *(default)* | Blur offset top |
-| `blurBottom` | *(default)* | *(default)* | *(default)* | Blur offset bottom |
-| `YCbCrCorrection` | 0 | 0 | 0 | YCbCr color correction |
-| `lumaScale` | — | — | 219.0/255.0 | Luma scale |
-| `lumaOffset` | — | — | 16.0/255.0 | Luma offset |
-| `CbScale` | — | — | 1.23 | Cb scale |
-| `CbOffset` | — | — | 0.0 | Cb offset |
-| `CrScale` | — | — | 1.23 | Cr scale |
-| `CrOffset` | — | — | 0.0 | Cr offset |
 
 ### Radiosity
 
@@ -314,7 +301,24 @@ aap (original v4.2b) → junior_dr (fork) → skygfx_plus (expIV rewrite)
 | `vcsTrails` | 0 | 0 | 0 | Enable VCS trails |
 | `trailsLimit` | 80 | 80 | 80 | Trail limit |
 | `trailsIntensity` | 38 | 38 | 38 | Trail intensity |
-| `trailsResolution` | — | 1 | *(not in expIV)* | Trail resolution |
+
+### Z-Write Threshold
+
+| INI Key | aap Default | junior Default | skygfx_plus Default | Notes |
+|---------|-------------|---------------|-------------------|-------|
+| `zwriteThreshold` | 128 | 128 | 128 | Z-write threshold |
+
+### Misc
+
+| INI Key | aap Default | junior Default | skygfx_plus Default | Notes |
+|---------|-------------|---------------|-------------------|-------|
+| `keySwitch` | 0x0 | 0x0 | 0x0 | Key to switch configs |
+| `keyReload` | 0x0 | 0x0 | 0x0 | Key to reload INI |
+| `explicitBuildingPipe` | *(none)* | *(none)* | -1 | Explicit building pipe override |
+| `coronaZtest` | *(none)* | *(none)* | -1 | Corona Z-test |
+| `fixShadows` | *(none)* | *(none)* | 0 | Fix shadow rendering |
+| `transparentLockon` | *(none)* | *(none)* | 0 | Transparent lock-on |
+| `privateHooks` | *(none)* | *(none)* | 0 | Private hooks |
 
 ### SSAO (skygfx_plus only)
 
@@ -326,7 +330,7 @@ aap (original v4.2b) → junior_dr (fork) → skygfx_plus (expIV rewrite)
 | `ssaoKernelSize` | 16 | Kernel size |
 | `ssaoSampleCount` | 16 | Sample count |
 
-### SMAA (junior has basic, skygfx_plus has full)
+### SMAA
 
 | INI Key | aap Default | junior Default | skygfx_plus Default | Notes |
 |---------|-------------|---------------|-------------------|-------|
@@ -342,8 +346,6 @@ aap (original v4.2b) → junior_dr (fork) → skygfx_plus (expIV rewrite)
 | `ivMode` | — | 0 | 0 | Enable GTA IV mode |
 | `ivDesaturation` | — | 0.3 | 1.0 | Desaturation strength |
 | `ivGamma` | — | 1.0 | 1.0 | Gamma correction |
-| `ivSaturation` | — | — | 0.0 | Saturation (skygfx_plus only) |
-| `ivCurves` | — | — | 0.0 | Curves (skygfx_plus only) |
 | `ivVignetteIntensity` | — | 0.5 | 0.0 | Vignette intensity |
 | `ivVignetteRadius` | — | 0.5 | 0.75 | Vignette radius |
 | `ivVignetteContrast` | — | 2.0 | 1.5 | Vignette contrast |
@@ -415,28 +417,6 @@ aap (original v4.2b) → junior_dr (fork) → skygfx_plus (expIV rewrite)
 |---------|---------|-------|
 | `pipeChainEnable` | 0 | Enable 4-pass pipe chain |
 | `pipeChainIntensity` | 0.5 | Chain intensity |
-
-### Z-Write Threshold
-
-| INI Key | aap Default | junior Default | skygfx_plus Default | Notes |
-|---------|-------------|---------------|-------------------|-------|
-| `zwriteThreshold` | 128 | 128 | 128 | Z-write threshold |
-| `zwriteThresholdGrass` | — | 128 | *(not in expIV)* | Grass Z-write |
-| `zwriteThresholdPed` | — | 128 | *(not in expIV)* | Ped Z-write |
-
-### Misc
-
-| INI Key | aap Default | junior Default | skygfx_plus Default | Notes |
-|---------|-------------|---------------|-------------------|-------|
-| `keySwitch` | 0x0 | 0x0 | 0x0 | Key to switch configs |
-| `keyReload` | 0x0 | 0x0 | 0x0 | Key to reload INI |
-| `explicitBuildingPipe` | *(none)* | *(none)* | -1 | Explicit building pipe override |
-| `tagsBuildingPipe` | — | *(none)* | *(not in expIV)* | Tags building pipe |
-| `coronaZtest` | *(none)* | *(none)* | -1 | Corona Z-test |
-| `fixShadows` | *(none)* | *(none)* | 0 | Fix shadow rendering |
-| `transparentLockon` | *(none)* | *(none)* | 0 | Transparent lock-on |
-| `privateHooks` | *(none)* | *(none)* | 0 | Private hooks |
-| `forceWindShader` | — | 0 | *(not in expIV)* | Force wind shader |
 
 ### Unified Pipeline (skygfx_plus only)
 
@@ -557,7 +537,6 @@ aap (original v4.2b) → junior_dr (fork) → skygfx_plus (expIV rewrite)
 | Rubber/Tire Shader | — | — | Y | Tire-specific |
 | Wheel Extender | — | — | Y | Extended wheel system |
 | Vehicle Registry | — | — | Y | Model ID mapping |
-| Dirt/Rust Layers | — | — | Y | Material layers |
 
 ### Quality System
 
