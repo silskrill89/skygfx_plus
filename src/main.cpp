@@ -348,6 +348,9 @@ myDefaultCallback(RpAtomic *atomic)
 	int dodual = 0;
 	int detach = 0;
 
+	if(!RpAtomicGetFrame(atomic))
+		return NULL;
+
 	pipe = atomic->pipeline;
 	if(pipe == NULL){
 		pipe = *(RxPipeline**)(*(DWORD*)0xC97B24+0x3C+dword_C9BC60);
@@ -381,6 +384,8 @@ void
 CTagManager__SetupAtomic(RpAtomic *atomic)
 {
 	CTagManager__SetupAtomic_orig(atomic);
+	if(!RpAtomicGetFrame(atomic))
+		return;
 	/* Set the building pipeline so we have control over drawing.
 	 * Note that we need the non-DN version. This works because this function
 	 * is called after the building pipeline has already been set up. */
@@ -890,6 +895,7 @@ RenderScene_hook(void)
 {
 	static int s_frameNum = 0;
 	s_frameNum++;
+	diag_heartbeat();
 
 	// Check device state via RenderWare camera - skip frame if no valid camera/raster
 	if (!Scene.camera || !RwCameraGetRaster(Scene.camera)) {
@@ -928,6 +934,10 @@ myPluginAttach(void)
 }
 
 void (*InitialiseGame)(void);
+
+// Forward declarations for crash guards (defined after RwIm3D functions)
+static RwTexture* __cdecl safe_CopyTexture(RwTexture* tex);
+
 void
 installLCMV2Hooks(void)
 {
@@ -942,11 +952,6 @@ InitialiseGame_hook(void)
 	dbglog("InitialiseGame_hook: entered (call #%d)", initCount);
 
 	if(initCount == 1){
-		// DISABLED FOR TESTING: Initialize normal map plugin — must run AFTER RwEngineInit()
-		// (InjectDelayedPatches runs at IsAlreadyRunning hook, before RW is ready)
-		// normalmap_init();
-		// dbglog("InitialiseGame_hook: normalmap_init done");
-
 		if(!UG_RegisterEventCallback)
 			InterceptCall(&RenderScene_A, RenderScene_hook, 0x53EABF);
 		else{
@@ -962,37 +967,91 @@ InitialiseGame_hook(void)
 		dbglog("InitialiseGame_hook: neoInit done");
 		initTexDB();
 		dbglog("InitialiseGame_hook: initTexDB done");
-		// DISABLED FOR TESTING: chars_init();
-		// dbglog("InitialiseGame_hook: chars_init done");
 	}else{
 		dbglog("InitialiseGame_hook: re-entry detected (call #%d), skipping hooks", initCount);
 	}
 
 	dbglog("InitialiseGame_hook: calling original CGame::Initialise...");
-	static DWORD s_initCrashCode;
-	static EXCEPTION_POINTERS* s_initCrashPtrs;
-	__try {
-		InitialiseGame();
-		dbglog("InitialiseGame_hook: original returned successfully");
-	} __except(
-		(s_initCrashCode = GetExceptionCode(),
-		 s_initCrashPtrs = GetExceptionInformation(),
-		 EXCEPTION_EXECUTE_HANDLER)
-	) {
-		CONTEXT *ctx = s_initCrashPtrs->ContextRecord;
-		DWORD storeCount = *(DWORD*)0xB1F650;
-		dbglog("InitialiseGame_hook: CRASH in original! code=0x%08X addr=%p",
-			s_initCrashCode, s_initCrashPtrs->ExceptionRecord->ExceptionAddress);
-		diag_writeMinidump(s_initCrashPtrs);
-		dbglog("  EAX=%08X EBX=%08X ECX=%08X EDX=%08X", ctx->Eax, ctx->Ebx, ctx->Ecx, ctx->Edx);
-		dbglog("  ESI=%08X EDI=%08X EBP=%08X ESP=%08X", ctx->Esi, ctx->Edi, ctx->Ebp, ctx->Esp);
-		dbglog("  EIP=%08X vehicleStoreCount=%d (0x%X)", ctx->Eip, storeCount, storeCount);
-		DWORD *sp = (DWORD*)ctx->Esp;
-		for(int i = 0; i < 8; i++)
-			dbglog("  [ESP+%d] = %08X", i*4, sp[i]);
-		dbglog("InitialiseGame_hook: SEH caught crash, game state partial. Continuing...");
+	diag_heartbeat();
+	InitialiseGame();
+	diag_heartbeat();
+	dbglog("InitialiseGame_hook: original returned successfully");
+
+	// Install CopyTexture crash guard AFTER CGame::Initialise returns.
+	// The game decrypts obfuscated code during Initialise — hooking before
+	// this point gets overwritten by the decryption routine.
+	if(initCount == 1){
+		InjectHook(0x5A5730, safe_CopyTexture, PATCH_JUMP);
+		dbglog("InitialiseGame_hook: CopyTexture NULL-guard installed (post-init)");
 	}
+
+	if(initCount == 1){
+		if(config->normalMapEnable){
+			normalmap_init();
+			dbglog("InitialiseGame_hook: normalmap_init done (after CGame::Initialise)");
+		}else{
+			dbglog("InitialiseGame_hook: normalmap disabled by config");
+		}
+	}
+
 	dbglog("InitialiseGame_hook: exiting (call #%d)", initCount);
+}
+
+// ============================================================================
+// Crash guard: RwFrameSyncObject at 0x7F39F0
+// The game's rendering code iterates a pool and calls this with a NULL frame.
+// __stdcall(frame*, syncFunc*) — if frame is NULL, return 0 without accessing it.
+// ============================================================================
+static void __declspec(naked) safe_RwFrameSyncObject(void)
+{
+	__asm {
+		mov  eax, [esp+4]      // original: load frame
+		test eax, eax
+		jz   rfs_null
+		add  eax, 8            // original: frame+8 (inDirtyListLink)
+		push ebp                // original
+		push esi                // original
+		push edi                // original
+		push 0x7F39FB           // resume past our overwritten bytes
+		retn
+	rfs_null:
+		xor  eax, eax           // return 0
+		ret  8                  // __stdcall: clean 2 args
+	}
+}
+
+// ============================================================================
+// Crash guard: CopyTexture at 0x5A5730
+// __cdecl(RwTexture*) — if tex is NULL or invalid, return NULL.
+// Original first5 bytes (0x5A5730-0x5A5734): 8B 44 24 04 53 (mov eax,[esp+4]; push ebx)
+// After hook, resume at 0x5A5735: 8B 18 (mov ebx,[eax])
+// ============================================================================
+static bool ValidateCopyTexturePtr(void* ptr)
+{
+	if(!ptr) return false;
+	__try {
+		volatile int v = *(volatile int*)ptr;
+		(void)v;
+		return true;
+	} __except(EXCEPTION_EXECUTE_HANDLER) {
+		return false;
+	}
+}
+
+static RwTexture* __cdecl safe_CopyTexture(RwTexture* tex)
+{
+	if(!ValidateCopyTexturePtr(tex)){
+		dbglog("safe_CopyTexture: invalid ptr %p, returning NULL", tex);
+		return nullptr;
+	}
+	// Execute overwritten instructions: mov eax,[esp+4] (already have tex) + push ebx
+	// Then jump to 0x5A5735 (mov ebx,[eax] — original continuation)
+	__asm {
+		mov  eax, tex
+		push ebx
+		push 0x5A5735
+		retn
+	}
 }
 
 void* RwIm3DTransform(RwIm3DVertex* pVerts, RwUInt32 numVerts, RwMatrix* ltm, RwUInt32 flags) {
@@ -1435,6 +1494,12 @@ readIni(int n)
 	c->envMapSize = i;
 	c->envMapFarClipMult = readfloat(cfg.get("SkyGfx", "envMapFarClipMult", ""), 1.0);
 	c->envMapUseLODs = readint(cfg.get("SkyGfx", "envMapUseLODs", ""), 0);
+
+	// Normal mapping
+	c->normalMapEnable = readint(cfg.get("SkyGfx", "normalMapEnable", ""), 0);
+	c->normalMapIntensity = readfloat(cfg.get("SkyGfx", "normalMapIntensity", ""), 1.0f);
+	c->normalMapPlayerOnly = readint(cfg.get("SkyGfx", "normalMapPlayerOnly", ""), 1);
+
 	c->doglare = readint(cfg.get("SkyGfx", "sunGlare", ""), -1);
 	if(c->doglare < 0){
 		iCanHasSunGlare = false;
@@ -1553,13 +1618,13 @@ readIni(int n)
 	c->crOffset     = readfloat(cfg.get("SkyGfx", "CrOffset", ""), 0.0f);
 
 	// SSAO
-	c->ssaoEnable = readint(cfg.get("SkyGfx", "ssaoEnable", ""), 1);
+	c->ssaoEnable = readint(cfg.get("SkyGfx", "ssaoEnable", ""), 0);
 	c->ssaoRadius = readfloat(cfg.get("SkyGfx", "ssaoRadius", ""), 0.8f);
 	c->ssaoPower = readfloat(cfg.get("SkyGfx", "ssaoPower", ""), 1.5f);
 	c->ssaoKernelSize = readfloat(cfg.get("SkyGfx", "ssaoKernelSize", ""), 16.0f);
 	c->ssaoSampleCount = readint(cfg.get("SkyGfx", "ssaoSampleCount", ""), 16);
 
-	c->smaaEnable = readint(cfg.get("SkyGfx", "smaaEnable", ""), 1);
+	c->smaaEnable = readint(cfg.get("SkyGfx", "smaaEnable", ""), 0);
 	c->smaaPreset = readint(cfg.get("SkyGfx", "smaaPreset", ""), 3); // ULTRA
 	c->smaaPredication = readint(cfg.get("SkyGfx", "smaaPredication", ""), 0);
 	c->smaaTemporal = readint(cfg.get("SkyGfx", "smaaTemporal", ""), 0);
@@ -1632,12 +1697,12 @@ readIni(int n)
 
 		// ===== Active Settings (Ultra Max Deluxe) =====
 		cfg.set("SkyGfx", "; ===== Active Settings (Ultra Max Deluxe) =====", "");
-		cfg.set("SkyGfx", "ssaoEnable", "1");
+		cfg.set("SkyGfx", "ssaoEnable", "0");
 		cfg.set("SkyGfx", "ssaoRadius", "1.0");
 		cfg.set("SkyGfx", "ssaoPower", "2.0");
 		cfg.set("SkyGfx", "ssaoKernelSize", "16");
 		cfg.set("SkyGfx", "ssaoSampleCount", "16");
-		cfg.set("SkyGfx", "smaaEnable", "1");
+		cfg.set("SkyGfx", "smaaEnable", "0");
 		cfg.set("SkyGfx", "smaaPreset", "3");  // ULTRA
 		cfg.set("SkyGfx", "smaaPredication", "0");
 		cfg.set("SkyGfx", "smaaTemporal", "0");
@@ -1648,7 +1713,9 @@ readIni(int n)
 		cfg.set("SkyGfx", "skinEnhanceEnable", "1");
 		cfg.set("SkyGfx", "hairEnhanceEnable", "1");
 		cfg.set("SkyGfx", "vegetationEnhanceEnable", "1");
-		cfg.set("SkyGfx", "enableNormalMaps", "1");
+		cfg.set("SkyGfx", "normalMapEnable", "0");
+		cfg.set("SkyGfx", "normalMapIntensity", "1.0");
+		cfg.set("SkyGfx", "normalMapPlayerOnly", "1");
 		cfg.set("SkyGfx", "ivMode", "0");
 		cfg.set("SkyGfx", "ivDesaturation", "0.15");
 		cfg.set("SkyGfx", "ivGamma", "1.0");
@@ -1673,12 +1740,12 @@ readIni(int n)
 		ADD_IF_MISSING("SkyGfx", "qualityPreset", "3");  // ULTRA
 		
 		// ===== Active Settings (Ultra Max Deluxe) =====
-		ADD_IF_MISSING("SkyGfx", "ssaoEnable", "1");
+		ADD_IF_MISSING("SkyGfx", "ssaoEnable", "0");
 		ADD_IF_MISSING("SkyGfx", "ssaoRadius", "1.0");
 		ADD_IF_MISSING("SkyGfx", "ssaoPower", "2.0");
 		ADD_IF_MISSING("SkyGfx", "ssaoKernelSize", "16");
 		ADD_IF_MISSING("SkyGfx", "ssaoSampleCount", "16");
-		ADD_IF_MISSING("SkyGfx", "smaaEnable", "1");
+		ADD_IF_MISSING("SkyGfx", "smaaEnable", "0");
 		ADD_IF_MISSING("SkyGfx", "smaaPreset", "3");
 		ADD_IF_MISSING("SkyGfx", "smaaPredication", "0");
 		ADD_IF_MISSING("SkyGfx", "smaaTemporal", "0");
@@ -1873,8 +1940,10 @@ InjectDelayedPatches()
 
 	explicitBuildingPipe = explicitBuildingPipe_tmp;
 
-	// DISABLED FOR TESTING: if(iCanHasbuildingPipe) hookBuildingPipe();
-	// DISABLED FOR TESTING: if(iCanHasvehiclePipe) hookVehiclePipe();
+	if(iCanHasbuildingPipe)
+		hookBuildingPipe();
+	if(iCanHasvehiclePipe)
+		hookVehiclePipe();
 
 	InjectHook(0x5E675E, &FX::GetFxQuality_ped);
 	InjectHook(0x5E676D, &FX::GetFxQuality_ped);
@@ -1941,17 +2010,11 @@ extern "C" {
 	extern bool RpNormMapAtomicIsInitialized(const RpAtomic *atomic);
 	extern RpMaterial* RpNormMapMaterialSetNormMapTexture(RpMaterial* material, RwTexture* normalmap);
 	extern RwTexture* RpNormMapMaterialGetNormMapTexture(const RpMaterial* material);
-}
+	}
 
-// Proper trampoline for CustomPipeAtomicSetup (0x5DA610) via the injector
-// library's function_hooker. 0x5DA610 is a function ENTRY (not a call site),
-// so InterceptCall captured a bogus original and recursed into itself
-// (CCustomCarEnvMapPipeline__CustomPipeAtomicSetup is a WRAPPER that
-//  EAXJMP(0x5DA610)). function_hooker builds an instruction-accurate trampoline
-// and passes the real original as the first functor argument — the same
-// discipline SilentPatch uses — so the RW rwnormal plugin handles normals from
-// the attached plugin without any recursion and the frame exits cleanly.
-static injector::function_hooker<0x5DA610, RpAtomic*(RpAtomic*)> s_CustomPipeAtomicSetup_hook;
+	// NOTE: 0x5DA610 (CustomPipeAtomicSetup) is hooked by normalmap_init()
+	// via InjectHook when the RW rwnormal plugin is active. No passthrough needed
+	// here — the RW SDK plugin handles normal map pipeline setup natively.
 
 BOOL WINAPI
 DllMain(HINSTANCE hInst, DWORD reason, LPVOID)
@@ -1968,7 +2031,8 @@ DllMain(HINSTANCE hInst, DWORD reason, LPVOID)
 
 		diag_init(logPath);
 		diag_installVEH();
-		dbglog("VEH handler installed");
+		diag_startWatchdog();
+		dbglog("VEH handler + watchdog installed");
 
 		dbglog("=== skygfx loading ===");
 		dbglog("dllModule=%p, logPath=%s", dllModule, diag_getLogPath());
@@ -2009,6 +2073,10 @@ DllMain(HINSTANCE hInst, DWORD reason, LPVOID)
 		InjectHook(0x713C4C, renderMoonMask, PATCH_JUMP);
 		dbglog("  moon mask OK");
 
+		// Crash guard: NULL frame in game's pool iteration (0x7F39F0 = RwFrameSyncObject)
+		InjectHook(0x7F39F0, safe_RwFrameSyncObject, PATCH_JUMP);
+		dbglog("  RwFrameSyncObject NULL-guard OK");
+
 		// Apply delayed patches directly from DllMain instead of hooking 0x74872D (IsAlreadyRunning).
 		// This avoids clashing with SilentPatch which hooks the exact same address.
 		dbglog("  applying delayed patches directly...");
@@ -2021,23 +2089,11 @@ DllMain(HINSTANCE hInst, DWORD reason, LPVOID)
 		InjectHook(0x756DFE, rxD3D9DefaultRenderCallback_Hook, PATCH_JUMP);
 		InjectHook(0x5DADB7, fixSeed, PATCH_JUMP);
 
-		// Attach normal map plugin for vehicle/vegetation normal maps
-		if(RpNormMapPluginAttach()){
-			dbglog("RpNormMapPluginAttach: success");
-		}else{
-			dbglog("RpNormMapPluginAttach: failed");
-		}
+		// NOTE: RpNormMapPluginAttach is called by normalmap_init() during game init.
+		// Do NOT call it here — it would succeed, then normalmap_init would fail,
+		// leaving gHasExternalNormalMapPlugin=false and normalmap hooks never installed.
 
-		// Hook CustomPipeAtomicSetup (0x5DA610) with a proper trampoline.
-		// With the rwnormal plugin attached, RenderWare handles normal maps
-		// itself — this hook just forwards to the real original (no recursion,
-		// clean frame exit, matching SilentPatch's trampoline discipline).
-		// (txd "_n" normal-map feature is future work.)
-		s_CustomPipeAtomicSetup_hook.make_call(
-			[](std::function<RpAtomic*(RpAtomic*)> orig, RpAtomic*& atomic) -> RpAtomic*
-			{
-				return orig(atomic);
-			});
+		// 0x5DA610 is hooked by normalmap_init() when rwnormal plugin is active
 		InjectHook(0x5DAE61, saveIntensity, PATCH_JUMP);
 		Patch(0x5DAEC8, setTextureAndColor);
 

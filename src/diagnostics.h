@@ -17,6 +17,10 @@
 #define diag_getLogPath()        ((const char*)"")
 #define diag_installVEH()       ((void)0)
 #define diag_removeVEH()        ((void)0)
+#define diag_heartbeat()        ((void)0)
+#define diag_startWatchdog()    ((void)0)
+#define diag_stopWatchdog()     ((void)0)
+#define diag_checkCrashMarker() ((void)0)
 
 #else
 
@@ -36,6 +40,18 @@ const char* diag_getLogPath(void);
 // Write a minidump of the current crash (best-effort). Pass the
 // EXCEPTION_POINTERS from a VEH or SEH handler. Safe to call any time.
 void diag_writeMinidump(EXCEPTION_POINTERS *exceptionPointers);
+
+// Call from heartbeat points to tell the watchdog the game is alive.
+void diag_heartbeat(void);
+
+// Start the freeze-detection watchdog thread.
+void diag_startWatchdog(void);
+
+// Stop the watchdog thread.
+void diag_stopWatchdog(void);
+
+// Check for crash marker from previous session — show dialog if found.
+void diag_checkCrashMarker(void);
 
 #endif // DIAGNOSTICS_DISABLED
 

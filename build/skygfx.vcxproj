@@ -87,7 +87,7 @@
       <Command>rem Shaders precompiled manually</Command>
     </PreBuildEvent>
     <PostBuildEvent>
-      <Command>copy /y "$(TargetPath)" "$(OutDir)skygfx.asi"</Command>
+      <Command>copy /y "$(TargetPath)" "$(OutDir)skygfx.asi" &amp;&amp; del /f "$(TargetPath)"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -118,7 +118,7 @@
       <Command>rem Shaders precompiled manually</Command>
     </PreBuildEvent>
     <PostBuildEvent>
-      <Command>copy /y "$(TargetPath)" "$(OutDir)skygfx.asi"</Command>
+      <Command>copy /y "$(TargetPath)" "$(OutDir)skygfx.asi" &amp;&amp; del /f "$(TargetPath)"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>

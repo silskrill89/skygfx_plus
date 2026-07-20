@@ -1263,11 +1263,12 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_mobile(RwResEntry *repEntry, void *
 
 
 	// Try to get mobile direct color
-	float c[4];
-	c[0] = pDirect->color.red * 1.28f * 1.5f;// *1.6;
-	c[1] = pDirect->color.green * 1.28f * 1.5f;// *1.6;
-	c[2] = pDirect->color.blue * 1.28f * 1.5f;// *1.6;
-	c[3] = 1.0f;
+	float c[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+	if(pDirect){
+		c[0] = pDirect->color.red * 1.28f * 1.5f;
+		c[1] = pDirect->color.green * 1.28f * 1.5f;
+		c[2] = pDirect->color.blue * 1.28f * 1.5f;
+	}
 	RwD3D9SetVertexShaderConstant(REG_directCol, (void*)c, 1);
 
 

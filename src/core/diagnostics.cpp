@@ -150,6 +150,11 @@ dbglog_loc(LogLevel level, const char *file, int line, const char *func, const c
 	va_end(ap);
 }
 
+// Forward declarations for watchdog helpers used by VEH handler
+static void diag_findGameWindow(void);
+static void diag_forceWindowToFront(void);
+static void diag_writeCrashMarker(const char *reason, DWORD code, DWORD addr);
+
 // ============================================================
 // VEH crash handler — diagnostic only, never suppresses exceptions
 // ============================================================
@@ -182,23 +187,6 @@ diag_crashHandler(EXCEPTION_POINTERS *ep)
 	// Dump a minidump (best-effort) for full back-trace in a debugger.
 	diag_writeMinidump(ep);
 
-	// Auto-fix: cascade crash in LoadCollisionFileFirstTime after corrupt COL model
-	// Instruction at 0x5B5192: mov byte ptr [esi+0x28], dl (3 bytes, ESI=NULL from failed new CColModel)
-	if(code == 0xC0000005 && ctx->Eip == 0x5B5192 && ctx->Esi == 0){
-		crash_log("AUTO-FIX: skipping NULL CColModel store at 0x5B5192");
-		ctx->Eip += 3;
-		return EXCEPTION_CONTINUE_EXECUTION;
-	}
-
-	// Auto-fix: crash in model info lookup during CGame::Initialise
-	// Instruction at 0x405CBC: inc byte ptr [eax+34h] (3 bytes)
-	// EAX comes from corrupted model info array lookup — always skip
-	if(code == 0xC0000005 && ctx->Eip == 0x405CBC){
-		crash_log("AUTO-FIX: skipping model info refcount at 0x405CBC (EAX=%08X)", ctx->Eax);
-		ctx->Eip += 3;
-		return EXCEPTION_CONTINUE_EXECUTION;
-	}
-
 	// Module info
 	HMODULE exeMod = GetModuleHandle(NULL);
 	MEMORY_BASIC_INFORMATION mbi = {};
@@ -229,6 +217,52 @@ diag_crashHandler(EXCEPTION_POINTERS *ep)
 		crash_log("    [ESP+0x%02X] = %08X", i*4, sp[i]);
 
 	// Diagnostic-only: always let exceptions propagate naturally.
+	diag_writeCrashMarker("CRASH (exception)", code, (DWORD)(DWORD_PTR)ep->ExceptionRecord->ExceptionAddress);
+
+	char mbTitle[128];
+	snprintf(mbTitle, sizeof(mbTitle), "skygfx CRASH 0x%08X", code);
+	char mbBody[2048];
+	snprintf(mbBody, sizeof(mbBody),
+		"Exception: 0x%08X\n"
+		"Address:   %p\n"
+		"Registers: EAX=%08X EBX=%08X ECX=%08X EDX=%08X\n"
+		"           ESI=%08X EDI=%08X EBP=%08X ESP=%08X\n\n"
+		"Crash log written to:\n%s\n"
+		"Minidump written to: %s.dmp\n\n"
+		"Click OK to continue (may hang)\n"
+		"Click Cancel to terminate.",
+		code, ep->ExceptionRecord->ExceptionAddress,
+		ctx->Eax, ctx->Ebx, ctx->Ecx, ctx->Edx,
+		ctx->Esi, ctx->Edi, ctx->Ebp, ctx->Esp,
+		s_logPath, s_logPath);
+	if(code == EXCEPTION_ACCESS_VIOLATION && numParams >= 2){
+		int rw = (int)ep->ExceptionRecord->ExceptionInformation[0];
+		char *end = mbBody + strlen(mbBody);
+		snprintf(end, sizeof(mbBody) - strlen(mbBody),
+			"\nAccess: %s at %p",
+			rw == 0 ? "READ" : rw == 1 ? "WRITE" : "EXECUTE",
+			(void*)ep->ExceptionRecord->ExceptionInformation[1]);
+	}
+	// Only show MessageBox for crashes in OUR code (skygfx DLL).
+	// Game crashes (in gta_sa.exe) are logged but allowed to propagate
+	// naturally — blocking with a MessageBox corrupts game state because
+	// other threads keep running while this thread is blocked.
+	HMODULE skygfxMod = GetModuleHandle("skygfx.asi");
+	if(!skygfxMod) skygfxMod = GetModuleHandle("skygfx.dll");
+	HMODULE crashModule = crashMod;
+	bool inSkygfx = (crashModule == skygfxMod);
+
+	if(inSkygfx){
+		diag_forceWindowToFront();
+		int mbRet = MessageBoxA(NULL, mbBody, mbTitle, MB_ICONERROR | MB_OKCANCEL | MB_TOPMOST);
+		if(mbRet == IDCANCEL || mbRet == 0)
+			TerminateProcess(GetCurrentProcess(), code);
+	}else{
+		crash_log("  (game crash — not showing dialog, letting propagate)");
+	}
+
+	// Let the exception propagate naturally.
+	// so SEH handlers (if any) can deal with it.
 	return EXCEPTION_CONTINUE_SEARCH;
 }
 
@@ -278,4 +312,177 @@ diag_removeVEH(void)
 		RemoveVectoredExceptionHandler((HANDLE)s_oldVEH);
 		s_oldVEH = 0;
 	}
+}
+
+// ============================================================
+// Watchdog — detects freezes (no crash, just hangs)
+// ============================================================
+static volatile LONG s_heartbeat = 0;
+static volatile LONG s_watchdogRunning = 0;
+static HWND s_gameHwnd = NULL;
+
+// Crash marker — written on crash/freeze so next launch can report it
+static const char *s_crashMarkerPath = NULL;
+
+void diag_heartbeat(void)
+{
+	InterlockedExchange(&s_heartbeat, GetTickCount());
+}
+
+static void diag_findGameWindow(void)
+{
+	if(s_gameHwnd) return;
+	struct EnumCtx { HWND found; } ctx = { NULL };
+	EnumWindows([](HWND hwnd, LPARAM lp) -> BOOL {
+		DWORD pid = 0;
+		GetWindowThreadProcessId(hwnd, &pid);
+		if(pid == GetCurrentProcessId() && IsWindowVisible(hwnd)){
+			((EnumCtx*)lp)->found = hwnd;
+			return FALSE;
+		}
+		return TRUE;
+	}, (LPARAM)&ctx);
+	s_gameHwnd = ctx.found;
+}
+
+// Force game window out of fullscreen so dialogs are visible
+static void diag_forceWindowToFront(void)
+{
+	diag_findGameWindow();
+	if(!s_gameHwnd) return;
+
+	// Try to restore from fullscreen / iconic
+	ShowWindow(s_gameHwnd, SW_RESTORE);
+	Sleep(100);
+
+	// Set as topmost and foreground
+	SetWindowPos(s_gameHwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+	SetForegroundWindow(s_gameHwnd);
+	Sleep(200);
+}
+
+// Write a crash marker file so next launch can show what happened
+static void diag_writeCrashMarker(const char *reason, DWORD code, DWORD addr)
+{
+	char markerPath[MAX_PATH];
+	strncpy(markerPath, s_logPath, MAX_PATH - 1);
+	markerPath[MAX_PATH - 1] = '\0';
+	char *dot = strrchr(markerPath, '.');
+	if(dot) strcpy(dot, ".crash");
+	else strncat(markerPath, ".crash", MAX_PATH - strlen(markerPath) - 1);
+
+	HANDLE h = CreateFileA(markerPath, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
+		FILE_ATTRIBUTE_NORMAL, NULL);
+	if(h == INVALID_HANDLE_VALUE) return;
+
+	char buf[512];
+	int len = snprintf(buf, sizeof(buf),
+		"skygfx %s\n"
+		"Code: 0x%08X\n"
+		"Address: 0x%08X\n"
+		"Log: %s\n"
+		"Time: %u\n",
+		reason, code, addr, s_logPath, GetTickCount());
+	DWORD written;
+	WriteFile(h, buf, len, &written, NULL);
+	CloseHandle(h);
+	s_crashMarkerPath = markerPath;
+}
+
+// Check for crash marker from previous session — show it if found
+void diag_checkCrashMarker(void)
+{
+	char markerPath[MAX_PATH];
+	GetModuleFileNameA(NULL, markerPath, MAX_PATH);
+	char *p = strrchr(markerPath, '\\');
+	if(p) strcpy(p + 1, "skygfx_asi.crash");
+	else return;
+
+	HANDLE h = CreateFileA(markerPath, GENERIC_READ, FILE_SHARE_READ,
+		NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+	if(h == INVALID_HANDLE_VALUE) return;
+
+	char buf[512] = {0};
+	DWORD read = 0;
+	ReadFile(h, buf, sizeof(buf) - 1, &read, NULL);
+	CloseHandle(h);
+
+	// Delete the marker after reading
+	DeleteFileA(markerPath);
+
+	if(read > 0){
+		char body[600];
+		snprintf(body, sizeof(body),
+			"The previous session ended abnormally.\n\n%s\n\n"
+			"Check the log file for details.",
+			buf);
+		MessageBoxA(NULL, body, "skygfx — Previous Crash", MB_ICONWARNING | MB_OK | MB_TOPMOST);
+	}
+}
+
+static DWORD WINAPI watchdogThread(LPVOID)
+{
+	InterlockedExchange(&s_watchdogRunning, 1);
+	crash_log("Watchdog: started (thread id=%08X)", GetCurrentThreadId());
+
+	// Check for crash from previous session
+	diag_checkCrashMarker();
+
+	Sleep(5000);
+
+	while(s_watchdogRunning){
+		DWORD last = (DWORD)InterlockedExchangeAdd(&s_heartbeat, 0);
+		DWORD now = GetTickCount();
+
+		// ESC key = force kill, always works even in fullscreen
+		if(GetAsyncKeyState(VK_ESCAPE) & 0x0001){
+			crash_log("Watchdog: ESC pressed — force terminating");
+			TerminateProcess(GetCurrentProcess(), 0x1234);
+		}
+
+		if(last != 0 && (now - last) > 30000){
+			crash_log("Watchdog: FREEZE DETECTED — no heartbeat for %u ms (last=%u now=%u)", now - last, last, now);
+
+			// Write crash marker before attempting dialog
+			diag_writeCrashMarker("FREEZE DETECTED", 0xDEAD, 0);
+
+			// Force window visible so dialog shows
+			diag_forceWindowToFront();
+
+			char title[128];
+			snprintf(title, sizeof(title), "skygfx FREEZE DETECTED");
+			char body[1024];
+			snprintf(body, sizeof(body),
+				"The game has not responded for over 30 seconds.\n\n"
+				"It may be frozen on a loading screen.\n\n"
+				"Full log written to:\n%s\n\n"
+				"Press ESC to force-kill at any time.\n\n"
+				"Click OK to try to continue.\n"
+				"Click Cancel to terminate.",
+				s_logPath);
+
+			int mbRet = MessageBoxA(s_gameHwnd, body, title, MB_ICONWARNING | MB_OKCANCEL | MB_TOPMOST);
+			if(mbRet == IDCANCEL)
+				TerminateProcess(GetCurrentProcess(), 0xDEAD);
+
+			InterlockedExchange(&s_heartbeat, GetTickCount());
+			Sleep(5000);
+		}
+
+		Sleep(2000);
+	}
+	crash_log("Watchdog: exiting");
+	return 0;
+}
+
+void diag_startWatchdog(void)
+{
+	if(s_watchdogRunning) return;
+	InterlockedExchange(&s_heartbeat, GetTickCount());
+	CreateThread(NULL, 0, watchdogThread, NULL, 0, NULL);
+}
+
+void diag_stopWatchdog(void)
+{
+	InterlockedExchange(&s_watchdogRunning, 0);
 }

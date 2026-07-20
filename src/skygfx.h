@@ -248,6 +248,7 @@ struct Config {
 	float envFresnel;
 
 	// Normal mapping
+	RwBool normalMapEnable;
 	float normalMapIntensity;
 	RwBool normalMapPlayerOnly;
 

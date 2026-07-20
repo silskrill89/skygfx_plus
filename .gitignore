@@ -52,6 +52,23 @@ nul
 # Temp
 *.tmp
 *.bak
+backups/
+*.asi
+*.dmp
+*.crash
+skygfx_dbg.log
+skygfx_new_dbg.log
+PLAN.md
+TODO_*.md
+compile_commands.json
+.clangd
+.lsai/
+.mimocode/
+.opencode/
+memory-bank/
+hlsl_intro_extracted.txt
+shaderx2_extracted.txt
+rw_*.txt
 
 # Cache and secrets
 .cache/

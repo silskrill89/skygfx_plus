@@ -2421,7 +2421,8 @@ CPostEffects::DrawSMAA(void)
 	}
 
 	prevCamPos = camPos;
-	prevCamMatrix = *camMatrix;
+	if(camMatrix)
+		prevCamMatrix = *camMatrix;
 	camInitialized = true;
 
 	// Combine camera movement into a single factor (0=still, 1=fast movement)

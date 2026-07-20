@@ -64,7 +64,7 @@ static void *&LightParent(RpLight *light) { return *(void **)((unsigned char *)l
 
 // ===== CustomPipeAtomicSetup (replaces 0x5DA610) =====
 
-static void MaterialHasDefaultMatFXEffect_cb(void *material, int *hasDefaultEffect)
+static RpMaterial *MaterialHasDefaultMatFXEffect_cb(RpMaterial *material, int *hasDefaultEffect)
 {
     int effect = game_RpMatFXMaterialGetEffects(material);
     if(effect)
@@ -73,13 +73,12 @@ static void MaterialHasDefaultMatFXEffect_cb(void *material, int *hasDefaultEffe
         {
             int matfx_offset = *(int *)0x8D12C4;
             if(*(int *)((int)material + matfx_offset))
-            {
-                *hasDefaultEffect = 1;
-                return;
-            }
+                return material;
         }
         *hasDefaultEffect = 1;
+        return NULL;
     }
+    return material;
 }
 
 static RpAtomic *__cdecl CustomPipeAtomicSetup_hook(RpAtomic *atomic)

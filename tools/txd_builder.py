@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+
 """
 TXD Builder - Creates GTA SA TXD files from PNG images
 Based on the RenderWare TXD format
