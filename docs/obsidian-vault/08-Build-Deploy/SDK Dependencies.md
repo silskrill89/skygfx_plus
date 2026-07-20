@@ -1,10 +1,13 @@
 ---
 tags: [sdk, dependencies, paths, toolchain]
 created: 2025-01-02
-updated: 2025-01-02
+updated: 2026-07-15
 ---
 
 # SDK Dependencies
+
+> [!info] Full documentation
+> See `docs/SDK Dependencies.md` for the complete SDK dependencies reference.
 
 ## Core SDKs
 
@@ -49,7 +52,7 @@ odbc32.lib  odbccp32.lib
 | **Game** | Grand Theft Auto San Andreas v1.0 US |
 | **Game dir** | `E:\games\gtasa_skygfx_plus` |
 | **ASI target** | `skygfx.asi` (x86, MSVC 2022) |
-| **Deploy** | `fast_build.py` copies ASI + INI + DLL to game dir |
+| **Deploy** | `fix_build.py` copies ASI + INI to game dir |
 
 ## Hook Compatibility Rules
 
@@ -58,11 +61,11 @@ All hooks target GTA SA v1.0 US (steam/retail executable). Hook methods:
 - `InterceptCall(&orig, func, addr)` — saves original CALL target, replaces with func
 - `WRAPPER` macros — for RW/game functions at known addresses (gta.cpp)
 
-**Critical rules**:
-- Only hook addresses verified against SA 1.0 US executable
-- Never hook addresses already used by other ASI plugins (CLEO, modloader, etc.)
-- Use `InterceptCall` over `InjectHook` where possible (safer, chains properly)
-- All hooks installed in `DllMain` → `DelayedInit` → specific `hook*()` functions
+> [!warning] Critical rules
+> - Only hook addresses verified against SA 1.0 US executable
+> - Never hook addresses already used by other ASI plugins (CLEO, modloader, etc.)
+> - Use `InterceptCall` over `InjectHook` where possible (safer, chains properly)
+> - All hooks installed in `DllMain` → `DelayedInit` → specific `hook*()` functions
 
 ## MoonLoader / Lua (Planned)
 
@@ -73,6 +76,5 @@ All hooks target GTA SA v1.0 US (steam/retail executable). Hook methods:
 - **Mounting**: Mark mounting spots on vehicles, scale/rotate spoiler geometry to fit
 
 ## See Also
-- [[08-Build-Deploy/Build System]] — Build automation
-- [[09-References/RW SDK Reference]] — RenderWare API details
-- [[01-Architecture/Project Paths]] — All project paths
+- [[Build System]] — Build automation
+- Full docs: `docs/RW SDK Reference.md`, `docs/Project Paths.md`

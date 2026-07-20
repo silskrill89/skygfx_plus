@@ -1,4 +1,13 @@
+---
+tags: [pipeline, rendering, architecture]
+created: 2025-01-02
+updated: 2026-07-15
+---
+
 # SkyGFX Plus - Rendering Pipeline Overview
+
+> [!info] Full documentation
+> See `docs/Vehicle Pipeline.md`, `docs/Building Pipeline.md`, `docs/Unified Pipeline.md` for detailed pipeline docs.
 
 ## Architecture
 3-step forward+ pipeline:
@@ -13,17 +22,20 @@ Entry: `CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env` in `vehiclePipe.cpp`
 | Path | VS | PS | Condition |
 |------|----|----|-----------|
 | Glass + Lights | `vehiclePBRVS` | `Glass_Vehicle` | isGlassMesh or isLightMesh |
-| Tires | `vehiclePBRVS` | `Rubber_Vehicle` | isTireMesh |
+| Tires | `vehiclePBRVS` | `Rubber_Vehicle_Modern` | isTireMesh |
 | Opaque PBR | `vehiclePBRVS` | `VehiclePBR_Modern` | default (paint) |
 
 ### Texture Binding (PBR path)
-| Stage | Texture | PS Register |
-|-------|---------|-------------|
-| s0 | Diffuse (material) | `diffuseTex` |
-| s1 | Normal buffer (raw D3D9) | `normalBufTex` |
-| s2 | Reflection mask (RwTexture) | `maskTex` |
-| s3 | IBL buffer (raw D3D9) | `iblTex` |
-| s4 | Env map / reflection (RwTexture) | `envMapTex` |
+| Stage | Sampler | Texture | Purpose |
+|-------|---------|---------|---------|
+| s0 | `diffuseTex` | Diffuse (material) | Material texture |
+| s1 | `envMapTex` | Env map / reflection | Scene reflection capture |
+| s2 | `maskTex` | Reflection mask | Reflection intensity mask |
+| s3 | `iblTex` | IBL buffer | Sky ambient color |
+| s4 | `normalBufTex` | Normal buffer | Screen-space normals |
+
+> [!warning] Common mistake
+> The texture order is **not** s0=diffuse, s1=normal, s2=mask, s3=IBL, s4=env. The actual order is s0=diffuse, s1=env, s2=mask, s3=IBL, s4=normal. See `shaders/ps/VehiclePBR_Modern.hlsl:18-22`.
 
 ### Shader Constants (PBR path)
 | Register | Content | Source |
@@ -33,8 +45,10 @@ Entry: `CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env` in `vehiclePipe.cpp`
 | c2 | eyePos | camera |
 | c3 | iblParams (roughness, metalness, 0, 0) | BRDF |
 | c4 | cloudShadow (sunDir, time, 1, 0) | weather |
-| c5-c11 | directCol + lightCol[6] | lights |
-| c12-c18 | directDir + lightDir[6] | lights |
+| c5 | directCol | lights |
+| c6-c11 | lightCol[6] | lights |
+| c12 | directDir | lights |
+| c13-c18 | lightDir[6] | lights |
 | c19 | matCol | material |
 | c22 | pbrParams (glossiness, reflectance, clearcoat, subsurface) | BRDF |
 | c23 | paintNoise (wheel, noiseScale, edgeBlend, 0) | paint type |
@@ -64,3 +78,5 @@ Entry: building pipe callback in `buildingPipe.cpp`
 - [[Non-Parametric Sparse BRDF]] — BRDF reference
 - [[RenderWare V2.1 API Reference]] — RW pipeline
 - [[SMAA Enhanced Subpixel Morphological AA]] — AA system
+- [[VehiclePBR Modern]] — Vehicle shader details
+- [[IBL Env Map Decision]] — IBL approach

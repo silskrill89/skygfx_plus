@@ -10,88 +10,14 @@
 #include <windows.h>
 #include <stdio.h>
 #include <stdarg.h>
-#include <dbghelp.h>
 
 // ============================================================
-// Log file paths - multiple locations for redundancy
+// Log file path
 // ============================================================
 static char s_logPath[MAX_PATH];
-static char s_logPath2[MAX_PATH];  // Backup log location
 static int  s_logInit = 0;
 
 const char* diag_getLogPath(void) { return s_logPath; }
-
-static void
-write_to_log(const char *logPath, const char *buf, int hlen)
-{
-	HANDLE h = CreateFileA(logPath, FILE_APPEND_DATA, FILE_SHARE_READ,
-		NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-	if(h == INVALID_HANDLE_VALUE) return;
-	DWORD written;
-	WriteFile(h, buf, hlen, &written, NULL);
-	FlushFileBuffers(h);  // Force write to disk immediately
-	CloseHandle(h);
-}
-
-// ============================================================
-// Crash-safe logging — uses a STATIC (non-stack) buffer so it
-// still works when the faulting thread has blown its stack
-// (stack overflow). dbglog_internal() above allocates 4KB on
-// the stack which would itself fault during a stack overflow.
-// ============================================================
-static char s_crashBuf[16384];
-static volatile LONG s_crashLogging = 0;
-
-static void
-crash_log(const char *fmt, ...)
-{
-	// Re-entrancy guard: if we fault *while* logging a crash, bail out
-	// instead of recursing into the crash handler forever.
-	if(InterlockedIncrement(&s_crashLogging) != 1){
-		InterlockedDecrement(&s_crashLogging);
-		return;
-	}
-	va_list ap;
-	va_start(ap, fmt);
-	int n = vsnprintf(s_crashBuf, sizeof(s_crashBuf), fmt, ap);
-	va_end(ap);
-	if(n < 0) n = 0;
-	if(n >= (int)sizeof(s_crashBuf)) n = (int)sizeof(s_crashBuf) - 1;
-	write_to_log(s_logPath, s_crashBuf, n);
-	if(s_logPath2[0] != '\0')
-		write_to_log(s_logPath2, s_crashBuf, n);
-	InterlockedDecrement(&s_crashLogging);
-}
-
-// Write a minidump to <logpath>.dmp so the crash can be traced in a debugger.
-// Best-effort: failures are silently ignored (we already wrote the text log).
-void
-diag_writeMinidump(EXCEPTION_POINTERS *ep)
-{
-	if(!ep) return;
-	char dmp[MAX_PATH];
-	// s_logPath ends in ".log"; swap to ".dmp"
-	strncpy(dmp, s_logPath, MAX_PATH - 1);
-	dmp[MAX_PATH - 1] = '\0';
-	char *dot = strrchr(dmp, '.');
-	if(dot) strncpy(dot, ".dmp", MAX_PATH - (dot - dmp) - 1);
-	else strncat(dmp, ".dmp", MAX_PATH - strlen(dmp) - 1);
-
-	HANDLE h = CreateFileA(dmp, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
-		FILE_ATTRIBUTE_NORMAL, NULL);
-	if(h == INVALID_HANDLE_VALUE) return;
-
-	MINIDUMP_EXCEPTION_INFORMATION mei;
-	mei.ThreadId = GetCurrentThreadId();
-	mei.ExceptionPointers = ep;
-	mei.ClientPointers = TRUE;
-
-	BOOL ok = MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), h,
-		MiniDumpWithFullMemory, &mei, NULL, NULL);
-	// Best-effort: ignore result.
-	(void)ok;
-	CloseHandle(h);
-}
 
 // ============================================================
 // dbglog — file-based debug logging
@@ -124,12 +50,13 @@ dbglog_internal(LogLevel level, const char *file, int line, const char *func, co
 			shortFile, line, func, msg);
 	if(hlen < 0 || hlen >= sizeof(buf)) return;
 
-	// Write to primary log location
-	write_to_log(s_logPath, buf, hlen);
-	
-	// Write to backup log location if set
-	if(s_logPath2[0] != '\0')
-		write_to_log(s_logPath2, buf, hlen);
+	HANDLE h = CreateFileA(s_logPath, FILE_APPEND_DATA, FILE_SHARE_READ,
+		NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+	if(h == INVALID_HANDLE_VALUE) return;
+	DWORD written;
+	WriteFile(h, buf, hlen, &written, NULL);
+	FlushFileBuffers(h);
+	CloseHandle(h);
 }
 
 void
@@ -150,11 +77,6 @@ dbglog_loc(LogLevel level, const char *file, int line, const char *func, const c
 	va_end(ap);
 }
 
-// Forward declarations for watchdog helpers used by VEH handler
-static void diag_findGameWindow(void);
-static void diag_forceWindowToFront(void);
-static void diag_writeCrashMarker(const char *reason, DWORD code, DWORD addr);
-
 // ============================================================
 // VEH crash handler — diagnostic only, never suppresses exceptions
 // ============================================================
@@ -167,25 +89,16 @@ diag_crashHandler(EXCEPTION_POINTERS *ep)
 	if(code == 0xE06D7363)
 		return EXCEPTION_CONTINUE_SEARCH;
 
-	static int crashCount = 0;
-	if(++crashCount > 20) return EXCEPTION_CONTINUE_SEARCH;
-
 	CONTEXT *ctx = ep->ContextRecord;
 	DWORD numParams = ep->ExceptionRecord->NumberParameters;
-
-	// CRITICAL: write the essential crash info first using the static
-	// (non-stack) buffer, so it survives even a stack overflow. Then dump.
-	crash_log("CRASH: code=0x%08X at=0x%p EAX=%08X EBX=%08X ECX=%08X EDX=%08X ESI=%08X EDI=%08X EBP=%08X ESP=%08X",
+	dbglog("CRASH: code=0x%08X at=0x%p EAX=%08X EBX=%08X ECX=%08X EDX=%08X ESI=%08X EDI=%08X EBP=%08X ESP=%08X",
 		code, ep->ExceptionRecord->ExceptionAddress,
 		ctx->Eax, ctx->Ebx, ctx->Ecx, ctx->Edx, ctx->Esi, ctx->Edi, ctx->Ebp, ctx->Esp);
 	if(numParams >= 2)
-		crash_log("  ExceptionInfo: %s addr=0x%p",
+		dbglog("  ExceptionInfo: %s addr=0x%p",
 			ep->ExceptionRecord->ExceptionInformation[0] == 0 ? "READ" :
 			ep->ExceptionRecord->ExceptionInformation[0] == 1 ? "WRITE" : "EXECUTE",
 			(void*)ep->ExceptionRecord->ExceptionInformation[1]);
-
-	// Dump a minidump (best-effort) for full back-trace in a debugger.
-	diag_writeMinidump(ep);
 
 	// Module info
 	HMODULE exeMod = GetModuleHandle(NULL);
@@ -194,17 +107,17 @@ diag_crashHandler(EXCEPTION_POINTERS *ep)
 	HMODULE crashMod = NULL;
 	if(mbi.AllocationBase)
 		crashMod = (HMODULE)mbi.AllocationBase;
-	crash_log("  EIP module: %p (base=%p protect=0x%X)", crashMod, exeMod, mbi.Protect);
+	dbglog("  EIP module: %p (base=%p protect=0x%X)", crashMod, exeMod, mbi.Protect);
 
-	// Walk EBP chain (up to 12 frames)
+	// Walk EBP chain (up to 8 frames)
 	DWORD *frame = (DWORD*)ctx->Ebp;
-	crash_log("  Stack trace:");
-	for(int i = 0; i < 12 && frame && frame != (DWORD*)0xFFFFFFFF; i++){
+	dbglog("  Stack trace:");
+	for(int i = 0; i < 8 && frame && frame != (DWORD*)0xFFFFFFFF; i++){
 		DWORD retAddr = frame[1];
 		MEMORY_BASIC_INFORMATION fmbi = {};
 		VirtualQuery((void*)retAddr, &fmbi, sizeof(fmbi));
 		HMODULE fmod = fmbi.AllocationBase ? (HMODULE)fmbi.AllocationBase : NULL;
-		crash_log("    [%d] EBP=%08X RET=%08X (module=%p)", i, (DWORD)frame, retAddr, fmod);
+		dbglog("    [%d] EBP=%08X RET=%08X (module=%p)", i, (DWORD)frame, retAddr, fmod);
 		DWORD *next = (DWORD*)frame[0];
 		if(next <= frame) break;
 		frame = next;
@@ -212,13 +125,14 @@ diag_crashHandler(EXCEPTION_POINTERS *ep)
 
 	// Dump first 16 DWORDs from ESP
 	DWORD *sp = (DWORD*)ctx->Esp;
-	crash_log("  Stack dump (ESP):");
+	dbglog("  Stack dump (ESP):");
 	for(int i = 0; i < 16; i++)
-		crash_log("    [ESP+0x%02X] = %08X", i*4, sp[i]);
+		dbglog("    [ESP+0x%02X] = %08X", i*4, sp[i]);
 
-	// Diagnostic-only: always let exceptions propagate naturally.
-	diag_writeCrashMarker("CRASH (exception)", code, (DWORD)(DWORD_PTR)ep->ExceptionRecord->ExceptionAddress);
+	// Write minidump
+	diag_writeMinidump(ep);
 
+	// Build a human-readable crash summary for MessageBox
 	char mbTitle[128];
 	snprintf(mbTitle, sizeof(mbTitle), "skygfx CRASH 0x%08X", code);
 	char mbBody[2048];
@@ -226,44 +140,116 @@ diag_crashHandler(EXCEPTION_POINTERS *ep)
 		"Exception: 0x%08X\n"
 		"Address:   %p\n"
 		"Registers: EAX=%08X EBX=%08X ECX=%08X EDX=%08X\n"
-		"           ESI=%08X EDI=%08X EBP=%08X ESP=%08X\n\n"
-		"Crash log written to:\n%s\n"
-		"Minidump written to: %s.dmp\n\n"
-		"Click OK to continue (may hang)\n"
+		"           ESI=%08X EDI=%08X EBP=%08X ESP=%08X\n"
+		"EIP mod:   %p  (exe=%p)\n\n"
+		"Full crash log written to:\n%s\n\n"
+		"Click OK to let the game continue (may hang).\n"
 		"Click Cancel to terminate.",
 		code, ep->ExceptionRecord->ExceptionAddress,
 		ctx->Eax, ctx->Ebx, ctx->Ecx, ctx->Edx,
 		ctx->Esi, ctx->Edi, ctx->Ebp, ctx->Esp,
-		s_logPath, s_logPath);
+		crashMod, exeMod, s_logPath);
 	if(code == EXCEPTION_ACCESS_VIOLATION && numParams >= 2){
 		int rw = (int)ep->ExceptionRecord->ExceptionInformation[0];
-		char *end = mbBody + strlen(mbBody);
-		snprintf(end, sizeof(mbBody) - strlen(mbBody),
+		snprintf(mbBody + strlen(mbBody), sizeof(mbBody) - strlen(mbBody),
 			"\nAccess: %s at %p",
 			rw == 0 ? "READ" : rw == 1 ? "WRITE" : "EXECUTE",
 			(void*)ep->ExceptionRecord->ExceptionInformation[1]);
 	}
-	// Only show MessageBox for crashes in OUR code (skygfx DLL).
-	// Game crashes (in gta_sa.exe) are logged but allowed to propagate
-	// naturally — blocking with a MessageBox corrupts game state because
-	// other threads keep running while this thread is blocked.
-	HMODULE skygfxMod = GetModuleHandle("skygfx.asi");
-	if(!skygfxMod) skygfxMod = GetModuleHandle("skygfx.dll");
-	HMODULE crashModule = crashMod;
-	bool inSkygfx = (crashModule == skygfxMod);
 
-	if(inSkygfx){
-		diag_forceWindowToFront();
-		int mbRet = MessageBoxA(NULL, mbBody, mbTitle, MB_ICONERROR | MB_OKCANCEL | MB_TOPMOST);
-		if(mbRet == IDCANCEL || mbRet == 0)
-			TerminateProcess(GetCurrentProcess(), code);
-	}else{
-		crash_log("  (game crash — not showing dialog, letting propagate)");
-	}
+	// Show MessageBox — user can decide to continue or terminate
+	int mbRet = MessageBoxA(NULL, mbBody, mbTitle, MB_ICONERROR | MB_OKCANCEL | MB_TOPMOST);
+	if(mbRet == IDCANCEL)
+		TerminateProcess(GetCurrentProcess(), code);
 
-	// Let the exception propagate naturally.
-	// so SEH handlers (if any) can deal with it.
+	// Diagnostic-only: always let exceptions propagate naturally.
 	return EXCEPTION_CONTINUE_SEARCH;
+}
+
+// ============================================================
+// Watchdog — detects freezes (no crash, just hangs)
+// ============================================================
+static volatile LONG s_heartbeat = 0;
+static volatile LONG s_watchdogRunning = 0;
+static HWND s_gameHwnd = NULL;
+
+void diag_heartbeat(void)
+{
+	InterlockedExchange(&s_heartbeat, GetTickCount());
+}
+
+static void diag_findGameWindow(void)
+{
+	if(s_gameHwnd) return;
+	// Find the game's main window by class name (GTA SA uses "LaunchUnrealUWindow" or gets a raw HWND)
+	struct EnumCtx { HWND found; } ctx = { NULL };
+	EnumWindows([](HWND hwnd, LPARAM lp) -> BOOL {
+		DWORD pid = 0;
+		GetWindowThreadProcessId(hwnd, &pid);
+		if(pid == GetCurrentProcessId() && IsWindowVisible(hwnd)){
+			((EnumCtx*)lp)->found = hwnd;
+			return FALSE;
+		}
+		return TRUE;
+	}, (LPARAM)&ctx);
+	s_gameHwnd = ctx.found;
+}
+
+static DWORD WINAPI watchdogThread(LPVOID)
+{
+	InterlockedExchange(&s_watchdogRunning, 1);
+	dbglog("Watchdog: started (thread id=%08X)", GetCurrentThreadId());
+
+	// Wait for game to start producing heartbeats
+	Sleep(5000);
+
+	while(s_watchdogRunning){
+		DWORD last = (DWORD)s_heartbeat;
+		DWORD now = GetTickCount();
+
+		if(last != 0 && (now - last) > 30000){
+			// 30 seconds with no heartbeat — game is frozen
+			dbglog("Watchdog: FREEZE DETECTED — no heartbeat for %u ms (last=%u now=%u)", now - last, last, now);
+
+			diag_findGameWindow();
+
+			char title[128];
+			snprintf(title, sizeof(title), "skygfx FREEZE DETECTED");
+			char body[1024];
+			snprintf(body, sizeof(body),
+				"The game has not responded for over 30 seconds.\n\n"
+				"It may be frozen on a loading screen or in a loop.\n\n"
+				"Full log written to:\n%s\n\n"
+				"Click OK to try to continue.\n"
+				"Click Cancel to terminate.",
+				s_logPath);
+
+			// Show on top of whatever is visible
+			int mbRet = MessageBoxA(s_gameHwnd, body, title, MB_ICONWARNING | MB_OKCANCEL | MB_TOPMOST);
+			if(mbRet == IDCANCEL)
+				TerminateProcess(GetCurrentProcess(), 0xDEAD);
+
+			// Reset heartbeat so we don't re-trigger immediately
+			InterlockedExchange(&s_heartbeat, GetTickCount());
+			Sleep(5000);
+		}
+
+		Sleep(2000);
+	}
+	dbglog("Watchdog: exiting");
+	return 0;
+}
+
+void diag_startWatchdog(void)
+{
+	if(s_watchdogRunning) return;
+	InterlockedExchange(&s_heartbeat, GetTickCount());
+	CreateThread(NULL, 0, watchdogThread, NULL, 0, NULL);
+}
+
+void diag_stopWatchdog(void)
+{
+	InterlockedExchange(&s_watchdogRunning, 0);
 }
 
 // ============================================================
@@ -278,25 +264,10 @@ diag_init(const char *logPath)
 		strncpy(s_logPath, logPath, MAX_PATH - 1);
 	s_logInit = 1;
 
-	// Set up backup log location in project directory
-	// This ensures we always have a log even if game directory is corrupted
-	strncpy(s_logPath2, "E:\\dev(dave)\\skygfx_plus_expIV\\logs\\skygfx_dbg.log", MAX_PATH - 1);
-	
-	// Create logs directory if it doesn't exist
-	CreateDirectoryA("E:\\dev(dave)\\skygfx_plus_expIV\\logs", NULL);
-
-	// Truncate both logs on fresh boot
+	// Truncate log on fresh boot
 	HANDLE hLog = CreateFileA(s_logPath, GENERIC_WRITE, FILE_SHARE_READ,
 		NULL, TRUNCATE_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 	if(hLog != INVALID_HANDLE_VALUE) CloseHandle(hLog);
-	
-	hLog = CreateFileA(s_logPath2, GENERIC_WRITE, FILE_SHARE_READ,
-		NULL, TRUNCATE_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-	if(hLog != INVALID_HANDLE_VALUE) CloseHandle(hLog);
-	
-	dbglog("=== Logging initialized ===");
-	dbglog("Primary log: %s", s_logPath);
-	dbglog("Backup log: %s", s_logPath2);
 }
 
 void
@@ -315,174 +286,45 @@ diag_removeVEH(void)
 }
 
 // ============================================================
-// Watchdog — detects freezes (no crash, just hangs)
+// Minidump writer
 // ============================================================
-static volatile LONG s_heartbeat = 0;
-static volatile LONG s_watchdogRunning = 0;
-static HWND s_gameHwnd = NULL;
-
-// Crash marker — written on crash/freeze so next launch can report it
-static const char *s_crashMarkerPath = NULL;
-
-void diag_heartbeat(void)
+void
+diag_writeMinidump(EXCEPTION_POINTERS *ep)
 {
-	InterlockedExchange(&s_heartbeat, GetTickCount());
-}
+	if(!ep) return;
 
-static void diag_findGameWindow(void)
-{
-	if(s_gameHwnd) return;
-	struct EnumCtx { HWND found; } ctx = { NULL };
-	EnumWindows([](HWND hwnd, LPARAM lp) -> BOOL {
-		DWORD pid = 0;
-		GetWindowThreadProcessId(hwnd, &pid);
-		if(pid == GetCurrentProcessId() && IsWindowVisible(hwnd)){
-			((EnumCtx*)lp)->found = hwnd;
-			return FALSE;
-		}
-		return TRUE;
-	}, (LPARAM)&ctx);
-	s_gameHwnd = ctx.found;
-}
+	char dumpPath[MAX_PATH];
+	strncpy(dumpPath, s_logPath, MAX_PATH - 1);
+	char *ext = strrchr(dumpPath, '.');
+	if(ext) strcpy(ext, "_crash.dmp");
+	else strcat(dumpPath, "_crash.dmp");
 
-// Force game window out of fullscreen so dialogs are visible
-static void diag_forceWindowToFront(void)
-{
-	diag_findGameWindow();
-	if(!s_gameHwnd) return;
-
-	// Try to restore from fullscreen / iconic
-	ShowWindow(s_gameHwnd, SW_RESTORE);
-	Sleep(100);
-
-	// Set as topmost and foreground
-	SetWindowPos(s_gameHwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
-	SetForegroundWindow(s_gameHwnd);
-	Sleep(200);
-}
-
-// Write a crash marker file so next launch can show what happened
-static void diag_writeCrashMarker(const char *reason, DWORD code, DWORD addr)
-{
-	char markerPath[MAX_PATH];
-	strncpy(markerPath, s_logPath, MAX_PATH - 1);
-	markerPath[MAX_PATH - 1] = '\0';
-	char *dot = strrchr(markerPath, '.');
-	if(dot) strcpy(dot, ".crash");
-	else strncat(markerPath, ".crash", MAX_PATH - strlen(markerPath) - 1);
-
-	HANDLE h = CreateFileA(markerPath, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
-		FILE_ATTRIBUTE_NORMAL, NULL);
-	if(h == INVALID_HANDLE_VALUE) return;
-
-	char buf[512];
-	int len = snprintf(buf, sizeof(buf),
-		"skygfx %s\n"
-		"Code: 0x%08X\n"
-		"Address: 0x%08X\n"
-		"Log: %s\n"
-		"Time: %u\n",
-		reason, code, addr, s_logPath, GetTickCount());
-	DWORD written;
-	WriteFile(h, buf, len, &written, NULL);
-	CloseHandle(h);
-	s_crashMarkerPath = markerPath;
-}
-
-// Check for crash marker from previous session — show it if found
-void diag_checkCrashMarker(void)
-{
-	char markerPath[MAX_PATH];
-	GetModuleFileNameA(NULL, markerPath, MAX_PATH);
-	char *p = strrchr(markerPath, '\\');
-	if(p) strcpy(p + 1, "skygfx_asi.crash");
-	else return;
-
-	HANDLE h = CreateFileA(markerPath, GENERIC_READ, FILE_SHARE_READ,
-		NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-	if(h == INVALID_HANDLE_VALUE) return;
-
-	char buf[512] = {0};
-	DWORD read = 0;
-	ReadFile(h, buf, sizeof(buf) - 1, &read, NULL);
-	CloseHandle(h);
-
-	// Delete the marker after reading
-	DeleteFileA(markerPath);
-
-	if(read > 0){
-		char body[600];
-		snprintf(body, sizeof(body),
-			"The previous session ended abnormally.\n\n%s\n\n"
-			"Check the log file for details.",
-			buf);
-		MessageBoxA(NULL, body, "skygfx — Previous Crash", MB_ICONWARNING | MB_OK | MB_TOPMOST);
+	HANDLE hFile = CreateFileA(dumpPath, GENERIC_WRITE, 0, NULL,
+		CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+	if(hFile == INVALID_HANDLE_VALUE){
+		dbglog("diag_writeMinidump: failed to create %s (err=%d)", dumpPath, GetLastError());
+		return;
 	}
-}
 
-static DWORD WINAPI watchdogThread(LPVOID)
-{
-	InterlockedExchange(&s_watchdogRunning, 1);
-	crash_log("Watchdog: started (thread id=%08X)", GetCurrentThreadId());
-
-	// Check for crash from previous session
-	diag_checkCrashMarker();
-
-	Sleep(5000);
-
-	while(s_watchdogRunning){
-		DWORD last = (DWORD)InterlockedExchangeAdd(&s_heartbeat, 0);
-		DWORD now = GetTickCount();
-
-		// ESC key = force kill, always works even in fullscreen
-		if(GetAsyncKeyState(VK_ESCAPE) & 0x0001){
-			crash_log("Watchdog: ESC pressed — force terminating");
-			TerminateProcess(GetCurrentProcess(), 0x1234);
+	// Use Windows MiniDumpWriteDump API
+	typedef BOOL (WINAPI *MiniDumpWriteDump_t)(HANDLE, DWORD, HANDLE, int, void*, void*, void*);
+	HMODULE dbgDll = GetModuleHandleA("dbghelp.dll");
+	if(!dbgDll) dbgDll = LoadLibraryA("dbghelp.dll");
+	if(dbgDll){
+		MiniDumpWriteDump_t pDump = (MiniDumpWriteDump_t)GetProcAddress(dbgDll, "MiniDumpWriteDump");
+		if(pDump){
+			MINIDUMP_EXCEPTION_INFORMATION mei;
+			mei.ThreadId = GetCurrentThreadId();
+			mei.ExceptionPointers = ep;
+			mei.ClientPointers = FALSE;
+			BOOL ok = pDump(GetCurrentProcess(), GetCurrentProcessId(), hFile,
+				MINIDUMPWithDataSegs, &mei, NULL, NULL);
+			dbglog("diag_writeMinidump: %s to %s", ok ? "OK" : "FAILED", dumpPath);
+		} else {
+			dbglog("diag_writeMinidump: MiniDumpWriteDump not found");
 		}
-
-		if(last != 0 && (now - last) > 30000){
-			crash_log("Watchdog: FREEZE DETECTED — no heartbeat for %u ms (last=%u now=%u)", now - last, last, now);
-
-			// Write crash marker before attempting dialog
-			diag_writeCrashMarker("FREEZE DETECTED", 0xDEAD, 0);
-
-			// Force window visible so dialog shows
-			diag_forceWindowToFront();
-
-			char title[128];
-			snprintf(title, sizeof(title), "skygfx FREEZE DETECTED");
-			char body[1024];
-			snprintf(body, sizeof(body),
-				"The game has not responded for over 30 seconds.\n\n"
-				"It may be frozen on a loading screen.\n\n"
-				"Full log written to:\n%s\n\n"
-				"Press ESC to force-kill at any time.\n\n"
-				"Click OK to try to continue.\n"
-				"Click Cancel to terminate.",
-				s_logPath);
-
-			int mbRet = MessageBoxA(s_gameHwnd, body, title, MB_ICONWARNING | MB_OKCANCEL | MB_TOPMOST);
-			if(mbRet == IDCANCEL)
-				TerminateProcess(GetCurrentProcess(), 0xDEAD);
-
-			InterlockedExchange(&s_heartbeat, GetTickCount());
-			Sleep(5000);
-		}
-
-		Sleep(2000);
+	} else {
+		dbglog("diag_writeMinidump: dbghelp.dll not available");
 	}
-	crash_log("Watchdog: exiting");
-	return 0;
-}
-
-void diag_startWatchdog(void)
-{
-	if(s_watchdogRunning) return;
-	InterlockedExchange(&s_heartbeat, GetTickCount());
-	CreateThread(NULL, 0, watchdogThread, NULL, 0, NULL);
-}
-
-void diag_stopWatchdog(void)
-{
-	InterlockedExchange(&s_watchdogRunning, 0);
+	CloseHandle(hFile);
 }

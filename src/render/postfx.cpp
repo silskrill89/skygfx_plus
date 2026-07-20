@@ -2406,7 +2406,7 @@ CPostEffects::DrawSMAA(void)
 	float cameraVelocity = 0.0f;
 	float cameraRotation = 0.0f;
 
-	if(camInitialized){
+	if(camInitialized && camMatrix){
 		// Position delta
 		float dx = camPos.x - prevCamPos.x;
 		float dy = camPos.y - prevCamPos.y;
@@ -2420,10 +2420,11 @@ CPostEffects::DrawSMAA(void)
 		cameraRotation = 1.0f - max(-1.0f, min(1.0f, dot)); // 0=no rotation, 2=max rotation
 	}
 
-	prevCamPos = camPos;
-	if(camMatrix)
+	if(camMatrix){
+		prevCamPos = camPos;
 		prevCamMatrix = *camMatrix;
-	camInitialized = true;
+		camInitialized = true;
+	}
 
 	// Combine camera movement into a single factor (0=still, 1=fast movement)
 	float cameraMovement = min(1.0f, (cameraVelocity * 0.1f) + (cameraRotation * 2.0f));
@@ -2447,9 +2448,13 @@ CPostEffects::DrawSMAA(void)
 
 	// ---- Pass 0: Edge + Motion + Depth Detection ----
 	// Uses combined shader that outputs: RG=luma edges, B=motion, A=depth
+	dbglog("SMAA: pass0 endupdate");
 	RwCameraEndUpdate(Scene.camera);
+	dbglog("SMAA: pass0 setraster");
 	RwCameraSetRaster(Scene.camera, edgeRaster);
+	dbglog("SMAA: pass0 beginupdate");
 	RwCameraBeginUpdate(Scene.camera);
+	dbglog("SMAA: pass0 begun");
 
 	// Set front buffer as input texture on stage 0
 	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)pRasterFrontBuffer);

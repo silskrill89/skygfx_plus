@@ -75,8 +75,8 @@ void myFeature_setRenderState(void)
     float params[4] = {config->myFeatureParam1, 0, 0, 0};
     RwD3D9SetPixelShaderConstant(0, params, 1);
 
-    // Set textures
-    RwD3D9SetTexture(0, someTexture);
+    // Set textures (note: texture first, stage second!)
+    RwD3D9SetTexture(someTexture, 0);
 
     // Render states
     RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)true);
@@ -87,7 +87,7 @@ void myFeature_restoreRenderState(void)
     RwD3D9SetVertexShader(nullptr);
     RwD3D9SetPixelShader(nullptr);
     // Clear textures
-    for(int i = 0; i < 8; i++) RwD3D9SetTexture(i, nullptr);
+    for(int i = 0; i < 8; i++) RwD3D9SetTexture(nullptr, i);
 }
 ```
 
@@ -111,7 +111,7 @@ CWaterLevel::RenderAndEmptyRenderBuffer
 | 0xC8132C | UnderWaterness |
 | 0x7FA100 | RwD3D9SetPixelShader |
 | 0x7FA0C0 | RwD3D9SetVertexShader |
-| 0x7F9880 | RwD3D9SetTexture |
+| 0x7FDE70 | RwD3D9SetTexture |
 
 ## Debugging
 - Set breakpoints in `waterPipe_setRenderState()` to verify shader/constants
@@ -122,3 +122,4 @@ CWaterLevel::RenderAndEmptyRenderBuffer
 ## See Also
 - [[Shader Architecture]] — How shaders compile
 - [[Build System]] — fix_build.py details
+- [[RW SDK Reference]] — Function signatures and addresses

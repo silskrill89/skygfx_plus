@@ -1263,11 +1263,12 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_mobile(RwResEntry *repEntry, void *
 
 
 	// Try to get mobile direct color
-	float c[4];
-	c[0] = pDirect->color.red * 1.28f * 1.5f;// *1.6;
-	c[1] = pDirect->color.green * 1.28f * 1.5f;// *1.6;
-	c[2] = pDirect->color.blue * 1.28f * 1.5f;// *1.6;
-	c[3] = 1.0f;
+	float c[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+	if(pDirect){
+		c[0] = pDirect->color.red * 1.28f * 1.5f;
+		c[1] = pDirect->color.green * 1.28f * 1.5f;
+		c[2] = pDirect->color.blue * 1.28f * 1.5f;
+	}
 	RwD3D9SetVertexShaderConstant(REG_directCol, (void*)c, 1);
 
 
@@ -1832,7 +1833,6 @@ RwTexture *RwTextureRead_HACK(const RwChar * name, const RwChar * maskName)
 void
 hookVehiclePipe(void)
 {
-	dbglog("hookVehiclePipe: entering");
 	InjectHook(0x5D9FE9, setVehiclePipeCB);
 	InterceptCall(&CCustomCarEnvMapPipeline__PreRenderUpdate_orig, CCustomCarEnvMapPipeline__PreRenderUpdate, 0x5D5B10);
 	InjectHook(0x7323C0, CVisibilityPlugins__RenderWheelAtomicCB, PATCH_JUMP);
@@ -1840,7 +1840,6 @@ hookVehiclePipe(void)
 	// Wire wheels extender for random wheel swapping
 	extern void WheelsExtender_Install(void);
 	WheelsExtender_Install();
-	dbglog("hookVehiclePipe: done");
 
 	// TEMP - disable car pipe
 #if 0

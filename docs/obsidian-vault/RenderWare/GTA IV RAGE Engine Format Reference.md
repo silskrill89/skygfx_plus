@@ -1,5 +1,13 @@
+---
+tags: [rage, gta-iv, format, reference]
+created: 2025-01-02
+updated: 2026-07-15
+---
+
 # GTA IV RAGE Engine Format Reference
-# From plugin-sdk-master/plugin_IV/game_IV/rage/ headers
+
+> [!info] Source
+> From `plugin-sdk-master/plugin_IV/game_IV/rage/` headers
 
 ## Overview
 GTA IV uses Rockstar Advanced Game Engine (RAGE), completely different from RenderWare.
@@ -162,4 +170,5 @@ namespace rage {
 
 ## Related
 - [[RenderWare V2.1 API Reference]] — RW format comparison
+- [[GTA IV RAGE Engine Complete Reference]] — Full RAGE reference with IMG encryption
 - [[SkyGFX Pipeline Overview]] — our rendering pipeline

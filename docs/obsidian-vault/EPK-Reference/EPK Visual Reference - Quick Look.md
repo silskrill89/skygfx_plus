@@ -1,5 +1,13 @@
+---
+tags: [epk, visual-reference, quick-look]
+created: 2025-01-02
+updated: 2026-07-15
+---
+
 # EPK Visual Reference - Quick Look Guide
-# Open these TIFFs in an image viewer to compare against our rendering
+
+> [!info] Usage
+> Open these TIFFs in an image viewer to compare against our rendering
 
 ## PC Screenshots (official Rockstar reference)
 ```
@@ -44,3 +52,7 @@ E:\docs\VC and SA EPKs\San Andreas EPK\San Andreas Review Screens\
 3. Navigate to same scene/area
 4. Compare: sky color, vehicle paint, building materials, lighting
 5. Adjust timecycle/config values to match
+
+## Related
+- [[GTA San Andreas EPK Reference]] — Full EPK reference
+- [[Weather System Architecture]] — Timecycle tuning

@@ -3,35 +3,41 @@
 #lens #postfx #fx
 
 ## Overview
-Camera lens simulation effects.
+
+Camera lens simulation effects. Config fields exist in `skygfx.h` but implementation is minimal — these are mostly placeholder configs without full rendering implementations.
 
 ## Distortion
+
 ```ini
-lensDistortionEnable=0
-lensDistortionAmount=0.0
+lensDistortionCoeff=0.0
+lensDistortionCubeCoeff=0.0
 ```
 
 ## Chromatic Aberration
+
 ```ini
-chromaAbEnable=0
-chromaAbAmount=0.0
+lensChromaticAberrationCoeff=0.0
+lensChromaticAberrationCubeCoeff=0.0
 ```
 
-## Grain
+## Lens Artefacts
+
 ```ini
-grainEnable=1
-grainStrength=0.03
-grainTimeMult=1.0
-grainLuminanceOnly=0
+lensArtefactsInten=0.0
+lensArtefactsIntenMinExp=0.0
+lensArtefactsIntenMaxExp=0.0
 ```
 
-## Infrared / Night Vision
+## Grain (Fully Implemented)
+
 ```ini
-infraredEnable=0
-infraredNightVision=0
-infraredVisionR, infraredVisionG, infraredVisionB
+grainFilter=0           # 0=PS2 style, 1=standard
+grainStrength=128       # Grain intensity
 ```
+
+The PS2 grain filter uses a VU-style random number generator (same algorithm as PCSX2) for deterministic noise generation.
 
 ## See Also
+
 - [[PostFX Pipeline]] — Other effects
 - [[INI Configuration]] — Config fields

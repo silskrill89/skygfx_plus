@@ -89,8 +89,12 @@ CustomBuildingEnvMapPipeline__SetupEnv(RpAtomic *atomic, RwFrame *envframe, RwMa
 	if(lastobject != (clump ? (void*)clump : (void*)atomic) ||
 	   lastfrm != envframe ||
 	   lastrenderframe != RWSRCGLOBAL(renderFrame)){
-		RwMatrixInvert(&inv, RwFrameGetLTM(envframe));
 		frame = clump ? RpClumpGetFrame(clump) : RpAtomicGetFrame(atomic);
+		if(!frame){
+			RwMatrixSetIdentity(envmat);
+			return;
+		}
+		RwMatrixInvert(&inv, RwFrameGetLTM(envframe));
 		RwMatrixMultiply(&lastmat, RwFrameGetLTM(frame), &inv);
 		if((rwMatrixGetFlags(&lastmat) & rwMATRIXTYPEMASK) != rwMATRIXTYPEORTHONORMAL)
 			RwMatrixOrthoNormalize(&lastmat, &lastmat);
@@ -190,6 +194,7 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PS2(RwResEntry *repEntry, void *ob
 	RwMatrixSetIdentity(&ident);
 
 	RwFrame* frame = (RwFrame*)atomic->object.object.parent;
+	if(!frame) return;
 
 	_rwD3D9EnableClippingIfNeeded(object, type);
 
@@ -399,6 +404,7 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *o
 	RwMatrixSetIdentity(&ident);
 
 	RwFrame* frame = (RwFrame*)atomic->object.object.parent;
+	if(!frame) return;
 
 	_rwD3D9EnableClippingIfNeeded(object, type);
 
@@ -616,6 +622,7 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 	RwMatrixSetIdentity(&ident);
 
 	RwFrame* frame = (RwFrame*)atomic->object.object.parent;
+	if(!frame) return;
 	_rwD3D9EnableClippingIfNeeded(object, type);
 
 	// Transform
@@ -1070,35 +1077,30 @@ CCustomBuildingRenderer__IsCBPCPipelineAttached(RpAtomic *atomic)
 	RxPipeline *pipe;
 	RpAtomicGetPipeline(atomic, &pipe);
 
-	// This is the correct way to check for a building
 	if(pipeID == RSPIPE_PC_CustomBuilding_PipeID || pipeID == RSPIPE_PC_CustomBuildingDN_PipeID)
 		return TRUE;
 
 	if(explicitBuildingPipe > 0)
 		return FALSE;
 
-	// This is only a building in this case if we don't have another pipe attached already!
-	// Skin or MatFX may already be attached and we'd like to use them
+	if(!RpAtomicGetFrame(atomic))
+		return FALSE;
+
 	return pipe == nil && GetExtraVertColourPtr(geo) && RpGeometryGetPreLightColors(geo);
 }
 
 void
 hookBuildingPipe(void)
 {
-	dbglog("hookBuildingPipe: entering");
 	InterceptCall(&CustomBuildingPipeline__Update_orig, CustomBuildingPipeline__Update, 0x53C15E);
 	InjectHook(0x5D7100, CCustomBuildingDNPipeline__CreateCustomObjPipe_PS2);
 	InjectHook(0x5D7D90, CCustomBuildingPipeline__CreateCustomObjPipe_PS2);
 	Patch<uint8>(0x5D7200, 0xC3);	// disable interpolation
 
-	dbglog("hookBuildingPipe: explicitBuildingPipe=%d, gHasExternalNormalMapPlugin=%d", explicitBuildingPipe, gHasExternalNormalMapPlugin);
-	if(explicitBuildingPipe >= 0 && !gHasExternalNormalMapPlugin){
-		dbglog("hookBuildingPipe: hooking 0x5D7F40");
+	if(explicitBuildingPipe >= 0)
 		InjectHook(0x5D7F40, CCustomBuildingRenderer__IsCBPCPipelineAttached, PATCH_JUMP);
-	}
 
 
 //	Patch<BYTE>(0x732B40, 0xC3);	// disable fading entities
 //	Patch<BYTE>(0x732610, 0xC3);	// disable fading atomic
-	dbglog("hookBuildingPipe: done");
 }

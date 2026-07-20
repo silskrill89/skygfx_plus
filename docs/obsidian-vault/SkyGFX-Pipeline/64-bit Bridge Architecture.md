@@ -1,5 +1,12 @@
 # SkyGFX Plus — 64-bit Bridge Architecture
 
+## Status: Concept / Partially Implemented
+
+- ✅ `skygfx_bridge.cpp` — shared memory ring buffer (32-bit only)
+- ❌ 64-bit Bridge DLL not implemented
+- ❌ WoW64 context switching not implemented
+- ❌ 4GB dedicated pool not implemented
+
 ## Concept: Signal Splitter / Bigger Bus
 
 Instead of hooking limited functions directly, SkyGFX creates a second library
@@ -26,7 +33,7 @@ communicate via a bridge, passing limited game functions through to the bigger b
 └─────────────────────────────────────────────┘
 ```
 
-### How It Works
+### How It Would Work (Planned)
 
 1. **SkyGFX ASI** loads normally, handles rendering hooks
 2. **Bridge DLL** loads via `LoadLibrary` — gets its own code segment
@@ -35,25 +42,22 @@ communicate via a bridge, passing limited game functions through to the bigger b
 5. **64-bit mode** via WoW64 — the bridge DLL runs in 64-bit context
 6. **Dedicated 4GB** — bridge allocates its own memory pool for scripts/AI
 
-### Implementation
+### What's Actually Implemented
 
-```cpp
-// In SkyGFX ASI (main.dll)
-HANDLE bridge = LoadLibrary("skygfx_bridge.dll");
-// Pass game function pointers through bridge
-void (*BridgeExec)(void* func, void* args) = GetProcAddress(bridge, "BridgeExec");
-BridgeExec(GameFunction, &args);
+`skygfx_bridge.cpp` provides a 32-bit shared memory ring buffer:
+- `Bridge_Init()` — creates shared memory via `CreateFileMappingA`
+- `Bridge_SendCommand()` — writes commands to ring buffer
+- `Bridge_ReceiveCommand()` — reads commands from ring buffer
+- 256-entry command ring buffer
+- Mutex synchronization
 
-// In Bridge DLL (skygfx_bridge.dll)
-// 64-bit address space, dedicated memory pool
-static char scriptMemory[4 * 1024 * 1024 * 1024]; // 4GB
-void BridgeExec(void* gameFunc, void* args) {
-    // Execute game function in 64-bit context
-    // Returns results through shared memory
-}
-```
+This is a foundation for inter-process communication, but does not implement:
+- 64-bit context switching
+- Script execution routing
+- Physics/AI isolation
+- 4GB dedicated memory pool
 
-### Benefits
+### Benefits (Planned)
 - Scripts get dedicated 4GB RAM (no memory pressure from rendering)
 - Asset loading/unloading isolated from main game loop
 - Physics/AI can run heavy computations without frame drops
@@ -64,9 +68,6 @@ void BridgeExec(void* gameFunc, void* args) {
 - Synchronization between 32-bit and 64-bit contexts
 - Memory layout alignment (pointers between address spaces)
 
-### TODO
-- [ ] Create bridge DLL skeleton
-- [ ] Implement shared memory allocation
-- [ ] Hook game functions to route through bridge
-- [ ] Benchmark WoW64 context switch overhead
-- [ ] Test 4GB allocation for scripts
+## Related
+- [[Signal Splitter Architecture]] — bridge concept
+- [[Decided Architecture]] — Q13 decision

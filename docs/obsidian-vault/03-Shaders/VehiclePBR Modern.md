@@ -1,16 +1,19 @@
 ---
 tags: [shaders, pbr, vehicles, entry-points]
 created: 2025-01-02
-updated: 2025-01-02
+updated: 2026-07-15
 ---
 
 # VehiclePBR Modern
+
+> [!info] Full documentation
+> See `docs/VehiclePBR Modern.md` for the complete shader reference.
 
 ## Overview
 The unified vehicle pixel shader. **7 entry points** in one HLSL file, covering every vehicle rendering path from PS2 classics to full PBR.
 
 **File**: `shaders/ps/VehiclePBR_Modern.hlsl`
-**Profile**: ps_3_0 (main PBR), ps_2_0 (legacy entry points compiled separately)
+**Profile**: ps_3_0
 
 ## Entry Points
 
@@ -42,11 +45,18 @@ Full PBR rendering with GGX/Smith/Schlick specular BRDF.
 | c12 | directDir |
 | c13-c18 | lightDir[6] |
 | c19 | matCol |
-| c22 | {glossiness, specular, specTint, envFresnel} |
-| c23 | {wheelFlag, noiseScale, edgeBlend, 0} |
-| c24 | {ambientColor.xyz, normalBufEnable} |
+| c22 | pbrParams {glossiness, reflectance, clearcoat, subsurface} |
+| c23 | paintNoise {wheelFlag, noiseScale, edgeBlend, 0} |
+| c24 | ambientColor {r, g, b, normalBufFlag} |
 
-**Textures**: s0=diffuse, s1=envMap, s2=mask, s3=IBL, s4=normalBuffer
+**Textures**:
+| Stage | Sampler | Purpose |
+|-------|---------|---------|
+| s0 | `diffuseTex` | Diffuse (material) |
+| s1 | `envMapTex` | Env map / reflection |
+| s2 | `maskTex` | Reflection mask |
+| s3 | `iblTex` | IBL buffer |
+| s4 | `normalBufTex` | Normal buffer |
 
 ### `main_rubber` — Parametric Rubber/Tire
 PBR rubber material with dirt/wear tinting and subsurface wrap.
@@ -61,25 +71,31 @@ PBR rubber material with dirt/wear tinting and subsurface wrap.
 **Constants**:
 | Register | Content |
 |----------|---------|
-| c22 | {roughness, F0, tintR, tintG} |
-| c23 | {tintB, dirtLevel, wearFactor, 0} |
+| c22 | pbrParams {roughness, F0, tintR, tintG} |
+| c23 | paintNoise {tintB, dirtLevel, wearFactor, 0} |
 
 **Implementation**: Merged from standalone `Rubber_Vehicle.hlsl` into unified shader.
 
-### `main_envCar` — PS2/PC Environment Car
-Sphere reflection + multi-light specular. Energy-conserved env blend.
-
 ### `main_ps2EnvSpecFx` — PS2 Env+Spec Dual-Layer
-Two-layer env map + specular texture blend.
+Two-layer env map + specular texture blend. Uses `envMapTex` (s1) and `maskTex` (s2).
 
 ### `main_specCarFx` — Specular Car FX
-Env map * envcolor + speccolor.
+Env map * envcolor + speccolor. Simple single-texture lookup.
 
 ### `main_mobileVehicle` — Mobile Vehicle
-Env lerp with shininess control + specular add.
+Env lerp with shininess control + specular add. Uses `diffuseTex` (s0) and `envMapTex` (s1).
 
 ### `main_normMapVehicle` — Normal-Mapped Vehicle
-Env blend with normal map detail.
+Env blend with normal map detail. Uses `diffuseTex` (s0) and `envMapTex` (s1).
+
+### `main_building` — Building PBR
+Unified building shader using vertex color as base color. Full PBR with GGX/Smith/Schlick. Uses `diffuseTex` (s0) and `iblTex` (s3).
+
+> [!warning] Non-existent entry points
+> The following entry points do **NOT** exist in VehiclePBR_Modern.hlsl:
+> - `main_envCar` — does not exist (use `main` for PBR env car)
+> - `main_glass` — glass has its own file: `shaders/ps/Glass_Vehicle.hlsl`
+> - `main_leeds` — does not exist (Leeds pipes use separate shaders)
 
 ## PBR Material Classification
 | roughness | Type |
@@ -108,8 +124,8 @@ float3 layer2 = envRefl * iblTint * paintTint * clearCoatF * envFresnel;
 This provides sky color variation while preserving the actual scene reflection.
 
 ## See Also
-- [[03-Shaders/PBR Common]] — Shared GGX/Smith/Schlick functions
-- [[02-Pipelines/Vehicle Pipeline]] — How each entry point is selected
-- [[03-Shaders/Glass Shader]] — Separate glass rendering
-- [[03-Shaders/Shader Architecture]] — Compilation and loading
-- [[06-Technical-Decisions/IBL Env Map Decision]] — Why IBL tints instead of replaces
+- [[../docs/PBR Common]] — Shared GGX/Smith/Schlick functions
+- [[../docs/Vehicle Pipeline]] — How each entry point is selected
+- [[../docs/Glass Shader]] — Separate glass rendering
+- [[../docs/Shader Architecture]] — Compilation and loading
+- [[IBL Env Map Decision]] — Why IBL tints instead of replaces

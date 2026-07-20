@@ -1,3 +1,9 @@
+---
+tags: [architecture, 64-bit, porting, reference]
+created: 2025-01-02
+updated: 2026-07-15
+---
+
 # 32→64 Bit Transition Reference
 
 **Source:** Microsoft 64-bit Windows Programming Guide, Intel 64 and IA-32 Architectures Software Developer's Manuals
@@ -134,12 +140,10 @@ SIZE_T size = 3000000000;  // OK on 64-bit
 ### 3. Format Strings
 ```c
 // BAD:
-printf("Pointer: 0x%08x
-", ptr);  // Truncates on 64-bit
+printf("Pointer: 0x%08x\n", ptr);  // Truncates on 64-bit
 
 // GOOD:
-printf("Pointer: 0x%p
-", ptr);  // Portable
+printf("Pointer: 0x%p\n", ptr);  // Portable
 ```
 
 ---
@@ -212,15 +216,7 @@ printf("Pointer: 0x%p
 
 ---
 
-## Next Steps
-
-1. **Immediate:** Audit SkyGFX Plus codebase for pointer casts
-2. **Short-term:** Create 64-bit build configuration
-3. **Medium-term:** Implement bridge DLL architecture
-4. **Long-term:** Port openSA to 64-bit with bridge support
-
----
-
-**Generated:** 2026-07-01  
-**Extracted from:** Microsoft and Intel official documentation  
-**Projects:** SkyGFX Plus, openSA
+## Related
+- [[64-bit Bridge Architecture]] — SkyGFX 64-bit bridge plan
+- [[Signal Splitter Architecture]] — Bigger bus concept
+- [[Decided Architecture]] — Architecture decisions including Q13 (64-bit bridge)

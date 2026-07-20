@@ -1,4 +1,13 @@
+---
+tags: [architecture, decisions, quiz]
+created: 2025-01-02
+updated: 2026-07-15
+---
+
 # SkyGFX Plus — Decided Architecture
+
+> [!info] Full documentation
+> See `docs/Project Lineage.md` for the complete project lineage.
 
 ## Quiz Answers (Final)
 
@@ -59,3 +68,10 @@ Keep PS2/Xbox/Neo as separate legacy pipes.
 ### Modular + Monolith (Q20)
 - Separate ASIs per feature
 - Single monolith installer option
+
+## Related
+- [[Workflow Quiz]] — The 20-question quiz
+- [[SkyGFX Pipeline Overview]] — Current rendering architecture
+- [[64-bit Bridge Architecture]] — 64-bit bridge details
+- [[Weather System Architecture]] — Weather system
+- [[Wheel System Architecture]] — Wheel system

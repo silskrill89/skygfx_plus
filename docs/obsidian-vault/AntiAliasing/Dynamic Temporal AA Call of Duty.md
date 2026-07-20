@@ -1,5 +1,13 @@
+---
+tags: [anti-aliasing, temporal, postfx]
+created: 2025-01-02
+updated: 2026-07-15
+---
+
 # Dynamic Temporal Anti-Aliasing and Upsampling (Call of Duty)
-# Source: `E:\docs\Dynamic_Temporal_Antialiasing_and_Upsampling_in_Call_of_Duty_v4.pdf`
+
+> [!info] Source paper
+> `E:\docs\Dynamic_Temporal_Antialiasing_and_Upsampling_in_Call_of_Duty_v4.pdf`
 
 ## Overview
 - Temporal AA used in Call of Duty (Infinity Ward)
@@ -29,5 +37,5 @@
 
 ## Related
 - [[SMAA Enhanced Subpixel Morphological AA]] — base SMAA
-- [[Conservative_Morphological_Antialiasing]] — simpler alternative
+- [[Conservative Morphological AA]] — simpler alternative
 - [[Non-Parametric Sparse BRDF]] — material reference

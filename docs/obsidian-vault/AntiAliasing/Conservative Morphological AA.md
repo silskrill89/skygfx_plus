@@ -1,5 +1,13 @@
+---
+tags: [anti-aliasing, cmaa, postfx]
+created: 2025-01-02
+updated: 2026-07-15
+---
+
 # Conservative Morphological Anti-Aliasing (CMAA)
-# Source: `E:\docs\conservative-morphological-anti-aliasing.pdf`
+
+> [!info] Source paper
+> `E:\docs\conservative-morphological-anti-aliasing.pdf`
 
 ## Overview
 - Simplified morphological AA — fewer passes than SMAA

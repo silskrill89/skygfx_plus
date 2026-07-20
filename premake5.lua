@@ -13,6 +13,11 @@ workspace "skygfx"
 	files { "resources/*.*" }
 	files { "shaders/*.*" }
 	files { "src/*.*" }
+	files { "src/Core/*.*" }
+	files { "src/entities/*.*" }
+	files { "src/extras/*.*" }
+	files { "src/render/*.*" }
+	files { "src/rw/*.*" }
 	files { "E:/SDKs/imgui-master/*.cpp" }
    
 	includedirs { "external/injector/include" }
@@ -20,6 +25,11 @@ workspace "skygfx"
 	includedirs { "resources" }
 	includedirs { "shaders" }
 	includedirs { "src" }
+	includedirs { "src/rw" }
+	includedirs { "src/entities" }
+	includedirs { "src/extras" }
+	includedirs { "src/render" }
+	includedirs { "src/Core" }
 	includedirs { "E:/SDKs/imgui-master" }
 	includedirs { "E:/SDKs/imgui-master/backends" }
 	includedirs { "E:/SDKs/plugin-sdk-master/plugin_sa/game_sa" }

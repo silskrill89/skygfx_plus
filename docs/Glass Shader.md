@@ -11,19 +11,19 @@ Vehicle glass rendering with physically-based Fresnel reflections and per-vehicl
 ## Features
 - **Schlick Fresnel** with glass IOR 1.5 → F0 = 0.04
 - **Sphere env mapping** (no pole pinching) via `SphereEnvMapUV()`
-- **Sun lighting** — sunspot + broad highlight + Fresnel hotspot
+- **Sun lighting** — sunspot + broad highlight + Fresnel hotspot via `ComputeSunContribution()`
 - **Per-vehicle tint** from C++ classification
-- **Edge darkening** at grazing angles
+- **Edge alpha thickening** at grazing angles (alpha increases, not darkening)
 
 ## Fresnel Model
 ```
-F = F0 + (1 - F0) * (1 - cosθ)⁵
+F = F0 + (1 - F0) * (1 - cosθ)^5
 ```
 
 ## Per-Vehicle Tint System
 Computed in C++ (`vehiclePipe.cpp`), passed as constants:
-- **c22** = `{ opacity, tintR, tintG, tintB }`
-- **c23** = `{ isLight, lightBoost, 0, 0 }`
+- **c22** = `{ tintR, tintG, tintB, opacity }` — glassParams
+- **c23** = `{ isLight, lightBoost, tintStrength, 0 }` — lightParams
 
 ### Detection Logic
 1. Glass: `hasAlpha && alpha < 255 && texture NOT "vehiclelights"`
@@ -42,7 +42,13 @@ Computed in C++ (`vehiclePipe.cpp`), passed as constants:
 - **Glass**: `SRCALPHA / INVSRCALPHA` (standard alpha)
 - **Light**: `SRCALPHA / ONE` (additive glow)
 
+## Rendering Paths
+The shader has two distinct code paths:
+1. **Light path** (`isLight > 0.5`): Nearly transparent, interior texture visible, subtle Fresnel glow at edges
+2. **Glass path** (`isLight <= 0.5`): Dark base (RGB 68,68,68), Fresnel-blended env reflection, tint overlay, alpha thickened at grazing angles
+
 ## See Also
 - [[VehiclePBR Modern]] — Main vehicle paint shader
 - [[Vehicle Classification]] — How meshes are detected
 - [[Vehicle Pipeline]] — How glass is routed
+- [[PBR Common]] — Shared SphereEnvMapUV and F_Schlick functions

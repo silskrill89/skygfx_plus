@@ -1,6 +1,14 @@
+---
+tags: [renderware, rw, api, reference]
+created: 2025-01-02
+updated: 2026-07-15
+---
+
 # RenderWare V2.1 API Reference (1997)
-# Source: `E:\docs\rendfereware\rwdoc.htm`
-# Note: V2.1 — GTA SA uses RW 3.7. Core concepts carry over.
+
+> [!info] Source
+> `E:\docs\rendfereware\rwdoc.htm`
+> V2.1 — GTA SA uses RW 3.7. Core concepts carry over.
 
 ## Overview
 - RenderWare is the 3D rendering engine used by GTA III, VC, SA
@@ -51,3 +59,5 @@
 ## Related
 - [[Non-Parametric Sparse BRDF]] — BRDF reference
 - [[SkyGFX Pipeline Overview]] — our rendering pipeline
+- [[GTA IV RAGE Engine Format Reference]] — RAGE format comparison
+- Full docs: `docs/RW SDK Reference.md`

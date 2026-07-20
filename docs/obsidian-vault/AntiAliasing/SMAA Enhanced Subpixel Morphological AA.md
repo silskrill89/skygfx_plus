@@ -1,14 +1,22 @@
+---
+tags: [anti-aliasing, smaa, postfx]
+created: 2025-01-02
+updated: 2026-07-15
+---
+
 # SMAA: Enhanced Subpixel Morphological Anti-Aliasing
-# Source: `E:\docs\SMAA-Enhanced-Subpixel-Morphological-Antialiasing.pdf`
+
+> [!info] Source paper
+> `E:\docs\SMAA-Enhanced-Subpixel-Morphological-Antialiasing.pdf`
 
 ## Overview
-- Morphological anti-liasing based on Jimenez's MLAA
+- Morphological anti-aliasing based on Jimenez's MLAA
 - 3-pass algorithm: Edge Detection → Blend Weight Calculation → Neighborhood Blending
 - Supports luma, color, and depth-based edge detection
 - High quality with minimal performance overhead
 
 ## Implementation for SkyGFX
-- Already implemented in `src/postfx.cpp` (DrawSMAA)
+- Implemented in `src/render/SMAA.cpp` and `src/render/postfx.cpp`
 - Uses 3 render passes with separate shaders:
   - `SMAA_Edge` — edge detection (luminance-based)
   - `SMAA_BlendWeight` — blend weight calculation
@@ -21,6 +29,7 @@
 - `smaaCornerRounding` — corner rounding strength
 
 ## Related
-- [[Conservative_Morphological_Antialiasing]] — simpler CMAA alternative
-- [[Dynamic_Temporal_Antialiasing_Call_of_Duty]] — temporal extension
+- [[Conservative Morphological AA]] — simpler CMAA alternative
+- [[Dynamic Temporal AA Call of Duty]] — temporal extension
 - [[Non-Parametric Sparse BRDF]] — material reference
+- Full docs: `docs/PostFX Pipeline.md`

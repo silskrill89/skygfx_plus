@@ -1,10 +1,8 @@
 # Credits
 
-#credits #attribution
-
 ## Core Contributors
 - **aap** — Original SkyGFX author
-- **Junior (JuniorDjjr)** — JuniorDjjr fork with extensive features
+- **Junior (JuniorDjjr)** — JuniorDjjr fork with extensive features (stochastic texturing, wind, EDED plugin)
 - **DK22Pac** — Normal mapping plugin
 - **Silent** — SilentPatch and GTA SA fixes
 - **_AG** — RenderWare documentation

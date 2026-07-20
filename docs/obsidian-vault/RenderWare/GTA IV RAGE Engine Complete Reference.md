@@ -1,5 +1,13 @@
+---
+tags: [rage, gta-iv, img, encryption, reference]
+created: 2025-01-02
+updated: 2026-07-15
+---
+
 # GTA IV RAGE Engine - Complete Reference
-# Everything collected from SparkIV, plugin-sdk, GTAV tools, wiki, and reverse engineering
+
+> [!info] Source
+> Everything collected from SparkIV, plugin-sdk, GTAV tools, wiki, and reverse engineering
 
 ## IMG v3 Archive Format
 
@@ -356,5 +364,5 @@ Each vehicle typically has:
 
 ## Related
 - [[RenderWare V2.1 API Reference]] — RW format comparison
+- [[GTA IV RAGE Engine Format Reference]] — RAGE format overview
 - [[SkyGFX Pipeline Overview]] — our rendering pipeline
-- [[BRDF Reference]] — material values
