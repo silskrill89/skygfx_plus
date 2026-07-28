@@ -165,6 +165,14 @@ struct Colorcycle
 void
 CPostEffects::UpdateFrontBuffer(void)
 {
+	if(!CPostEffects::pRasterFrontBuffer){
+		dbglog("[PostFX] WARNING: UpdateFrontBuffer pRasterFrontBuffer is NULL!");
+		return;
+	}
+	if(!Scene.camera){
+		dbglog("[PostFX] WARNING: UpdateFrontBuffer Scene.camera is NULL!");
+		return;
+	}
 	RwCameraEndUpdate(Scene.camera);
 	RwRasterPushContext(CPostEffects::pRasterFrontBuffer);
 	RwRasterRenderFast(RwCameraGetRaster(Scene.camera), 0, 0);
@@ -831,6 +839,9 @@ CPostEffects::DarknessFilter_fix(uint8 alpha)
 void
 CPostEffects::ColourFilter_Generic(RwRGBA rgb1, RwRGBA rgb2, void *ps)
 {
+	dbglog("[PostFX] ColourFilter_Generic ps=%p pRasterFrontBuffer=%p rgb1=(%d,%d,%d,%d) rgb2=(%d,%d,%d,%d)",
+		ps, CPostEffects::pRasterFrontBuffer, rgb1.red, rgb1.green, rgb1.blue, rgb1.alpha,
+		rgb2.red, rgb2.green, rgb2.blue, rgb2.alpha);
 //	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERNEAREST);
 	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
 	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
@@ -854,15 +865,21 @@ CPostEffects::ColourFilter_Generic(RwRGBA rgb1, RwRGBA rgb2, void *ps)
 	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
 	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)NULL);
 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
-	// CRITICAL: unbind pixel/vertex shaders after postfx draw
-	// Without this, the GTAIV pixel shader stays bound and corrupts UI rendering
-	RwD3D9SetPixelShader(NULL);
-	RwD3D9SetVertexShader(NULL);
 }
 
 void
 CPostEffects::ColourFilter_Modern(RwRGBA rgba1, RwRGBA rgba2)
 {
+	dbglog("[PostFX] ColourFilter_Modern ENTER rgba1=(%d,%d,%d,%d) rgba2=(%d,%d,%d,%d) pRasterFrontBuffer=%p gradingPS=%p",
+		rgba1.red, rgba1.green, rgba1.blue, rgba1.alpha,
+		rgba2.red, rgba2.green, rgba2.blue, rgba2.alpha,
+		CPostEffects::pRasterFrontBuffer, gradingPS);
+
+	if(!CPostEffects::pRasterFrontBuffer){
+		dbglog("[PostFX] WARNING: pRasterFrontBuffer is NULL in ColourFilter_Modern!");
+		return;
+	}
+
 	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
 	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
 	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
@@ -891,13 +908,26 @@ CPostEffects::ColourFilter_Modern(RwRGBA rgba1, RwRGBA rgba2)
 	green.r = green.b = green.a = 0.0f;
 	blue.r = blue.g = blue.a = 0.0f;
 
+	dbglog("[PostFX] ColourFilter_Modern grading: red.r=%.3f green.g=%.3f blue.b=%.3f a1=%.3f a2=%.3f",
+		red.r, green.g, blue.b, a1, a2);
+
 	RwD3D9SetPixelShaderConstant(0, &red, 1);
 	RwD3D9SetPixelShaderConstant(1, &green, 1);
 	RwD3D9SetPixelShaderConstant(2, &blue, 1);
 
-	// Reinhard tonemapping: enable=1, exposure=1.2 (slightly lower than mobile for better contrast)
+	// Reinhard tonemapping: enable=1, exposure=1.2
+	// Skip for PBR pipeline — PBR shaders already apply Reinhard + sRGB internally
 	float tonemapP[4] = { 1.0f, 1.2f, 0.0f, 0.0f };
+	if(config->pipeline == PIPELINE_PBR)
+		tonemapP[0] = 0.0f;
 	RwD3D9SetPixelShaderConstant(5, tonemapP, 1);
+
+	dbglog("[PostFX] ColourFilter_Modern tonemapP=(%.1f,%.1f,%.1f,%.1f) gradingPS=%p",
+		tonemapP[0], tonemapP[1], tonemapP[2], tonemapP[3], gradingPS);
+
+	if(!gradingPS){
+		dbglog("[PostFX] WARNING: gradingPS is NULL! ColourFilter_Modern will render with no shader");
+	}
 
 	overrideIm2dPixelShader = gradingPS;
 	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
@@ -908,8 +938,6 @@ CPostEffects::ColourFilter_Modern(RwRGBA rgba1, RwRGBA rgba2)
 	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
 	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)NULL);
 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
-	RwD3D9SetPixelShader(NULL);
-	RwD3D9SetVertexShader(NULL);
 }
 
 void
@@ -1002,6 +1030,11 @@ CPostEffects::ColourFilter_Mobile(RwRGBA rgba1, RwRGBA rgba2)
 void
 CPostEffects::ColourFilter_PS2(RwRGBA rgba1, RwRGBA rgba2)
 {
+	dbglog("[PostFX] ColourFilter_PS2 ENTER rgba1=(%d,%d,%d,%d) rgba2=(%d,%d,%d,%d) pRasterFrontBuffer=%p",
+		rgba1.red, rgba1.green, rgba1.blue, rgba1.alpha,
+		rgba2.red, rgba2.green, rgba2.blue, rgba2.alpha,
+		CPostEffects::pRasterFrontBuffer);
+
 	RwIm2DVertex *verts;
 
 	verts = colorfilterVerts;
@@ -1280,6 +1313,14 @@ void DrawPipeChain(void);
 void
 CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 {
+	dbglog("[PostFX] ColourFilter_switch ENTER filter=%d pipeline=%d pRasterFrontBuffer=%p",
+		config->colorFilter, config->pipeline, CPostEffects::pRasterFrontBuffer);
+
+	if(!CPostEffects::pRasterFrontBuffer){
+		dbglog("[PostFX] WARNING: pRasterFrontBuffer is NULL! ColourFilter_switch bailing");
+		return;
+	}
+
 	// Generate normal buffer from stereo disparity (before SSAO)
 	if(config->normalBufferEnable){
 		PERF_SCOPE("NormalBuf");
@@ -1357,7 +1398,7 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 		return (uint8)(f * 255.0f);
 	};
 
-	if(config->usePCTimecyc){
+	if(config->usePCTimecyc || config->pipeline == PIPELINE_PBR){
 		// PC timecycle - values already in PC space
 		rgb1.alpha /= 2;
 		rgb2.alpha /= 2;
@@ -1448,6 +1489,12 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 		}
 	}
 
+	dbglog("[PostFX] ColourFilter_switch filter=%d pipeline=%d rgb1=(%d,%d,%d,%d) rgb2=(%d,%d,%d,%d) pRasterFrontBuffer=%p",
+		colorFilter, config->pipeline,
+		rgb1.red, rgb1.green, rgb1.blue, rgb1.alpha,
+		rgb2.red, rgb2.green, rgb2.blue, rgb2.alpha,
+		CPostEffects::pRasterFrontBuffer);
+
 	switch(colorFilter){
 	case COLORFILTER_NONE:
 		// Fall back to PC filter (same as COLORFILTER_PC)
@@ -1487,10 +1534,6 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 	default:
 		return;
 	}
-	// CRITICAL: unbind all shaders after every color filter pass
-	// Prevents UI corruption from stale shader bindings
-	RwD3D9SetPixelShader(NULL);
-	RwD3D9SetVertexShader(NULL);
 	UpdateFrontBuffer();	dbglog("ColourFilter_switch: done (filter=%d)", colorFilter);
 
 	//static int doramp = 0;
@@ -1525,6 +1568,9 @@ static RwMatrix YUV2RGB = {
 void
 CPostEffects::DrawFinalEffects(void)
 {
+	dbglog("[PostFX] DrawFinalEffects ENTER ycbcrFilter=%d SSS_Blur=%p SMAA_Edge=%p smaaEnable=%d",
+		m_bYCbCrFilter, SSS_Blur, SMAA_Edge, config->smaaEnable);
+
 	if(m_bYCbCrFilter){
 		UpdateFrontBuffer();
 
@@ -1594,16 +1640,20 @@ CPostEffects::DrawFinalEffects(void)
 
 	// SSS blur pass (after color filter, before SMAA)
 	{
+		dbglog("[PostFX] SSS_Blur ENTER SSS_Blur=%p chars_SSS_Blur=%p", SSS_Blur, (void*)chars_drawSSSBlur);
 		PERF_SCOPE("SSS_Blur");
 		chars_drawSSSBlur();
 	}
 
 	// SMAA at end of post-processing (3-pass)
 	if(config->smaaEnable && SMAA_Edge){
+		dbglog("[PostFX] SMAA ENTER smaaEnable=%d SMAA_Edge=%p", config->smaaEnable, SMAA_Edge);
 		ImmediateModeRenderStatesStore();
 		ImmediateModeRenderStatesSet();
 		DrawSMAA();
 		ImmediateModeRenderStatesReStore();
+	}else{
+		dbglog("[PostFX] SMAA skipped: smaaEnable=%d SMAA_Edge=%p", config->smaaEnable, SMAA_Edge);
 	}
 
 	// Debug menu moved to D3D9 EndScene hook (main.cpp) - renders AFTER all UI
@@ -1768,21 +1818,25 @@ void InitSSAOResources(void)
 void
 CPostEffects::DrawSSAO(void)
 {
-	if(!config->ssaoEnable || !SSAO)
+	dbglog("[PostFX] DrawSSAO ENTER ssaoEnable=%d SSAO=%p", config->ssaoEnable, SSAO);
+	if(!config->ssaoEnable || !SSAO){
+		dbglog("[PostFX] DrawSSAO bailing: ssaoEnable=%d SSAO=%p", config->ssaoEnable, SSAO);
 		return;
+	}
 
 	__try {
 		IDirect3DDevice9 *dev = d3d9device;
-		if(dev == NULL) return;
-		if(Scene.camera == NULL) return;
+		if(dev == NULL){ dbglog("[PostFX] DrawSSAO bailing: dev is NULL"); return; }
+		if(Scene.camera == NULL){ dbglog("[PostFX] DrawSSAO bailing: Scene.camera is NULL"); return; }
 		RwRaster *camRas = RwCameraGetRaster(Scene.camera);
-		if(camRas == NULL) return;
+		if(camRas == NULL){ dbglog("[PostFX] DrawSSAO bailing: camRas is NULL"); return; }
 		int w = camRas->width;
 		int h = camRas->height;
 
 		InitSSAOResources();
 
 		if(!g_ssaoNoiseTex || !g_ssaoDepthTex){
+			dbglog("[PostFX] DrawSSAO bailing: noiseTex=%p depthTex=%p (disabling SSAO)", g_ssaoNoiseTex, g_ssaoDepthTex);
 			config->ssaoEnable = 0;
 			return;
 		}
@@ -1790,14 +1844,16 @@ CPostEffects::DrawSSAO(void)
 		if(!g_ssaoOutputRaster || g_ssaoOutputRaster->width != w || g_ssaoOutputRaster->height != h){
 			if(g_ssaoOutputRaster) RwRasterDestroy(g_ssaoOutputRaster);
 			g_ssaoOutputRaster = RwRasterCreate(w, h, camRas->depth, rwRASTERTYPECAMERATEXTURE);
-			if(!g_ssaoOutputRaster) return;
+			if(!g_ssaoOutputRaster){ dbglog("[PostFX] DrawSSAO bailing: output raster creation failed"); return; }
 		}
 
 		IDirect3DSurface9 *pDS = NULL;
 		if(FAILED(dev->GetDepthStencilSurface(&pDS)) || pDS == NULL){
+			dbglog("[PostFX] DrawSSAO bailing: GetDepthStencilSurface failed");
 			return;
 		}
 		if(FAILED(dev->StretchRect(pDS, NULL, g_ssaoDepthSurf, NULL, D3DTEXF_NONE))){
+			dbglog("[PostFX] DrawSSAO bailing: StretchRect failed (disabling SSAO)");
 			pDS->Release();
 			config->ssaoEnable = 0;
 			return;
@@ -1871,8 +1927,9 @@ CPostEffects::DrawSSAO(void)
 		RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
 
 		ImmediateModeRenderStatesReStore();
+		dbglog("[PostFX] DrawSSAO completed successfully");
 	} __except(EXCEPTION_EXECUTE_HANDLER){
-		dbglog("DrawSSAO CRASHED exception=0x%08X", GetExceptionCode());
+		dbglog("[PostFX] DrawSSAO CRASHED exception=0x%08X", GetExceptionCode());
 	}
 }
 

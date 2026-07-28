@@ -503,6 +503,18 @@ CreateShaders(void)
 	dbglog("CreateShaders PBR handles: PBR_Lighting=%p CarPaint_Reflections=%p",
 		PBR_Lighting, CarPaint_Reflections);
 
+	// Log PostFX shader handle status
+	dbglog("CreateShaders PostFX handles: gradingPS=%p contrastPS=%p blurPS=%p radiosityPS=%p",
+		gradingPS, contrastPS, blurPS, radiosityPS);
+	dbglog("CreateShaders PostFX handles: SSAO=%p SSAO_VertexDepth=%p SMAA_Edge=%p",
+		SSAO, SSAO_VertexDepth, SMAA_Edge);
+	dbglog("CreateShaders PostFX handles: SSS_Blur=%p NormalBufferShader=%p PipeChainShader=%p",
+		SSS_Blur, NormalBufferShader, PipeChainShader);
+	dbglog("CreateShaders PostFX handles: modernColorFilterPS=%p vcTrailsPS=%p",
+		modernColorFilterPS, vcTrailsPS);
+	dbglog("CreateShaders PostFX handles: MotionBlur_Burnout=%p ColorFilter_CrossMix=%p",
+		MotionBlur_Burnout, ColorFilter_CrossMix);
+
 	shadersCreated = true;
 	dbglog("CreateShaders: done");
 }
