@@ -2,9 +2,9 @@
 // Eliminates duplication across VehiclePBR_Modern, Glass_Vehicle, CarPaint_Reflections
 //
 // All vehicle shaders should #include this file for:
-//   - SphereEnvMapUV (no-pinch sphere mapping)
-//   - F_Schlick (Fresnel)
+//   - F_Schlick / SchlickFresnelScalar (Fresnel)
 //   - D_GGX / V_SmithCorrelated (specular BRDF)
+//   - SphereEnvMapUV (no-pinch sphere mapping)
 //   - ComputeSunContribution (sunspot + Fresnel hotspot + broad highlight)
 //   - Cloud shadow FBM noise (CloudWorks by Brian Tu)
 
@@ -29,6 +29,7 @@ float D_GGX(float NdotH, float roughness)
     float a = roughness * roughness;
     float a2 = a * a;
     float d = NdotH * NdotH * (a2 - 1.0) + 1.0;
+    d = max(d, 1e-7);
     return a2 / (3.14159265 * d * d);
 }
 
@@ -45,7 +46,7 @@ float V_SmithCorrelated(float NdotV, float NdotL, float roughness)
 // ---- Sphere Environment Mapping (no pole pinching) ----
 float2 SphereEnvMapUV(float3 normal, float3 viewDir)
 {
-    float m = 2.0 * sqrt(dot(normal.xy, normal.xy) + (normal.z + 1.0) * (normal.z + 1.0));
+    float m = 2.0 * sqrt(max(dot(normal.xy, normal.xy) + (normal.z + 1.0) * (normal.z + 1.0), 1e-6));
     float2 envUV = normal.xy / m + 0.5;
     envUV += viewDir.xy * 0.04;
     return envUV;
@@ -55,7 +56,9 @@ float2 SphereEnvMapUV(float3 normal, float3 viewDir)
 // Returns sun color contribution; NdotL passed in to avoid recomputation
 float3 ComputeSunContribution(float3 N, float3 V, float3 L, float3 F0, float NdotL)
 {
-    float3 H = normalize(V + L);
+    float3 H = V + L;
+    float Hlen = length(H);
+    H = Hlen > 1e-6 ? H / Hlen : float3(0, 1, 0);
     float NdotH = max(dot(N, H), 0.0);
     float3 reflVec = reflect(-V, N);
     float reflDot = max(dot(reflVec, L), 0.0);

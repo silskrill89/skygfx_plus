@@ -67,9 +67,9 @@ struct PS_INPUT{
 
 float4 main(PS_INPUT IN) : COLOR
 {
-    float3 N = normalize(IN.WorldNormal);
-    float3 V = normalize(IN.ViewDir);
-    float3 L = normalize(IN.SunDir);
+    float3 N = length(IN.WorldNormal) > 1e-6 ? IN.WorldNormal / length(IN.WorldNormal) : float3(0, 1, 0);
+    float3 V = length(IN.ViewDir) > 1e-6 ? IN.ViewDir / length(IN.ViewDir) : float3(0, 0, 1);
+    float3 L = length(IN.SunDir) > 1e-6 ? IN.SunDir / length(IN.SunDir) : float3(0, 0, -1);
 
     // ---- Base color ----
     float4 diff = tex2D(diffuseTex, IN.texcoord0);
@@ -356,8 +356,8 @@ float4 main_normMapVehicle(PS_INPUT_NORMMAP IN) : COLOR
 // Entry: main_building
 //
 // BRDF material properties uploaded via c22:
-//   c22 = {roughness, reflectance, clearcoat, subsurface}
-//   c23 = {specularInt, metalness, 0, 0}
+//   c22 = {glossiness, reflectance, clearcoat, subsurface}
+//   c23 = {specularTintR, specularTintG, specularTintB, 0}
 //
 // Uses vertex color as base color (buildings use vertex color).
 // Supports day/night blending via vertex alpha.
@@ -384,25 +384,24 @@ float4 main_building(PS_INPUT_BUILDING IN) : COLOR
     float reflectance  = pbrParams.y;
     float clearcoat    = pbrParams.z;
     float subsurface   = pbrParams.w;
-    float specularInt  = paintNoise.x; // from c23.x
-    float metalness    = paintNoise.y; // from c23.y
+    float3 specularTint = paintNoise.xyz; // c23 = {specTintR, specTintG, specTintB}
 
     // Normals
-    float3 N = normalize(IN.WorldNormal);
-    float3 V = normalize(IN.ViewDir);
-    float3 L = normalize(IN.SunDir);
+    float3 N = length(IN.WorldNormal) > 1e-6 ? IN.WorldNormal / length(IN.WorldNormal) : float3(0, 1, 0);
+    float3 V = length(IN.ViewDir) > 1e-6 ? IN.ViewDir / length(IN.ViewDir) : float3(0, 0, 1);
+    float3 L = length(IN.SunDir) > 1e-6 ? IN.SunDir / length(IN.SunDir) : float3(0, 0, -1);
 
     // Core PBR vectors
     float NdotV = max(dot(N, V), 0.0);
     float NdotL = max(dot(N, L), 0.0);
 
-    // F0: dielectric reflectance
-    float3 F0 = lerp(float3(reflectance, reflectance, reflectance), baseColor, metalness);
+    // F0: dielectric reflectance, optionally tinted by specular tint
+    float3 F0 = lerp(float3(reflectance, reflectance, reflectance), baseColor * reflectance, specularTint.r);
 
     // Fresnel
     float3 F_atNdotV = F_Schlick(NdotV, F0);
     float3 kS = F_atNdotV;
-    float3 kD = (1.0 - kS) * (1.0 - metalness);
+    float3 kD = 1.0 - kS;  // dielectric: all non-reflected energy is diffuse
 
     // Day/night blending (vertex color alpha)
     float dayFactor = IN.color.a;
@@ -418,7 +417,7 @@ float4 main_building(PS_INPUT_BUILDING IN) : COLOR
     float Vis = V_SmithCorrelated(NdotV, NdotL, roughness);
     float3 F = F_Schlick(max(dot(L, H), 0.0), F0);
 
-    float3 specTotal = D * F * Vis * NdotL * directCol.rgb * specularInt;
+    float3 specTotal = D * F * Vis * NdotL * directCol.rgb;
 
     // Multi-light accumulation
     for(int i = 0; i < 6; i++){
@@ -430,7 +429,7 @@ float4 main_building(PS_INPUT_BUILDING IN) : COLOR
             float Dl = D_GGX(NdotH_l, roughness);
             float Visl = V_SmithCorrelated(NdotV, NdotL_l, roughness);
             float3 Fl = F_Schlick(max(dot(Ll, Hl), 0.0), F0);
-            specTotal += Dl * Fl * Visl * NdotL_l * lightCol[i].rgb * specularInt;
+            specTotal += Dl * Fl * Visl * NdotL_l * lightCol[i].rgb;
         }
     }
 
@@ -464,9 +463,9 @@ float4 main_building(PS_INPUT_BUILDING IN) : COLOR
 // ============================================================
 float4 main_rubber(PS_INPUT IN) : COLOR
 {
-    float3 N = normalize(IN.WorldNormal);
-    float3 V = normalize(IN.ViewDir);
-    float3 L = normalize(IN.SunDir);
+    float3 N = length(IN.WorldNormal) > 1e-6 ? IN.WorldNormal / length(IN.WorldNormal) : float3(0, 1, 0);
+    float3 V = length(IN.ViewDir) > 1e-6 ? IN.ViewDir / length(IN.ViewDir) : float3(0, 0, 1);
+    float3 L = length(IN.SunDir) > 1e-6 ? IN.SunDir / length(IN.SunDir) : float3(0, 0, -1);
 
     float4 diff = tex2D(diffuseTex, IN.texcoord0);
     float3 baseColor = diff.rgb * IN.color.rgb * matCol.rgb;
