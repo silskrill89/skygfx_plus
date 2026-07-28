@@ -519,7 +519,7 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_PS2(RwResEntry *repEntry, void *obj
 
 		pipeSetTexture(material->texture, 0);
 
-		hasAlpha = instancedData->vertexAlpha == true || instancedData->material->color.alpha != 255;
+		hasAlpha = instancedData->vertexAlpha != 0 || instancedData->material->color.alpha != 255;
 		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)hasAlpha);
 
 		pipeUploadMatCol(flags, material, REG_matCol);
@@ -709,7 +709,7 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Specular(RwResEntry *repEntry, void
 
 		pipeSetTexture(material->texture, 0);
 
-		hasAlpha = instancedData->vertexAlpha == true || material->color.alpha != 255;
+		hasAlpha = instancedData->vertexAlpha != 0 || material->color.alpha != 255;
 		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)hasAlpha);
 
 		pipeUploadMatCol(flags, material, REG_matCol);
@@ -940,7 +940,7 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *ob
 		hasEnv2  = (materialFlags & 2) && !noFx && (flags & rpGEOMETRYTEXTURED2);
 		hasSpec  = (materialFlags & 4) && !noFx && !renderingWheel;
 
-		hasAlpha = instancedData->vertexAlpha == true || instancedData->material->color.alpha != 255;
+		hasAlpha = instancedData->vertexAlpha != 0 || instancedData->material->color.alpha != 255;
 		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)hasAlpha);
 
 		RwD3D9SetTexture(NULL, 1);
@@ -1127,7 +1127,7 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_leeds(RwResEntry *repEntry, void *o
 
 		pipeSetTexture(material->texture, 0);
 
-		hasAlpha = instancedData->vertexAlpha == true || instancedData->material->color.alpha != 255;
+		hasAlpha = instancedData->vertexAlpha != 0 || instancedData->material->color.alpha != 255;
 		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)hasAlpha);
 
 		pipeUploadMatCol(flags, material, REG_matCol);
@@ -1480,7 +1480,7 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 
 		pipeSetTexture(material->texture, 0);
 
-		hasAlpha = instancedData->vertexAlpha == true || instancedData->material->color.alpha != 255;
+		hasAlpha = instancedData->vertexAlpha != 0 || instancedData->material->color.alpha != 255;
 		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)hasAlpha);
 
 	// ================================================================
@@ -1836,10 +1836,6 @@ hookVehiclePipe(void)
 	InjectHook(0x5D9FE9, setVehiclePipeCB);
 	InterceptCall(&CCustomCarEnvMapPipeline__PreRenderUpdate_orig, CCustomCarEnvMapPipeline__PreRenderUpdate, 0x5D5B10);
 	InjectHook(0x7323C0, CVisibilityPlugins__RenderWheelAtomicCB, PATCH_JUMP);
-
-	// Wire wheels extender for random wheel swapping
-	extern void WheelsExtender_Install(void);
-	WheelsExtender_Install();
 
 	// TEMP - disable car pipe
 #if 0

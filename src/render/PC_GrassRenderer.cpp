@@ -429,7 +429,9 @@ int32 TriIdx = 0;
 //
 //
 //
+#ifdef __GNUC__
 #pragma mark --- PPTriPlantBuffer stuff ---
+#endif
 
 //
 //

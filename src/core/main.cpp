@@ -25,6 +25,7 @@ double perfFreqInv = 0.0;
 HMODULE dllModule;
 DebugMenuAPI gDebugMenuAPI;
 char asipath[MAX_PATH];
+volatile int g_allowCrashPassThrough = 0;
 
 extern std::map<std::string, TexInfo*> texdb;
 extern int32 texdbOffset;
@@ -348,22 +349,18 @@ myDefaultCallback(RpAtomic *atomic)
 	int dodual = 0;
 	int detach = 0;
 
-	if(!RpAtomicGetFrame(atomic))
-		return NULL;
-
 	pipe = atomic->pipeline;
 	if(pipe == NULL){
 		pipe = *(RxPipeline**)(*(DWORD*)0xC97B24+0x3C+dword_C9BC60);
 		RwRenderStateGet(rwRENDERSTATEZWRITEENABLE, (void*)&zwrite);
 		if(zwrite && config->dualPassDefault)
 			dodual = 1;
-	}else if(pipe == skinPipe && config->dualPassPed && config->zwriteThresholdPed > 0)
+	}else if(pipe == skinPipe && config->dualPassPed)
 		dodual = 1;
 	if(dodual){
-		if (pipe == skinPipe) RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE); //this line was not on original skygfx, I don't know why, forced only on skin pipes (to be conservative) as it fixes parachute strings
 		RwRenderStateGet(rwRENDERSTATEALPHATESTFUNCTION, (void*)&alphatest);
 		RwRenderStateGet(rwRENDERSTATEALPHATESTFUNCTIONREF, (void*)&alpharef);
-		RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTIONREF, (void*)config->zwriteThresholdPed);
+		RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTIONREF, (void*)config->zwriteThreshold);
 		RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION, (void*)rwALPHATESTFUNCTIONGREATEREQUAL);
 		RxPipelineExecute(pipe, atomic, 1);
 		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
@@ -384,8 +381,6 @@ void
 CTagManager__SetupAtomic(RpAtomic *atomic)
 {
 	CTagManager__SetupAtomic_orig(atomic);
-	if(!RpAtomicGetFrame(atomic))
-		return;
 	/* Set the building pipeline so we have control over drawing.
 	 * Note that we need the non-DN version. This works because this function
 	 * is called after the building pipeline has already been set up. */
@@ -849,60 +844,16 @@ float cloudAnimTimer = 0.0f;
 bool
 RenderScene_after(void*)
 {
-	static int s_afterFrame = 0;
-	s_afterFrame++;
-	bool doLog = s_afterFrame <= 3;
-
-	cloudAnimTimer += CTimer__ms_fTimeStep;
-	perfInit();
-
-	if(doLog) dbglog("  RS_after: Weather_Update");
-	extern void Weather_Update(void);
-	Weather_Update();
-
-	if((config->vehiclePipe == CAR_MODERN || config->vehiclePipe == CAR_ENV || config->vehiclePipe == CAR_NEO) && DynamicSky){
-		if(doLog) dbglog("  RS_after: RenderIBLBuffer");
-		PERF_SCOPE("IBL_Buffer");
-		RenderIBLBuffer();
-	}
 	if(config->vehiclePipe == CAR_NEO)
 		CarPipe::RenderEnvTex();
 	else if(config->vehiclePipe == CAR_LCS || config->vehiclePipe == CAR_VCS)
 		RenderReflectionMap_leeds();
-	else if(config->vehiclePipe == CAR_MODERN){
-		if(doLog) dbglog("  RS_after: RenderEnvTex");
-		PERF_SCOPE("EnvTex");
-		CarPipe::RenderEnvTex();
-	}
-
-	// Temporal smoothing — blend new env map with previous to eliminate
-	// "melting" / ghosting artifacts on vehicle bodies when camera moves.
-	extern void BlendEnvMapTemporal(void);
-	BlendEnvMapTemporal();
-
-	if(config->normalBufferEnable){
-		if(doLog) dbglog("  RS_after: RenderNormalBuffer");
-		PERF_SCOPE("NormalBuffer");
-		RenderNormalBuffer();
-	}
-
 	DrawDebugEnvMap();
-	if(doLog) dbglog("  RS_after: done");
 	return true;
 }
 void
 RenderScene_hook(void)
 {
-	static int s_frameNum = 0;
-	s_frameNum++;
-	diag_heartbeat();
-
-	// Check device state via RenderWare camera - skip frame if no valid camera/raster
-	if (!Scene.camera || !RwCameraGetRaster(Scene.camera)) {
-		// Device is lost/resetting, skip this frame
-		return;
-	}
-
 	// F4 to toggle debug menu
 	static bool s_f4Prev = false;
 	bool f4Now = (GetAsyncKeyState(VK_F4) & 0x8000) != 0;
@@ -917,13 +868,9 @@ RenderScene_hook(void)
 	}
 	s_f4Prev = f4Now;
 
-	if(s_frameNum <= 3) dbglog("RS_hook: frame %d START", s_frameNum);
 	RenderScene_before(nil);
-	if(s_frameNum <= 3) dbglog("RS_hook: before done, calling RenderScene");
 	RenderScene();
-	if(s_frameNum <= 3) dbglog("RS_hook: RenderScene done, calling after");
 	RenderScene_after(nil);
-	if(s_frameNum <= 3) dbglog("RS_hook: frame %d END", s_frameNum);
 }
 
 int (*PipelinePluginAttach)(void);
@@ -934,9 +881,6 @@ myPluginAttach(void)
 }
 
 void (*InitialiseGame)(void);
-
-// Forward declarations for crash guards (defined after RwIm3D functions)
-static RwTexture* __cdecl safe_CopyTexture(RwTexture* tex);
 
 void
 installLCMV2Hooks(void)
@@ -972,86 +916,32 @@ InitialiseGame_hook(void)
 	}
 
 	dbglog("InitialiseGame_hook: calling original CGame::Initialise...");
-	diag_heartbeat();
-	InitialiseGame();
-	diag_heartbeat();
-	dbglog("InitialiseGame_hook: original returned successfully");
-
-	// Install CopyTexture crash guard AFTER CGame::Initialise returns.
-	// The game decrypts obfuscated code during Initialise — hooking before
-	// this point gets overwritten by the decryption routine.
-	if(initCount == 1){
-		InjectHook(0x5A5730, safe_CopyTexture, PATCH_JUMP);
-		dbglog("InitialiseGame_hook: CopyTexture NULL-guard installed (post-init)");
-	}
-
-	if(initCount == 1){
-		if(config->normalMapEnable){
-			normalmap_init();
-			dbglog("InitialiseGame_hook: normalmap_init done (after CGame::Initialise)");
-		}else{
-			dbglog("InitialiseGame_hook: normalmap disabled by config");
-		}
-	}
-
-	dbglog("InitialiseGame_hook: exiting (call #%d)", initCount);
-}
-
-// ============================================================================
-// Crash guard: RwFrameSyncObject at 0x7F39F0
-// The game's rendering code iterates a pool and calls this with a NULL frame.
-// __stdcall(frame*, syncFunc*) — if frame is NULL, return 0 without accessing it.
-// ============================================================================
-static void __declspec(naked) safe_RwFrameSyncObject(void)
-{
-	__asm {
-		mov  eax, [esp+4]      // original: load frame
-		test eax, eax
-		jz   rfs_null
-		add  eax, 8            // original: frame+8 (inDirtyListLink)
-		push ebp                // original
-		push esi                // original
-		push edi                // original
-		push 0x7F39FB           // resume past our overwritten bytes
-		retn
-	rfs_null:
-		xor  eax, eax           // return 0
-		ret  8                  // __stdcall: clean 2 args
-	}
-}
-
-// ============================================================================
-// Crash guard: CopyTexture at 0x5A5730
-// __cdecl(RwTexture*) — if tex is NULL or invalid, return NULL.
-// Original first5 bytes (0x5A5730-0x5A5734): 8B 44 24 04 53 (mov eax,[esp+4]; push ebx)
-// After hook, resume at 0x5A5735: 8B 18 (mov ebx,[eax])
-// ============================================================================
-static bool ValidateCopyTexturePtr(void* ptr)
-{
-	if(!ptr) return false;
+	static DWORD s_initCrashCode;
+	static EXCEPTION_POINTERS* s_initCrashPtrs;
+	g_allowCrashPassThrough = 1;
 	__try {
-		volatile int v = *(volatile int*)ptr;
-		(void)v;
-		return true;
-	} __except(EXCEPTION_EXECUTE_HANDLER) {
-		return false;
+		InitialiseGame();
+		g_allowCrashPassThrough = 0;
+		dbglog("InitialiseGame_hook: original returned successfully");
+	} __except(
+		(s_initCrashCode = GetExceptionCode(),
+		 s_initCrashPtrs = GetExceptionInformation(),
+		 EXCEPTION_EXECUTE_HANDLER)
+	) {
+		g_allowCrashPassThrough = 0;
+		CONTEXT *ctx = s_initCrashPtrs->ContextRecord;
+		DWORD storeCount = *(DWORD*)0xB1F650;
+		dbglog("InitialiseGame_hook: CRASH in original! code=0x%08X addr=%p",
+			s_initCrashCode, s_initCrashPtrs->ExceptionRecord->ExceptionAddress);
+		dbglog("  EAX=%08X EBX=%08X ECX=%08X EDX=%08X", ctx->Eax, ctx->Ebx, ctx->Ecx, ctx->Edx);
+		dbglog("  ESI=%08X EDI=%08X EBP=%08X ESP=%08X", ctx->Esi, ctx->Edi, ctx->Ebp, ctx->Esp);
+		dbglog("  EIP=%08X vehicleStoreCount=%d (0x%X)", ctx->Eip, storeCount, storeCount);
+		DWORD *sp = (DWORD*)ctx->Esp;
+		for(int i = 0; i < 8; i++)
+			dbglog("  [ESP+%d] = %08X", i*4, sp[i]);
+		dbglog("InitialiseGame_hook: SEH caught crash, game state partial. Continuing...");
 	}
-}
-
-static RwTexture* __cdecl safe_CopyTexture(RwTexture* tex)
-{
-	if(!ValidateCopyTexturePtr(tex)){
-		dbglog("safe_CopyTexture: invalid ptr %p, returning NULL", tex);
-		return nullptr;
-	}
-	// Execute overwritten instructions: mov eax,[esp+4] (already have tex) + push ebx
-	// Then jump to 0x5A5735 (mov ebx,[eax] — original continuation)
-	__asm {
-		mov  eax, tex
-		push ebx
-		push 0x5A5735
-		retn
-	}
+	dbglog("InitialiseGame_hook: exiting (call #%d)", initCount);
 }
 
 void* RwIm3DTransform(RwIm3DVertex* pVerts, RwUInt32 numVerts, RwMatrix* ltm, RwUInt32 flags) {
@@ -1906,9 +1796,14 @@ void hooktexdb(void);
 void installMenu(void);
 extern "C" bool RpNormMapPluginAttach(void);
 
+static int (*IsAlreadyRunning)();
+
 int
 InjectDelayedPatches()
 {
+	if(IsAlreadyRunning())
+		return TRUE;
+
 	dbglog("InjectDelayedPatches entered");
 
 	findInis();
@@ -1939,6 +1834,10 @@ InjectDelayedPatches()
 	Nop(0x5BBF83, 2);
 
 	explicitBuildingPipe = explicitBuildingPipe_tmp;
+
+	// Initialize normal map plugin BEFORE building pipe hooks
+	// This sets gHasExternalNormalMapPlugin so buildingPipe doesn't hook 0x5D7F40
+	normalmap_init();
 
 	if(iCanHasbuildingPipe)
 		hookBuildingPipe();
@@ -2073,15 +1972,12 @@ DllMain(HINSTANCE hInst, DWORD reason, LPVOID)
 		InjectHook(0x713C4C, renderMoonMask, PATCH_JUMP);
 		dbglog("  moon mask OK");
 
-		// Crash guard: NULL frame in game's pool iteration (0x7F39F0 = RwFrameSyncObject)
-		InjectHook(0x7F39F0, safe_RwFrameSyncObject, PATCH_JUMP);
-		dbglog("  RwFrameSyncObject NULL-guard OK");
-
-		// Apply delayed patches directly from DllMain instead of hooking 0x74872D (IsAlreadyRunning).
-		// This avoids clashing with SilentPatch which hooks the exact same address.
-		dbglog("  applying delayed patches directly...");
-		InjectDelayedPatches();
-		dbglog("  delayed patches OK");
+		// Deferred init: hook IsAlreadyRunning at 0x74872D, matching original skygfx.
+		// InjectDelayedPatches will be called when the game reaches this point
+		// during startup, after its basic state is initialized.
+		IsAlreadyRunning = (int(*)())(*(int*)(0x74872D+1) + 0x74872D + 5);
+		InjectHook(0x74872D, InjectDelayedPatches);
+		dbglog("  deferred init via 0x74872D OK");
 
 		InjectHook(0x5BCF14, afterStreamIni, PATCH_JUMP);
 		InjectHook(0x7491C0, myDefaultCallback, PATCH_JUMP);

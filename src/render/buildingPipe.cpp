@@ -155,7 +155,7 @@ TagRenderCB(RpAtomic *atomic, RxD3D9ResEntryHeader *resEntryHeader, RxD3D9Instan
 {
 	int alpha, alpharef;
 	RwRenderStateGet(rwRENDERSTATEALPHATESTFUNCTIONREF, (void*)&alpharef);
-	if(config->tagsBuildingPipe == BUILDING_PS2){
+	if(config->buildingPipe == BUILDING_PS2){
 		RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDONE);
 		RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDZERO);
 	}
@@ -599,7 +599,7 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Sphere(RwResEntry *repEntry, void 
 		}else
 			RwD3D9SetVertexShaderConstant(REG_texmat, &ident, 4);
 
-		hasAlpha = instancedData->vertexAlpha == true || instancedData->material->color.alpha != 255;
+		hasAlpha = instancedData->vertexAlpha != 0 || instancedData->material->color.alpha != 255;
 		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)hasAlpha);
 
 		pipeUploadMatCol(flags, material, REG_matCol);
@@ -1081,9 +1081,6 @@ CCustomBuildingRenderer__IsCBPCPipelineAttached(RpAtomic *atomic)
 		return TRUE;
 
 	if(explicitBuildingPipe > 0)
-		return FALSE;
-
-	if(!RpAtomicGetFrame(atomic))
 		return FALSE;
 
 	return pipe == nil && GetExtraVertColourPtr(geo) && RpGeometryGetPreLightColors(geo);

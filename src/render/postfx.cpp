@@ -1573,8 +1573,10 @@ CPostEffects::DrawFinalEffects(void)
 		RwD3D9SetPixelShaderConstant(1, &green, 1);
 		RwD3D9SetPixelShaderConstant(2, &blue, 1);
 
-		// Reinhard tonemapping params: enable=1, exposure=1.5
-		float tonemapP[4] = { 1.0f, 1.5f, 0.0f, 0.0f };
+		// YCbCr is a color space conversion — NO tonemapping here.
+		// Tonemapping is already applied by the main colour filter (ColourFilter_Modern).
+		// Double Reinhard causes dark red (low) / black (maxed) screens.
+		float tonemapP[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 		RwD3D9SetPixelShaderConstant(5, tonemapP, 1);
 
 		overrideIm2dPixelShader = gradingPS;

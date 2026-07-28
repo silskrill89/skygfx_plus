@@ -294,7 +294,12 @@ def compile_shaders_parallel():
 # ============================================================
 
 def normalize_env(env):
-    """Normalize environment variables to avoid case-insensitive duplicates."""
+    """Normalize environment variables to avoid case-insensitive duplicates.
+    
+    Windows env blocks are case-insensitive but Python dicts are case-sensitive.
+    This can cause MSBuild/CL.exe to see duplicate keys like PROGRAMW6432 and
+    ProgramW6432. We build a case-insensitive dedup dict and return it.
+    """
     normalized = {}
     seen = set()
     for key, value in env.items():

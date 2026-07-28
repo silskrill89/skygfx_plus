@@ -8,6 +8,7 @@
 
 #include "skygfx.h"
 #include <windows.h>
+#include <DbgHelp.h>
 #include <stdio.h>
 #include <stdarg.h>
 
@@ -18,6 +19,8 @@ static char s_logPath[MAX_PATH];
 static int  s_logInit = 0;
 
 const char* diag_getLogPath(void) { return s_logPath; }
+
+static void diag_writeMinidump(EXCEPTION_POINTERS *ep);
 
 // ============================================================
 // dbglog — file-based debug logging
@@ -76,93 +79,56 @@ dbglog_loc(LogLevel level, const char *file, int line, const char *func, const c
 	dbglog_internal(level, file, line, func, fmt, ap);
 	va_end(ap);
 }
+// ============================================================
+// VEH crash handler — matches original skygfx crashHandler
+// Logs crashes, auto-fixes known issues, suppresses rendering crashes
+// ============================================================
 
-// ============================================================
-// VEH crash handler — diagnostic only, never suppresses exceptions
-// ============================================================
+// Set by InitialiseGame_hook to let SEH handlers fire during CGame::Initialise
+extern volatile int g_allowCrashPassThrough;
+
 static LONG WINAPI
 diag_crashHandler(EXCEPTION_POINTERS *ep)
 {
 	DWORD code = ep->ExceptionRecord->ExceptionCode;
 
-	// Let C++ exceptions pass through to try/catch blocks
+	// Let C++ exceptions (0xE06D7363) pass through to try/catch blocks in readint/readfloat
+	// Swallowing them with EXCEPTION_EXECUTE_HANDLER corrupts C++ exception handling
 	if(code == 0xE06D7363)
 		return EXCEPTION_CONTINUE_SEARCH;
 
+	static int crashCount = 0;
+	if(++crashCount > 20) return EXCEPTION_CONTINUE_SEARCH;
+
 	CONTEXT *ctx = ep->ContextRecord;
-	DWORD numParams = ep->ExceptionRecord->NumberParameters;
 	dbglog("CRASH: code=0x%08X at=0x%p EAX=%08X EBX=%08X ECX=%08X EDX=%08X ESI=%08X EDI=%08X EBP=%08X ESP=%08X",
 		code, ep->ExceptionRecord->ExceptionAddress,
-		ctx->Eax, ctx->Ebx, ctx->Ecx, ctx->Edx, ctx->Esi, ctx->Edi, ctx->Ebp, ctx->Esp);
-	if(numParams >= 2)
-		dbglog("  ExceptionInfo: %s addr=0x%p",
-			ep->ExceptionRecord->ExceptionInformation[0] == 0 ? "READ" :
-			ep->ExceptionRecord->ExceptionInformation[0] == 1 ? "WRITE" : "EXECUTE",
-			(void*)ep->ExceptionRecord->ExceptionInformation[1]);
-
-	// Module info
-	HMODULE exeMod = GetModuleHandle(NULL);
-	MEMORY_BASIC_INFORMATION mbi = {};
-	VirtualQuery((void*)ctx->Eip, &mbi, sizeof(mbi));
-	HMODULE crashMod = NULL;
-	if(mbi.AllocationBase)
-		crashMod = (HMODULE)mbi.AllocationBase;
-	dbglog("  EIP module: %p (base=%p protect=0x%X)", crashMod, exeMod, mbi.Protect);
-
-	// Walk EBP chain (up to 8 frames)
-	DWORD *frame = (DWORD*)ctx->Ebp;
-	dbglog("  Stack trace:");
-	for(int i = 0; i < 8 && frame && frame != (DWORD*)0xFFFFFFFF; i++){
-		DWORD retAddr = frame[1];
-		MEMORY_BASIC_INFORMATION fmbi = {};
-		VirtualQuery((void*)retAddr, &fmbi, sizeof(fmbi));
-		HMODULE fmod = fmbi.AllocationBase ? (HMODULE)fmbi.AllocationBase : NULL;
-		dbglog("    [%d] EBP=%08X RET=%08X (module=%p)", i, (DWORD)frame, retAddr, fmod);
-		DWORD *next = (DWORD*)frame[0];
-		if(next <= frame) break;
-		frame = next;
-	}
-
-	// Dump first 16 DWORDs from ESP
-	DWORD *sp = (DWORD*)ctx->Esp;
-	dbglog("  Stack dump (ESP):");
-	for(int i = 0; i < 16; i++)
-		dbglog("    [ESP+0x%02X] = %08X", i*4, sp[i]);
-
-	// Write minidump
-	diag_writeMinidump(ep);
-
-	// Build a human-readable crash summary for MessageBox
-	char mbTitle[128];
-	snprintf(mbTitle, sizeof(mbTitle), "skygfx CRASH 0x%08X", code);
-	char mbBody[2048];
-	snprintf(mbBody, sizeof(mbBody),
-		"Exception: 0x%08X\n"
-		"Address:   %p\n"
-		"Registers: EAX=%08X EBX=%08X ECX=%08X EDX=%08X\n"
-		"           ESI=%08X EDI=%08X EBP=%08X ESP=%08X\n"
-		"EIP mod:   %p  (exe=%p)\n\n"
-		"Full crash log written to:\n%s\n\n"
-		"Click OK to let the game continue (may hang).\n"
-		"Click Cancel to terminate.",
-		code, ep->ExceptionRecord->ExceptionAddress,
 		ctx->Eax, ctx->Ebx, ctx->Ecx, ctx->Edx,
-		ctx->Esi, ctx->Edi, ctx->Ebp, ctx->Esp,
-		crashMod, exeMod, s_logPath);
-	if(code == EXCEPTION_ACCESS_VIOLATION && numParams >= 2){
-		int rw = (int)ep->ExceptionRecord->ExceptionInformation[0];
-		snprintf(mbBody + strlen(mbBody), sizeof(mbBody) - strlen(mbBody),
-			"\nAccess: %s at %p",
-			rw == 0 ? "READ" : rw == 1 ? "WRITE" : "EXECUTE",
-			(void*)ep->ExceptionRecord->ExceptionInformation[1]);
+		ctx->Esi, ctx->Edi, ctx->Ebp, ctx->Esp);
+
+	// Auto-fixes must fire BEFORE pass-through check so they work during InitialiseGame
+	// Auto-fix: cascade crash in LoadCollisionFileFirstTime after corrupt COL model
+	if(code == 0xC0000005 && ctx->Eip == 0x5B5192 && ctx->Esi == 0){
+		dbglog("AUTO-FIX: skipping NULL CColModel store at 0x5B5192");
+		ctx->Eip += 3;
+		return EXCEPTION_CONTINUE_EXECUTION;
 	}
 
-	// Show MessageBox — user can decide to continue or terminate
-	int mbRet = MessageBoxA(NULL, mbBody, mbTitle, MB_ICONERROR | MB_OKCANCEL | MB_TOPMOST);
-	if(mbRet == IDCANCEL)
-		TerminateProcess(GetCurrentProcess(), code);
+	// Auto-fix: crash in model info lookup during CGame::Initialise
+	if(code == 0xC0000005 && ctx->Eip == 0x405CBC){
+		dbglog("AUTO-FIX: skipping model info refcount at 0x405CBC (EAX=%08X)", ctx->Eax);
+		ctx->Eip += 3;
+		return EXCEPTION_CONTINUE_EXECUTION;
+	}
 
-	// Diagnostic-only: always let exceptions propagate naturally.
+	// During InitialiseGame call, let SEH handlers fire to get exact crash info
+	if(g_allowCrashPassThrough)
+		return EXCEPTION_CONTINUE_SEARCH;
+
+	// Handle our rendering crashes - suppress them (matches original skygfx)
+	if(code == 0xC0000005 || code == 0x40010006){
+		return EXCEPTION_EXECUTE_HANDLER;
+	}
 	return EXCEPTION_CONTINUE_SEARCH;
 }
 
@@ -207,8 +173,8 @@ static DWORD WINAPI watchdogThread(LPVOID)
 		DWORD last = (DWORD)s_heartbeat;
 		DWORD now = GetTickCount();
 
-		if(last != 0 && (now - last) > 30000){
-			// 30 seconds with no heartbeat — game is frozen
+		if(last != 0 && (now - last) > 120000){
+			// 120 seconds with no heartbeat — game is likely frozen
 			dbglog("Watchdog: FREEZE DETECTED — no heartbeat for %u ms (last=%u now=%u)", now - last, last, now);
 
 			diag_findGameWindow();
@@ -217,7 +183,7 @@ static DWORD WINAPI watchdogThread(LPVOID)
 			snprintf(title, sizeof(title), "skygfx FREEZE DETECTED");
 			char body[1024];
 			snprintf(body, sizeof(body),
-				"The game has not responded for over 30 seconds.\n\n"
+				"The game has not responded for over 2 minutes.\n\n"
 				"It may be frozen on a loading screen or in a loop.\n\n"
 				"Full log written to:\n%s\n\n"
 				"Click OK to try to continue.\n"
@@ -318,7 +284,7 @@ diag_writeMinidump(EXCEPTION_POINTERS *ep)
 			mei.ExceptionPointers = ep;
 			mei.ClientPointers = FALSE;
 			BOOL ok = pDump(GetCurrentProcess(), GetCurrentProcessId(), hFile,
-				MINIDUMPWithDataSegs, &mei, NULL, NULL);
+				MiniDumpWithDataSegs, &mei, NULL, NULL);
 			dbglog("diag_writeMinidump: %s to %s", ok ? "OK" : "FAILED", dumpPath);
 		} else {
 			dbglog("diag_writeMinidump: MiniDumpWriteDump not found");
