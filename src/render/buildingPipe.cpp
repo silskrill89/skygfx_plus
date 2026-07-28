@@ -16,6 +16,7 @@ void *xboxBuildingPS;
 void *sphereBuildingVS;
 void *simpleFogPS;
 void *buildingPBRVS;
+void *buildingPBRPS;
 
 RxPipeline *&CCustomBuildingPipeline__ObjPipeline = *(RxPipeline**)0xC02C68;
 RxPipeline *&CCustomBuildingDNPipeline__ObjPipeline = *(RxPipeline**)0xC02C1C;
