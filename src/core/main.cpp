@@ -1176,6 +1176,8 @@ readIni(int n)
 		break;
 	}
 
+	dbglog("Config: pipeline=%d buildingPipe=%d vehiclePipe=%d colorFilter=%d", c->pipeline, c->buildingPipe, c->vehiclePipe, c->colorFilter);
+
 	// ===== Quality Preset (read second, sets feature defaults) =====
 	// 0=LOW (PS2 classic), 1=MEDIUM (PC classic), 2=HIGH (Enhanced), 3=ULTRA (Full PBR)
 	int preset = readint(cfg.get("SkyGfx", "qualityPreset", ""), 3);  // default to ULTRA

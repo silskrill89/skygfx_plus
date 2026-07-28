@@ -629,6 +629,19 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 	if(!frame) return;
 	_rwD3D9EnableClippingIfNeeded(object, type);
 
+	// Per-frame debug logging (throttle to once per second)
+	static unsigned int lastLogFrame = 0;
+	unsigned int curFrame = ++lastLogFrame;
+	if(curFrame - lastLogFrame < 60) lastLogFrame = curFrame; // reset every 60 frames
+	static int logCounter = 0;
+	bool logThisFrame = (logCounter++ % 300 == 0); // log every 300th call
+
+	if(logThisFrame){
+		dbglog("[BuildingPBR] frame=%u atomic=%p flags=%X", curFrame, atomic, flags);
+		dbglog("[BuildingPBR] shaders: VS=%p PS=%p", buildingPBRVS, buildingPBRPS);
+		dbglog("[BuildingPBR] pDirect=%p pAmbient=%p", pDirect, pAmbient);
+	}
+
 	// Transform (WVP + world matrix for PBR)
 	float transform[16];
 	pipeGetComposedTransformMatrix(atomic, transform);
@@ -672,6 +685,10 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 		pipeUploadZero(REG_directDir);
 	}
 
+	if(logThisFrame){
+		dbglog("[BuildingPBR] eyePos=(%.2f,%.2f,%.2f) flags&GEOMETRYLIGHT=%d", eyePos.x, eyePos.y, eyePos.z, !!(flags & rpGEOMETRYLIGHT));
+	}
+
 	// Env map setup (from Xbox building pipeline)
 	RwMatrix envmat;
 	CustomBuildingEnvMapPipeline__SetupEnv(atomic, NULL, &envmat);
@@ -698,8 +715,13 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 		else {
 			RwD3D9SetVertexShader(xboxBuildingVS);
 		}
+		if(logThisFrame)
+			dbglog("[BuildingPBR] WARNING: buildingPBRVS is NULL, using fallback VS");
 	}
 	RwD3D9SetPixelShader(buildingPBRPS);
+
+	if(logThisFrame)
+		dbglog("[BuildingPBR] numMeshes=%d", resEntryHeader->numMeshes);
 
 	int alphafunc, alpharef;
 	int src, dst;
@@ -762,6 +784,13 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 		const BRDFMaterial *brdf = GetBRDF(surfaceType);
 		pipeUploadPBR(brdf->glossiness, brdf->specular, brdf->clearcoat, brdf->subsurface,
 		              brdf->specularTintR, brdf->specularTintG, brdf->specularTintB);
+
+		if(logThisFrame && numMeshes == resEntryHeader->numMeshes - 1){
+			dbglog("[BuildingPBR] first mesh: surfType=%d brdf=(%.2f,%.2f,%.2f,%.2f tint=%.2f,%.2f,%.2f)",
+				surfaceType, brdf->glossiness, brdf->specular, brdf->clearcoat, brdf->subsurface,
+				brdf->specularTintR, brdf->specularTintG, brdf->specularTintB);
+			dbglog("[BuildingPBR] buildingAmbient=(%.2f,%.2f,%.2f)", buildingAmbient.red, buildingAmbient.green, buildingAmbient.blue);
+		}
 
 		// Tag rendering support (from PS2 building pipeline)
 		if(material->pipeline == (RxPipeline*)TagRenderCB){

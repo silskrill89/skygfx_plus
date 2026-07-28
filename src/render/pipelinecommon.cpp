@@ -495,6 +495,14 @@ CreateShaders(void)
 	makePS(IDR_SIMPLEDETAILSTOCHASTICPS, &simpleDetailStochasticPS);
 	makePS(IDR_SIMPLEFOGPS, &simpleFogPS);
 
+	// Log PBR shader handle status for debugging
+	dbglog("CreateShaders PBR handles: VehiclePBR_Modern=%p buildingPBRVS=%p buildingPBRPS=%p",
+		VehiclePBR_Modern, buildingPBRVS, buildingPBRPS);
+	dbglog("CreateShaders PBR handles: vehiclePBRVS=%p Glass_Vehicle=%p Rubber_Vehicle_Modern=%p",
+		vehiclePBRVS, Glass_Vehicle, Rubber_Vehicle_Modern);
+	dbglog("CreateShaders PBR handles: PBR_Lighting=%p CarPaint_Reflections=%p",
+		PBR_Lighting, CarPaint_Reflections);
+
 	shadersCreated = true;
 	dbglog("CreateShaders: done");
 }

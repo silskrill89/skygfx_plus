@@ -1408,6 +1408,16 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 
 	_rwD3D9EnableClippingIfNeeded(object, type);
 
+	// Per-frame debug logging (throttle to once per second)
+	static unsigned int vehLogCounter = 0;
+	bool vehLogThisFrame = (vehLogCounter++ % 300 == 0);
+
+	if(vehLogThisFrame){
+		dbglog("[VehiclePBR] atomic=%p flags=%X", atomic, flags);
+		dbglog("[VehiclePBR] shaders: VS=%p PS=%p", vehiclePBRVS, VehiclePBR_Modern);
+		dbglog("[VehiclePBR] iCanHasNeoCar=%d iCanHasbuildingPipe=%d", iCanHasNeoCar, iCanHasbuildingPipe);
+	}
+
 	float colorscale = 1.0f;
 	RwD3D9SetPixelShaderConstant(0, &colorscale, 1);
 
@@ -1596,6 +1606,8 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 
 		if(!vehiclePBRVS || !VehiclePBR_Modern){
 			// Fallback: use legacy render if PBR shaders missing
+			if(vehLogThisFrame)
+				dbglog("[VehiclePBR] WARNING: null VS=%p or PS=%p, falling back", vehiclePBRVS, VehiclePBR_Modern);
 			D3D9Render(resEntryHeader, instancedData);
 			continue;
 		}
@@ -1733,6 +1745,11 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 
 		RwD3D9SetVertexShader(vehiclePBRVS);
 		RwD3D9SetPixelShader(VehiclePBR_Modern);
+
+		if(vehLogThisFrame){
+			dbglog("[VehiclePBR] OPAQUE: glossiness=%.2f specular=%.2f specTintR=%.2f", glossiness, specular, specularTintR);
+			dbglog("[VehiclePBR] OPAQUE: ambientPS=(%.2f,%.2f,%.2f,%.2f) iblTex=%p", ambientPS[0], ambientPS[1], ambientPS[2], ambientPS[3], g_iblTex);
+		}
 
 		D3D9RenderDual(config->dualPassVehicle, resEntryHeader, instancedData);
 		continue;
