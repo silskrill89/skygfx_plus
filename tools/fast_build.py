@@ -1,20 +1,28 @@
 #!/usr/bin/env python3
 """
 SkyGFX Plus - Optimized Build Script
-Parallel shader compilation, cached environment, fast iteration modes.
+Parallel shader compilation, cached environment, tiered build modes.
 
 Usage:
-  python tools/fast_build.py              # Full build (like fix_build.py but faster)
-  python tools/fast_build.py --fast       # Skip checks, incremental build, deploy
-  python tools/fast_build.py --rebuild    # Clean + build + deploy
+  python tools/fast_build.py              # Smart incremental: rebuild only if sources changed
+  python tools/fast_build.py --fastest    # Always rebuild: skip all detection, just build+deploy
+  python tools/fast_build.py --fast       # Smart: detect changes, skip if nothing modified
+  python tools/fast_build.py --rebuild    # Clean + full rebuild + deploy
   python tools/fast_build.py --shaders    # Only compile shaders
   python tools/fast_build.py --deploy     # Only deploy existing DLL
   python tools/fast_build.py --launch     # Build + launch game
   python tools/fast_build.py --watch      # Auto-rebuild on file changes
-  python tools/fast_build.py --clean      # Clean build (no incremental)
+  python tools/fast_build.py --clean      # Clean build (delete outputs, full rebuild)
   python tools/fast_build.py --reset-env  # Invalidate VS env cache and re-cache
   python tools/fast_build.py --open       # Open game directory after deploy
   python tools/fast_build.py --no-deploy  # Build without deploying
+
+Build Tiers:
+  --fastest  : No detection. Compile shaders + MSBuild incremental + deploy. Fastest iteration.
+  --fast     : Smart detection. Skip build if no source/shader changes since last build.
+  (default)  : Same as --fastest (always build). MSBuild handles C++ incremental compilation.
+  --rebuild  : Delete outputs, clean + rebuild from scratch, deploy.
+  --clean    : Alias for --rebuild.
 """
 
 import os
@@ -25,7 +33,6 @@ import shutil
 import subprocess
 import hashlib
 import json
-import signal
 from pathlib import Path
 from multiprocessing import Pool, cpu_count
 from datetime import datetime
@@ -104,37 +111,95 @@ def kill_game_process():
 # Source Change Detection
 # ============================================================
 
-def get_source_hash():
-    """Get hash of all source files to detect changes."""
-    hasher = hashlib.md5()
+def get_source_mtimes():
+    """Get mtime+size fingerprint of all source files. Returns a dict of
+    {relative_path: (mtime, size)} for deterministic hashing."""
     src_dir = PROJECT_DIR / 'src'
     if not src_dir.exists():
-        return None
-    
-    files = []
+        return {}
+
+    fingerprint = {}
     for ext in ['*.cpp', '*.h', '*.hpp']:
-        files.extend(src_dir.rglob(ext))
-    
-    for f in sorted(files):
+        for f in src_dir.rglob(ext):
+            rel = f.relative_to(PROJECT_DIR)
+            stat = f.stat()
+            fingerprint[str(rel)] = (stat.st_mtime, stat.st_size)
+    return fingerprint
+
+def get_shader_mtimes():
+    """Get mtime fingerprint of all shader source files."""
+    fingerprint = {}
+    for subdir in ['ps', 'vs']:
+        shader_dir = SHADERS_DIR / subdir
+        if not shader_dir.exists():
+            continue
+        for f in shader_dir.rglob('*.hlsl'):
+            rel = f.relative_to(PROJECT_DIR)
+            stat = f.stat()
+            fingerprint[str(rel)] = (stat.st_mtime, stat.st_size)
+    # Also check root shaders dir
+    for f in SHADERS_DIR.glob('*.hlsl'):
+        rel = f.relative_to(PROJECT_DIR)
         stat = f.stat()
-        hasher.update(f"{f}:{stat.st_mtime}:{stat.st_size}\n".encode())
-    
+        fingerprint[str(rel)] = (stat.st_mtime, stat.st_size)
+    return fingerprint
+
+def compute_fingerprint(data):
+    """Compute a deterministic hash from a fingerprint dict."""
+    hasher = hashlib.md5()
+    for key in sorted(data.keys()):
+        mtime, size = data[key]
+        hasher.update(f"{key}:{mtime}:{size}\n".encode())
     return hasher.hexdigest()
 
-def sources_changed():
-    """Check if sources changed since last build."""
-    cache_file = CACHE_DIR / 'source_hash.txt'
-    current_hash = get_source_hash()
+def check_changes():
+    """Check what has changed since the last build. Returns:
+    (sources_changed: bool, shaders_changed: bool, any_changed: bool)
     
-    if cache_file.exists():
-        with open(cache_file, 'r') as f:
-            old_hash = f.read().strip()
-        if old_hash == current_hash:
-            return False
-    
+    Does NOT auto-write the hash — only commit_hash() does that after
+    a successful build.
+    """
+    cache_file = CACHE_DIR / 'build_fingerprint.json'
+
+    src_fp = get_source_mtimes()
+    shader_fp = get_shader_mtimes()
+
+    current = {
+        'sources': compute_fingerprint(src_fp) if src_fp else '',
+        'shaders': compute_fingerprint(shader_fp) if shader_fp else '',
+    }
+
+    if not cache_file.exists():
+        return True, True, True
+
+    with open(cache_file, 'r') as f:
+        saved = json.load(f)
+
+    src_changed = current['sources'] != saved.get('sources', '')
+    shd_changed = current['shaders'] != saved.get('shaders', '')
+    return src_changed, shd_changed, src_changed or shd_changed
+
+def commit_hash():
+    """Write current fingerprint after a successful build. Only call
+    when the build actually succeeded — prevents failed builds from
+    'consuming' the change detection."""
+    cache_file = CACHE_DIR / 'build_fingerprint.json'
+
+    src_fp = get_source_mtimes()
+    shader_fp = get_shader_mtimes()
+
+    current = {
+        'sources': compute_fingerprint(src_fp) if src_fp else '',
+        'shaders': compute_fingerprint(shader_fp) if shader_fp else '',
+    }
+
     with open(cache_file, 'w') as f:
-        f.write(current_hash)
-    return True
+        json.dump(current, f, indent=2)
+
+def sources_changed():
+    """Legacy interface: returns True if any sources changed."""
+    _, _, any_changed = check_changes()
+    return any_changed
 
 # ============================================================
 # VS Environment Cache
@@ -236,10 +301,11 @@ def get_shader_list():
         ('vs_3_0', 'vehiclePipeVS.hlsl', 'main_neoPass2', 'neoVehiclePass2VS.cso'),
         ('ps_3_0', 'VehiclePBR_Modern.hlsl', 'main_specCarFx', 'specCarFxPS.cso'),
         ('ps_3_0', 'VehiclePBR_Modern.hlsl', 'main_mobileVehicle', 'mobileVehiclePS.cso'),
+        ('ps_3_0', 'VehiclePBR_Modern.hlsl', 'main_building', 'BuildingPBRPS.cso'),
+        ('ps_3_0', 'VehiclePBR_Modern.hlsl', 'main_rubber', 'Rubber_Vehicle_Modern.cso'),
     ]
 
     for profile, src_file, entry, out_cso in multi_entry:
-        # Check both root and subdir
         hlsl_path = SHADERS_DIR / src_file
         if not hlsl_path.exists():
             hlsl_path = SHADERS_DIR / 'ps' / src_file
@@ -263,7 +329,6 @@ def compile_shaders_parallel():
         timer.end()
         return True
 
-    # Use all cores for parallel compilation
     num_workers = min(cpu_count(), len(shaders))
     print(f"  Compiling {len(shaders)} shaders with {num_workers} workers...")
 
@@ -310,9 +375,12 @@ def normalize_env(env):
         normalized[key] = value
     return normalized
 
-def build(clean=False, retry_on_env_error=True):
-    """Build project via MSBuild. Auto-retries on env collision errors."""
+def build(clean=False):
+    """Build project via MSBuild using VS env (no os.environ merge to avoid case collisions)."""
     timer.begin("MSBuild")
+
+    # Kill game if running — the ASI may be locked
+    kill_game_process()
 
     proj = BUILD_DIR / 'skygfx.vcxproj'
     if not proj.exists():
@@ -321,22 +389,19 @@ def build(clean=False, retry_on_env_error=True):
         return False
 
     vs_env = get_vs_env_cached()
-    build_env = os.environ.copy()
-    if vs_env:
-        build_env.update(vs_env)
+    # Only use VS env — do NOT merge os.environ (Git Bash has PROGRAMW6432,
+    # VS has ProgramW6432, case-different keys break CL.exe MSB6001).
+    build_env = vs_env if vs_env else os.environ.copy()
     build_env = normalize_env(build_env)
 
     if clean:
-        # Force a REAL rebuild: delete outputs + Clean target + Rebuild target
-        print("  Clean build requested - removing all outputs")
-        import shutil
+        print("  Clean build - removing all outputs")
         for out_dir in [BUILD_DIR / 'obj' / 'Release', BUILD_DIR / 'bin',
                         PROJECT_DIR / 'bin' / 'Release']:
             if out_dir.exists():
                 shutil.rmtree(out_dir, ignore_errors=True)
                 print(f"    Removed: {out_dir}")
 
-        # Run Clean + Rebuild in one MSBuild call
         cmd = [MSBUILD, str(proj), '/p:Configuration=Release', '/p:Platform=Win32',
                '/t:Clean;Rebuild', '/nologo', '/v:minimal', '/m']
         print(f"  MSBuild Release|Win32 (clean+rebuild)")
@@ -348,19 +413,13 @@ def build(clean=False, retry_on_env_error=True):
     result = subprocess.run(cmd, capture_output=True, text=True,
                            cwd=str(PROJECT_DIR), env=build_env)
 
-    # Check for env collision error - auto-retry with fresh cache
-    env_collision = 'PROGRAMW6432' in result.stdout or 'ProgramW6432' in result.stdout
-    if env_collision and retry_on_env_error:
-        print("  ENV COLLISION DETECTED - resetting cache and retrying...")
-        get_vs_env_cached(force_refresh=True)
-        timer.end()
-        return build(clean=clean, retry_on_env_error=False)
-
-    # Check for errors
+    # Check for compile/link errors (ignore post-build copy failures —
+    # the DLL was already produced, deploy() handles the copy)
     has_error = False
     for line in result.stdout.split('\n'):
         s = line.strip()
-        if 'error ' in s.lower() and 'copy' not in s.lower():
+        # Ignore MSB3073 (post-build event) and copy errors — DLL was built
+        if 'error ' in s.lower() and 'MSB3073' not in s and 'copy ' not in s.lower():
             print(f"  ERROR: {s}")
             has_error = True
 
@@ -372,20 +431,19 @@ def build(clean=False, retry_on_env_error=True):
         timer.end()
         return False
 
-    # Check output
+    # Check output — post-build copies DLL→ASI then deletes DLL,
+    # so check for ASI (primary) then DLL (before post-build runs)
+    asi_path = GAME_DIR / 'skygfx.asi'
     dll_path = GAME_DIR / 'skygfx.dll'
-    if dll_path.exists():
-        print(f"  Output: {dll_path} ({dll_path.stat().st_size:,} bytes)")
-        timer.end()
-        return True
+    alt_dll = PROJECT_DIR / 'bin' / 'Release' / 'skygfx.dll'
 
-    alt = PROJECT_DIR / 'bin' / 'Release' / 'skygfx.dll'
-    if alt.exists():
-        print(f"  Output: {alt} ({alt.stat().st_size:,} bytes)")
-        timer.end()
-        return True
+    for p in [asi_path, dll_path, alt_dll]:
+        if p.exists():
+            print(f"  Output: {p} ({p.stat().st_size:,} bytes)")
+            timer.end()
+            return True
 
-    print("  WARNING: Output DLL not found")
+    print("  WARNING: Output file not found (DLL or ASI)")
     timer.end()
     return False
 
@@ -426,6 +484,8 @@ def deploy(force=False):
 
             shutil.copy2(dll_src, asi_dst)
             print(f"  ASI deployed ({asi_dst.stat().st_size:,} bytes)")
+    else:
+        print("  No DLL found to deploy")
 
     ini_dst = GAME_DIR / 'skygfx.ini'
     if not ini_dst.exists():
@@ -460,8 +520,12 @@ def launch_game():
 def watch_mode():
     """Watch for file changes and auto-rebuild."""
     import time
-    from watchdog.observers import Observer
-    from watchdog.events import FileSystemEventHandler
+    try:
+        from watchdog.observers import Observer
+        from watchdog.events import FileSystemEventHandler
+    except ImportError:
+        print("  watch mode requires: pip install watchdog")
+        return
 
     print("Watch mode - monitoring for changes...")
     print("Press Ctrl+C to stop")
@@ -498,13 +562,13 @@ def watch_mode():
 
 def main():
     args = sys.argv[1:]
+    fastest = '--fastest' in args
     fast = '--fast' in args
-    rebuild = '--rebuild' in args
+    rebuild = '--rebuild' in args or '--clean' in args
     shaders_only = '--shaders' in args
     deploy_only = '--deploy' in args
     launch = '--launch' in args
     watch = '--watch' in args
-    clean = '--clean' in args or rebuild
     force = '--force' in args
     reset_env = '--reset-env' in args
     open_dir = '--open' in args
@@ -516,7 +580,7 @@ def main():
 
     if reset_env:
         reset_env_cache()
-        if not any([fast, rebuild, shaders_only, deploy_only, watch, clean]):
+        if not any([fastest, fast, rebuild, shaders_only, deploy_only, watch]):
             timer.summary()
             return
 
@@ -545,37 +609,45 @@ def main():
         watch_mode()
         return
 
-    # Fast mode: skip checks, just compile + build + deploy
-    if not fast and not rebuild:
-        timer.begin("Pre-flight Checks")
-        for name, path in [('fxc', FXC), ('msbuild', MSBUILD), ('vcvarsall', VCVARSALL)]:
-            if not os.path.exists(path):
-                print(f"  MISS: {name}")
-                sys.exit(1)
-        print("  SDKs OK")
+    # --- Build tier selection ---
+    #
+    # --fastest : Always build. No change detection. Shaders + MSBuild + deploy.
+    # --fast    : Smart detection. Skip build if sources AND shaders unchanged.
+    # (default) : Same as --fastest (always build). MSBuild handles C++ incremental.
+    # --rebuild : Delete outputs, clean + rebuild from scratch.
+
+    do_build = True
+    do_clean = rebuild
+
+    if not fastest and not rebuild:
+        # Smart mode: check if anything actually changed
+        timer.begin("Change Detection")
+        src_changed, shd_changed, any_changed = check_changes()
+
+        if not any_changed:
+            print(f"  Sources: unchanged, Shaders: unchanged")
+            print("  Nothing changed since last build - skipping build")
+            do_build = False
+        else:
+            src_tag = "CHANGED" if src_changed else "ok"
+            shd_tag = "CHANGED" if shd_changed else "ok"
+            print(f"  Sources: {src_tag}, Shaders: {shd_tag}")
         timer.end()
 
-    # Skip build if sources unchanged (unless clean/rebuild)
-    if not clean and not rebuild and not sources_changed():
-        print("\n  No source changes detected - skipping build")
-        if not no_deploy:
-            deploy(force=force)
-        if launch:
-            launch_game()
-        if open_dir:
-            subprocess.Popen(['explorer', str(GAME_DIR)])
-        timer.summary()
-        return
+    if do_build:
+        # Compile shaders
+        if not compile_shaders_parallel():
+            print("\n  SHADER COMPILATION FAILED")
+            sys.exit(1)
 
-    # Compile shaders in parallel
-    if not compile_shaders_parallel():
-        print("\n  SHADER COMPILATION FAILED")
-        sys.exit(1)
+        # Build DLL
+        if not build(clean=do_clean):
+            print("\n  BUILD FAILED")
+            sys.exit(1)
 
-    # Build
-    if not build(clean=clean):
-        print("\n  BUILD FAILED")
-        sys.exit(1)
+        # Commit hash only after successful build
+        commit_hash()
+        print("  Build fingerprint saved")
 
     # Deploy
     if not no_deploy:

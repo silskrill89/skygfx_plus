@@ -81,3 +81,5 @@
 #define IDR_CUSTOMBUILDINGVS        235
 #define IDR_NORMMAPBUILDINGPS       236
 #define IDR_NORMMAPVEHICLEPS        237
+#define IDR_BUILDINGPBRVS           238
+#define IDR_BUILDINGPBRPS           239

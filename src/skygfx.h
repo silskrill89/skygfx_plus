@@ -752,6 +752,7 @@ extern void *mobileVehiclePipeVS, *mobileVehiclePipePS;
 // Building legacy
 extern void *ps2BuildingVS, *ps2BuildingFxVS, *ps2BuildingWindVS;
 extern void *xboxBuildingVS, *xboxBuildingPS, *xboxBuildingStochasticPS, *xboxBuildingWindVS;
+extern void *buildingPBRVS, *buildingPBRPS;
 extern void *sphereBuildingVS;
 extern void *simpleDetailPS, *simpleDetailStochasticPS, *simpleFogPS;
 

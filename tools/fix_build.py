@@ -320,6 +320,7 @@ def _get_shader_list():
         ('ps_3_0', 'VehiclePBR_Modern.hlsl', 'main_specCarFx', 'specCarFxPS.cso', False),
         ('ps_3_0', 'VehiclePBR_Modern.hlsl', 'main_mobileVehicle', 'mobileVehiclePS.cso', False),
         ('ps_3_0', 'VehiclePBR_Modern.hlsl', 'main_rubber', 'Rubber_Vehicle_Modern.cso', False),
+        ('ps_3_0', 'VehiclePBR_Modern.hlsl', 'main_building', 'BuildingPBRPS.cso', False),
     ]
     for profile, src_file, entry, out_cso, in_root in multi_entry:
         hlsl_path = os.path.join(shaders_dir, src_file) if in_root else os.path.join(shaders_dir, 'ps', src_file)
@@ -427,6 +428,15 @@ def build():
     build_env = os.environ.copy()
     if vs_env:
         build_env.update(vs_env)
+    # Deduplicate case-insensitive keys to prevent MSB6001
+    deduped = {}
+    seen = set()
+    for k, v in build_env.items():
+        kl = k.lower()
+        if kl not in seen:
+            seen.add(kl)
+            deduped[k] = v
+    build_env = deduped
 
     cmd = [msbuild, proj, '/p:Configuration=Release', '/p:Platform=Win32',
            '/nologo', '/v:minimal', '/m']  # /m = parallel build

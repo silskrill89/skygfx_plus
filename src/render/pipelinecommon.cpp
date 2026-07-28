@@ -485,6 +485,8 @@ CreateShaders(void)
 	makeVS(IDR_PS2BUILDINGFXVS, &ps2BuildingFxVS);
 	makeVS(IDR_PS2BUILDINGWINDVS, &ps2BuildingWindVS);
 	makeVS(IDR_XBOXBUILDINGVS, &xboxBuildingVS);
+	makeVS(IDR_BUILDINGPBRVS, &buildingPBRVS);
+	makePS(IDR_BUILDINGPBRPS, &buildingPBRPS);
 	makePS(IDR_XBOXBUILDINGPS, &xboxBuildingPS);
 	makePS(IDR_XBOXBUILDINGSTOCHASTICPS, &xboxBuildingStochasticPS);
 	makeVS(IDR_XBOXBUILDINGWINDVS, &xboxBuildingWindVS);
@@ -503,6 +505,11 @@ CreateShaders(void)
 //
 // c22 = {glossiness, specular, pipeParam3, pipeParam4}
 // c23 = {pipeParam5, pipeParam6, pipeParam7, 0}
+//
+// Vehicle:  c22 = {glossiness, specular, specularTintR, envFresnel}
+//           c23 = {renderingWheel, noiseScale, edgeBlend, 0}
+// Building: c22 = {glossiness, specular, clearcoat, subsurface}
+//           c23 = {specularTintR, specularTintG, specularTintB, 0}
 // ============================================================
 void pipeUploadPBR(float glossiness, float specular, float c22_3, float c22_4,
                    float c23_1, float c23_2, float c23_3)

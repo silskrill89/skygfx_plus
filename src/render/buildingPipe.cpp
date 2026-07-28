@@ -15,6 +15,7 @@ void *xboxBuildingStochasticPS;
 void *xboxBuildingPS;
 void *sphereBuildingVS;
 void *simpleFogPS;
+void *buildingPBRVS;
 
 RxPipeline *&CCustomBuildingPipeline__ObjPipeline = *(RxPipeline**)0xC02C68;
 RxPipeline *&CCustomBuildingDNPipeline__ObjPipeline = *(RxPipeline**)0xC02C1C;
@@ -38,6 +39,8 @@ enum {
 	REG_windIntensity = 22,
 
 	REG_shaderParams= 29,
+	// PBR building
+	REG_worldMat = 24,	// 4x4 world matrix (c24-c27) for PBR vertex shader
 	// DN and UVA
 	REG_dayparam	= 30,
 	REG_nightparam	= 31,
@@ -625,10 +628,15 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 	if(!frame) return;
 	_rwD3D9EnableClippingIfNeeded(object, type);
 
-	// Transform
+	// Transform (WVP + world matrix for PBR)
 	float transform[16];
 	pipeGetComposedTransformMatrix(atomic, transform);
 	RwD3D9SetVertexShaderConstant(REG_transform, transform, 4);
+
+	// World matrix at c24-c27 for buildingPBRVS (world-space normals, positions, view dir)
+	float worldMat[16];
+	pipeGetWorldMatrix(worldMat);
+	RwD3D9SetVertexShaderConstant(24, worldMat, 4);
 
 	RxD3D9ResEntryHeader *resEntryHeader = (RxD3D9ResEntryHeader*)(repEntry + 1);
 	RxD3D9InstanceData *instancedData = (RxD3D9InstanceData*)(resEntryHeader + 1);
@@ -649,12 +657,19 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 			if(camLTM) eyePos = camLTM->pos;
 		}
 	}
-	RwD3D9SetVertexShaderConstant(34, &eyePos, 1);
+	RwD3D9SetVertexShaderConstant(36, &eyePos, 1);  // c36: matches buildingPBRVS register
 	RwD3D9SetPixelShaderConstant(2, &eyePos, 1);
 
-	// Lights (PBR addition)
+	// Lights (PBR addition) — VS directDir for buildingPBRVS SunDir + PS lights
 	pipeUploadLightColorPS(pDirect, REG_directCol);
 	pipeUploadLightDirectionPS(pDirect, REG_directDir);
+	if(flags & rpGEOMETRYLIGHT){
+		pipeUploadLightColor(pDirect, REG_directCol);
+		pipeUploadLightDirection(pDirect, REG_directDir);
+	}else{
+		pipeUploadZero(REG_directCol);
+		pipeUploadZero(REG_directDir);
+	}
 
 	// Env map setup (from Xbox building pipeline)
 	RwMatrix envmat;
@@ -663,18 +678,27 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 
 	DefinedVertexShader definedVertexShader = (DefinedVertexShader)GetDefinedShader(atomic);
 
-	// Set PBR building shader - use Xbox vertex shaders for proper building setup
-	// with wind support (merged Xbox/PS2 approach)
+	// Set PBR building shader - use buildingPBRVS for proper world-space vectors
+	// with wind support
 	bool vertexAlphaIsAlpha = true;
-	if (definedVertexShader == DefinedVertexShader::WIND) {
-		vertexAlphaIsAlpha = false;
-		setWindParams(atomic, frame);
-		RwD3D9SetVertexShader(xboxBuildingWindVS);
+	if (buildingPBRVS) {
+		if (definedVertexShader == DefinedVertexShader::WIND) {
+			vertexAlphaIsAlpha = false;
+			setWindParams(atomic, frame);
+		}
+		RwD3D9SetVertexShader(buildingPBRVS);
+	} else {
+		// Fallback to Xbox building VS if PBR VS not loaded
+		if (definedVertexShader == DefinedVertexShader::WIND) {
+			vertexAlphaIsAlpha = false;
+			setWindParams(atomic, frame);
+			RwD3D9SetVertexShader(xboxBuildingWindVS);
+		}
+		else {
+			RwD3D9SetVertexShader(xboxBuildingVS);
+		}
 	}
-	else {
-		RwD3D9SetVertexShader(xboxBuildingVS);
-	}
-	RwD3D9SetPixelShader(VehiclePBR_Modern);
+	RwD3D9SetPixelShader(buildingPBRPS);
 
 	int alphafunc, alpharef;
 	int src, dst;
