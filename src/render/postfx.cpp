@@ -839,9 +839,10 @@ CPostEffects::DarknessFilter_fix(uint8 alpha)
 void
 CPostEffects::ColourFilter_Generic(RwRGBA rgb1, RwRGBA rgb2, void *ps)
 {
-	dbglog("[PostFX] ColourFilter_Generic ps=%p pRasterFrontBuffer=%p rgb1=(%d,%d,%d,%d) rgb2=(%d,%d,%d,%d)",
-		ps, CPostEffects::pRasterFrontBuffer, rgb1.red, rgb1.green, rgb1.blue, rgb1.alpha,
-		rgb2.red, rgb2.green, rgb2.blue, rgb2.alpha);
+	if(dbglog_throttle( "cf_generic"))
+		dbglog("[PostFX] ColourFilter_Generic ps=%p pRasterFrontBuffer=%p rgb1=(%d,%d,%d,%d) rgb2=(%d,%d,%d,%d)",
+			ps, CPostEffects::pRasterFrontBuffer, rgb1.red, rgb1.green, rgb1.blue, rgb1.alpha,
+			rgb2.red, rgb2.green, rgb2.blue, rgb2.alpha);
 //	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERNEAREST);
 	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
 	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
@@ -870,10 +871,11 @@ CPostEffects::ColourFilter_Generic(RwRGBA rgb1, RwRGBA rgb2, void *ps)
 void
 CPostEffects::ColourFilter_Modern(RwRGBA rgba1, RwRGBA rgba2)
 {
-	dbglog("[PostFX] ColourFilter_Modern ENTER rgba1=(%d,%d,%d,%d) rgba2=(%d,%d,%d,%d) pRasterFrontBuffer=%p gradingPS=%p",
-		rgba1.red, rgba1.green, rgba1.blue, rgba1.alpha,
-		rgba2.red, rgba2.green, rgba2.blue, rgba2.alpha,
-		CPostEffects::pRasterFrontBuffer, gradingPS);
+	if(dbglog_throttle( "cf_modern"))
+		dbglog("[PostFX] ColourFilter_Modern ENTER rgba1=(%d,%d,%d,%d) rgba2=(%d,%d,%d,%d) pRasterFrontBuffer=%p gradingPS=%p",
+			rgba1.red, rgba1.green, rgba1.blue, rgba1.alpha,
+			rgba2.red, rgba2.green, rgba2.blue, rgba2.alpha,
+			CPostEffects::pRasterFrontBuffer, gradingPS);
 
 	if(!CPostEffects::pRasterFrontBuffer){
 		dbglog("[PostFX] WARNING: pRasterFrontBuffer is NULL in ColourFilter_Modern!");
@@ -908,8 +910,9 @@ CPostEffects::ColourFilter_Modern(RwRGBA rgba1, RwRGBA rgba2)
 	green.r = green.b = green.a = 0.0f;
 	blue.r = blue.g = blue.a = 0.0f;
 
-	dbglog("[PostFX] ColourFilter_Modern grading: red.r=%.3f green.g=%.3f blue.b=%.3f a1=%.3f a2=%.3f",
-		red.r, green.g, blue.b, a1, a2);
+	if(dbglog_throttle( "cf_modern_grading"))
+		dbglog("[PostFX] ColourFilter_Modern grading: red.r=%.3f green.g=%.3f blue.b=%.3f a1=%.3f a2=%.3f",
+			red.r, green.g, blue.b, a1, a2);
 
 	RwD3D9SetPixelShaderConstant(0, &red, 1);
 	RwD3D9SetPixelShaderConstant(1, &green, 1);
@@ -922,8 +925,9 @@ CPostEffects::ColourFilter_Modern(RwRGBA rgba1, RwRGBA rgba2)
 		tonemapP[0] = 0.0f;
 	RwD3D9SetPixelShaderConstant(5, tonemapP, 1);
 
-	dbglog("[PostFX] ColourFilter_Modern tonemapP=(%.1f,%.1f,%.1f,%.1f) gradingPS=%p",
-		tonemapP[0], tonemapP[1], tonemapP[2], tonemapP[3], gradingPS);
+	if(dbglog_throttle( "cf_modern_tonemap"))
+		dbglog("[PostFX] ColourFilter_Modern tonemapP=(%.1f,%.1f,%.1f,%.1f) gradingPS=%p",
+			tonemapP[0], tonemapP[1], tonemapP[2], tonemapP[3], gradingPS);
 
 	if(!gradingPS){
 		dbglog("[PostFX] WARNING: gradingPS is NULL! ColourFilter_Modern will render with no shader");
@@ -1030,10 +1034,11 @@ CPostEffects::ColourFilter_Mobile(RwRGBA rgba1, RwRGBA rgba2)
 void
 CPostEffects::ColourFilter_PS2(RwRGBA rgba1, RwRGBA rgba2)
 {
-	dbglog("[PostFX] ColourFilter_PS2 ENTER rgba1=(%d,%d,%d,%d) rgba2=(%d,%d,%d,%d) pRasterFrontBuffer=%p",
-		rgba1.red, rgba1.green, rgba1.blue, rgba1.alpha,
-		rgba2.red, rgba2.green, rgba2.blue, rgba2.alpha,
-		CPostEffects::pRasterFrontBuffer);
+	if(dbglog_throttle( "cf_ps2"))
+		dbglog("[PostFX] ColourFilter_PS2 ENTER rgba1=(%d,%d,%d,%d) rgba2=(%d,%d,%d,%d) pRasterFrontBuffer=%p",
+			rgba1.red, rgba1.green, rgba1.blue, rgba1.alpha,
+			rgba2.red, rgba2.green, rgba2.blue, rgba2.alpha,
+			CPostEffects::pRasterFrontBuffer);
 
 	RwIm2DVertex *verts;
 
@@ -1313,8 +1318,9 @@ void DrawPipeChain(void);
 void
 CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 {
-	dbglog("[PostFX] ColourFilter_switch ENTER filter=%d pipeline=%d pRasterFrontBuffer=%p",
-		config->colorFilter, config->pipeline, CPostEffects::pRasterFrontBuffer);
+	if(dbglog_throttle( "cf_switch"))
+		dbglog("[PostFX] ColourFilter_switch ENTER filter=%d pipeline=%d pRasterFrontBuffer=%p",
+			config->colorFilter, config->pipeline, CPostEffects::pRasterFrontBuffer);
 
 	if(!CPostEffects::pRasterFrontBuffer){
 		dbglog("[PostFX] WARNING: pRasterFrontBuffer is NULL! ColourFilter_switch bailing");
@@ -1489,11 +1495,12 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 		}
 	}
 
-	dbglog("[PostFX] ColourFilter_switch filter=%d pipeline=%d rgb1=(%d,%d,%d,%d) rgb2=(%d,%d,%d,%d) pRasterFrontBuffer=%p",
-		colorFilter, config->pipeline,
-		rgb1.red, rgb1.green, rgb1.blue, rgb1.alpha,
-		rgb2.red, rgb2.green, rgb2.blue, rgb2.alpha,
-		CPostEffects::pRasterFrontBuffer);
+	if(dbglog_throttle( "cf_switch"))
+		dbglog("[PostFX] ColourFilter_switch filter=%d pipeline=%d rgb1=(%d,%d,%d,%d) rgb2=(%d,%d,%d,%d) pRasterFrontBuffer=%p",
+			colorFilter, config->pipeline,
+			rgb1.red, rgb1.green, rgb1.blue, rgb1.alpha,
+			rgb2.red, rgb2.green, rgb2.blue, rgb2.alpha,
+			CPostEffects::pRasterFrontBuffer);
 
 	switch(colorFilter){
 	case COLORFILTER_NONE:
@@ -1568,8 +1575,9 @@ static RwMatrix YUV2RGB = {
 void
 CPostEffects::DrawFinalEffects(void)
 {
-	dbglog("[PostFX] DrawFinalEffects ENTER ycbcrFilter=%d SSS_Blur=%p SMAA_Edge=%p smaaEnable=%d",
-		m_bYCbCrFilter, SSS_Blur, SMAA_Edge, config->smaaEnable);
+	if(dbglog_throttle( "finalfx"))
+		dbglog("[PostFX] DrawFinalEffects ENTER ycbcrFilter=%d SSS_Blur=%p SMAA_Edge=%p smaaEnable=%d",
+			m_bYCbCrFilter, SSS_Blur, SMAA_Edge, config->smaaEnable);
 
 	if(m_bYCbCrFilter){
 		UpdateFrontBuffer();
@@ -1640,7 +1648,8 @@ CPostEffects::DrawFinalEffects(void)
 
 	// SSS blur pass (after color filter, before SMAA)
 	{
-		dbglog("[PostFX] SSS_Blur ENTER SSS_Blur=%p chars_SSS_Blur=%p", SSS_Blur, (void*)chars_drawSSSBlur);
+		if(dbglog_throttle( "sss_blur"))
+			dbglog("[PostFX] SSS_Blur ENTER SSS_Blur=%p chars_SSS_Blur=%p", SSS_Blur, (void*)chars_drawSSSBlur);
 		PERF_SCOPE("SSS_Blur");
 		chars_drawSSSBlur();
 	}
@@ -1653,7 +1662,8 @@ CPostEffects::DrawFinalEffects(void)
 		DrawSMAA();
 		ImmediateModeRenderStatesReStore();
 	}else{
-		dbglog("[PostFX] SMAA skipped: smaaEnable=%d SMAA_Edge=%p", config->smaaEnable, SMAA_Edge);
+		if(dbglog_throttle( "smaa_skip"))
+			dbglog("[PostFX] SMAA skipped: smaaEnable=%d SMAA_Edge=%p", config->smaaEnable, SMAA_Edge);
 	}
 
 	// Debug menu moved to D3D9 EndScene hook (main.cpp) - renders AFTER all UI
@@ -1818,9 +1828,11 @@ void InitSSAOResources(void)
 void
 CPostEffects::DrawSSAO(void)
 {
-	dbglog("[PostFX] DrawSSAO ENTER ssaoEnable=%d SSAO=%p", config->ssaoEnable, SSAO);
+	if(dbglog_throttle( "ssao_enter"))
+		dbglog("[PostFX] DrawSSAO ENTER ssaoEnable=%d SSAO=%p", config->ssaoEnable, SSAO);
 	if(!config->ssaoEnable || !SSAO){
-		dbglog("[PostFX] DrawSSAO bailing: ssaoEnable=%d SSAO=%p", config->ssaoEnable, SSAO);
+		if(dbglog_throttle( "ssao_bail"))
+			dbglog("[PostFX] DrawSSAO bailing: ssaoEnable=%d SSAO=%p", config->ssaoEnable, SSAO);
 		return;
 	}
 

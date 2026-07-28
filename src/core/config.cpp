@@ -248,6 +248,8 @@ readIni(int n)
 		{"",        1},
 	};
 	c->colorFilter = StrAssoc::get(colorFilterMap, cfg.get("SkyGfx", "colorFilter", "").c_str());
+	if(c->pipeline == PIPELINE_PBR)
+		c->colorFilter = COLORFILTER_MODERN;
 	ps2pcMap[2].val = c->colorFilter == COLORFILTER_PS2 ? 0 : 1;
 	c->infraredVision = StrAssoc::get(ps2pcMap, cfg.get("SkyGfx", "infraredVision", "").c_str());
 	c->nightVision = StrAssoc::get(ps2pcMap, cfg.get("SkyGfx", "nightVision", "").c_str());

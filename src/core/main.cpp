@@ -1440,6 +1440,9 @@ readIni(int n)
 		{"",        1},
 	};
 	c->colorFilter = StrAssoc::get(colorFilterMap, cfg.get("SkyGfx", "colorFilter", "").c_str());
+	// PBR pipeline always uses Modern color filter (Reinhard already applied in shaders)
+	if(c->pipeline == PIPELINE_PBR)
+		c->colorFilter = COLORFILTER_MODERN;
 	ps2pcMap[2].val = c->colorFilter == COLORFILTER_PS2 ? 0 : 1;
 	c->rgb1Mult = readfloat(cfg.get("SkyGfx", "rgb1Mult", ""), 1.0f);
 	c->rgb2Mult = readfloat(cfg.get("SkyGfx", "rgb2Mult", ""), 1.0f);

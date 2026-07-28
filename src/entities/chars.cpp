@@ -299,18 +299,22 @@ static void EnsureSSSRasters(int w, int h)
 
 void chars_drawSSSBlur(void)
 {
-	dbglog("[PostFX] chars_drawSSSBlur ENTER sssPostProcessEnable=%d SSS_Blur=%p pRasterFrontBuffer=%p",
-		config->sssPostProcessEnable, SSS_Blur, CPostEffects::pRasterFrontBuffer);
+	if(dbglog_throttle( "sss_blur"))
+		dbglog("[PostFX] chars_drawSSSBlur ENTER sssPostProcessEnable=%d SSS_Blur=%p pRasterFrontBuffer=%p",
+			config->sssPostProcessEnable, SSS_Blur, CPostEffects::pRasterFrontBuffer);
 	if(!config->sssPostProcessEnable){
-		dbglog("[PostFX] chars_drawSSSBlur bailing: sssPostProcessEnable=0");
+		if(dbglog_throttle( "sss_bail1"))
+			dbglog("[PostFX] chars_drawSSSBlur bailing: sssPostProcessEnable=0");
 		return;
 	}
 	if(!SSS_Blur){
-		dbglog("[PostFX] chars_drawSSSBlur bailing: SSS_Blur=NULL");
+		if(dbglog_throttle( "sss_bail2"))
+			dbglog("[PostFX] chars_drawSSSBlur bailing: SSS_Blur=NULL");
 		return;
 	}
 	if(!CPostEffects::pRasterFrontBuffer){
-		dbglog("[PostFX] chars_drawSSSBlur bailing: pRasterFrontBuffer=NULL");
+		if(dbglog_throttle( "sss_bail3"))
+			dbglog("[PostFX] chars_drawSSSBlur bailing: pRasterFrontBuffer=NULL");
 		return;
 	}
 

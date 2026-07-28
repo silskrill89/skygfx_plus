@@ -66,6 +66,21 @@ struct PerfTimer {
 };
 #define PERF_SCOPE(name) PerfTimer _perf##__LINE__(name)
 
+// Rate-limited logging: logs at most once per interval (ms)
+#define DBGLOG_THROTTLE_MS 1000
+
+// Returns true if the log should be emitted this call
+inline bool dbglog_throttle(const char *tag) {
+	static double lastTime[64] = {};
+	int idx = 0;
+	for(const char *p = tag; *p; p++) idx = idx * 31 + (unsigned char)*p;
+	idx = (idx & 0x7FFFFFFF) % 64;
+	double now = perfNow();
+	if(now - lastTime[idx] < DBGLOG_THROTTLE_MS) return false;
+	lastTime[idx] = now;
+	return true;
+}
+
 #define nil NULL
 #define VERSION 0x370
 
