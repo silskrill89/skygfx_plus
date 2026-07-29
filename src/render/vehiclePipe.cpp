@@ -421,7 +421,7 @@ uploadLights(RwMatrix *lightmat)
 {
 	if(!lightmat){ uploadNoLights(); return; }
 	pipeUploadLightColor(pAmbient, REG_ambient);
-	pipeUploadLightColor(pDirect, REG_directCol);
+	pipeUploadLightColorForce(pDirect, REG_directCol);
 	pipeUploadLightDirectionLocal(pDirect, lightmat, REG_directDir);
 	for(int i = 0; i < 6; i++)
 		if(i < NumExtraDirLightsInWorld && RpLightGetType(pExtraDirectionals[i]) == rpLIGHTDIRECTIONAL){
@@ -1470,8 +1470,8 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 	surfProps.prelight = flags & rpGEOMETRYPRELIT ? 1.0f : 0.0f;
 
 	// Per pixel lights (uploaded once before mesh loop)
-	pipeUploadLightColorPS(pDirect, REG_directCol);
-	pipeUploadLightDirectionPS(pDirect, REG_directDir);
+	pipeUploadLightColorForcePS(pDirect, REG_directCol);
+	pipeUploadLightDirectionForcePS(pDirect, REG_directDir);
 	for(int i = 0; i < 6; i++)
 		if(i < NumExtraDirLightsInWorld && RpLightGetType(pExtraDirectionals[i]) == rpLIGHTDIRECTIONAL){
 			pipeUploadLightColorPS(pExtraDirectionals[i], REG_directCol+i+1);
