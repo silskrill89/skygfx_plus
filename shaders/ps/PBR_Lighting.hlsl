@@ -7,8 +7,8 @@
 //   c0 = {screenW, screenH, 1/screenW, 1/screenH}
 //   c1 = (sunDirX, sunDirY, sunDirZ, sunIntensity)
 //   c2 = (camPosX, camPosY, camPosZ, 0)
-//   c3 = (roughness, reflectance, clearcoat, subsurface)
-//   c4 = (specularInt, metalness, 0, 0)
+//   c3 = (glossiness, reflectance, clearcoat, subsurface)
+//   c4 = (specularInt, 0, 0, 0)
 //   c5 = (ambientR, ambientG, ambientB, ambientInt)
 //   c6 = (nearClip, farClip, 0, 0)
 //   c7 = (time, 0, 0, 0)
@@ -27,14 +27,29 @@ sampler2D envMapTex   : register(s3);
 float4 screenParams  : register(c0); // xy=res, zw=1/res
 float4 sunDirection  : register(c1); // xyz=dir, w=intensity
 float4 cameraPos     : register(c2); // xyz=cam pos
-float4 brdfProps     : register(c3); // x=roughness, y=reflectance, z=clearcoat, w=subsurface
-float4 brdfProps2    : register(c4); // x=specularInt, y=metalness
+float4 brdfProps     : register(c3); // x=glossiness, y=reflectance, z=clearcoat, w=subsurface
+float4 brdfProps2    : register(c4); // x=specularInt
 float4 ambientColor  : register(c5); // xyz=ambient, w=intensity
 float4 clipPlanes    : register(c6); // xy=near, far
 float4 timeParam     : register(c7); // x=time
 
 static const float3 LUM = float3(0.299, 0.587, 0.114);
 static const float PI = 3.14159265;
+
+// Burley (Disney) Diffuse
+float BurleyDiffuse(float NdotL, float NdotV, float VdotH, float roughness)
+{
+    float fd90 = 0.5 + 2.0 * VdotH * VdotH * roughness;
+    float scatterL = lerp(1.0, fd90, pow(1.0 - NdotL, 5.0));
+    float scatterV = lerp(1.0, fd90, pow(1.0 - NdotV, 5.0));
+    return scatterL * scatterV * lerp(1.0, 1.0/1.51, roughness);
+}
+
+// Linearize depth
+float LinearizeDepth(float depth, float near, float far)
+{
+    return (2.0 * near) / (far + near - depth * (far - near));
+}
 
 // GGX Normal Distribution
 float D_GGX(float NdotH, float roughness)
@@ -62,24 +77,6 @@ float3 F_Schlick(float cosTheta, float3 F0)
     return F0 + (1.0 - F0) * f;
 }
 
-// Linearize depth
-float LinearizeDepth(float depth, float near, float far)
-{
-    return (2.0 * near) / (far + near - depth * (far - near));
-}
-
-// Simple hash for noise
-float hash(float n) { return frac(sin(n) * 43758.5453); }
-float noise(float2 p)
-{
-    float2 i = floor(p);
-    float2 f = frac(p);
-    f = f * f * (3.0 - 2.0 * f);
-    float n = i.x + i.y * 57.0;
-    return lerp(lerp(hash(n), hash(n + 1.0), f.x),
-                lerp(hash(n + 57.0), hash(n + 58.0), f.x), f.y);
-}
-
 float4 main(float2 uv : TEXCOORD0) : COLOR0
 {
     // Sample G-buffer
@@ -100,15 +97,15 @@ float4 main(float2 uv : TEXCOORD0) : COLOR0
     float3 L = normalize(-sunDirection.xyz);
 
     // BRDF properties
-    float roughness   = brdfProps.x;
+    float glossiness  = brdfProps.x;
+    float roughness   = 1.0 - glossiness;  // convert glossiness → roughness internally
     float reflectance = brdfProps.y;
     float clearcoat   = brdfProps.z;
     float subsurface  = brdfProps.w;
     float specularInt = brdfProps2.x;
-    float metalness   = brdfProps2.y;
 
-    // F0
-    float3 F0 = lerp(float3(reflectance, reflectance, reflectance), albedo.rgb, metalness);
+    // F0: explicit dielectric reflectance (no metalness)
+    float3 F0 = float3(reflectance, reflectance, reflectance);
 
     // Core PBR
     float NdotV = max(dot(N, V), 0.0);
@@ -116,11 +113,13 @@ float4 main(float2 uv : TEXCOORD0) : COLOR0
     float3 H = normalize(V + L);
     float NdotH = max(dot(N, H), 0.0);
     float LdotH = max(dot(L, H), 0.0);
+    float VdotH = max(dot(V, H), 0.0);
 
-    // Diffuse (Lambert)
+    // Diffuse (Burley/Disney)
     float3 kS = F_Schlick(LdotH, F0);
-    float3 kD = (1.0 - kS) * (1.0 - metalness);
-    float3 diffuse = kD * albedo.rgb / PI;
+    float3 kD = 1.0 - kS;  // dielectric: all non-reflected energy is diffuse
+    float diffuseBRDF = BurleyDiffuse(NdotL, NdotV, VdotH, roughness);
+    float3 diffuse = kD * albedo.rgb * diffuseBRDF;
 
     // Specular (GGX)
     float D = D_GGX(NdotH, roughness);
