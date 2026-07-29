@@ -270,6 +270,17 @@ pipeUploadLightColor(RpLight *light, int loc)
 }
 
 void
+pipeUploadLightColorForce(RpLight *light, int loc)
+{
+	float c[4];
+	c[0] = light->color.red;
+	c[1] = light->color.green;
+	c[2] = light->color.blue;
+	c[3] = 1.0f;
+	RwD3D9SetVertexShaderConstant(loc, (void*)c, 1);
+}
+
+void
 pipeUploadLightColorPS(RpLight *light, int loc)
 {
 	float c[4];
@@ -281,6 +292,17 @@ pipeUploadLightColorPS(RpLight *light, int loc)
 		RwD3D9SetPixelShaderConstant(loc, (void*)c, 1);
 	}else
 		pipeUploadZeroPS(loc);
+}
+
+void
+pipeUploadLightColorForcePS(RpLight *light, int loc)
+{
+	float c[4];
+	c[0] = light->color.red;
+	c[1] = light->color.green;
+	c[2] = light->color.blue;
+	c[3] = 1.0f;
+	RwD3D9SetPixelShaderConstant(loc, (void*)c, 1);
 }
 
 void
@@ -301,6 +323,20 @@ pipeUploadLightDirection(RpLight *light, int loc)
 }
 
 void
+pipeUploadLightDirectionForce(RpLight *light, int loc)
+{
+	float c[4];
+	RwFrame *lf = RpLightGetFrame(light);
+	if(!lf){ pipeUploadZero(loc); return; }
+	RwV3d *at = RwMatrixGetAt(RwFrameGetLTM(lf));
+	c[0] = at->x;
+	c[1] = at->y;
+	c[2] = at->z;
+	c[3] = 1.0f;
+	RwD3D9SetVertexShaderConstant(loc, (void*)c, 1);
+}
+
+void
 pipeUploadLightDirectionPS(RpLight *light, int loc)
 {
 	float c[4];
@@ -315,6 +351,20 @@ pipeUploadLightDirectionPS(RpLight *light, int loc)
 		RwD3D9SetPixelShaderConstant(loc, (void*)c, 1);
 	}else
 		pipeUploadZeroPS(loc);
+}
+
+void
+pipeUploadLightDirectionForcePS(RpLight *light, int loc)
+{
+	float c[4];
+	RwFrame *lf = RpLightGetFrame(light);
+	if(!lf){ pipeUploadZeroPS(loc); return; }
+	RwV3d *at = RwMatrixGetAt(RwFrameGetLTM(lf));
+	c[0] = at->x;
+	c[1] = at->y;
+	c[2] = at->z;
+	c[3] = 1.0f;
+	RwD3D9SetPixelShaderConstant(loc, (void*)c, 1);
 }
 
 void
