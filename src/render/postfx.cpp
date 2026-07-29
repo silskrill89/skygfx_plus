@@ -114,6 +114,27 @@ Im2dSetPixelShader_hook(void*)
 	RwD3D9SetPixelShader(overrideIm2dPixelShader);
 }
 
+// Per-frame summary report: logs all critical state once per frame
+static unsigned int postfxReportFrame = 0;
+static void postfxReportSummary()
+{
+	static unsigned int lastFrame = 0;
+	if(postfxReportFrame == lastFrame) return;
+	lastFrame = postfxReportFrame;
+	RwRaster *camRas = Scene.camera ? RwCameraGetRaster(Scene.camera) : 0;
+	int pfbW = CPostEffects::pRasterFrontBuffer ? RwRasterGetWidth(CPostEffects::pRasterFrontBuffer) : 0;
+	int pfbH = CPostEffects::pRasterFrontBuffer ? RwRasterGetHeight(CPostEffects::pRasterFrontBuffer) : 0;
+	int camW = camRas ? RwRasterGetWidth(camRas) : 0;
+	int camH = camRas ? RwRasterGetHeight(camRas) : 0;
+	dbglog("[PostFX-REPORT] frame=%u filter=%d pipeline=%d pRasFB=%p(%dx%d) camRas=%p(%dx%d) gradingPS=%p overridePS=%p SSAO=%d smaa=%d normalBuf=%d pipeChain=%d bPBRVS=%p bPBRPS=%p vPBRVS=%p vPBRMod=%p",
+		postfxReportFrame, config->colorFilter, config->pipeline,
+		CPostEffects::pRasterFrontBuffer, pfbW, pfbH,
+		camRas, camW, camH,
+		gradingPS, overrideIm2dPixelShader,
+		config->ssaoEnable, config->smaaEnable, config->normalBufferEnable, config->pipeChainEnable,
+		buildingPBRVS, buildingPBRPS, vehiclePBRVS, VehiclePBR_Modern);
+}
+
 
 /////
 /////
@@ -173,6 +194,12 @@ CPostEffects::UpdateFrontBuffer(void)
 		dbglog("[PostFX] WARNING: UpdateFrontBuffer Scene.camera is NULL!");
 		return;
 	}
+	if(dbglog_throttle("ufb_copy"))
+		dbglog("[PostFX] UpdateFrontBuffer pRasFB=%p(%dx%d) camRas=%p(%dx%d)",
+			CPostEffects::pRasterFrontBuffer,
+			RwRasterGetWidth(CPostEffects::pRasterFrontBuffer), RwRasterGetHeight(CPostEffects::pRasterFrontBuffer),
+			RwCameraGetRaster(Scene.camera),
+			RwRasterGetWidth(RwCameraGetRaster(Scene.camera)), RwRasterGetHeight(RwCameraGetRaster(Scene.camera)));
 	RwCameraEndUpdate(Scene.camera);
 	RwRasterPushContext(CPostEffects::pRasterFrontBuffer);
 	RwRasterRenderFast(RwCameraGetRaster(Scene.camera), 0, 0);
@@ -666,6 +693,8 @@ CPostEffects::Radiosity_shader(int intensityLimit, int filterPasses, int renderP
 void
 CPostEffects::Radiosity(int intensityLimit, int filterPasses, int renderPasses, int intensity)
 {
+	if(!config->radiosityEnable)
+		return;
 	if(!pRasterFrontBuffer){
 		return;
 		return;
@@ -882,6 +911,13 @@ CPostEffects::ColourFilter_Modern(RwRGBA rgba1, RwRGBA rgba2)
 		return;
 	}
 
+	// Log render state before postfx
+	if(dbglog_throttle("cf_modern_state"))
+		dbglog("[PostFX] cf_modern PRE-RENDER pRasFB=%p camRas=%p overridePS=%p gradingPS=%p zTest=%d zWrite=%d",
+			CPostEffects::pRasterFrontBuffer,
+			Scene.camera ? RwCameraGetRaster(Scene.camera) : 0,
+			overrideIm2dPixelShader, gradingPS, -1, -1);
+
 	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
 	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
 	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
@@ -934,7 +970,16 @@ CPostEffects::ColourFilter_Modern(RwRGBA rgba1, RwRGBA rgba2)
 	}
 
 	overrideIm2dPixelShader = gradingPS;
+
+	if(dbglog_throttle("cf_modern_draw"))
+		dbglog("[PostFX] cf_modern BEFOREDRAW overridePS=%p gradingPS=%p verts=%p indices=%p",
+			overrideIm2dPixelShader, gradingPS, colorfilterVerts, colorfilterIndices);
+
 	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
+
+	if(dbglog_throttle("cf_modern_draw"))
+		dbglog("[PostFX] cf_modern AFTERDRAW overridePS=%p", overrideIm2dPixelShader);
+
 	overrideIm2dPixelShader = nil;
 
 	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
@@ -1264,6 +1309,8 @@ inline uint vrnext(void){ vradvance(); return R; }
 void
 CPostEffects::Grain_PS2(int strength, bool generate)
 {
+	if(!config->grainEnable)
+		return;
 	if(config->grainFilter != 0){
 		CPostEffects::Grain(strength, generate);
 		return;
@@ -1488,6 +1535,18 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 
 	int colorFilter = config->colorFilter;
 
+	// Debug toggle: bypass colour filter entirely
+	if(!config->colorFilterEnable){
+		if(dbglog_throttle("cf_switch"))
+			dbglog("[PostFX] ColourFilter_switch BYPASSED (colorFilterEnable=0)");
+		UpdateFrontBuffer();
+		return;
+	}
+
+	// PBR pipeline always uses Modern colour filter (Reinhard already in shaders)
+	if(config->pipeline == PIPELINE_PBR)
+		colorFilter = COLORFILTER_MODERN;
+
 	// VCS trails isn't compatible with PC/PS2 color filter, falls off to VCS color filter
 	if (config->vcsTrails) {
 		if (colorFilter == COLORFILTER_PC || colorFilter == COLORFILTER_PS2) {
@@ -1541,7 +1600,14 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 	default:
 		return;
 	}
-	UpdateFrontBuffer();	dbglog("ColourFilter_switch: done (filter=%d)", colorFilter);
+
+	// Per-frame summary report (one compact line per frame)
+	postfxReportFrame++;
+	postfxReportSummary();
+
+	UpdateFrontBuffer();
+	if(dbglog_throttle("cf_done"))
+		dbglog("ColourFilter_switch: done (filter=%d)", colorFilter);
 
 	//static int doramp = 0;
 	//{
