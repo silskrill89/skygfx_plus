@@ -62,7 +62,7 @@ project "skygfx"
 	systemversion "10.0.26100.0"
 
 	defines { "_CRT_USE_MM_LOADU_SI64=0" }
-	buildoptions { "/Zc:threadSafeInit-" }
+	buildoptions { "/FS", "/Zc:threadSafeInit-" }
 
 	links { "d3dx9" }
 
