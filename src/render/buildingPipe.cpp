@@ -816,6 +816,7 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Switch(RwResEntry *repEntry, void 
 	else switch(config->buildingPipe){
 	default:
 	case BUILDING_PS2:
+	case BUILDING_GTAIV:  // GTAIV = PS2 callback + ivMode shader swap
 		CCustomBuildingDNPipeline__CustomPipeRenderCB_PS2(repEntry, object, type, flags);
 		break;
 	case BUILDING_XBOX:

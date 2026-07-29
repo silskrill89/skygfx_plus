@@ -1811,6 +1811,11 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Switch(RwResEntry *repEntry, void *
 		if(iCanHasNeoCar)
 			CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(repEntry, object, type, flags);
 		break;
+	case CAR_GTAIV:
+		// GTA IV: uses CarPipe class (neoCarpipe.cpp) with gtaivVehicleVS/PS
+		if(iCanHasNeoCar && !UG_mod)
+			CarPipe::RenderCallback(repEntry, object, type, flags);
+		break;
 	}
 	fixSAMP();
 }
