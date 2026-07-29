@@ -1586,6 +1586,11 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 		CPostEffects::ColourFilter_Generic(rgb1, rgb2, vcTrailsPS);
 		break;
 	case COLORFILTER_MODERN:
+		// CRITICAL: Copy camera raster to pRasterFrontBuffer BEFORE grading.
+		// ColourFilter_Modern reads from pRasterFrontBuffer (previous frame) and
+		// overwrites the camera raster. Without this, the first frame reads black
+		// (uninitialized front buffer), creating a self-sustaining black loop.
+		UpdateFrontBuffer();
 		CPostEffects::ColourFilter_Modern(rgb1, rgb2);
 		break;
 	case COLORFILTER_GTAIV:
