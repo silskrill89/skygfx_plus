@@ -1139,6 +1139,7 @@ readIni(int n)
 	// PBR = unified PBR for all assets, PS2/Xbox/Mobile/GTAIV = locked presets
 	static StrAssoc pipelineMap[] = {
 		{"PBR",    PIPELINE_PBR},
+		{"Modern", PIPELINE_PBR},  // alias
 		{"PS2",    PIPELINE_PS2},
 		{"Xbox",   PIPELINE_XBOX},
 		{"Mobile", PIPELINE_MOBILE},
@@ -1146,6 +1147,11 @@ readIni(int n)
 		{"",       PIPELINE_PBR},  // default to PBR
 	};
 	c->pipeline = StrAssoc::get(pipelineMap, cfg.get("SkyGfx", "pipeline", "").c_str());
+
+	// Pipeline override: force a specific pipeline for debugging (-1=disabled, 0=PBR, 1=PS2, 2=Xbox, 3=Mobile, 4=GTAIV)
+	c->pipelineOverride = readint(cfg.get("SkyGfx", "pipelineOverride", ""), -1);
+	if(c->pipelineOverride >= 0 && c->pipelineOverride <= 4)
+		c->pipeline = c->pipelineOverride;
 
 	// Map pipeline to internal building/vehicle pipes (locked presets)
 	switch(c->pipeline){
@@ -1176,7 +1182,8 @@ readIni(int n)
 		break;
 	}
 
-	dbglog("Config: pipeline=%d buildingPipe=%d vehiclePipe=%d colorFilter=%d", c->pipeline, c->buildingPipe, c->vehiclePipe, c->colorFilter);
+	dbglog("Config: pipeline=%d buildingPipe=%d vehiclePipe=%d colorFilter=%d pipelineOverride=%d colorFilterEnable=%d",
+		c->pipeline, c->buildingPipe, c->vehiclePipe, c->colorFilter, c->pipelineOverride, c->colorFilterEnable);
 
 	// ===== Quality Preset (read second, sets feature defaults) =====
 	// 0=LOW (PS2 classic), 1=MEDIUM (PC classic), 2=HIGH (Enhanced), 3=ULTRA (Full PBR)
@@ -1532,6 +1539,11 @@ readIni(int n)
 	// 4-Pipe Chain
 	c->pipeChainEnable = readint(cfg.get("SkyGfx", "pipeChainEnable", ""), 0);
 	c->pipeChainIntensity = readfloat(cfg.get("SkyGfx", "pipeChainIntensity", ""), 0.5f);
+
+	// Debug toggles — set to 0 to bypass effects for black screen isolation
+	c->colorFilterEnable = readint(cfg.get("SkyGfx", "colorFilterEnable", ""), 1);
+	c->radiosityEnable = readint(cfg.get("SkyGfx", "radiosityEnable", ""), 1);
+	c->grainEnable = readint(cfg.get("SkyGfx", "grainEnable", ""), 1);
 
 	// GTA IV Mode
 	c->ivMode = readint(cfg.get("SkyGfx", "ivMode", ""), 0);
