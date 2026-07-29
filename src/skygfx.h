@@ -67,7 +67,7 @@ struct PerfTimer {
 #define PERF_SCOPE(name) PerfTimer _perf##__LINE__(name)
 
 // Rate-limited logging: logs at most once per interval (ms)
-#define DBGLOG_THROTTLE_MS 1000
+#define DBGLOG_THROTTLE_MS 2000
 
 // Returns true if the log should be emitted this call
 inline bool dbglog_throttle(const char *tag) {
@@ -468,6 +468,13 @@ struct Config {
 	// 4-Pipe Chain
 	RwBool pipeChainEnable;
 	float pipeChainIntensity;
+
+	// Debug toggles — individual effect enable/disable for isolation testing
+	// Set to 0 in INI to bypass specific effects (helps find black screen cause)
+	RwBool colorFilterEnable;		// 0=bypass colour filter entirely
+	RwBool radiosityEnable;		// 0=disable radiosity postfx
+	RwBool grainEnable;			// 0=disable film grain
+	int pipelineOverride;		// -1=use normal pipeline, 0-4=force specific pipeline
 };
 extern int numConfigs;
 extern int currentConfig;
