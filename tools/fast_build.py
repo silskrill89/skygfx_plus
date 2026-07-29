@@ -255,21 +255,59 @@ def reset_env_cache():
 # Parallel Shader Compilation
 # ============================================================
 
+def _file_md5(path):
+    """Compute MD5 hash of a file's content."""
+    h = hashlib.md5()
+    with open(path, 'rb') as f:
+        for chunk in iter(lambda: f.read(65536), b''):
+            h.update(chunk)
+    return h.hexdigest()
+
+def _read_shader_hash_cache():
+    """Load the shader content hash cache (md5 of HLSL source)."""
+    cache_file = CACHE_DIR / 'shader_hashes.json'
+    if cache_file.exists():
+        try:
+            with open(cache_file, 'r') as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+def _write_shader_hash_cache(cache):
+    """Write shader content hash cache."""
+    cache_file = CACHE_DIR / 'shader_hashes.json'
+    with open(cache_file, 'w') as f:
+        json.dump(cache, f, indent=2)
+
+# Module-level cache (loaded once per process in Pool)
+_shader_hash_cache = None
+
 def compile_single_shader(args):
-    """Compile a single shader. Called by multiprocessing Pool."""
+    """Compile a single shader. Called by multiprocessing Pool.
+    
+    Workers only READ the hash cache — the cache is updated once after
+    all workers finish to avoid multiprocessing race conditions."""
+    global _shader_hash_cache
     fxc, hlsl_path, cso_path, profile, entry = args
 
-    # Skip if up-to-date
-    if os.path.exists(cso_path):
-        if os.path.getmtime(cso_path) >= os.path.getmtime(hlsl_path):
-            return ('skip', hlsl_path)
+    # Load cache once per worker process
+    if _shader_hash_cache is None:
+        _shader_hash_cache = _read_shader_hash_cache()
+
+    # Skip if HLSL content hasn't changed (content hash, not mtime)
+    hlsl_hash = _file_md5(hlsl_path)
+    cache_key = f"{hlsl_path}:{entry}"
+    if os.path.exists(cso_path) and cache_key in _shader_hash_cache:
+        if _shader_hash_cache[cache_key] == hlsl_hash:
+            return ('skip', hlsl_path, cache_key, hlsl_hash)
 
     result = subprocess.run(
         [fxc, '/T', profile, '/nologo', '/E', entry, '/Fo', cso_path, hlsl_path],
         capture_output=True, text=True
     )
     if result.returncode == 0:
-        return ('ok', hlsl_path)
+        return ('ok', hlsl_path, cache_key, hlsl_hash)
     else:
         return ('fail', hlsl_path, result.stderr.strip().split('\n')[0] if result.stderr else 'Unknown error')
 
@@ -334,6 +372,7 @@ def compile_shaders_parallel():
 
     results = {'ok': 0, 'skip': 0, 'fail': 0}
     failures = []
+    updated_cache = _read_shader_hash_cache()
 
     with Pool(num_workers) as pool:
         for result in pool.imap_unordered(compile_single_shader, shaders):
@@ -341,6 +380,10 @@ def compile_shaders_parallel():
             name = Path(result[1]).name
             if status == 'ok':
                 results['ok'] += 1
+                # Collect hash updates from successful compiles
+                cache_key = result[2]
+                hlsl_hash = result[3]
+                updated_cache[cache_key] = hlsl_hash
                 print(f"  OK:   {name}")
             elif status == 'skip':
                 results['skip'] += 1
@@ -349,6 +392,9 @@ def compile_shaders_parallel():
                 err = result[2] if len(result) > 2 else 'Unknown'
                 failures.append((name, err))
                 print(f"  FAIL: {name} - {err}")
+
+    # Write updated cache once after all workers finish
+    _write_shader_hash_cache(updated_cache)
 
     print(f"  {results['ok']} compiled, {results['skip']} up-to-date, {results['fail']} failed")
     timer.end()
