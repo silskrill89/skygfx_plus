@@ -195,7 +195,7 @@ float4 main(PS_INPUT IN) : COLOR
         float3 F = F_Schlick(LdotH, F0);
         specTotal += D * F * Vis * NdotL_sun * directCol.rgb;
     }
-    for(int i = 0; i < 6; i++){
+    for(i = 0; i < 6; i++){
         float3 Ll = -lightDir[i];
         float3 H = normalize(V + Ll);
         float NdotL = max(dot(N, Ll), 0.0);
@@ -433,9 +433,11 @@ float4 main_building(PS_INPUT_BUILDING IN) : COLOR
         }
     }
 
-    // IBL (ambient)
+    // IBL (ambient) — fallback to flat ambient when iblTex not bound
     float2 iblUV = N.xy * 0.5 + 0.5;
-    float3 ibl = tex2D(iblTex, iblUV).rgb * 0.06;
+    float3 iblSample = tex2D(iblTex, iblUV).rgb;
+    // SM3.0 returns black for unbound textures — use ambient as fill
+    float3 ibl = (dot(iblSample, iblSample) > 1e-6) ? iblSample * 0.06 : baseColor * surfProps.x * 0.3;
 
     // Composite
     float3 color = baseColor * kD * diffuse * directCol.rgb;
@@ -451,7 +453,8 @@ float4 main_building(PS_INPUT_BUILDING IN) : COLOR
     color = color / (1.0 + color);
     color = pow(saturate(color), 1.0/2.2);
 
-    return float4(color, diff.a);
+    // DEBUG: force solid red (alpha=1) to verify PS is executing
+    return float4(1.0, 0.0, 0.0, 1.0);
 }
 
 // ============================================================
