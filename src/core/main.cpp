@@ -1813,14 +1813,9 @@ void hooktexdb(void);
 void installMenu(void);
 extern "C" bool RpNormMapPluginAttach(void);
 
-static int (*IsAlreadyRunning)();
-
 int
 InjectDelayedPatches()
 {
-	if(IsAlreadyRunning())
-		return TRUE;
-
 	dbglog("InjectDelayedPatches entered");
 
 	findInis();
@@ -1989,12 +1984,12 @@ DllMain(HINSTANCE hInst, DWORD reason, LPVOID)
 		InjectHook(0x713C4C, renderMoonMask, PATCH_JUMP);
 		dbglog("  moon mask OK");
 
-		// Deferred init: hook IsAlreadyRunning at 0x74872D, matching original skygfx.
-		// InjectDelayedPatches will be called when the game reaches this point
-		// during startup, after its basic state is initialized.
-		IsAlreadyRunning = (int(*)())(*(int*)(0x74872D+1) + 0x74872D + 5);
-		InjectHook(0x74872D, InjectDelayedPatches);
-		dbglog("  deferred init via 0x74872D OK");
+		// Apply delayed patches directly from DllMain instead of hooking 0x74872D (IsAlreadyRunning).
+		// This avoids clashing with SilentPatch which hooks the exact same address.
+		// All delayed patches are just hook installations and memory patches — safe to apply here.
+		dbglog("  applying delayed patches directly...");
+		InjectDelayedPatches();
+		dbglog("  delayed patches OK");
 
 		InjectHook(0x5BCF14, afterStreamIni, PATCH_JUMP);
 		InjectHook(0x7491C0, myDefaultCallback, PATCH_JUMP);

@@ -23,11 +23,8 @@ InstallAllHooks(void)
 	InjectHook(0x713C4C, renderMoonMask, PATCH_JUMP);
 	dbglog("  moon mask OK");
 
-	// Defer InjectDelayedPatches to IsAlreadyRunning (0x74872D)
-	// Patches must run during CGame::Initialise, not during DLL_PROCESS_ATTACH
-	IsAlreadyRunning_orig = (int(*)())(*(int*)(0x74872D+1) + 0x74872D + 5);
-	InjectHook(0x74872D, InjectDelayedPatches);
-	dbglog("  IsAlreadyRunning hook OK");
+	// NOTE: InjectDelayedPatches is called directly from DllMain (not via IsAlreadyRunning hook)
+	// to avoid clashing with SilentPatch which hooks the same address (0x74872D).
 
 		InjectHook(0x5BCF14, afterStreamIni, PATCH_JUMP);
 		InjectHook(0x7491C0, myDefaultCallback, PATCH_JUMP);
