@@ -72,7 +72,6 @@ int  myPluginAttach(void);
 
 // Previously static — now extern for hooks.cpp
 extern int explicitBuildingPipe_tmp;
-extern int (*IsAlreadyRunning_orig)(void);
 void installLCMV2Hooks(void);
 
 // ============================================================
