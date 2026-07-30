@@ -453,8 +453,7 @@ float4 main_building(PS_INPUT_BUILDING IN) : COLOR
     color = color / (1.0 + color);
     color = pow(saturate(color), 1.0/2.2);
 
-    // DEBUG: force solid red (alpha=1) to verify PS is executing
-    return float4(1.0, 0.0, 0.0, 1.0);
+    return float4(color, diff.a);
 }
 
 // ============================================================

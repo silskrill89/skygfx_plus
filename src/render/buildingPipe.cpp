@@ -182,6 +182,10 @@ TagRenderCB(RpAtomic *atomic, RxD3D9ResEntryHeader *resEntryHeader, RxD3D9Instan
 void
 CCustomBuildingDNPipeline__CustomPipeRenderCB_PS2(RwResEntry *repEntry, void *object, RwUInt8 type, RwUInt32 flags)
 {
+	static int ps2FrameCount = 0;
+	if(++ps2FrameCount % 300 == 1)
+		dbglog("PS2Building: frame %d object=%p type=%d flags=0x%X", ps2FrameCount, object, type, flags);
+
 	RpAtomic *atomic;
 	RxD3D9ResEntryHeader *resEntryHeader;
 	RxD3D9InstanceData *instancedData;
@@ -393,6 +397,10 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PS2(RwResEntry *repEntry, void *ob
 void
 CCustomBuildingDNPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *object, RwUInt8 type, RwUInt32 flags)
 {
+	static int xboxFrameCount = 0;
+	if(++xboxFrameCount % 300 == 1)
+		dbglog("XboxBuilding: frame %d object=%p type=%d flags=0x%X", xboxFrameCount, object, type, flags);
+
 	RpAtomic *atomic;
 	RxD3D9ResEntryHeader *resEntryHeader;
 	RxD3D9InstanceData *instancedData;
@@ -626,6 +634,10 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Sphere(RwResEntry *repEntry, void 
 void
 CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *object, RwUInt8 type, RwUInt32 flags)
 {
+	static int pbrFrameCount = 0;
+	if(++pbrFrameCount % 300 == 1)
+		dbglog("PBRBuilding: frame %d object=%p type=%d flags=0x%X", pbrFrameCount, object, type, flags);
+
 	RpAtomic *atomic = (RpAtomic*)object;
 
 	RwMatrix ident;
@@ -634,24 +646,6 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 	RwFrame* frame = (RwFrame*)atomic->object.object.parent;
 	if(!frame) return;
 	_rwD3D9EnableClippingIfNeeded(object, type);
-
-	// Per-frame debug logging (throttle to once per second)
-	static unsigned int lastLogFrame = 0;
-	unsigned int curFrame = ++lastLogFrame;
-	if(curFrame - lastLogFrame < 60) lastLogFrame = curFrame; // reset every 60 frames
-	static int logCounter = 0;
-	bool logThisFrame = (logCounter++ % 300 == 0); // log every 300th call
-
-	// Per-frame: clear RT to magenta on FIRST building draw each frame
-	static unsigned int lastClearFrame = 0;
-	bool firstDrawThisFrame = (curFrame != lastClearFrame);
-	if(firstDrawThisFrame) lastClearFrame = curFrame;
-
-	if(logThisFrame){
-		dbglog("[BuildingPBR] frame=%u atomic=%p flags=%X", curFrame, atomic, flags);
-		dbglog("[BuildingPBR] shaders: VS=%p PS=%p", buildingPBRVS, buildingPBRPS);
-		dbglog("[BuildingPBR] pDirect=%p pAmbient=%p", pDirect, pAmbient);
-	}
 
 	// Transform (WVP + world matrix for PBR)
 	float transform[16];
@@ -682,45 +676,14 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 			if(camLTM) eyePos = camLTM->pos;
 		}
 	}
-	RwD3D9SetVertexShaderConstant(36, &eyePos, 1);  // c36: matches buildingPBRVS register
+	RwD3D9SetVertexShaderConstant(36, &eyePos, 1);
 	RwD3D9SetPixelShaderConstant(2, &eyePos, 1);
 
-	// Lights (PBR addition) — always upload pDirect for VS SunDir + PS directCol
-	// Force variants bypass rpLIGHTLIGHTATOMICS flag gate (game may not set this flag)
+	// Lights — Force variants bypass rpLIGHTLIGHTATOMICS flag gate
 	pipeUploadLightColorForce(pDirect, REG_directCol);
 	pipeUploadLightDirectionForce(pDirect, REG_directDir);
 	pipeUploadLightColorForcePS(pDirect, REG_directCol);
 	pipeUploadLightDirectionForcePS(pDirect, REG_directDir);
-
-	// DIAGNOSTIC: Force bright white direct light to test if scene renders
-	// If buildings become visible → problem is pDirect color values
-	// If still black → problem is elsewhere (normals, vertex color, etc.)
-	{
-		float forcedColor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-		RwD3D9SetVertexShaderConstant(REG_directCol, forcedColor, 1);
-		RwD3D9SetPixelShaderConstant(REG_directCol, forcedColor, 1);
-	}
-
-	if(logThisFrame){
-		RwUInt32 pDirectFlags = pDirect ? RpLightGetFlags(pDirect) : 0;
-		bool hasLightAtomics = !!(pDirectFlags & rpLIGHTLIGHTATOMICS);
-		dbglog("[BuildingPBR] eyePos=(%.2f,%.2f,%.2f) flags=%X GEOM=%d pDirectFlags=%X lightAtomics=%d",
-			eyePos.x, eyePos.y, eyePos.z, flags, !!(flags & rpGEOMETRYLIGHT), pDirectFlags, hasLightAtomics);
-		// Log actual light color and direction values
-		if(pDirect){
-			dbglog("[BuildingPBR] pDirect color=(%.3f,%.3f,%.3f)",
-				pDirect->color.red, pDirect->color.green, pDirect->color.blue);
-			RwFrame *lf = RpLightGetFrame(pDirect);
-			if(lf){
-				RwV3d *at = RwMatrixGetAt(RwFrameGetLTM(lf));
-				dbglog("[BuildingPBR] pDirect dir=(%.3f,%.3f,%.3f)", at->x, at->y, at->z);
-			}else{
-				dbglog("[BuildingPBR] pDirect NO FRAME");
-			}
-		}
-		// Log VS constants c4 (ambient) and c19 (matCol)
-		dbglog("[BuildingPBR] buildingAmbient=(%.3f,%.3f,%.3f)", buildingAmbient, buildingAmbient, buildingAmbient);
-	}
 
 	// Env map setup (from Xbox building pipeline)
 	RwMatrix envmat;
@@ -729,21 +692,24 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 
 	DefinedVertexShader definedVertexShader = (DefinedVertexShader)GetDefinedShader(atomic);
 
-	// DIAGNOSTIC: Use proven Xbox building shaders + simplePS
-	// If buildings appear → PBR shaders are the problem
-	// If still black → RT or callback state setup is the problem
+	// Set PBR building shaders
 	bool vertexAlphaIsAlpha = true;
-	if (definedVertexShader == DefinedVertexShader::WIND) {
-		vertexAlphaIsAlpha = false;
-		setWindParams(atomic, frame);
-		RwD3D9SetVertexShader(xboxBuildingWindVS);
+	if (buildingPBRVS) {
+		if (definedVertexShader == DefinedVertexShader::WIND) {
+			vertexAlphaIsAlpha = false;
+			setWindParams(atomic, frame);
+		}
+		RwD3D9SetVertexShader(buildingPBRVS);
 	} else {
-		RwD3D9SetVertexShader(xboxBuildingVS);
+		if (definedVertexShader == DefinedVertexShader::WIND) {
+			vertexAlphaIsAlpha = false;
+			setWindParams(atomic, frame);
+			RwD3D9SetVertexShader(xboxBuildingWindVS);
+		} else {
+			RwD3D9SetVertexShader(xboxBuildingVS);
+		}
 	}
-	RwD3D9SetPixelShader(simplePS);
-
-	if(logThisFrame)
-		dbglog("[BuildingPBR-DIAG] Using Xbox shaders: VS=%p PS=%p (xboxVS=%p windVS=%p simplePS=%p) numMeshes=%d", buildingPBRVS, buildingPBRPS, xboxBuildingVS, xboxBuildingWindVS, simplePS, resEntryHeader->numMeshes);
+	RwD3D9SetPixelShader(buildingPBRPS);
 
 	int alphafunc, alpharef;
 	int src, dst;
@@ -765,7 +731,7 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 		RwD3D9SetPixelShaderConstant(0, &colorScale, 1);
 		RwD3D9SetVertexShaderConstant(REG_shaderParams, &colorScale, 1);
 
-		// UV transform support (from Xbox building pipeline)
+		// UV transform support
 		RwMatrix ident, *m1, *m2;
 		RwMatrixSetIdentity(&ident);
 		int effect = RpMatFXMaterialGetEffects(material);
@@ -778,7 +744,7 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 		}else
 			RwD3D9SetVertexShaderConstant(REG_texmat, &ident, 4);
 
-		// Vertex alpha handling (from Xbox building pipeline)
+		// Vertex alpha handling
 		bool hasAlpha;
 		if (vertexAlphaIsAlpha) {
 			hasAlpha = (bool)(instancedData->vertexAlpha || instancedData->material->color.alpha != 255);
@@ -789,8 +755,8 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)hasAlpha);
 
 		RwD3D9SetVertexShaderConstant(REG_ambient, &buildingAmbient, 1);
-		
-		// Material color and surface properties (from Xbox building pipeline)
+
+		// Material color and surface properties
 		if(flags & rpGEOMETRYLIGHT){
 			pipeUploadMatCol(flags, material, REG_matCol);
 			RwD3D9SetVertexShaderConstant(REG_surfProps, &material->surfaceProps, 1);
@@ -801,86 +767,17 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 			RwD3D9SetVertexShaderConstant(REG_surfProps, &surf, 1);
 		}
 
-		// Unified PBR upload (c22/c23 layout defined in pipeUploadPBR)
+		// PBR material params (c22/c23)
 		int surfaceType = GetSurfaceTypeFromMaterial(material);
 		const BRDFMaterial *brdf = GetBRDF(surfaceType);
 		pipeUploadPBR(brdf->glossiness, brdf->specular, brdf->clearcoat, brdf->subsurface,
 		              brdf->specularTintR, brdf->specularTintG, brdf->specularTintB);
 
-		if(logThisFrame && numMeshes == resEntryHeader->numMeshes - 1){
-			dbglog("[BuildingPBR] first mesh: surfType=%d brdf=(%.2f,%.2f,%.2f,%.2f tint=%.2f,%.2f,%.2f)",
-				surfaceType, brdf->glossiness, brdf->specular, brdf->clearcoat, brdf->subsurface,
-				brdf->specularTintR, brdf->specularTintG, brdf->specularTintB);
-			dbglog("[BuildingPBR] buildingAmbient=(%.2f,%.2f,%.2f)", buildingAmbient.red, buildingAmbient.green, buildingAmbient.blue);
-		}
-
-		// Tag rendering support (from PS2 building pipeline)
+		// Tag rendering support
 		if(material->pipeline == (RxPipeline*)TagRenderCB){
 			TagRenderCB(atomic, resEntryHeader, instancedData);
 			continue;
 		}
-
-		// D3D9 state diagnostic: query state + force opaque + check COLORWRITEENABLE
-		if(logThisFrame && numMeshes == resEntryHeader->numMeshes - 1){
-		 IDirect3DSurface9 *rt = NULL, *ds = NULL;
-		 d3d9device->GetRenderTarget(0, &rt);
-		 d3d9device->GetDepthStencilSurface(&ds);
-		 D3DVIEWPORT9 vp;
-		 d3d9device->GetViewport(&vp);
-		 RwBool zTest, zWrite, alphaBlend, alphaTest;
-		 RwUInt32 srcBlend, dstBlend, alphafunc;
-		 RwInt32 alpharef;
-		 RwD3D9GetRenderState(D3DRS_ZENABLE, &zTest);
-		 RwD3D9GetRenderState(D3DRS_ZWRITEENABLE, &zWrite);
-		 RwD3D9GetRenderState(D3DRS_ALPHABLENDENABLE, &alphaBlend);
-		 RwD3D9GetRenderState(D3DRS_ALPHATESTENABLE, &alphaTest);
-		 RwD3D9GetRenderState(D3DRS_SRCBLEND, &srcBlend);
-		 RwD3D9GetRenderState(D3DRS_DESTBLEND, &dstBlend);
-		 RwD3D9GetRenderState(D3DRS_ALPHAFUNC, &alphafunc);
-		 RwD3D9GetRenderState(D3DRS_ALPHAREF, &alpharef);
-		 IDirect3DVertexShader9 *curVS = NULL;
-		 IDirect3DPixelShader9 *curPS = NULL;
-		 d3d9device->GetVertexShader(&curVS);
-		 d3d9device->GetPixelShader(&curPS);
-		 // Check COLORWRITEENABLE — if 0, no pixels reach the RT
-		 DWORD cwe = 0xF, cwe1 = 0, cwe2 = 0;
-		 d3d9device->GetRenderState(D3DRS_COLORWRITEENABLE, &cwe);
-		 d3d9device->GetRenderState(D3DRS_COLORWRITEENABLE1, &cwe1);
-		 d3d9device->GetRenderState(D3DRS_COLORWRITEENABLE2, &cwe2);
-		 dbglog("[BuildingPBR] D3D9 rt=%p ds=%p vp=(%d,%d,%d,%d)", rt, ds, vp.X, vp.Y, vp.Width, vp.Height);
-		 dbglog("[BuildingPBR] D3D9 zTest=%d zWrite=%d alphaBlend=%d alphaTest=%d", zTest, zWrite, alphaBlend, alphaTest);
-		 dbglog("[BuildingPBR] D3D9 srcBlend=%d dstBlend=%d alphafunc=%d alpharef=%d", srcBlend, dstBlend, alphafunc, alpharef);
-		 dbglog("[BuildingPBR] D3D9 curVS=%p curPS=%p wantVS=%p wantPS=%p", curVS, curPS, buildingPBRVS, buildingPBRPS);
-		 dbglog("[BuildingPBR] D3D9 COLORWRITEENABLE=%X cwe1=%X cwe2=%X", cwe, cwe1, cwe2);
-		 dbglog("[BuildingPBR] D3D9 numPrimitives=%d primType=%d", instancedData->numPrimitives, resEntryHeader->primType);
-		 // Log WVP matrix first row to check for degenerate transforms
-		 dbglog("[BuildingPBR] D3D9 WVP[0]=(%.4f,%.4f,%.4f,%.4f)", transform[0], transform[1], transform[2], transform[3]);
-		 if(rt) rt->Release();
-		 if(ds) ds->Release();
-		 if(curVS) curVS->Release();
-		 if(curPS) curPS->Release();
-		 // Force all render states to maximally opaque
-		 RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
-		 RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
-		 RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION, (void*)rwALPHATESTFUNCTIONALWAYS);
-		 d3d9device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
-		 d3d9device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
-		 d3d9device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ZERO);
-		 d3d9device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
-		 // CRITICAL TEST: Clear RT to bright green — if screen shows green, RT is correct
-		 d3d9device->Clear(0, NULL, D3DCLEAR_TARGET, D3DCOLOR_XRGB(0, 255, 0), 0.0f, 0);
-		}
-
-		// CRITICAL DIAGNOSTIC: Clear RT to magenta on first building draw each frame
-		// If screen shows magenta → RT is correct, problem is in shaders/geometry
-		// If screen stays black → RT is not the final presented surface
-		if(firstDrawThisFrame){
-			d3d9device->Clear(0, NULL, D3DCLEAR_TARGET, D3DCOLOR_XRGB(255, 0, 255), 0.0f, 0);
-			firstDrawThisFrame = false;
-		}
-
-		// CRITICAL: Force COLORWRITEENABLE on EVERY draw to rule out blocked writes
-		d3d9device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
 
 		D3D9Render(resEntryHeader, instancedData);
 	}
@@ -907,10 +804,7 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Switch(RwResEntry *repEntry, void 
 		CCustomBuildingDNPipeline__CustomPipeRenderCB_Xbox(repEntry, object, type, flags);
 		break;
 	case BUILDING_PBR:
-		// DEFINITIVE TEST: bypass PBR callback entirely, call Xbox callback directly
-		// If visible → PBR callback code is the problem
-		// If still black → RT or pipe-level issue
-		CCustomBuildingDNPipeline__CustomPipeRenderCB_Xbox(repEntry, object, type, flags);
+		CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(repEntry, object, type, flags);
 		break;
 	}
 	fixSAMP();
