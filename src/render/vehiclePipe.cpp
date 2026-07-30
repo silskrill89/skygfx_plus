@@ -5,6 +5,7 @@
 extern void *Glass_Vehicle;
 extern void *Rubber_Vehicle;
 extern void *Rubber_Vehicle_Modern;
+extern int GetVehicleEraByID(int modelID);
 
 enum {
 	// common
@@ -1586,11 +1587,20 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 		float zero[4] = {0,0,0,0};
 		RwD3D9SetVertexShaderConstant(21, zero, 1);
 
+		// Compute wear and dirt from vehicle era (pre-baked per-era defaults)
+		float wearFactor = 0.0f;
+		float dirtLevel = 0.0f;
+		int era = GetVehicleEraByID(modelIndex);
+		if(era < 0 || era > 3) era = 1;
+		// Pre-80 and utility vehicles get base wear and dirt
+		wearFactor = (era == 0) ? 0.5f : (era == 3 ? 0.4f : (era == 1 ? 0.2f : 0.05f));
+		dirtLevel = (era == 3) ? 0.5f : (era == 0 ? 0.3f : 0.1f);
+
 		// Upload tire params to c22/c23 (read by parametric Rubber_Vehicle shader)
 		// c22 = {roughness, F0, tintR, tintG}
 		// c23 = {tintB, dirtLevel, wearFactor, 0}
 		float tireParams[4] = { tireRough, tireRefl, tireTR, tireTG };
-		float tireParams2[4] = { tireTB, 0.0f, 0.0f, 0.0f };
+		float tireParams2[4] = { tireTB, dirtLevel, wearFactor, 0.0f };
 		RwD3D9SetPixelShaderConstant(22, tireParams, 1);
 		RwD3D9SetPixelShaderConstant(23, tireParams2, 1);
 
@@ -1639,6 +1649,16 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 		}
 
 		pipeUploadMatCol(flags, material, REG_matCol);
+		// PS c19 = matCol — vehicle PBR main() uses matCol.rgb for baseColor/paintTint
+		// pipeUploadMatCol only sets VS constant; PS needs it too
+		if(flags & rpGEOMETRYMODULATEMATERIALCOLOR){
+			RwRGBAReal matColRGBA;
+			RwRGBARealFromRwRGBA(&matColRGBA, &material->color);
+			RwD3D9SetPixelShaderConstant(REG_matCol, &matColRGBA, 1);
+		}else{
+			static float white4[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+			RwD3D9SetPixelShaderConstant(REG_matCol, white4, 1);
+		}
 		surfProps.ambient = material->surfaceProps.ambient;
 		surfProps.diffuse = material->surfaceProps.diffuse;
 		if(surfProps.ambient > 0.1f && surfProps.ambient < 0.8f)

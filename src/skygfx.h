@@ -731,7 +731,7 @@ extern void *simplePS;
 // postfx
 extern void *vcTrailsPS;
 extern void *modernColorFilterPS;
-extern void *gradingPS, *contrastPS;
+extern void *gradingPS, *contrastPS, *tonemapPassPS;
 extern void *blurPS, *radiosityPS;
 extern void *SMAA;
 extern void *SMAA_Edge;

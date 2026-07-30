@@ -110,12 +110,15 @@ static const GlassTint glassFWD      = { 0.10f, 0.22f, 0.30f, 0.25f };
 struct TireProps { float specular, glossiness, tintR, tintG, tintB; };
 
 // Tire properties per vehicle era
-// Uses SURFACE_CAR_TIRE as base, with era-specific variations
+// Tint values control rubber color: lower = greyer/worn, higher = darker/newer
+// PRE80/UTILITY: old, weathered tires — grey/brown rubber
+// 80S: standard mid-age — medium grey
+// 90S: newer cars — dark black rubber
 static const TireProps tireTable[] = {
-    { 0.04f, 0.10f, 0.08f, 0.08f, 0.08f },  // VERA_PRE80 - older, more worn
-    { 0.04f, 0.12f, 0.06f, 0.06f, 0.06f },  // VERA_80S - standard
-    { 0.04f, 0.15f, 0.05f, 0.05f, 0.05f },  // VERA_90S - newer, darker
-    { 0.04f, 0.08f, 0.10f, 0.09f, 0.08f },  // VERA_UTILITY - off-road tires
+    { 0.04f, 0.08f, 0.55f, 0.50f, 0.45f },  // VERA_PRE80 — old grey rubber, worn brown tint
+    { 0.04f, 0.10f, 0.40f, 0.38f, 0.35f },  // VERA_80S — standard grey rubber
+    { 0.04f, 0.12f, 0.20f, 0.20f, 0.22f },  // VERA_90S — dark black, newer rubber
+    { 0.04f, 0.06f, 0.50f, 0.45f, 0.40f },  // VERA_UTILITY — off-road, dusty grey-brown
 };
 
 // ============================================================

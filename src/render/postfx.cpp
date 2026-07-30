@@ -84,6 +84,13 @@ static RwRaster *smaaRaster = nil;
 
 
 /////
+///// Menu state guard — skip expensive PostFX during menus/loading/pause
+/////
+static inline bool IsGameInMenuOrPaused() {
+	return CMenuManager__m_bMenuActive || CCutsceneMgr__ms_running || CPostEffects::m_bDisableAllPostEffect;
+}
+
+/////
 ///// Im2D overrides
 /////
 
@@ -152,7 +159,7 @@ struct Grade
 {
 	float r, g, b, a;
 };
-void *gradingPS, *contrastPS;
+void *gradingPS, *contrastPS, *tonemapPassPS;
 #define NUMHOURS 8
 #define NUMWEATHERS 23
 #define EXTRASTART 21
@@ -935,58 +942,99 @@ CPostEffects::ColourFilter_Modern(RwRGBA rgba1, RwRGBA rgba2)
 	green = cset.green;
 	blue = cset.blue;
 
-	// Modern: use timecycle colors to modulate grading (like PC filter)
-	// Reduce base brightness by 30% to lower grey middle point
+	// Modern grading for PBR: timecycle provides color tint, not brightness multiplier.
+	// Vanilla two-pass pipeline (MODULATE2X + ADD) is calibrated for gamma-encoded [0,1] values.
+	// PBR outputs linear HDR where values can be 5-20+ (sky, reflections).
+	// So we extract the timecycle's COLOR HUE and apply it as a gentle tint around neutral (1.0).
 	float a1 = rgba1.alpha/128.0f;
 	float a2 = rgba2.alpha/128.0f;
-	red.r = 0.7f + a1*rgba1.red/255.0f + a2*rgba2.red/255.0f;
-	green.g = 0.7f + a1*rgba1.green/255.0f + a2*rgba2.green/255.0f;
-	blue.b = 0.7f + a1*rgba1.blue/255.0f + a2*rgba2.blue/255.0f;
+	float raw_r = a1*rgba1.red/255.0f + a2*rgba2.red/255.0f;
+	float raw_g = a1*rgba1.green/255.0f + a2*rgba2.green/255.0f;
+	float raw_b = a1*rgba1.blue/255.0f + a2*rgba2.blue/255.0f;
+	// Luminance of the raw tint — encodes overall brightness level (night=dark, day=bright)
+	float luma = 0.299f*raw_r + 0.587f*raw_g + 0.114f*raw_b;
+	float inv = (luma > 0.001f) ? 1.0f/luma : 1.0f;
+	// Extract color hue from raw, blend toward neutral with TINT_STRENGTH
+	// 0.0 = no tint (neutral 1,1,1), 1.0 = full vanilla timecycle color shift
+	float TINT_STRENGTH = 0.35f;
+	red.r   = 1.0f + (raw_r*inv - 1.0f) * TINT_STRENGTH;
+	green.g = 1.0f + (raw_g*inv - 1.0f) * TINT_STRENGTH;
+	blue.b  = 1.0f + (raw_b*inv - 1.0f) * TINT_STRENGTH;
+	// Subtle brightness from timecycle level (preserves day/night atmosphere)
+	float brightness = max(0.75f, min(1.25f, 0.85f + luma * 0.1f));
+	red.r   *= brightness;
+	green.g *= brightness;
+	blue.b  *= brightness;
+	// Clamp to prevent extremes
+	red.r   = max(0.5f, min(2.0f, red.r));
+	green.g = max(0.5f, min(2.0f, green.g));
+	blue.b  = max(0.5f, min(2.0f, blue.b));
 	red.g = red.b = red.a = 0.0f;
 	green.r = green.b = green.a = 0.0f;
 	blue.r = blue.g = blue.a = 0.0f;
 
-	if(dbglog_throttle( "cf_modern_grading"))
-		dbglog("[PostFX] ColourFilter_Modern grading: red.r=%.3f green.g=%.3f blue.b=%.3f a1=%.3f a2=%.3f",
-			red.r, green.g, blue.b, a1, a2);
+	if(dbglog_throttle("cf_modern_grading"))
+		dbglog("[PostFX] ColourFilter_Modern grading: r=%.3f g=%.3f b=%.3f luma=%.3f bright=%.3f tint=%.1f",
+			red.r, green.g, blue.b, luma, brightness, TINT_STRENGTH);
 
 	RwD3D9SetPixelShaderConstant(0, &red, 1);
 	RwD3D9SetPixelShaderConstant(1, &green, 1);
 	RwD3D9SetPixelShaderConstant(2, &blue, 1);
 
-	// Reinhard tonemapping: enable=1, exposure=1.2
-	// Skip for PBR pipeline — PBR shaders already apply Reinhard + sRGB internally
-	float tonemapP[4] = { 1.0f, 1.2f, 0.0f, 0.0f };
-	if(config->pipeline == PIPELINE_PBR)
-		tonemapP[0] = 0.0f;
-	RwD3D9SetPixelShaderConstant(5, tonemapP, 1);
-
-	if(dbglog_throttle( "cf_modern_tonemap"))
-		dbglog("[PostFX] ColourFilter_Modern tonemapP=(%.1f,%.1f,%.1f,%.1f) gradingPS=%p",
-			tonemapP[0], tonemapP[1], tonemapP[2], tonemapP[3], gradingPS);
-
 	if(!gradingPS){
 		dbglog("[PostFX] WARNING: gradingPS is NULL! ColourFilter_Modern will render with no shader");
 	}
 
+	// Pass 1: Color grading (diagonal matrix multiply)
 	overrideIm2dPixelShader = gradingPS;
-
-	if(dbglog_throttle("cf_modern_draw"))
-		dbglog("[PostFX] cf_modern BEFOREDRAW overridePS=%p gradingPS=%p verts=%p indices=%p",
-			overrideIm2dPixelShader, gradingPS, colorfilterVerts, colorfilterIndices);
-
 	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
-
-	if(dbglog_throttle("cf_modern_draw"))
-		dbglog("[PostFX] cf_modern AFTERDRAW overridePS=%p", overrideIm2dPixelShader);
-
 	overrideIm2dPixelShader = nil;
 
+	// Copy graded linear output to pRasterFrontBuffer for tonemap input
+	UpdateFrontBuffer();
+
+	// Pass 2: Reinhard tonemap + sRGB gamma encode
+	if(tonemapPassPS){
+		// Re-setup render states for tonemap pass (reads pRasterFrontBuffer)
+		RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
+		RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
+		RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
+		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
+		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)CPostEffects::pRasterFrontBuffer);
+		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
+
+		float tonemapP[4] = { 1.0f, 0.0f, 0.0f, 0.0f };
+		RwD3D9SetPixelShaderConstant(5, tonemapP, 1);
+
+		overrideIm2dPixelShader = tonemapPassPS;
+		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
+		overrideIm2dPixelShader = nil;
+	}
+
+	// Pass 3: SMAA anti-aliasing (after tonemap, guarded by menu check)
+	if(config->smaaEnable && !IsGameInMenuOrPaused()){
+		DrawSMAA();
+	}
+
+	// Restore all render states (match ColourFilter_PC pattern + FOG=TRUE)
 	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
+	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)TRUE);
 	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
 	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
 	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)NULL);
+	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
+	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
+
+	// Full D3D9 pipeline cleanup (SMAA leaves textures on stages 1-2)
+	IDirect3DDevice9 *dev = d3d9device;
+	if(dev){
+		dev->SetTexture(0, NULL);
+		dev->SetTexture(1, NULL);
+		dev->SetTexture(2, NULL);
+		RwD3D9SetPixelShader(NULL);
+		RwD3D9SetVertexShader(NULL);
+	}
 }
 
 void
@@ -1646,98 +1694,72 @@ static RwMatrix YUV2RGB = {
 void
 CPostEffects::DrawFinalEffects(void)
 {
-	if(dbglog_throttle( "finalfx"))
-		dbglog("[PostFX] DrawFinalEffects ENTER ycbcrFilter=%d SSS_Blur=%p SMAA_Edge=%p smaaEnable=%d",
-			m_bYCbCrFilter, SSS_Blur, SMAA_Edge, config->smaaEnable);
+	// Match skygfx_junior: only YCbCr filter. Nothing else.
+	// SSS is per-character (chars.cpp), SMAA will be integrated into ColourFilter_Modern.
+	if(!m_bYCbCrFilter)
+		return;
 
-	if(m_bYCbCrFilter){
-		UpdateFrontBuffer();
+	UpdateFrontBuffer();
 
-		RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERNEAREST);
-		RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
-		RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
-		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
-		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)CPostEffects::pRasterFrontBuffer);
-		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
+	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERNEAREST);
+	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
+	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
+	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
+	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)CPostEffects::pRasterFrontBuffer);
+	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
 
-		RwMatrix m = RGB2YUV;
+	RwMatrix m = RGB2YUV;
 
-		RwMatrix m2;
-		m2.right.x = m_lumaScale;
-		m2.up.x = 0.0f;
-		m2.at.x = 0.0f;
-		m2.pos.x = m_lumaOffset;
-		m2.right.y = 0.0f;
-		m2.up.y = m_cbScale;
-		m2.at.y = 0.0f;
-		m2.pos.y = m_cbOffset;
-		m2.right.z = 0.0f;
-		m2.up.z = 0.0f;
-		m2.at.z = m_crScale;
-		m2.pos.z = m_crOffset;
+	RwMatrix m2;
+	m2.right.x = m_lumaScale;
+	m2.up.x = 0.0f;
+	m2.at.x = 0.0f;
+	m2.pos.x = m_lumaOffset;
+	m2.right.y = 0.0f;
+	m2.up.y = m_cbScale;
+	m2.at.y = 0.0f;
+	m2.pos.y = m_cbOffset;
+	m2.right.z = 0.0f;
+	m2.up.z = 0.0f;
+	m2.at.z = m_crScale;
+	m2.pos.z = m_crOffset;
 
-		RwMatrixOptimize(&m2, nil);
+	RwMatrixOptimize(&m2, nil);
 
-		RwMatrixTransform(&m, &m2, rwCOMBINEPOSTCONCAT);
-		RwMatrixTransform(&m, &YUV2RGB, rwCOMBINEPOSTCONCAT);
-		Grade red, green, blue;
-		red.r = m.right.x;
-		red.g = m.up.x;
-		red.b = m.at.x;
-		red.a = m.pos.x;
-		green.r = m.right.y;
-		green.g = m.up.y;
-		green.b = m.at.y;
-		green.a = m.pos.y;
-		blue.r = m.right.z;
-		blue.g = m.up.z;
-		blue.b = m.at.z;
-		blue.a = m.pos.z;
+	RwMatrixTransform(&m, &m2, rwCOMBINEPOSTCONCAT);
+	RwMatrixTransform(&m, &YUV2RGB, rwCOMBINEPOSTCONCAT);
+	Grade red, green, blue;
+	red.r = m.right.x;
+	red.g = m.up.x;
+	red.b = m.at.x;
+	red.a = m.pos.x;
+	green.r = m.right.y;
+	green.g = m.up.y;
+	green.b = m.at.y;
+	green.a = m.pos.y;
+	blue.r = m.right.z;
+	blue.g = m.up.z;
+	blue.b = m.at.z;
+	blue.a = m.pos.z;
 
-		RwD3D9SetPixelShaderConstant(0, &red, 1);
-		RwD3D9SetPixelShaderConstant(1, &green, 1);
-		RwD3D9SetPixelShaderConstant(2, &blue, 1);
+	RwD3D9SetPixelShaderConstant(0, &red, 1);
+	RwD3D9SetPixelShaderConstant(1, &green, 1);
+	RwD3D9SetPixelShaderConstant(2, &blue, 1);
 
-		// YCbCr is a color space conversion — NO tonemapping here.
-		// Tonemapping is already applied by the main colour filter (ColourFilter_Modern).
-		// Double Reinhard causes dark red (low) / black (maxed) screens.
-		float tonemapP[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-		RwD3D9SetPixelShaderConstant(5, tonemapP, 1);
+	float tonemapP[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	RwD3D9SetPixelShaderConstant(5, tonemapP, 1);
 
-		overrideIm2dPixelShader = gradingPS;
-		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
-		overrideIm2dPixelShader = nil;
+	overrideIm2dPixelShader = gradingPS;
+	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
+	overrideIm2dPixelShader = nil;
 
-		RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
-		RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
-		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
-		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)NULL);
-		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
+	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
+	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
+	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
+	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)NULL);
+	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
 
-		UpdateFrontBuffer();
-	}
-
-	// SSS blur pass (after color filter, before SMAA)
-	{
-		if(dbglog_throttle( "sss_blur"))
-			dbglog("[PostFX] SSS_Blur ENTER SSS_Blur=%p chars_SSS_Blur=%p", SSS_Blur, (void*)chars_drawSSSBlur);
-		PERF_SCOPE("SSS_Blur");
-		chars_drawSSSBlur();
-	}
-
-	// SMAA at end of post-processing (3-pass)
-	if(config->smaaEnable && SMAA_Edge){
-		dbglog("[PostFX] SMAA ENTER smaaEnable=%d SMAA_Edge=%p", config->smaaEnable, SMAA_Edge);
-		ImmediateModeRenderStatesStore();
-		ImmediateModeRenderStatesSet();
-		DrawSMAA();
-		ImmediateModeRenderStatesReStore();
-	}else{
-		if(dbglog_throttle( "smaa_skip"))
-			dbglog("[PostFX] SMAA skipped: smaaEnable=%d SMAA_Edge=%p", config->smaaEnable, SMAA_Edge);
-	}
-
-	// Debug menu moved to D3D9 EndScene hook (main.cpp) - renders AFTER all UI
+	UpdateFrontBuffer();
 }
 
 IDirect3DTexture9 *g_ssaoDepthTex = NULL;
@@ -1899,6 +1921,7 @@ void InitSSAOResources(void)
 void
 CPostEffects::DrawSSAO(void)
 {
+	if(IsGameInMenuOrPaused()) return;
 	if(dbglog_throttle( "ssao_enter"))
 		dbglog("[PostFX] DrawSSAO ENTER ssaoEnable=%d SSAO=%p", config->ssaoEnable, SSAO);
 	if(!config->ssaoEnable || !SSAO){
@@ -2690,6 +2713,12 @@ CPostEffects::DrawSMAA(void)
 	RwRasterRenderFast(RwCameraGetRaster(Scene.camera), 0, 0);
 	RwRasterPopContext();
 	RwCameraBeginUpdate(Scene.camera);
+
+	// Clean up D3D9 state left by SMAA passes (area/search textures on stages 1-2)
+	if(dev){
+		dev->SetTexture(1, NULL);
+		dev->SetTexture(2, NULL);
+	}
 }
 
 void (*CPostEffects::Initialise_orig)(void);

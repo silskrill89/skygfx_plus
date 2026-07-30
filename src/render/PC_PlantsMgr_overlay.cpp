@@ -440,11 +440,8 @@ bool8 CPlantMgr::Initialise()
 
 	PC_PlantSlotTextureTab[0] = &PC_PlantTextureTab0[0];
 	PC_PlantSlotTextureTab[1] = &PC_PlantTextureTab1[0];
-	PC_PlantSlotTextureTab[2] = &PC_PlantTextureTab0[0];	// 2
-	PC_PlantSlotTextureTab[3] = &PC_PlantTextureTab1[0];	// 3
-
-
-
+	PC_PlantSlotTextureTab[2] = &PC_PlantTextureTab0[0];
+	PC_PlantSlotTextureTab[3] = &PC_PlantTextureTab1[0];
 
 char* models_fnames[CPLANT_SLOT_NUM_MODELS];
 
@@ -452,7 +449,6 @@ char* models_fnames[CPLANT_SLOT_NUM_MODELS];
 	models_fnames[1] = "grass0_2.dff";
 	models_fnames[2] = "grass0_3.dff";
 	models_fnames[3] = "grass0_4.dff";
-//	models_fnames[0] = models_fnames[1] = models_fnames[2] = models_fnames[3] = "plant1.dff";
 	if(!LoadGeometryForPlantSlot(PC_PlantModelsTab0, models_fnames))
 		return(FALSE);
 
@@ -460,38 +456,33 @@ char* models_fnames[CPLANT_SLOT_NUM_MODELS];
 	models_fnames[1] = "grass1_2.dff";
 	models_fnames[2] = "grass1_3.dff";
 	models_fnames[3] = "grass1_4.dff";
-//	models_fnames[0] = models_fnames[1] = models_fnames[2] = models_fnames[3] = "plant1.dff";
 	if(!LoadGeometryForPlantSlot(PC_PlantModelsTab1, models_fnames))
 		return(FALSE);
 
-/*	models_fnames[0] = "grass2_1.dff";
+	models_fnames[0] = "grass2_1.dff";
 	models_fnames[1] = "grass2_2.dff";
 	models_fnames[2] = "grass2_3.dff";
 	models_fnames[3] = "grass2_4.dff";
-//	models_fnames[0] = models_fnames[1] = models_fnames[2] = models_fnames[3] = "plant1.dff";
-	if(!LoadGeometryForPlantSlot(PC_PlantModelSlotTab[2], models_fnames))
-		return(FALSE);*/
+	if(!LoadGeometryForPlantSlot(PC_PlantModelsTab2, models_fnames))
+		return(FALSE);
 
-/*	models_fnames[0] = "grass3_1.dff";
+	models_fnames[0] = "grass3_1.dff";
 	models_fnames[1] = "grass3_2.dff";
 	models_fnames[2] = "grass3_3.dff";
 	models_fnames[3] = "grass3_4.dff";
-//	models_fnames[0] = models_fnames[1] = models_fnames[2] = models_fnames[3] = "plant1.dff";
-	if(!LoadGeometryForPlantSlot(PC_PlantModelSlotTab[3], models_fnames))
-		return(FALSE);*/
+	if(!LoadGeometryForPlantSlot(PC_PlantModelsTab3, models_fnames))
+		return(FALSE);
 
 
 	PC_PlantModelSlotTab[0] = &PC_PlantModelsTab0[0];
 	PC_PlantModelSlotTab[1] = &PC_PlantModelsTab1[0];
-	PC_PlantModelSlotTab[2] = &PC_PlantModelsTab0[0];	//2;
-	PC_PlantModelSlotTab[3] = &PC_PlantModelsTab1[0];	//3;
+	PC_PlantModelSlotTab[2] = &PC_PlantModelsTab2[0];
+	PC_PlantModelSlotTab[3] = &PC_PlantModelsTab3[0];
 
-
-	//PC - need to set the association between tables and sets somewhere?...
 	CGrassRenderer::SetPlantModelsTab(PPPLANTBUF_MODEL_SET0,	PC_PlantModelSlotTab[0]);
-	CGrassRenderer::SetPlantModelsTab(PPPLANTBUF_MODEL_SET1,	PC_PlantModelSlotTab[0]);	//1]);
-	CGrassRenderer::SetPlantModelsTab(PPPLANTBUF_MODEL_SET2,	PC_PlantModelSlotTab[0]);	//2]);
-	CGrassRenderer::SetPlantModelsTab(PPPLANTBUF_MODEL_SET3,	PC_PlantModelSlotTab[0]);	//3]);
+	CGrassRenderer::SetPlantModelsTab(PPPLANTBUF_MODEL_SET1,	PC_PlantModelSlotTab[1]);
+	CGrassRenderer::SetPlantModelsTab(PPPLANTBUF_MODEL_SET2,	PC_PlantModelSlotTab[2]);
+	CGrassRenderer::SetPlantModelsTab(PPPLANTBUF_MODEL_SET3,	PC_PlantModelSlotTab[3]);
 
 
 	CGrassRenderer::SetCloseFarAlphaDist(CPLANT_ALPHA_CLOSE_DIST, CPLANT_ALPHA_FAR_DIST);

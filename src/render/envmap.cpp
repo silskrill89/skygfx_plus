@@ -501,7 +501,7 @@ void
 RenderSphereReflections(void)
 {
 
-	if(iCanHasbuildingPipe && (config->vehiclePipe == CAR_MOBILE || config->vehiclePipe == CAR_ENV)){
+	if(iCanHasbuildingPipe && (config->vehiclePipe == CAR_MOBILE || config->vehiclePipe == CAR_ENV || config->vehiclePipe == CAR_MODERN)){
 		MakeEnvmapRasters();
 
 		RwCamera *cam = Scene.camera;

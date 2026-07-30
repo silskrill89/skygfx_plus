@@ -139,12 +139,14 @@
     <ClInclude Include="..\src\PC_GrassRenderer.h" />
     <ClInclude Include="..\src\postfx.h" />
     <ClInclude Include="..\src\skygfx.h" />
+    <ClInclude Include="..\src\entities\Ragdoll.h" />
   </ItemGroup>
   <ItemGroup>
     <!-- All source paths point to new subdirectory layout after merge restructure -->
     <ClCompile Include="..\src\rw\HLSL_hook.cpp" />
     <ClCompile Include="..\src\render\buildingPipe.cpp" />
     <ClCompile Include="..\src\entities\chars.cpp" />
+    <ClCompile Include="..\src\entities\ragdoll.cpp" />
     <ClCompile Include="..\src\core\diagnostics.cpp" />
     <!-- <ClCompile Include="..\src\core\config.cpp" /> -->
     <ClCompile Include="..\src\render\custom_mode.cpp" />

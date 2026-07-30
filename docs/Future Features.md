@@ -41,6 +41,43 @@ Most features are already implemented (see [[Implemented Features]]). Remaining:
 - Dependency mapping
 - Agent assignments
 
+## Ragdoll Physics Restoration
+
+**Status:** Planned — roadmap created
+**Plan:** `docs/plans/2026-07-30-ragdoll-restoration.md`
+**Approach:** RW SDK bone-node-based (NOT RAGE/NaturalMotion)
+
+### Phase 1: MVP (Basic Ragdoll)
+- Create `Ragdoll.h` class declarations
+- Extend BoneNode_c with velocity + keyframe quaternion (wrapper struct)
+- Hard-code `ms_boneInfos[32]` bone hierarchy data table
+- Hard-code `aBONETAG_ENUM_TAB[32]` lookup
+- Add WRAPPER declarations for RpHAnim*/RtQuat* functions
+- Implement `Ragdoll.cpp` from gtasa_src-main prototype (fix: process ALL bones, fix friction)
+
+### Phase 2: Polish
+- Ground collision (bone positions vs terrain)
+- Joint limit enforcement (rotation clamping per bone)
+- Angular velocity damping
+
+### Phase 3: Integration
+- Init in `InjectDelayedPatches()` after pipe hooks
+- Update in game loop (`CGame::Process` or ped update)
+- Trigger on ped death (`CPed::SetDie` hook)
+- Blend-out after 3-5 seconds
+
+### Phase 4: Enhancement
+- Vehicle impact forces
+- Weapon knockback
+- Pose correction (from RAGE reference)
+- Writhe simulation
+
+### Source Availability
+- BoneNode_c/OpenSA: COMPLETE (65+232 lines)
+- IKChain_c/OpenSA: COMPLETE (71+297 lines)
+- Ragdoll.cpp/gtasa_src-main: COMPLETE but commented out (435 lines)
+- MISSING: Ragdoll.h, bone data table, HAnim/Quat WRAPPER declarations
+
 ## Deferred (Not in Current Roadmap)
 
 ### Normal Map Plugin Integration

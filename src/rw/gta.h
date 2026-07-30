@@ -1,3 +1,4 @@
+#pragma once
 
 class CGeneral
 {
@@ -178,6 +179,7 @@ extern float& CWeather__Wind;
 extern CVector& CWeather__WindDir;
 extern float &CWeather__UnderWaterness;
 extern bool &CCutsceneMgr__ms_running;
+extern bool &CMenuManager__m_bMenuActive;
 extern int* CGame__currArea;
 extern int* CEntryExitManager__ms_exitEnterState;
 

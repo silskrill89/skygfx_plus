@@ -1,4 +1,8 @@
 #include "skygfx.h"
+#include "rtquat.h"
+#include "rtanim.h"
+#include "rphanim.h"
+#include "rtslerp.h"
 
 RsGlobalType *RsGlobal = (RsGlobalType*)0xC17040;
 IDirect3DDevice9 *&d3d9device = *(IDirect3DDevice9**)0xC97C28;
@@ -23,6 +27,7 @@ float &CWeather__Wind = *(float*)(0xC812F0);
 CVector &CWeather__WindDir = *(CVector*)(0xC813E0);
 float &CWeather__UnderWaterness = *(float*)(0xC8132C);
 bool &CCutsceneMgr__ms_running = *(bool*)(0xB5F851);
+bool &CMenuManager__m_bMenuActive = *(bool*)(0xBA67AC);
 int* CGame__currArea = (int*)0xB72914;
 int* CEntryExitManager__ms_exitEnterState = (int*)0x96A7CC;
 
@@ -194,4 +199,22 @@ WRAPPER RpLight *RpLightSetColor(RpLight *light, const RwRGBAReal *color) { EAXJ
 extern "C" {
 WRAPPER RwFrame *RwFrameTranslate(RwFrame *frame, const RwV3d *v, RwOpCombineType combine) { EAXJMP(0x7F0E30); }
 WRAPPER RpGeometry *RpGeometryForAllMaterials(RpGeometry *geometry, RpMaterialCallBack fpCallBack, void *pData) { EAXJMP(0x74C790); }
+
+// ---- RpHAnim (hierarchical animation) ----
+WRAPPER RwInt32 RpHAnimIDGetIndex(RpHAnimHierarchy *hierarchy, RwInt32 ID) { EAXJMP(0x7C51A0); }
+WRAPPER RwMatrix *RpHAnimHierarchyGetMatrixArray(RpHAnimHierarchy *hierarchy) { EAXJMP(0x7C5120); }
+WRAPPER RwMatrix *RpHAnimHierarchyGetNodeMatrix(RpHAnimHierarchy *hierarchy, RwInt32 nodeID) { EAXJMP(0x7C5120); }
+WRAPPER RpHAnimHierarchy *RpHAnimFrameGetHierarchy(RwFrame *frame) { EAXJMP(0x7C5160); }
+WRAPPER RwBool RpHAnimHierarchyUpdateMatrices(RpHAnimHierarchy *hierarchy) { EAXJMP(0x7C51D0); }
+
+// ---- RtQuat (quaternion toolkit) ----
+WRAPPER RwBool RtQuatConvertFromMatrix(RtQuat *qpQuat, const RwMatrix *mpMatrix) { EAXJMP(0x7EB5C0); }
+WRAPPER RtQuat *RtQuatRotate(RtQuat *quat, const RwV3d *axis, RwReal angle, RwOpCombineType combineOp) { EAXJMP(0x7EB7C0); }
+WRAPPER RwV3d *RtQuatTransformVectors(RwV3d *vectorsOut, const RwV3d *vectorsIn, const RwInt32 numPoints, const RtQuat *quat) { EAXJMP(0x7EBBB0); }
+
+// ---- RtQuatSlerp (spherical interpolation) ----
+WRAPPER void RtQuatSetupSlerpCache(RtQuat *qpFrom, RtQuat *qpTo, RtQuatSlerpCache *sCache) { EAXJMP(0x7EC220); }
+
+// ---- Game helpers ----
+WRAPPER RpHAnimHierarchy *GetAnimHierarchyFromSkinClump(RpClump *clump) { EAXJMP(0x734A40); }
 }

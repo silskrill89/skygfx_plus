@@ -1,20 +1,22 @@
 /*===================================================================================
 SkyGFX Plus - Vehicle Glass Shader (ps_3_0)
-Energy-conserving glass with Fresnel reflections and era-based tinting.
 
-Energy Conservation:
-  Glass: kS = Fresnel (edges reflect more), kD = 1 - kS (center shows interior)
-  Dark parts of glass always stay dark, reflections add on top via Fresnel.
+Two material modes:
+  1. LIGHT MODE (headlights/taillights):
+     The lens texture is the interior — show it at full brightness.
+     A glossy plastic/glass cover is drawn ON TOP via env reflection + sun specular.
+     High alpha so the light clearly sits on the car surface, not sinking in.
 
-Lens mode (headlights/taillights):
-  Nearly fully transparent — interior texture visible through glass.
-  Subtle Fresnel glow at edges for lens effect.
+  2. GLASS MODE (windows, windshields):
+     Dark tinted glass with env reflections as the glossy surface.
+     Semi-transparent so interior is visible through the glass.
+     Fresnel makes edges more reflective (real glass behavior).
 
-Layers:
-  1. Interior base (diffuse * vertex color) — always visible
-  2. Environment reflection — blended via Fresnel, energy-conserved
-  3. Colored tint — subtle overlay
-  4. Sun specular — additive highlight
+Layers for both:
+  1. Base layer: interior texture × tint × boost (the thing behind the glass)
+  2. Gloss layer: env reflection blended via Fresnel (the glass surface itself)
+  3. Sun specular: additive highlight from directional light
+  4. Tint overlay: colored glass tint (subtle for lights, stronger for windows)
 ===================================================================================*/
 
 #include "../include/PBR_Common.hlsl"
@@ -46,29 +48,23 @@ float4 main(PS_INPUT IN) : COLOR
 
     float NdotV = saturate(dot(N, V));
 
-    // ---- Fresnel (glass: F0 = 0.04 for dielectric) ----
+    // Fresnel (F0 = 0.04 for glass/plastic dielectric)
     float3 F0 = float3(0.04, 0.04, 0.04);
-    float3 F = F_Schlick(NdotV, F0);
-    float fresnel = F.r;
+    float fresnel = SchlickFresnelScalar(NdotV, 0.04);
 
-    // ---- Energy conservation for glass ----
-    // kS = Fresnel (edges reflect more)
-    // kD = 1 - kS (center shows interior)
-    float3 kS = F;
-    float3 kD = 1.0 - kS;
-
-    // ---- Env map reflection (energy-conserved) ----
+    // Env map reflection — stable sphere map (NO viewDir offset to prevent warping)
     float3 R = reflect(-V, N);
-    float2 envUV = SphereEnvMapUV(R, V);
+    float m = 2.0 * sqrt(dot(R.xy, R.xy) + (R.z + 1.0) * (R.z + 1.0));
+    float2 envUV = R.xy / m + 0.5;
     float4 env = tex2D(envMapTex, envUV);
     float envIntensity = max(IN.envColor.a, 0.15) * 0.8;
     float3 envCol = env.rgb * envIntensity;
 
-    // ---- Sun ----
+    // Sun contribution
     float NdotL = saturate(dot(N, L));
     float3 sunContrib = ComputeSunContribution(N, V, L, F0, NdotL);
 
-    // ---- Glass params ----
+    // Glass params
     float3 tint = glassParams.xyz;
     float opacity = glassParams.w;
     float isLight = lightParams.x;
@@ -76,52 +72,67 @@ float4 main(PS_INPUT IN) : COLOR
     float tintStrength = lightParams.z;
 
     // ================================================================
-    // LIGHT PATH — nearly transparent, interior texture visible
-    // Lens effect: very subtle reflection, texture shows through
+    // LIGHT PATH — headlight/taillight lens
+    //
+    // The lens texture IS the interior — show it at full brightness.
+    // A glossy plastic/glass cover is layered ON TOP via env reflection.
+    // High alpha ensures the light sits visibly on the car surface.
     // ================================================================
     if(isLight > 0.5){
         float3 lightTint = glassParams.xyz;
 
-        // Interior is fully visible (the light texture IS the interior)
+        // LAYER 1: Interior (the glowing lens/reflector texture)
+        // FULLY OPAQUE — the light mesh has nothing behind it,
+        // so alpha MUST be 1.0 to prevent see-through/culling bug
         float3 interior = diff.rgb * lightBoost * lightTint;
 
-        // Very subtle env reflection — just enough to show glass surface
-        // Reduces with NdotV so face-on is pure interior, edges show reflection
-        float lensReflStrength = fresnel * 0.06;
-        float3 lensRefl = envCol * lensReflStrength;
+        // LAYER 2: Glossy glass cover ON TOP of the opaque lens
+        // Subtle env reflection: face-on = 0%, grazing = 15%
+        float3 glossLayer = envCol * fresnel * 0.15;
 
-        // Combine: interior base + subtle reflection overlay
-        float3 glow = interior + lensRefl;
+        // LAYER 3: Sun specular highlight on the glass cover
+        float3 glossSpec = sunContrib * 0.20;
 
-        // Alpha: mostly transparent, slight opacity at edges for lens effect
-        float lensAlpha = saturate(opacity * 0.2 + fresnel * 0.15);
-        return float4(glow, lensAlpha);
+        // Composite: opaque interior + gloss overlay on top
+        float3 color = interior + glossLayer + glossSpec;
+
+        // Alpha: ALWAYS 1.0 — lens must be fully opaque, nothing behind it
+        return float4(color, 1.0);
     }
 
     // ================================================================
-    // GLASS PATH — dark base (44,44,44), subtle reflection
+    // GLASS PATH — windows, windshields
+    //
+    // Glass is semi-transparent alpha-blended over the car body.
+    // The diffuse texture for glass meshes IS the window tint (dark/transparent).
+    // We preserve this texture and ADD a subtle env reflection on top.
+    // The car body always shows through at (1-alpha).
     // ================================================================
 
-    // LAYER 1: Interior base (RGB 68,68,68 ≈ 0.267)
-    float3 glassBase = float3(0.267, 0.267, 0.267);
-    float3 layer1 = glassBase * IN.color.rgb;
+    // LAYER 1: The actual glass texture (preserves window tint from game TXD)
+    // IN.color.rgb = vertex color from car body, diff.rgb = glass window texture
+    float3 glassBase = diff.rgb * IN.color.rgb;
 
-    // LAYER 2: Environment reflection (subtle, Fresnel-blended)
-    float3 layer2 = envCol * kS * 0.2;
+    // LAYER 2: Subtle env reflection — adds glossy glass surface on top of texture
+    // Very gentle Fresnel: face-on = 5% reflection, grazing = 25% reflection
+    float envStrength = lerp(0.05, 0.25, fresnel);
+    float3 reflLayer = envCol * envStrength;
 
-    // COMPOSITE: dark base + subtle reflection
-    float3 color = lerp(layer1, layer2, fresnel * 0.5);
+    // Combine: glass texture + subtle reflection (car body shows through via alpha)
+    float3 color = glassBase + reflLayer;
 
-    // Sun highlight (very subtle)
-    color += sunContrib * 0.15;
+    // LAYER 3: Very subtle sun highlight on glass surface
+    color += sunContrib * 0.06;
 
-    // LAYER 3: Colored tint
-    float3 tintColor = tint * 2.0;
-    float tintAlpha = opacity * tintStrength;
-    color = lerp(color, color * tintColor, tintAlpha);
+    // LAYER 4: Colored tint overlay (subtle, adds warmth/color to glass)
+    float3 tintColor = tint * 0.3;
+    float tintAlpha = opacity * tintStrength * 0.15;
+    color = lerp(color, color + tintColor, tintAlpha);
 
-    // Final alpha: glass opacity, thickened at grazing angles
-    float alpha = opacity + (1.0 - opacity) * (1.0 - NdotV) * 0.25;
+    // Alpha: use the material's original opacity — this controls how much
+    // of the car body shows through. Glass is semi-transparent.
+    // Thicker at grazing angles (Fresnel) for realistic glass edge behavior.
+    float alpha = saturate(opacity * 0.7 + fresnel * 0.15);
 
     return float4(color, saturate(alpha));
 }

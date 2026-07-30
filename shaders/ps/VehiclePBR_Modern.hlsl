@@ -73,7 +73,8 @@ float4 main(PS_INPUT IN) : COLOR
 
     // ---- Base color ----
     float4 diff = tex2D(diffuseTex, IN.texcoord0);
-    float3 baseColor = diff.rgb * IN.color.rgb;
+    // matCol = carcols paint color (c19). Diffuse = texture × vertex × paint color.
+    float3 baseColor = diff.rgb * IN.color.rgb * matCol.rgb;
 
     // Blend with screen-space normal (if available)
     // ambientColor.w > 0 means normal buffer is bound and valid
@@ -129,7 +130,7 @@ float4 main(PS_INPUT IN) : COLOR
     // kD = (1 - kS) * (1 - metalness) — metals have no diffuse
     // ambientColor.rgb = timecycle ambient light, surfProps.x = surface ambient
     float3 ambient = ambientColor.rgb * surfProps.x * baseColor;
-    float3 layer1 = diff.rgb * IN.color.rgb * kD * shadowFactor + ambient;
+    float3 layer1 = baseColor * kD * shadowFactor + ambient;
 
     // ---- Multi-light Fresnel accumulation ----
     float fresnelAccum = 0.0;
@@ -177,12 +178,12 @@ float4 main(PS_INPUT IN) : COLOR
 
     // Layer 2 = env map (primary) tinted by IBL sky color, Fresnel-modulated
     // IBL tints additively, not multiplicatively — prevents dark IBL areas killing reflections
-    float3 iblBlend = lerp(envRefl, envRefl + iblTint * 0.15, 0.5);
-    float3 layer2 = iblBlend * paintTint * clearCoatF * envFresnel * reflFresnel;
+    float3 iblBlend = lerp(envRefl, envRefl + iblTint * 0.06, 0.5);
+    float3 layer2 = iblBlend * F_atNdotV * clearCoatF * envFresnel * reflFresnel;
 
     // ---- Fresnel Rim ----
     float rimStrength = pow(1.0 - NdotV, 3.0) * envFresnel * 0.3;
-    float3 fresnelRim = F_Schlick(NdotV, F0) * paintTint * rimStrength;
+    float3 fresnelRim = F_atNdotV * rimStrength;
 
     // ---- PBR Specular (GGX/Smith) — direct lights only ----
     float3 specTotal = float3(0, 0, 0);
@@ -195,7 +196,7 @@ float4 main(PS_INPUT IN) : COLOR
         float3 F = F_Schlick(LdotH, F0);
         specTotal += D * F * Vis * NdotL_sun * directCol.rgb;
     }
-    for(i = 0; i < 6; i++){
+    for(int i = 0; i < 6; i++){
         float3 Ll = -lightDir[i];
         float3 H = normalize(V + Ll);
         float NdotL = max(dot(N, Ll), 0.0);
@@ -214,45 +215,17 @@ float4 main(PS_INPUT IN) : COLOR
     float3 layer4 = tex2D(iblTex, iblUV).rgb * 0.06;
 
     // ---- COMPOSITE ----
-    // Preserve base paint color from carcols (diff.rgb * IN.color.rgb)
-    // The carcols color is the foundation - lighting and reflections are overlays
-    
-    // Base paint with minimal lighting modification
-    float3 basePaint = diff.rgb * IN.color.rgb;
-    
-    // Apply shadow factor to darken base paint (not replace it)
-    float3 litPaint = basePaint * shadowFactor;
-    
-    // Add ambient to lift shadows (preserves base color in dark areas)
-    litPaint += ambient * 0.3;
-    
-    // Reflections as overlay (scaled down to preserve paint)
-    float3 reflection = layer2 * 0.35;
-    
-    // Rim light (very subtle)
-    float3 rim = fresnelRim * 0.25;
-    
-    // Specular highlights (halved for PS2 light intensity)
-    float3 specular = specTotal * 0.5;
-    
-    // IBL fill (subtle ambient from environment)
-    float3 iblFill = layer4 * 0.5;
-    
-    // Composite: start with lit paint, add overlays
-    float3 color = litPaint;
-    color += reflection * reflFresnel;  // reflections respect Fresnel
-    color += rim;
-    color += specular;
-    color += iblFill;
+    // Energy-conserved: diffuse is reduced by Fresnel (kD), reflections add on top
+    float3 color = layer1;                           // diffuse × kD × shadow + ambient
+    color += layer2;                                  // env reflections (Fresnel-modulated)
+    color += fresnelRim * 0.3;                        // edge rim
+    color += specTotal * 0.6;                         // direct specular highlights
+    color += layer4;                                  // IBL fill
 
-    // Soft tonemap (Reinhard) instead of hard saturate() to avoid clamp banding
-    color = color / (1.0 + color);
-    // Slight contrast boost to recover midtones
-    color = pow(color, 0.9);
-    // Linear → sRGB encoding (display gamma)
-    // Using approximate: pow(x, 1/2.2) matches sRGB closely
-    color = pow(saturate(color), 1.0/2.2);
+    // ---- Contrast: crush blacks, match building/ground contrast ----
+    color = color * 1.15 - 0.015;
 
+    // Output linear HDR — Reinhard tonemap + gamma applied by PostFX grading pass
     return float4(color, diff.a);
 }
 

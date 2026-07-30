@@ -22,12 +22,16 @@
 | `presets.cpp` | 133 | Game preset definitions (16 presets) |
 | `debugmenu_ui.cpp` | 514 | ImGui debug menu |
 
-### Entities (src/entities/) — 3 files
+### Entities (src/entities/) — 3 files + 4 planned
 | File | Lines | Purpose |
 |------|-------|---------|
 | `chars.cpp` | 368 | Character rendering |
 | `chars.h` | — | Character header |
 | `PlantSurfPropMgr.h` | — | Plant surface property manager |
+| `ragdoll.h` | — | **PLANNED:** Ragdoll_c + RagdollManager_c class declarations |
+| `ragdoll.cpp` | — | **PLANNED:** Core ragdoll physics (gravity, torque, friction) |
+| `ragdoll_bone.h` | — | **PLANNED:** RagdollBoneData (velocity + keyframe quat wrapper) |
+| `bone_data.cpp` | — | **PLANNED:** ms_boneInfos[32] + aBONETAG_ENUM_TAB[32] |
 
 ### Extras (src/extras/) — 10 files
 | File | Lines | Purpose |

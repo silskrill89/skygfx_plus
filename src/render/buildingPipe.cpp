@@ -71,7 +71,7 @@ CustomBuildingPipeline__Update(void)
 	buildingAmbient.blue = CTimeCycle_GetAmbientBlue() * CCoronas__LightsMult;
 
 	// Clamp minimum ambient — prevents pure-black buildings when timecycle ambient is very low
-	const float AMBIENT_FLOOR = 0.15f;
+	const float AMBIENT_FLOOR = 0.08f;
 	if(buildingAmbient.red < AMBIENT_FLOOR) buildingAmbient.red = AMBIENT_FLOOR;
 	if(buildingAmbient.green < AMBIENT_FLOOR) buildingAmbient.green = AMBIENT_FLOOR;
 	if(buildingAmbient.blue < AMBIENT_FLOOR) buildingAmbient.blue = AMBIENT_FLOOR;
@@ -684,6 +684,18 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 	pipeUploadLightDirectionForce(pDirect, REG_directDir);
 	pipeUploadLightColorForcePS(pDirect, REG_directCol);
 	pipeUploadLightDirectionForcePS(pDirect, REG_directDir);
+
+	// Clear extra light arrays — D3D9 constants persist across draw calls.
+	// Stale values from vehicle pipe or game rendering would be treated as
+	// phantom extra lights by the PBR multi-light loop, creating a bright
+	// halo that follows the camera.
+	static float zero4[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	for(int i = 0; i < 6; i++){
+		RwD3D9SetVertexShaderConstant(REG_directCol + 1 + i, zero4, 1);   // VS c6-c11
+		RwD3D9SetVertexShaderConstant(REG_directDir + 1 + i, zero4, 1);   // VS c13-c18
+		RwD3D9SetPixelShaderConstant(REG_directCol + 1 + i, zero4, 1);    // PS c6-c11
+		RwD3D9SetPixelShaderConstant(REG_directDir + 1 + i, zero4, 1);    // PS c13-c18
+	}
 
 	// Env map setup (from Xbox building pipeline)
 	RwMatrix envmat;

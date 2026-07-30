@@ -35,6 +35,7 @@
 #define IDR_RADIOSITYPS             163
 #define IDR_VCTRAILSPS              164
 #define IDR_MODERNCOLORFILTERPS     165
+#define IDR_TONEMAPPASS             166
 
 // PBR / Modern (200-210)
 #define IDR_VEHICLEPAINT_GTAIV      200

@@ -38,6 +38,7 @@ IDR_BLURPS              RCDATA "cso/blurPS.cso"
 IDR_RADIOSITYPS         RCDATA "cso/radiosityPS.cso"
 IDR_VCTRAILSPS          RCDATA "cso/vcTrailsPS.cso"
 IDR_MODERNCOLORFILTERPS RCDATA "cso/ModernColorFilterPS.cso"
+IDR_TONEMAPPASS         RCDATA "cso/TonemapPass.cso"
 
 // PBR / Modern
 IDR_VEHICLEPAINT_GTAIV  RCDATA "cso/VehiclePaint_GTAIV.cso"

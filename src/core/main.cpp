@@ -3,6 +3,7 @@
 #include "neo.h"
 #include "waterPipe.h"
 #include "chars.h"
+#include "Ragdoll.h"
 #include "ini_parser.hpp"
 #include "debugmenu_public.h"
 #include "ModuleList.hpp"
@@ -867,6 +868,10 @@ RenderScene_hook(void)
 			config->debugMenuOpen, config, &config->debugMenuOpen);
 	}
 	s_f4Prev = f4Now;
+
+	// Process ragdoll motion BEFORE render so modified matrices are visible
+	g_ragdollMan.ProcessAllPeds(CTimer__ms_fTimeStep / 50.0f);
+	g_ragdollMan.Update(CTimer__ms_fTimeStep / 50.0f);
 
 	RenderScene_before(nil);
 	RenderScene();
@@ -1856,6 +1861,10 @@ InjectDelayedPatches()
 	if(iCanHasvehiclePipe)
 		hookVehiclePipe();
 
+	// Initialize ragdoll physics manager
+	g_ragdollMan.Init();
+	dbglog("Ragdoll manager initialized (%d ragdolls in pool)", MAX_RAGDOLLS);
+
 	InjectHook(0x5E675E, &FX::GetFxQuality_ped);
 	InjectHook(0x5E676D, &FX::GetFxQuality_ped);
 	InjectHook(0x706BC4, &FX::GetFxQuality_ped);
@@ -1942,7 +1951,7 @@ DllMain(HINSTANCE hInst, DWORD reason, LPVOID)
 
 		diag_init(logPath);
 		diag_installVEH();
-		diag_startWatchdog();
+		// diag_startWatchdog() removed — heartbeat() is never called, causes false freeze dialog
 		dbglog("VEH handler + watchdog installed");
 
 		dbglog("=== skygfx loading ===");
@@ -2104,6 +2113,11 @@ DllMain(HINSTANCE hInst, DWORD reason, LPVOID)
 		hooktexdb();
 
 		dbglog("=== DllMain complete, all hooks applied ===");
+	}
+
+	if(reason == DLL_PROCESS_DETACH){
+		g_ragdollMan.Exit();
+		dbglog("Ragdoll manager shut down");
 	}
 
 	return TRUE;

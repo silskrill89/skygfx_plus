@@ -473,6 +473,7 @@ CreateShaders(void)
 	makePS(IDR_VCTRAILSPS, &vcTrailsPS);
 	makePS(IDR_MODERNCOLORFILTERPS, &modernColorFilterPS);
 	makePS(IDR_GRADINGPS, &gradingPS);
+	makePS(IDR_TONEMAPPASS, &tonemapPassPS);
 	makePS(IDR_CONTRASTPS, &contrastPS);
 	makePS(IDR_BLURPS, &blurPS);
 	makePS(IDR_RADIOSITYPS, &radiosityPS);
