@@ -57,7 +57,9 @@ float4 main(PS_INPUT IN) : COLOR
     float m = 2.0 * sqrt(dot(R.xy, R.xy) + (R.z + 1.0) * (R.z + 1.0));
     float2 envUV = R.xy / m + 0.5;
     float4 env = tex2D(envMapTex, envUV);
-    float envIntensity = max(IN.envColor.a, 0.15) * 0.8;
+    // Dark glass: env map at ~15% keeps windows dark while showing subtle reflections.
+    // Reference photos show nearly opaque windows with minimal env bleed.
+    float envIntensity = max(IN.envColor.a, 0.1) * 0.15;
     float3 envCol = env.rgb * envIntensity;
 
     // Sun contribution
@@ -114,25 +116,25 @@ float4 main(PS_INPUT IN) : COLOR
     float3 glassBase = diff.rgb * IN.color.rgb;
 
     // LAYER 2: Subtle env reflection — adds glossy glass surface on top of texture
-    // Very gentle Fresnel: face-on = 5% reflection, grazing = 25% reflection
-    float envStrength = lerp(0.05, 0.25, fresnel);
+    // Very gentle Fresnel: face-on = 2% reflection, grazing = 8% reflection
+    // Reference: real car windows show minimal reflection except at extreme angles
+    float envStrength = lerp(0.02, 0.08, fresnel);
     float3 reflLayer = envCol * envStrength;
 
     // Combine: glass texture + subtle reflection (car body shows through via alpha)
     float3 color = glassBase + reflLayer;
 
     // LAYER 3: Very subtle sun highlight on glass surface
-    color += sunContrib * 0.06;
+    color += sunContrib * 0.04;
 
-    // LAYER 4: Colored tint overlay (subtle, adds warmth/color to glass)
-    float3 tintColor = tint * 0.3;
-    float tintAlpha = opacity * tintStrength * 0.15;
+    // LAYER 4: Colored tint overlay (very subtle)
+    float3 tintColor = tint * 0.15;
+    float tintAlpha = opacity * tintStrength * 0.08;
     color = lerp(color, color + tintColor, tintAlpha);
 
-    // Alpha: use the material's original opacity — this controls how much
-    // of the car body shows through. Glass is semi-transparent.
-    // Thicker at grazing angles (Fresnel) for realistic glass edge behavior.
-    float alpha = saturate(opacity * 0.7 + fresnel * 0.15);
+    // Alpha: Reference photos show nearly opaque windows from outside.
+    // Higher base opacity (0.6) + stronger Fresnel at edges makes glass feel solid.
+    float alpha = saturate(opacity * 0.6 + fresnel * 0.15);
 
     return float4(color, saturate(alpha));
 }

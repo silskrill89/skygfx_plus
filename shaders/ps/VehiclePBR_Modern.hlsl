@@ -39,20 +39,15 @@ float whiteNoise(float2 p){
     return frac(sin(dot(p, float2(12.9898, 78.233))) * 43758.5453);
 }
 
-float smoothNoise(float3 pos){
-    float n  = frac(sin(dot(pos, float3(12.9898, 78.233, 45.164))) * 43758.5453);
-    float n2 = frac(sin(dot(pos + float3(1,0,0), float3(12.9898, 78.233, 45.164))) * 43758.5453);
-    float n3 = frac(sin(dot(pos + float3(0,1,0), float3(12.9898, 78.233, 45.164))) * 43758.5453);
-    float n4 = frac(sin(dot(pos + float3(0,0,1), float3(12.9898, 78.233, 45.164))) * 43758.5453);
-    return (n + n2 + n3 + n4) * 0.25;
-}
 
-// Burley Diffuse (Disney/Crytek) - used for non-metals
+// Burley Diffuse (Disney/Crytek) — returns BRDF × NdotL (energy-conserved cosine weighting)
+// Matches CryEngine shadeLib.cfi BurleyBRDF exactly.
 float BurleyDiffuse(float NdotL, float NdotV, float VdotH, float roughness){
+    NdotV = max(NdotV, 0.1);  // Prevent overly dark edges (CryEngine convention)
     float fd90 = 0.5 + 2.0 * VdotH * VdotH * roughness;
     float scatterL = lerp(1.0, fd90, pow(1.0 - NdotL, 5.0));
     float scatterV = lerp(1.0, fd90, pow(1.0 - NdotV, 5.0));
-    return scatterL * scatterV * lerp(1.0, 1.0/1.51, roughness);
+    return scatterL * scatterV * lerp(1.0, 1.0/1.51, roughness) * NdotL;
 }
 
 struct PS_INPUT{
@@ -69,12 +64,15 @@ float4 main(PS_INPUT IN) : COLOR
 {
     float3 N = length(IN.WorldNormal) > 1e-6 ? IN.WorldNormal / length(IN.WorldNormal) : float3(0, 1, 0);
     float3 V = length(IN.ViewDir) > 1e-6 ? IN.ViewDir / length(IN.ViewDir) : float3(0, 0, 1);
-    float3 L = length(IN.SunDir) > 1e-6 ? IN.SunDir / length(IN.SunDir) : float3(0, 0, -1);
+    // Use PS c12 (directDir) — world-space sun direction.
+    // IN.SunDir from VS is LOCAL-space (wrong for rotated vehicles).
+    float3 L = length(directDir) > 1e-6 ? -normalize(directDir) : float3(0, 0, -1);
 
     // ---- Base color ----
     float4 diff = tex2D(diffuseTex, IN.texcoord0);
-    // matCol = carcols paint color (c19). Diffuse = texture × vertex × paint color.
-    float3 baseColor = diff.rgb * IN.color.rgb * matCol.rgb;
+    // Albedo = texture × paint color ONLY. Vertex color (IN.color) contains
+    // VS-baked lighting × matCol — using it doubles lighting and matCol.
+    float3 baseColor = diff.rgb * matCol.rgb;
 
     // Blend with screen-space normal (if available)
     // ambientColor.w > 0 means normal buffer is bound and valid
@@ -101,10 +99,7 @@ float4 main(PS_INPUT IN) : COLOR
     float wheelNoise = whiteNoise(IN.texcoord0 * 47.0);
     roughness = lerp(roughness, 0.15, isWheel * wheelNoise * 0.5);
 
-    // ---- Surface noise for reflection breakup ----
-    float noiseScale = paintNoise.y;
-    float edgeBlend  = paintNoise.z;
-    float rawNoise = smoothNoise(IN.WorldPos * 0.5);
+    // (paintNoise.y/z = noiseScale/edgeBlend, reserved for future reflection breakup)
 
     // ---- Paint tint from carcols ----
     float3 paintTint = matCol.rgb;
@@ -126,36 +121,18 @@ float4 main(PS_INPUT IN) : COLOR
     cloudNoise = smoothstep(0.3, 0.7, cloudNoise);
     float shadowFactor = lerp(0.6, 1.0, 1.0 - cloudNoise * 0.4);
 
-    // ---- LAYER 1: Diffuse (Burley, energy-conserved) ----
+    // ---- LAYER 1: Diffuse (Burley, energy-conserved, NdotL-weighted) ----
     // kD = (1 - kS) * (1 - metalness) — metals have no diffuse
     // ambientColor.rgb = timecycle ambient light, surfProps.x = surface ambient
     float3 ambient = ambientColor.rgb * surfProps.x * baseColor;
-    float3 layer1 = baseColor * kD * shadowFactor + ambient;
-
-    // ---- Multi-light Fresnel accumulation ----
-    float fresnelAccum = 0.0;
     float NdotL_sun = max(dot(N, L), 0.0);
-    if(NdotL_sun > 0.0){
-        float3 H = normalize(V + L);
-        float LdotH = max(dot(L, H), 0.0);
-        float3 F = F_Schlick(LdotH, F0);
-        fresnelAccum += F.r * NdotL_sun;
-    }
-    for(int i = 0; i < 6; i++){
-        float3 Ll = -lightDir[i];
-        float NdotL = max(dot(N, Ll), 0.0);
-        if(NdotL > 0.0){
-            float3 H = normalize(V + Ll);
-            float LdotH = max(dot(Ll, H), 0.0);
-            float3 F = F_Schlick(LdotH, F0);
-            fresnelAccum += F.r * NdotL;
-        }
-    }
-    fresnelAccum = saturate(fresnelAccum);
+    float3 H_sun = normalize(V + L);
+    float VdotH_sun = max(dot(V, H_sun), 0.0);
+    float burleyDiff = BurleyDiffuse(NdotL_sun, NdotV, VdotH_sun, roughness);
+    float3 layer1 = baseColor * kD * burleyDiff * directCol.rgb * shadowFactor + ambient;
 
     // ---- LAYER 2: Environment Reflection (env map primary, IBL tint/boost) ----
     float3 R = reflect(-V, N);
-    float4 mask = tex2D(maskTex, IN.texcoord0);
 
     // Sample scene env map (s1) — actual reflection of surroundings
     float2 envReflUV = SphereEnvMapUV(R, V);
@@ -164,25 +141,16 @@ float4 main(PS_INPUT IN) : COLOR
     // Sample IBL (s3) — sky ambient color, tints/boosts the env map
     float3 iblTint = tex2D(iblTex, envReflUV).rgb;
 
-    // Clear-coat Fresnel for car paint: strong at all angles
-    float clearCoatF = SchlickFresnelScalar(NdotV, 0.04);
-    clearCoatF = lerp(0.35, 1.0, clearCoatF);
-
-    // Fresnel refraction clamp (30→30, 10→10 pattern)
-    // Prevents env map melting at grazing angles:
-    //   NdotV >= 0.30 → full reflection (100%)
-    //   NdotV <= 0.10 → minimum reflection (10%, never zero)
-    //   Between → smooth lerp
-    float reflFresnel = saturate((NdotV - 0.10) / (0.30 - 0.10));
-    reflFresnel = lerp(0.10, 1.0, reflFresnel);
-
     // Layer 2 = env map (primary) tinted by IBL sky color, Fresnel-modulated
     // IBL tints additively, not multiplicatively — prevents dark IBL areas killing reflections
     float3 iblBlend = lerp(envRefl, envRefl + iblTint * 0.06, 0.5);
-    float3 layer2 = iblBlend * F_atNdotV * clearCoatF * envFresnel * reflFresnel;
+    // Physically correct Fresnel for env reflection: Schlick with 8% minimum floor.
+    // Clear coat is implicitly handled by the minimum — real clear coat F0≈0.04-0.08.
+    // Reflections are ADDITIVE: nothing gets darker, they only add light.
+    float3 layer2 = iblBlend * max(F_atNdotV, 0.08) * envFresnel;
 
     // ---- Fresnel Rim ----
-    float rimStrength = pow(1.0 - NdotV, 3.0) * envFresnel * 0.3;
+    float rimStrength = pow(1.0 - NdotV, 3.0) * envFresnel;
     float3 fresnelRim = F_atNdotV * rimStrength;
 
     // ---- PBR Specular (GGX/Smith) — direct lights only ----
@@ -217,16 +185,13 @@ float4 main(PS_INPUT IN) : COLOR
     // ---- COMPOSITE ----
     // Energy-conserved: diffuse is reduced by Fresnel (kD), reflections add on top
     float3 color = layer1;                           // diffuse × kD × shadow + ambient
-    color += layer2;                                  // env reflections (Fresnel-modulated)
+    color += layer2;                                  // env reflections (Fresnel-modulated, additive)
     color += fresnelRim * 0.3;                        // edge rim
-    color += specTotal * 0.6;                         // direct specular highlights
+    color += specTotal;                                // direct specular highlights (full strength)
     color += layer4;                                  // IBL fill
 
-    // ---- Contrast: crush blacks, match building/ground contrast ----
-    color = color * 1.15 - 0.015;
-
-    // Output linear HDR — Reinhard tonemap + gamma applied by PostFX grading pass
-    return float4(color, diff.a);
+    // Output linear HDR — Hable/Uncharted 2 tonemap + sRGB gamma applied by PostFX
+    return float4(max(color, 0.0), diff.a);
 }
 
 // ============================================================

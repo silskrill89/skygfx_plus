@@ -1452,7 +1452,7 @@ readIni(int n)
 		{"",        1},
 	};
 	c->colorFilter = StrAssoc::get(colorFilterMap, cfg.get("SkyGfx", "colorFilter", "").c_str());
-	// PBR pipeline always uses Modern color filter (Reinhard already applied in shaders)
+	// PBR pipeline always uses Modern color filter (Hable filmic tonemap applied in PostFX)
 	if(c->pipeline == PIPELINE_PBR)
 		c->colorFilter = COLORFILTER_MODERN;
 	ps2pcMap[2].val = c->colorFilter == COLORFILTER_PS2 ? 0 : 1;

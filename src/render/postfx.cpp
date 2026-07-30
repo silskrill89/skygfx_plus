@@ -993,7 +993,7 @@ CPostEffects::ColourFilter_Modern(RwRGBA rgba1, RwRGBA rgba2)
 	// Copy graded linear output to pRasterFrontBuffer for tonemap input
 	UpdateFrontBuffer();
 
-	// Pass 2: Reinhard tonemap + sRGB gamma encode
+	// Pass 2: Hable/Uncharted 2 filmic tonemap + sRGB gamma encode
 	if(tonemapPassPS){
 		// Re-setup render states for tonemap pass (reads pRasterFrontBuffer)
 		RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
@@ -1591,7 +1591,7 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 		return;
 	}
 
-	// PBR pipeline always uses Modern colour filter (Reinhard already in shaders)
+	// PBR pipeline always uses Modern colour filter (Hable filmic tonemap in PostFX)
 	if(config->pipeline == PIPELINE_PBR)
 		colorFilter = COLORFILTER_MODERN;
 
