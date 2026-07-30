@@ -1409,11 +1409,13 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 
 	_rwD3D9EnableClippingIfNeeded(object, type);
 
-	// Per-frame debug logging (throttle to once per second)
+	// Per-frame debug logging (throttle to once per ~60 seconds)
 	static unsigned int vehLogCounter = 0;
-	bool vehLogThisFrame = (vehLogCounter++ % 300 == 0);
+	bool vehLogThisFrame = (vehLogCounter++ % 3600 == 0);
 
 	if(vehLogThisFrame){
+		RwUInt32 frame = RWSRCGLOBAL(renderFrame);
+		dbglog("[VehiclePBR] === FRAME %u ===", frame);
 		dbglog("[VehiclePBR] atomic=%p flags=%X", atomic, flags);
 		dbglog("[VehiclePBR] shaders: VS=%p PS=%p", vehiclePBRVS, VehiclePBR_Modern);
 		dbglog("[VehiclePBR] iCanHasNeoCar=%d iCanHasbuildingPipe=%d", iCanHasNeoCar, iCanHasbuildingPipe);
@@ -1651,13 +1653,13 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 		pipeUploadMatCol(flags, material, REG_matCol);
 		// PS c19 = matCol — vehicle PBR main() uses matCol.rgb for baseColor/paintTint
 		// pipeUploadMatCol only sets VS constant; PS needs it too
+		RwRGBAReal matColRGBA;
 		if(flags & rpGEOMETRYMODULATEMATERIALCOLOR){
-			RwRGBAReal matColRGBA;
 			RwRGBARealFromRwRGBA(&matColRGBA, &material->color);
 			RwD3D9SetPixelShaderConstant(REG_matCol, &matColRGBA, 1);
 		}else{
-			static float white4[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-			RwD3D9SetPixelShaderConstant(REG_matCol, white4, 1);
+			matColRGBA = { 1.0f, 1.0f, 1.0f, 1.0f };
+			RwD3D9SetPixelShaderConstant(REG_matCol, &matColRGBA, 1);
 		}
 		surfProps.ambient = material->surfaceProps.ambient;
 		surfProps.diffuse = material->surfaceProps.diffuse;
@@ -1767,8 +1769,13 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 		RwD3D9SetPixelShader(VehiclePBR_Modern);
 
 		if(vehLogThisFrame){
-			dbglog("[VehiclePBR] OPAQUE: glossiness=%.2f specular=%.2f specTintR=%.2f", glossiness, specular, specularTintR);
-			dbglog("[VehiclePBR] OPAQUE: ambientPS=(%.2f,%.2f,%.2f,%.2f) iblTex=%p", ambientPS[0], ambientPS[1], ambientPS[2], ambientPS[3], g_iblTex);
+			RwUInt32 frame = RWSRCGLOBAL(renderFrame);
+			dbglog("[VehiclePBR] MESH@frame=%u: glossiness=%.2f specular=%.2f specTintR=%.2f", frame, glossiness, specular, specularTintR);
+			dbglog("[VehiclePBR] MESH@frame=%u: ambientPS=(%.2f,%.2f,%.2f,%.2f) iblTex=%p", frame, ambientPS[0], ambientPS[1], ambientPS[2], ambientPS[3], g_iblTex);
+			dbglog("[VehiclePBR] MESH@frame=%u: tex=%p matCol=(%.2f,%.2f,%.2f,%.2f) flags=0x%X", frame, material->texture, matColRGBA.red, matColRGBA.green, matColRGBA.blue, matColRGBA.alpha, flags);
+			dbglog("[VehiclePBR] MESH@frame=%u: surfProps amb=%.2f diff=%.2f spec=%.2f", frame, surfProps.ambient, surfProps.diffuse, surfProps.specular);
+			extern IDirect3DTexture9 *g_normalBufferTex;
+			dbglog("[VehiclePBR] MESH@frame=%u: normalBuf=%p dualPass=%d", frame, g_normalBufferTex, config->dualPassVehicle);
 		}
 
 		D3D9RenderDual(config->dualPassVehicle, resEntryHeader, instancedData);

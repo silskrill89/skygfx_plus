@@ -84,7 +84,7 @@ PIPELINE_GTAIV(4) → buildingPipe=BUILDING_GTAIV(2), vehiclePipe=CAR_GTAIV(9)
 - c19: matCol
 - c22: pbrParams — **MUST use `pipeUploadPBR()`** — NEVER upload manually
 - c23: paintNoise — **MUST use `pipeUploadPBR()`**
-- c24: ambientColor (vehicle PBR only, not used by `main_building`)
+- c24: ambientColor — used by BOTH vehicle `main()` AND building `main_building()` (uploaded by both callbacks)
 
 ### Texture Registers
 
@@ -106,11 +106,27 @@ PIPELINE_GTAIV(4) → buildingPipe=BUILDING_GTAIV(2), vehiclePipe=CAR_GTAIV(9)
 
 ## Rules
 
+### Critical Shader Rules
 - **c22/c23 upload**: ALWAYS use `pipeUploadPBR()` from `pipelinecommon.cpp`. Order: `{glossiness, specular, ...}`. Manual upload produces flat/dark output.
 - **Color filter for PBR**: MUST be `COLORFILTER_MODERN(8)`. Runtime override in `postfx.cpp ColourFilter_switch`.
 - **SM3.0 only**: All shaders compile as ps_3_0 / vs_3_0. No SM4/5 features.
 - **Division safety**: Guard all `normalize()` calls against zero-length vectors. Guard `D_GGX` denominator. Use `1e-7` epsilon minimum. NaN propagates as black in SM3.0.
 - **Debug logging**: Use `dbglog_throttle("tag")` (global 2s interval) for per-frame logs. Use `dbglog()` for init/error logs. Log file: `skygfx_dbg.log`.
+
+### Token Efficiency Rules
+- **AGGRESSIVE COMPRESSION**: This project hits context limits extremely fast. Compress early, compress often. Every 5-8 tool calls, evaluate whether older ranges are stale and compress them. Do NOT wait for the max context warning. When the user asks to compress, do it IMMEDIATELY — compress the widest stale range possible in one pass.
+- **LSAI First**: Use LSAI for all symbol lookup (saves 90%+ tokens). Never grep/glob for symbol search. Use lsai_source instead of Read for method bodies. Use lsai_outline instead of reading entire files.
+- **Specialist Routing**: Single-file mechanical fix → @fixer (1/2 cost). Symbol lookup → @explorer (2x faster, 1/2 cost). External research → @librarian (2x faster, 1/2 cost). Architecture decisions → @oracle (5x better decisions).
+- **Parallel Execution**: Independent tasks → Parallel background specialists. Dependent tasks → Sequential with dependency tracking. Write conflicts → Never parallelize overlapping writes.
+- **Session Reuse**: Reuse available sessions when context fits. Fresh sessions when too much unrelated context. Track session IDs for background tasks.
+- **Minimal Context**: Reference paths/lines instead of pasting files. Brief delegation notices instead of verbose explanations. Concise status updates instead of narrating work.
+
+### Safety Rules
+- **Null Pointer Guards**: Always check RwFrame/RwCamera/RwRaster pointers before use. Check return values of RwV3dNormalize.
+- **Division Safety**: Guard all 1.0f/x operations with epsilon checks. Use max(x, 1e-7f) pattern.
+- **Buffer Safety**: Use strncpy/strncat instead of strcpy/strcat. Use snprintf instead of sprintf.
+- **Memory Safety**: Prefer stack allocation over heap. If heap required, ensure matching delete/free.
+- **Render State**: Save and restore all D3D9 render states modified in callbacks.
 
 ## Hooks
 

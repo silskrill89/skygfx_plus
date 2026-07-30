@@ -220,22 +220,27 @@ void VehShaders_GetTireProps(int modelID, float *specular, float *glossiness,
 
 // ============================================================
 // Texture name detection (mesh type identification)
-// Uses unified BRDF library surface detection
+// All detection delegates to VehShaders_GetSurfaceType() —
+// single source of truth using vehicles.txd texture names.
 // ============================================================
 
 bool VehShaders_IsTireTexture(const char *texName){
-    return texName && (strstr(texName, "tyre") || strstr(texName, "tire"));
+    return texName && VehShaders_GetSurfaceType(texName) == SURFACE_CAR_TIRE;
 }
 
 bool VehShaders_IsHeadlightTexture(const char *texName){
-    return texName && (strstr(texName, "vehiclelights") || strstr(texName, "vehiclelightson"));
+    return texName && VehShaders_GetSurfaceType(texName) == SURFACE_CAR_HEADLIGHT;
 }
 
 bool VehShaders_IsTaillightTexture(const char *texName){
-    return texName && strstr(texName, "taillight");
+    return texName && VehShaders_GetSurfaceType(texName) == SURFACE_CAR_TAILLIGHT;
 }
 
 bool VehShaders_IsGlassTexture(const char *texName, bool hasAlpha, unsigned char alpha){
+    // Positive match: known glass texture names from vehicles.txd
+    if(texName && VehShaders_GetSurfaceType(texName) == SURFACE_CAR_GLASS)
+        return true;
+    // Fallback: alpha-based elimination for modded vehicles with unknown names
     if(!hasAlpha || alpha >= 200) return false;
     if(VehShaders_IsHeadlightTexture(texName)) return false;
     if(VehShaders_IsTaillightTexture(texName)) return false;

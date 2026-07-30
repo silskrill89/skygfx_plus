@@ -57,9 +57,9 @@ float4 main(PS_INPUT IN) : COLOR
     float m = 2.0 * sqrt(dot(R.xy, R.xy) + (R.z + 1.0) * (R.z + 1.0));
     float2 envUV = R.xy / m + 0.5;
     float4 env = tex2D(envMapTex, envUV);
-    // Dark glass: env map at ~15% keeps windows dark while showing subtle reflections.
+    // Dark glass: env map at ~8% keeps windows dark while showing subtle reflections.
     // Reference photos show nearly opaque windows with minimal env bleed.
-    float envIntensity = max(IN.envColor.a, 0.1) * 0.15;
+    float envIntensity = max(IN.envColor.a, 0.1) * 0.08;
     float3 envCol = env.rgb * envIntensity;
 
     // Sun contribution
@@ -128,13 +128,13 @@ float4 main(PS_INPUT IN) : COLOR
     color += sunContrib * 0.04;
 
     // LAYER 4: Colored tint overlay (very subtle)
-    float3 tintColor = tint * 0.15;
-    float tintAlpha = opacity * tintStrength * 0.08;
+    float3 tintColor = tint * 0.10;
+    float tintAlpha = opacity * tintStrength * 0.05;
     color = lerp(color, color + tintColor, tintAlpha);
 
     // Alpha: Reference photos show nearly opaque windows from outside.
-    // Higher base opacity (0.6) + stronger Fresnel at edges makes glass feel solid.
-    float alpha = saturate(opacity * 0.6 + fresnel * 0.15);
+    // Higher base opacity (0.7) + stronger Fresnel at edges makes glass feel solid.
+    float alpha = saturate(opacity * 0.7 + fresnel * 0.20);
 
     return float4(color, saturate(alpha));
 }

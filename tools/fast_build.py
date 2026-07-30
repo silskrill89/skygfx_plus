@@ -503,12 +503,21 @@ def deploy(force=False):
 
     kill_game_process()
 
-    # Find DLL
+    # Find DLL — post-build copies DLL directly to game dir as .asi
     dll_src = None
-    for p in [GAME_DIR / 'skygfx.dll', PROJECT_DIR / 'bin' / 'Release' / 'skygfx.dll']:
+    asi_dst = GAME_DIR / 'skygfx.asi'
+    for p in [PROJECT_DIR / 'build' / 'Release' / 'skygfx.dll',
+              PROJECT_DIR / 'bin' / 'Release' / 'skygfx.dll',
+              GAME_DIR / 'skygfx.dll']:
         if p.exists():
             dll_src = p
             break
+
+    # If post-build already placed the ASI in game dir, consider it deployed
+    if not dll_src and asi_dst.exists():
+        print(f"  ASI already deployed ({asi_dst.stat().st_size:,} bytes - post-build)")
+        timer.end()
+        return
 
     asi_dst = GAME_DIR / 'skygfx.asi'
 

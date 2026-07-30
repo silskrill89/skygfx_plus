@@ -634,6 +634,18 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Sphere(RwResEntry *repEntry, void 
 void
 CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *object, RwUInt8 type, RwUInt32 flags)
 {
+	// Render IBL cubemap once per frame (sky capture for vehicle environment reflections)
+	// Buildings render before vehicles, so this is the right time
+	{
+		static RwUInt32 lastIBLFrame = 0;
+		RwUInt32 curFrame = RWSRCGLOBAL(renderFrame);
+		if(curFrame != lastIBLFrame){
+			extern void RenderIBLBuffer(void);
+			RenderIBLBuffer();
+			lastIBLFrame = curFrame;
+		}
+	}
+
 	static int pbrFrameCount = 0;
 	if(++pbrFrameCount % 300 == 1)
 		dbglog("PBRBuilding: frame %d object=%p type=%d flags=0x%X", pbrFrameCount, object, type, flags);
@@ -722,6 +734,10 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 		}
 	}
 	RwD3D9SetPixelShader(buildingPBRPS);
+
+	// Upload ambient color to PS c24 for PBR ambient term (matches vehicle pipe)
+	float ambientPS[4] = { buildingAmbient.red, buildingAmbient.green, buildingAmbient.blue, 0.0f };
+	RwD3D9SetPixelShaderConstant(24, ambientPS, 1);
 
 	int alphafunc, alpharef;
 	int src, dst;

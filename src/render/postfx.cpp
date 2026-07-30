@@ -1003,8 +1003,17 @@ CPostEffects::ColourFilter_Modern(RwRGBA rgba1, RwRGBA rgba2)
 		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)CPostEffects::pRasterFrontBuffer);
 		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
 
-		float tonemapP[4] = { 1.0f, 0.0f, 0.0f, 0.0f };
+		// Map GTA SA brightness slider (0-384, default 256) to tonemap exposure
+		float brightness = (float)CMenuManager__m_PrefsBrightness;
+		float exposure = max(0.3f, brightness / 256.0f);  // 256 → 1.0 (neutral)
+		float tonemapP[4] = { exposure, 0.0f, 0.0f, 0.0f };
 		RwD3D9SetPixelShaderConstant(5, tonemapP, 1);
+
+		// Throttled diagnostic: verify brightness offset reads correctly
+		static unsigned int brightLogCounter = 0;
+		if(brightLogCounter++ % 3600 == 0){
+			dbglog("[Tonemap] brightness=%d exposure=%.3f", CMenuManager__m_PrefsBrightness, exposure);
+		}
 
 		overrideIm2dPixelShader = tonemapPassPS;
 		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);

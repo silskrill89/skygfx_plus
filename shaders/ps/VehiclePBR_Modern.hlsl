@@ -110,6 +110,9 @@ float4 main(PS_INPUT IN) : COLOR
     // F0: dielectric reflectance, optionally tinted by paint color
     float3 F0 = lerp(float3(specularF0, specularF0, specularF0), paintTint * specularF0, specTint);
 
+    // Energy conservation (CryEngine fragLib pattern): reduce albedo by specular reflectance
+    baseColor *= saturate(1.0 - dot(F0, float3(0.2126, 0.7152, 0.0722)));
+
     // Fresnel
     float3 F_atNdotV = F_Schlick(NdotV, F0);
     float3 kS = F_atNdotV;
@@ -121,39 +124,35 @@ float4 main(PS_INPUT IN) : COLOR
     cloudNoise = smoothstep(0.3, 0.7, cloudNoise);
     float shadowFactor = lerp(0.6, 1.0, 1.0 - cloudNoise * 0.4);
 
-    // ---- LAYER 1: Diffuse (Burley, energy-conserved, NdotL-weighted) ----
-    // kD = (1 - kS) * (1 - metalness) — metals have no diffuse
-    // ambientColor.rgb = timecycle ambient light, surfProps.x = surface ambient
-    float3 ambient = ambientColor.rgb * surfProps.x * baseColor;
+    // ---- Direct light with minimum floor for dawn/dusk ----
+    // At dawn directCol can be ~0.02-0.05. Floor of 0.15 ensures paint gets some directional shading.
+    float3 sunContrib = max(directCol.rgb, float3(0.15, 0.15, 0.18));
+
     float NdotL_sun = max(dot(N, L), 0.0);
     float3 H_sun = normalize(V + L);
     float VdotH_sun = max(dot(V, H_sun), 0.0);
     float burleyDiff = BurleyDiffuse(NdotL_sun, NdotV, VdotH_sun, roughness);
-    float3 layer1 = baseColor * kD * burleyDiff * directCol.rgb * shadowFactor + ambient;
 
-    // ---- LAYER 2: Environment Reflection (env map primary, IBL tint/boost) ----
+    // ---- Ambient: fill light — at dawn this is the primary illumination ----
+    // 20% of timecycle ambient gives paint visibility at dawn without washing out daytime
+    float3 ambient = ambientColor.rgb * baseColor * 0.20;
+
+    // ---- Diffuse: paint color × lighting (paint MUST dominate) ----
+    float3 layer1 = baseColor * kD * burleyDiff * sunContrib * shadowFactor + ambient;
+
+    // ---- Environment Reflection: SUBTLE, paint must show through ----
+    // Cars are NOT mirrors. Env reflection adds gloss hint, not mirror image.
     float3 R = reflect(-V, N);
-
-    // Sample scene env map (s1) — actual reflection of surroundings
     float2 envReflUV = SphereEnvMapUV(R, V);
     float3 envRefl = tex2D(envMapTex, envReflUV).rgb;
-
-    // Sample IBL (s3) — sky ambient color, tints/boosts the env map
     float3 iblTint = tex2D(iblTex, envReflUV).rgb;
+    float3 iblBlend = lerp(envRefl, envRefl + iblTint * 0.04, 0.3);
+    // Heavily attenuated: ×0.12 strength, masked by sharp Fresnel falloff
+    // Only visible at grazing angles (carpaint has clearcoat, not mirror)
+    float envMask = pow(1.0 - NdotV, 4.0) * 0.12;
+    float3 layer2 = iblBlend * envMask;
 
-    // Layer 2 = env map (primary) tinted by IBL sky color, Fresnel-modulated
-    // IBL tints additively, not multiplicatively — prevents dark IBL areas killing reflections
-    float3 iblBlend = lerp(envRefl, envRefl + iblTint * 0.06, 0.5);
-    // Physically correct Fresnel for env reflection: Schlick with 8% minimum floor.
-    // Clear coat is implicitly handled by the minimum — real clear coat F0≈0.04-0.08.
-    // Reflections are ADDITIVE: nothing gets darker, they only add light.
-    float3 layer2 = iblBlend * max(F_atNdotV, 0.08) * envFresnel;
-
-    // ---- Fresnel Rim ----
-    float rimStrength = pow(1.0 - NdotV, 3.0) * envFresnel;
-    float3 fresnelRim = F_atNdotV * rimStrength;
-
-    // ---- PBR Specular (GGX/Smith) — direct lights only ----
+    // ---- Specular: GGX/Smith for direct sun highlight ----
     float3 specTotal = float3(0, 0, 0);
     if(NdotL_sun > 0.0){
         float3 H = normalize(V + L);
@@ -162,7 +161,7 @@ float4 main(PS_INPUT IN) : COLOR
         float D = D_GGX(NdotH, roughness);
         float Vis = V_SmithCorrelated(NdotV, NdotL_sun, roughness);
         float3 F = F_Schlick(LdotH, F0);
-        specTotal += D * F * Vis * NdotL_sun * directCol.rgb;
+        specTotal += D * F * Vis * NdotL_sun * sunContrib;
     }
     for(int i = 0; i < 6; i++){
         float3 Ll = -lightDir[i];
@@ -178,19 +177,13 @@ float4 main(PS_INPUT IN) : COLOR
         }
     }
 
-    // ---- IBL fill ----
-    float2 iblUV = N.xy * 0.5 + 0.5;
-    float3 layer4 = tex2D(iblTex, iblUV).rgb * 0.06;
-
     // ---- COMPOSITE ----
-    // Energy-conserved: diffuse is reduced by Fresnel (kD), reflections add on top
-    float3 color = layer1;                           // diffuse × kD × shadow + ambient
-    color += layer2;                                  // env reflections (Fresnel-modulated, additive)
-    color += fresnelRim * 0.3;                        // edge rim
-    color += specTotal;                                // direct specular highlights (full strength)
-    color += layer4;                                  // IBL fill
+    // Paint color (baseColor) is the DOMINANT term. Everything else is additive tint.
+    float3 color = layer1;                           // diffuse (paint × lighting) + subtle ambient
+    color += specTotal;                                // specular highlights (paint-colored via F0 tint)
+    color += layer2;                                  // env reflection (very subtle, grazing only)
 
-    // Output linear HDR — Hable/Uncharted 2 tonemap + sRGB gamma applied by PostFX
+    // Output linear HDR — PostFX TonemapPass handles everything
     return float4(max(color, 0.0), diff.a);
 }
 
@@ -344,6 +337,13 @@ float4 main_building(PS_INPUT_BUILDING IN) : COLOR
     // Day/night blending (vertex color alpha)
     float dayFactor = IN.color.a;
 
+    // Ambient from timecycle (PS c24) — irradiance × albedo
+    // Provides fill light when directCol is dim (dawn/dusk/night)
+    float3 ambient = ambientColor.rgb * baseColor;
+
+    // Minimum direct light floor — ensures directional shading at dawn/dusk
+    float3 sunContrib = max(directCol.rgb, float3(0.05, 0.05, 0.05));
+
     // Diffuse lighting (Burley)
     float3 H = normalize(V + L);
     float VdotH = max(dot(V, H), 0.0);
@@ -355,7 +355,7 @@ float4 main_building(PS_INPUT_BUILDING IN) : COLOR
     float Vis = V_SmithCorrelated(NdotV, NdotL, roughness);
     float3 F = F_Schlick(max(dot(L, H), 0.0), F0);
 
-    float3 specTotal = D * F * Vis * NdotL * directCol.rgb;
+    float3 specTotal = D * F * Vis * NdotL * sunContrib;
 
     // Multi-light accumulation
     for(int i = 0; i < 6; i++){
@@ -377,21 +377,16 @@ float4 main_building(PS_INPUT_BUILDING IN) : COLOR
     // SM3.0 returns black for unbound textures — use ambient as fill
     float3 ibl = (dot(iblSample, iblSample) > 1e-6) ? iblSample * 0.06 : baseColor * surfProps.x * 0.3;
 
-    // Composite
-    float3 color = baseColor * kD * diffuse * directCol.rgb;
+    // Composite: ambient + direct diffuse + specular + IBL (CryEngine pattern)
+    float3 color = ambient + baseColor * kD * diffuse * sunContrib;
     color += specTotal;
     color += ibl;
 
     // Day/night blend (night = darker, more ambient)
     color = lerp(color * 0.3, color, dayFactor);
 
-    // Scale down (PS2 lights are too strong for linear PBR)
-    color *= 0.5;
-    // Soft tonemap + gamma encode
-    color = color / (1.0 + color);
-    color = pow(saturate(color), 1.0/2.2);
-
-    return float4(color, diff.a);
+    // Output linear HDR — PostFX TonemapPass handles tonemapping uniformly
+    return float4(max(color, 0.0), diff.a);
 }
 
 // ============================================================
