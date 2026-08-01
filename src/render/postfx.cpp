@@ -1007,46 +1007,72 @@ CPostEffects::ColourFilter_Modern(RwRGBA rgba1, RwRGBA rgba2)
 		float brightness = (float)CMenuManager__m_PrefsBrightness;
 		float baseExposure = max(0.3f, brightness / 256.0f);  // 256 → 1.0 (neutral)
 
-		// === Adaptive tonemap — timecycle + interior/cutscene aware ===
+		// === Timecycle-driven adaptive tonemap ===
+		// The timecycle is the authority over tonemapping mood.
+		// Every parameter derives from CColourSet fields that timecyc.dat authors control.
+		CColourSet &tc = CTimeCycle__m_CurrentColours;
 		bool isInterior = (*CGame__currArea != 0);
 		bool isCutscene = CCutsceneMgr__ms_running;
 
+		// --- Timecycle signals (normalized 0-1 where applicable) ---
+		float tcAmbientLuma  = 0.299f*tc.ambientR + 0.587f*tc.ambientG + 0.114f*tc.ambientB;
+		float tcDirLuma      = 0.299f*tc.directionalR + 0.587f*tc.directionalG + 0.114f*tc.directionalB;
+		float sceneLuma      = tcAmbientLuma + tcDirLuma * 0.5f;
+		float shadowNorm     = max(0.0f, min(1.0f, (float)tc.shadowStrength / 255.0f));
+		float fogFactor      = max(0.0f, min(1.0f, tc.fogStart / 500.0f));       // less fog = 1, heavy fog = 0
+		float clouds         = max(0.0f, min(1.0f, tc.cloudAlpha));
+		float sunBright      = max(0.0f, min(2.0f, tc.spriteBrightness));
+		float streetLights   = max(0.0f, min(1.0f, tc.lightsOnGroundBrightness));
+		float envMult        = CCustomCarEnvMapPipeline__m_EnvMapLightingMult;
+
 		float exposure, toeStrength;
-		float sceneLuma = 0.0f;
+		float gradeContrast, gradeBrightness, gradeLift, gradeCurve;
 
 		if(isInterior || isCutscene){
-			// Interior/cutscene: brighter tonemap — game's own lighting is often too dark
-			// Boost exposure and lift shadows to make cutscenes visible
+			// Interior/cutscene: brighter tonemap from timecycle ambient
 			exposure = baseExposure * 1.8f;
 			toeStrength = 0.30f;
-			sceneLuma = 0.5f;  // mid-range for PostGrade (full grading)
+			sceneLuma = 0.5f;
+			// Gentler grading for interiors — timecycle shadow/fog less meaningful indoors
+			gradeContrast   = 1.20f;
+			gradeBrightness = 0.06f;
+			gradeLift       = 0.02f;
+			gradeCurve      = 0.25f;
 		} else {
-			// Exterior: adaptive tonemap from timecycle scene luminance
-			CColourSet &tc = CTimeCycle__m_CurrentColours;
-			float tcAmbientLuma = 0.299f*tc.ambientR + 0.587f*tc.ambientG + 0.114f*tc.ambientB;
-			float tcDirLuma     = 0.299f*tc.directionalR + 0.587f*tc.directionalG + 0.114f*tc.directionalB;
-			sceneLuma           = tcAmbientLuma + tcDirLuma * 0.5f;
-
-			// EnvMapLightingMult from carcols — vehicle env brightness context
-			float envMult = CCustomCarEnvMapPipeline__m_EnvMapLightingMult;
-
-			// Scene exposure: reciprocal curve — gentle dark-scene lift, suppress sunset overbrightness
-			// dawn (~0.10) → ~1.1x, sunset (~0.20) → ~0.91x (reduced), midday (~0.40) → 0.80x
-			// carcols envMult nudges ±5% (range ~0.5-2.0 → 0.95-1.1)
+			// --- Exposure: reciprocal of scene brightness + timecycle dampening ---
 			float sceneExposure = 1.0f / (0.70f + sceneLuma * 2.0f);
 			sceneExposure = max(0.80f, min(1.30f, sceneExposure));
+			// Carcols env mult nudges ±5%
 			float carcolsAdapt = 0.95f + envMult * 0.05f;
-			exposure = baseExposure * sceneExposure * carcolsAdapt;
+			// Bright sun → slightly less exposure (prevent highlight blowout)
+			float sunDampen = 1.0f - max(0.0f, min(0.08f, sunBright * 0.05f));
+			exposure = baseExposure * sceneExposure * carcolsAdapt * sunDampen;
 
-			// Toe: moderate adaptation — shadow lift reduced for deeper blacks
-			// night (~0.01) → 0.19, dawn (~0.10) → 0.10, midday (~0.40) → 0.05
-			toeStrength = max(0.05f, min(0.20f, 0.20f - sceneLuma * 1.0f));
+			// --- Toe: shadow lift driven by sceneLuma + timecycle shadow depth ---
+			float toeFromLuma   = 0.20f - sceneLuma * 1.0f;
+			float toeFromShadow = shadowNorm * 0.08f;  // deeper shadows → more lift
+			toeStrength = max(0.05f, min(0.25f, toeFromLuma + toeFromShadow));
+
+			// --- Grade params: fully timecycle-driven ---
+			// Contrast: shadow strength × fog clearance (deep shadows + clear sky = max contrast)
+			gradeContrast = 1.15f + shadowNorm * 0.25f * fogFactor;
+
+			// Brightness: street lights provide fill in dark scenes
+			gradeBrightness = 0.03f + streetLights * 0.04f;
+
+			// Lift: overcast/cloudy raises blacks slightly; heavy fog also lifts
+			gradeLift = clouds * 0.015f + (1.0f - fogFactor) * 0.01f;
+
+			// Curve blend: brighter scenes get more S-curve for depth
+			gradeCurve = 0.25f + sceneLuma * 0.25f;
 
 			// Throttled diagnostic
 			static unsigned int tonemapLogCounter = 0;
 			if(tonemapLogCounter++ % 3600 == 0){
-			dbglog("[Tonemap] EXT sceneLuma=%.3f envMult=%.3f sceneExp=%.3f toe=%.3f finalExp=%.3f",
-				sceneLuma, envMult, sceneExposure, toeStrength, exposure);
+				dbglog("[Tonemap] TC sceneLuma=%.3f shadow=%d fog=%.0f cloud=%.2f sun=%.2f street=%.2f",
+					sceneLuma, tc.shadowStrength, tc.fogStart, clouds, sunBright, streetLights);
+				dbglog("[Tonemap] VAL exp=%.3f toe=%.3f ct=%.2f br=%.3f lift=%.3f curve=%.2f",
+					exposure, toeStrength, gradeContrast, gradeBrightness, gradeLift, gradeCurve);
 			}
 		}
 
@@ -1055,13 +1081,8 @@ CPostEffects::ColourFilter_Modern(RwRGBA rgba1, RwRGBA rgba2)
 		float tonemapP[4] = { exposure, toeStrength, sceneLuma, (isInterior ? 1.0f : 0.0f) + (isCutscene ? 2.0f : 0.0f) };
 		RwD3D9SetPixelShaderConstant(5, tonemapP, 1);
 
-		// Post-gamma grading: Curves + Brightness/Contrast
-		// Tuned for deeper blacks — removed lift, lowered brightness
-		//   brightness: 0.05 (subtle lift to keep textures visible)
-		//   contrast: 1.30 (moderate S-curve push)
-		//   lift: 0.00 (no shadow floor — blacks stay black)
-		//   curveBlend: 0.35 (S-curve for depth)
-		float gradeP[4] = { 0.05f, 1.30f, 0.0f, 0.35f };
+		// Pack into c6: {brightness, contrast, lift, curveBlend} — all timecycle-driven
+		float gradeP[4] = { gradeBrightness, gradeContrast, gradeLift, gradeCurve };
 		RwD3D9SetPixelShaderConstant(6, gradeP, 1);
 
 		overrideIm2dPixelShader = tonemapPassPS;

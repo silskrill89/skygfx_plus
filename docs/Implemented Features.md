@@ -1,7 +1,7 @@
 # Implemented Features
 
 ## Rendering
-- **PBR Vehicle Shader** — GGX/Smith/Schlick, energy conservation, IBL
+- **PBR Vehicle Shader** — GGX/Smith/Schlick, metallic energy conservation, clearcoat reflections, IBL
 - **Vehicle Glass** — Schlick Fresnel, per-vehicle tint, sun lighting
 - **Vehicle Rubber** — Tire-specific material
 - **Car Paint Reflections** — Sphere env mapping, noise breakup
@@ -10,6 +10,7 @@
 - **Cloud Shadow FBM** — Ground vehicle cloud shadows
 - **Wind Animation** — Building wind shaders (inherited from junior)
 - **Stochastic Texturing** — Grain-free detail maps (inherited from junior)
+- **Adaptive Tonemap** — Hable filmic with timecycle-driven exposure, toe, and grade
 
 ## Vehicle System
 - **All 11 Vehicle Pipes** — PS2 through Modern PBR, backwards compatible
@@ -19,7 +20,7 @@
 - **Vehicle Registry** — Model ID mapping and shader assignment
 
 ## Building Pipeline
-- **4 Building Pipes** — PS2, Xbox/PC, GTAIV, PBR
+- **4 Building Pipes** — PS2, Xbox/PC, GTAIV, PBR (timecycle ambient, no hardcoded floor)
 - **Wind Animation** — Building wind shaders (PS2 + Xbox)
 - **Stochastic Building Shaders** — Grain-free detail for buildings
 - **Sphere Map Buildings** — Sphere-mapped environment mapping
@@ -41,6 +42,7 @@
 - **Pipe Chain** — 4-pass post-processing chain
 - **Color Filters** — PS2, PC, Mobile, III, VC, VCS, GTAIV (8 filters)
 - **GTA IV Filmic Tonemapping** — Hable curve, luminance-only
+- **Adaptive Tonemap** — Hable/Uncharted2 with scene-adaptive exposure, toe, and grading
 - **Grain Filter** — Film grain
 - **Infrared / Night Vision** — Special vision modes
 - **VCS Trails** — Light trail effects

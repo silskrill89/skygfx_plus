@@ -49,8 +49,8 @@
       and feed them through the rwnormal plugin. This is the final feature step.
 
 ### D. Visual quality refinement (CURRENT WORK)
-- [ ] Vehicle PBR specularity/metallic/env reflections improvement
-- [ ] Ground/street brightness at dawn
+- [x] Vehicle PBR specularity/metallic/env reflections improvement — clearcoat Fresnel, metallic energy conservation, ambientObj
+- [x] Ground/street brightness at dawn — ambientObj timecycle, removed hardcoded floor
 - [ ] CJ character material depth
 - [ ] Glass shader transparency
 

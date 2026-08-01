@@ -7,17 +7,17 @@
 //
 // Reads graded linear HDR from pRasterFrontBuffer, outputs gamma-corrected LDR.
 //
-// c5 = tonemapParams (timecycle-adaptive):
-//   x = exposure (brightness slider × scene luminance factor × CCoronas LightsMult)
-//   y = toeStrength (0.12-0.35, time-of-day adaptive)
-//   z = sceneLuma (total scene brightness estimate, 0-1)
+// c5 = tonemapParams (timecycle-driven):
+//   x = exposure (brightness slider × sceneLuma × carcols × sun dampening)
+//   y = toeStrength (0.05-0.25, driven by sceneLuma + timecycle shadowStrength)
+//   z = sceneLuma (ambient + directional luminance from timecycle, 0-1)
 //   w = flags (bit0=isInterior, bit1=isCutscene)
 //
-// c6 = gradeParams (post-gamma color grading, tuned for PBR linear HDR):
-//   x = brightness offset (0.10 — raises midtones)
-//   y = contrast multiplier (1.30 — moderate S-curve push)
-//   z = shadow lift (0.02 — raises blacks from 0 to ~5/255)
-//   w = curves blend (0.35 — S-curve intensity)
+// c6 = gradeParams (fully timecycle-driven from CColourSet):
+//   x = brightness (0.03-0.07, from timecycle lightsOnGroundBrightness)
+//   y = contrast (1.15-1.40, from timecycle shadowStrength × fogStart)
+//   z = lift (0.00-0.025, from timecycle cloudAlpha + fogStart)
+//   w = curves blend (0.25-0.50, from timecycle sceneLuma)
 
 uniform sampler2D tex : register(s0);
 uniform float4 tonemapParams : register(c5);

@@ -11,9 +11,12 @@ The unified vehicle pixel shader. **7 entry points** in one HLSL file, covering 
 ## Entry Points
 
 ### `main` — PBR Vehicle
-Full PBR rendering with GGX/Smith/Schlick specular BRDF. Uses glossiness workflow (everything is dielectric, no metalness).
+Full PBR rendering with GGX/Smith/Schlick specular BRDF. Uses glossiness workflow with metallic energy conservation.
 
 **Features**:
+- Metallic energy conservation: `metallicFactor = saturate((specF0 - 0.5) * 2.0)` — near-zero diffuse when specF0 > 0.5
+- Clearcoat Fresnel: F0=0.04 dielectric base, drives env reflection visibility (3% → 25% at grazing)
+- Paint-tinted reflections: tinted at normal, white at grazing (clearcoat model)
 - Burley/Disney diffuse (non-metals)
 - Energy conservation: `kD = 1 - kS`
 - Sphere env mapping (no pole pinching) via `SphereEnvMapUV()`
@@ -24,7 +27,9 @@ Full PBR rendering with GGX/Smith/Schlick specular BRDF. Uses glossiness workflo
 - Wheel metallic white noise
 - Normal buffer blending (stereo disparity)
 - Paint tint from carcols
-- Soft Reinhard tonemap + sRGB gamma encode
+- Direct light: raw timecycle directCol.rgb, NO floor clamp
+- Ambient: ambientObj from timecycle via PS c24, full strength
+- Output: linear HDR → PostFX TonemapPass handles tonemapping
 
 **Constants**:
 | Register | Content |
@@ -34,7 +39,7 @@ Full PBR rendering with GGX/Smith/Schlick specular BRDF. Uses glossiness workflo
 | c2 | eyePos |
 | c3 | iblParams |
 | c4 | cloudShadow |
-| c5 | directCol |
+| c5 | directCol (raw timecycle, no floor clamp) |
 | c6-c11 | lightCol[6] |
 | c12 | directDir |
 | c13-c18 | lightDir[6] |
@@ -46,7 +51,7 @@ Full PBR rendering with GGX/Smith/Schlick specular BRDF. Uses glossiness workflo
 **Textures**: s0=diffuse, s1=envMap, s2=mask, s3=IBL, s4=normalBuffer
 
 ### `main_rubber` — PBR Rubber/Tire
-Parametric rubber BRDF with dirt/wear tint and subsurface wrap lighting.
+Simplified pure diffuse wrap lighting. No specular or Fresnel — rubber is fully rough.
 
 **Constants**: c22 = {roughness, rubberF0, tintR, tintG}, c23 = {tintB, dirtLevel, wearFactor, 0}
 

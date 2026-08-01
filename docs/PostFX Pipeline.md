@@ -43,6 +43,30 @@ Screen-space post-processing effects applied after the main scene render. Implem
 | Modern | `COLORFILTER_MODERN` | `gradingPS` | Modern grading with timecycle modulation |
 | GTAIV | `COLORFILTER_GTAIV` | — | Bypass mode — no filter applied (relies on SA timecycle) |
 
+### Adaptive Tonemap (PBR Pipeline)
+- **Adaptive Hable/Uncharted2** filmic tonemap with timecycle-driven parameters
+- **SoftKnee** highlight compression before tonemap (prevents hard clipping)
+- **PostGrade**: S-curve + brightness/contrast, adaptive to scene luminance
+- **sRGB gamma encode**: Exact OETF (not pow 1/2.2)
+- Interior/cutscene: exposure ×1.8, toe=0.30, sceneLuma=0.5, grade: contrast=1.20, brightness=0.06, lift=0.02, curve=0.25
+- Exterior signals from timecycle (CColourSet):
+  - `sceneLuma = tcAmbientLuma + tcDirLuma * 0.5`
+  - `shadowNorm = tc.shadowStrength / 255.0` → [0, 1]
+  - `fogFactor = tc.fogStart / 500.0` → [0, 1] (less fog = 1, heavy fog = 0)
+  - `clouds = tc.cloudAlpha` → [0, 1]
+  - `sunBright = tc.spriteBrightness` → [0, 2]
+  - `streetLights = tc.lightsOnGroundBrightness` → [0, 1]
+- Exposure: `baseExposure × sceneExposure × carcolsAdapt × sunDampen`
+  - `sceneExposure = 1.0 / (0.70 + sceneLuma * 2.0)` clamped [0.80, 1.30]
+  - `sunDampen = 1 - clamp(sunBright * 0.05, 0, 0.08)` — bright sun reduces exposure
+- Toe: `clamp(0.20 - sceneLuma * 1.0 + shadowNorm * 0.08, 0.05, 0.25)`
+- Grade params (fully timecycle-driven):
+  - contrast = 1.15 + shadowNorm × 0.25 × fogFactor → [1.15, 1.40]
+  - brightness = 0.03 + streetLights × 0.04 → [0.03, 0.07]
+  - lift = clouds × 0.015 + (1-fogFactor) × 0.01 → [0.00, 0.025]
+  - curveBlend = 0.25 + sceneLuma × 0.25 → [0.25, 0.50]
+- Runs as part of `COLORFILTER_MODERN` path in ColourFilter_switch
+
 ### SSS (Subsurface Scattering)
 - **Post-process blur**: Screen-space edge-preserving blur (`sssPostProcessEnable`)
 - **Skin Enhancement**: Wrap lighting for SSS approximation (`skinEnhanceEnable`)
