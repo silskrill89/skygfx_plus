@@ -425,26 +425,26 @@ static uint32 nLocTriDrawn[CPLANT_NUM_PLANT_SLOTS] = {0};
 
 		char txt[128];
 		const int16 START_X = 30, START_Y = 24;
-		::sprintf(txt, "CPlantMgr::Info:");
+		::snprintf(txt, sizeof(txt), "CPlantMgr::Info:");
 		CDebug::PrintToScreenCoors(txt, START_X, START_Y+0);
 		
-		::sprintf(txt, "Entity: All=%d", nEntitiesCountAll);
+		::snprintf(txt, sizeof(txt), "Entity: All=%d", nEntitiesCountAll);
 		CDebug::PrintToScreenCoors(txt, START_X, START_Y+1);
 
 		CPlantMgr::DbgCountLocTrisAndPlants(0, &nLocTrisCountAll, &nPlantsCountAll);
-		::sprintf(txt, "LocTris[0]: All=%d (dr=%d) Plants=%d (dr=%d)", nLocTrisCountAll, nLocTriDrawn[0], nPlantsCountAll, nLocTriPlantsDrawn[0]);
+		::snprintf(txt, sizeof(txt), "LocTris[0]: All=%d (dr=%d) Plants=%d (dr=%d)", nLocTrisCountAll, nLocTriDrawn[0], nPlantsCountAll, nLocTriPlantsDrawn[0]);
 		CDebug::PrintToScreenCoors(txt, START_X, START_Y+2);
 
 		CPlantMgr::DbgCountLocTrisAndPlants(1, &nLocTrisCountAll, &nPlantsCountAll);
-		::sprintf(txt, "LocTris[1]: All=%d (dr=%d) Plants=%d (dr=%d)", nLocTrisCountAll, nLocTriDrawn[1], nPlantsCountAll, nLocTriPlantsDrawn[1]);
+		::snprintf(txt, sizeof(txt), "LocTris[1]: All=%d (dr=%d) Plants=%d (dr=%d)", nLocTrisCountAll, nLocTriDrawn[1], nPlantsCountAll, nLocTriPlantsDrawn[1]);
 		CDebug::PrintToScreenCoors(txt, START_X, START_Y+3);
 
 		CPlantMgr::DbgCountLocTrisAndPlants(2, &nLocTrisCountAll, &nPlantsCountAll);
-		::sprintf(txt, "LocTris[2]: All=%d (dr=%d) Plants=%d (dr=%d)", nLocTrisCountAll, nLocTriDrawn[2], nPlantsCountAll, nLocTriPlantsDrawn[2]);
+		::snprintf(txt, sizeof(txt), "LocTris[2]: All=%d (dr=%d) Plants=%d (dr=%d)", nLocTrisCountAll, nLocTriDrawn[2], nPlantsCountAll, nLocTriPlantsDrawn[2]);
 		CDebug::PrintToScreenCoors(txt, START_X, START_Y+4);
 
 		CPlantMgr::DbgCountLocTrisAndPlants(3, &nLocTrisCountAll, &nPlantsCountAll);
-		::sprintf(txt, "LocTris[3]: All=%d (dr=%d) Plants=%d (dr=%d)", nLocTrisCountAll, nLocTriDrawn[3], nPlantsCountAll, nLocTriPlantsDrawn[3]);
+		::snprintf(txt, sizeof(txt), "LocTris[3]: All=%d (dr=%d) Plants=%d (dr=%d)", nLocTrisCountAll, nLocTriDrawn[3], nPlantsCountAll, nLocTriPlantsDrawn[3]);
 		CDebug::PrintToScreenCoors(txt, START_X, START_Y+5);
 
 //		CPlantMgr::DbgCountLocTrisAndPlants(4, &nLocTrisCountAll, &nPlantsCountAll);

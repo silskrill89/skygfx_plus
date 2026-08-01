@@ -819,6 +819,7 @@ char *GetPlayerTxdName(char *name)
 void NormalTextureSetName(RwTexture *texture, char *name)
 {
 	unsigned int len = strlen(name) + 3;
+	// SAFETY: raw new — needs RAII (std::unique_ptr<char[]>); cleanup exists at delete below
 	char *normName = new char[len];
 	memset(normName, 0, len);
 	strcpy(normName, name);
@@ -1143,6 +1144,7 @@ void SetupMaterial(RpMaterial *material, RwTexture *texture)
 	if(!texture)
 		return;
 	unsigned int len = strlen(texture->name) + 6;
+	// SAFETY: raw new — needs RAII (std::unique_ptr<char[]>); cleanup exists at delete below
 	char *normName = new char[len];
 	memset(normName, 0, len);
 	strcpy(normName, texture->name);

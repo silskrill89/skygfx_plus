@@ -190,7 +190,8 @@ CCustomCarEnvMapPipeline__PreRenderUpdate(void)
 		if(lightFrame){
 			l = RwFrameGetMatrix(lightFrame)->at;
 			RwV3dTransformVector(&carfx_lightdir, &l, &carfx_view);
-			RwV3dNormalize(&carfx_lightdir, &carfx_lightdir);
+			if(RwV3dNormalize(&carfx_lightdir, &carfx_lightdir) == 0.0f)
+			carfx_lightdir = {0.0f, 1.0f, 0.0f};
 		}
 	}
 
@@ -245,7 +246,6 @@ CCustomCarEnvMapPipeline__Env2Xform(RpAtomic *atomic, RwMatrix *envmat,
 	float trans;
 	float sclx, scly;
 	float val1, val2;
-	int sub;
 
 	sclx = envData->GetTransScaleX()*50.0f;
 	scly = envData->GetTransScaleY()*50.0f;
@@ -263,9 +263,12 @@ CCustomCarEnvMapPipeline__Env2Xform(RpAtomic *atomic, RwMatrix *envmat,
 
 		diff = { envmat->pos.x - atmEnvData->posx, envmat->pos.y - atmEnvData->posy, 0.0 };
 
-		sub = 0;
+		if(RwV3dNormalize(&diff, &diff) == 0.0f)
+			diff = {0.0f, 1.0f, 0.0f};
+		if(RwV3dNormalize(&upnorm, &envmat->up) == 0.0f)
+			upnorm = {0.0f, 1.0f, 0.0f};
 		if(RwV3dDotProduct(&diff, &diff) > 0.0f ||
-		   RwV3dNormalize(&diff, &diff), RwV3dNormalize(&upnorm, &envmat->up), RwV3dDotProduct(&diff, &upnorm) < 0.0f){
+		   RwV3dDotProduct(&diff, &upnorm) < 0.0f){
 			trans = atmEnvData->trans - fabs(val2-val1);
 			if(trans < 0.0f)
 				trans += 1.0f;
@@ -320,7 +323,6 @@ CCustomCarEnvMapPipeline__Env2Xform_PC(RpAtomic *atomic,
 	float trans;
 	float sclx, scly;
 	float val1, val2;
-	int sub;
 	RwMatrix *envmat;
 
 	sclx = envData->GetTransScaleX()*50.0f;
@@ -340,9 +342,12 @@ CCustomCarEnvMapPipeline__Env2Xform_PC(RpAtomic *atomic,
 
 		diff = { envmat->pos.x - atmEnvData->posx, envmat->pos.y - atmEnvData->posy, 0.0 };
 
-		sub = 0;
+		if(RwV3dNormalize(&diff, &diff) == 0.0f)
+			diff = {0.0f, 1.0f, 0.0f};
+		if(RwV3dNormalize(&upnorm, &envmat->up) == 0.0f)
+			upnorm = {0.0f, 1.0f, 0.0f};
 		if(RwV3dDotProduct(&diff, &diff) > 0.0f ||
-		   RwV3dNormalize(&diff, &diff), RwV3dNormalize(&upnorm, &envmat->up), RwV3dDotProduct(&diff, &upnorm) < 0.0f){
+		   RwV3dDotProduct(&diff, &upnorm) < 0.0f){
 			trans = atmEnvData->trans - fabs(val2-val1);
 			if(trans < 0.0f)
 				trans += 1.0f;
@@ -467,6 +472,7 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_PS2(RwResEntry *repEntry, void *obj
 	RwV3d specdir;
 	RwMatrix lightmat;
 	float transform[16];
+	memset(&fxParams, 0, sizeof(fxParams));
 
 	atomic = (RpAtomic*)object;
 
@@ -657,6 +663,7 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Specular(RwResEntry *repEntry, void
 	RwV3d eye;
 	RwMatrix lightmat;
 	float transform[16];
+	memset(&fxParams, 0, sizeof(fxParams));
 
 	atomic = (RpAtomic*)object;
 
@@ -1070,6 +1077,7 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_leeds(RwResEntry *repEntry, void *o
 	RwV3d eye;
 	RwMatrix lightmat;
 	float transform[16];
+	memset(&fxParams, 0, sizeof(fxParams));
 
 	atomic = (RpAtomic*)object;
 	if(!atomic) return;
@@ -1217,6 +1225,7 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_mobile(RwResEntry *repEntry, void *
 	RwV3d eye;
 	RwMatrix lightmat;
 	float transform[16];
+	memset(&fxParams, 0, sizeof(fxParams));
 
 	atomic = (RpAtomic*)object;
 	if(!atomic) return;
@@ -1396,6 +1405,8 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 	RwV3d eye;
 	RwMatrix lightmat;
 	float transform[16];
+	memset(&fxParams, 0, sizeof(fxParams));
+	memset(&surfProps, 0, sizeof(surfProps));
 
 	atomic = (RpAtomic*)object;
 	if(!atomic) return;

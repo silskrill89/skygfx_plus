@@ -100,6 +100,7 @@ readTxt(void)
 			else if(hasdetail || alphamode || hassibling || affiliate || stochastic){
 				std::string s = filename;
 				strtolower(s);
+				// SAFETY: raw new — ownership held by global texdb map; needs RAII refactor
 				info = new TexInfo;
 				memset(info, 0, sizeof(TexInfo));
 
@@ -164,6 +165,7 @@ initTexDB(void)
 	faketexinfo.dualPass = 1;
 
 	// for roadsign texture
+	// SAFETY: raw new — ownership held by global texdb map; needs RAII refactor
 	TexInfo* info = new TexInfo;
 	memset(info, 0, sizeof(TexInfo));
 	info->dualPass = 1;
@@ -220,7 +222,7 @@ TexDbFindCB(char *name)
 				info = info->affiliateTex;
 			if(info->hassibling){
 				static char sibling[200];
-				sprintf(sibling, "%s_%s", name, currentTxdName);
+				snprintf(sibling, sizeof(sibling), "%s_%s", name, currentTxdName);
 				TexInfo *sib = FindTexInfo(sibling);
 				if (sib) 
 					info = sib;

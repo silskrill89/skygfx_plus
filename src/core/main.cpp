@@ -102,7 +102,7 @@ getpath(char *path)
 	}
 	extern char asipath[];
 	strncpy(tmppath, asipath, MAX_PATH);
-	strcat(tmppath, path);
+	strncat(tmppath, path, sizeof(tmppath) - strlen(tmppath) - 1);
 	f = fopen(tmppath, "r");
 	if(f){
 		fclose(f);

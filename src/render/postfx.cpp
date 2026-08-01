@@ -635,12 +635,12 @@ CPostEffects::Radiosity_shader(int intensityLimit, int filterPasses, int renderP
 	overrideIm2dPixelShader = blurPS;
 	// Blur vertically
 	params[0] = 0;
-	params[1] = 1.0f/RwRasterGetHeight(pRasterFrontBuffer);
+	params[1] = 1.0f/max(RwRasterGetHeight(pRasterFrontBuffer), 1);
 	RwD3D9SetPixelShaderConstant(0, params, 1);
 	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
 	UpdateFrontBuffer();
 	// Blur horizontally
-	params[0] = 1.0f/RwRasterGetWidth(pRasterFrontBuffer);
+	params[0] = 1.0f/max(RwRasterGetWidth(pRasterFrontBuffer), 1);
 	params[1] = 0;
 	RwD3D9SetPixelShaderConstant(0, params, 1);
 	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
@@ -759,7 +759,7 @@ CPostEffects::Radiosity(int intensityLimit, int filterPasses, int renderPasses, 
 
 	float nearscreen = RwIm2DGetNearScreenZ();
 	float nearcam = RwCameraGetNearClipPlane(Scene.camera);
-	float recipz = 1.0f/nearcam;
+	float recipz = 1.0f/max(nearcam, 1e-7f);
 	for(int i = 0; i < 4; i++){
 		RwIm2DVertexSetScreenZ(&verts[i], nearscreen);
 		RwIm2DVertexSetCameraZ(&verts[i], nearcam);
@@ -1034,7 +1034,7 @@ CPostEffects::ColourFilter_Modern(RwRGBA rgba1, RwRGBA rgba2)
 		// Cutscene/interior gets a gentle dampening factor where the sun is pointing at camera.
 
 		// --- Exposure: reciprocal of scene brightness + timecycle dampening ---
-		float sceneExposure = 1.0f / (0.70f + sceneLuma * 2.0f);
+		float sceneExposure = 1.0f / max(0.70f + sceneLuma * 2.0f, 1e-7f);
 		sceneExposure = max(0.80f, min(1.30f, sceneExposure));
 		// Carcols env mult nudges ±5%
 		float carcolsAdapt = 0.95f + envMult * 0.05f;
@@ -1138,7 +1138,7 @@ CPostEffects::ColourFilter_Mobile(RwRGBA rgba1, RwRGBA rgba2)
 	float r = rgba1.red + rgba2.red;
 	float g = rgba1.green + rgba2.green;
 	float b = rgba1.blue + rgba2.blue;
-	float invsqrt = 1.0f/sqrt(r*r + g*g + b*b);
+	float invsqrt = 1.0f/max(sqrt(r*r + g*g + b*b), 1e-7f);
 	r *= invsqrt;
 	g *= invsqrt;
 	b *= invsqrt;
