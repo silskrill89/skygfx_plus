@@ -50,6 +50,12 @@
 - **Color Grading** — Mobile-style grading
 - **Contrast Adjustment** — Screen contrast control
 
+## Sun / Corona Controls
+- **Sun Corona Intensity** — PS2→PC D3D9 modulate fix (sunCoronaIntensity, default 0.4)
+- **Sun Core Intensity** — PS2→PC D3D9 modulate fix (sunCoreIntensity, default 0.6)
+- **Corona Z-Test Toggle** — PS2 vs PC depth testing (coronaZtest)
+- **Vehicle Sun Glare** — Per-surface specular glare (sunGlare toggle)
+
 ## Weather / Timecycle
 - **GTA V-style Sky** — Dynamic sky rendering
 - **Weather Expansion** — Sun, moon, clouds, lighting overhaul

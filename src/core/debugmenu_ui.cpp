@@ -30,6 +30,8 @@ extern bool iCanHasNeoDrops;
 	X(envPower)			\
 	X(envFresnel)			\
 	X(doglare)						\
+	X(sunCoronaIntensity)			\
+	X(sunCoreIntensity)				\
 	X(fixGrassPlacement)			\
 	X(grassAddAmbient)			\
 	X(backfaceCull)			\
@@ -189,6 +191,10 @@ DebugMenuEntrySetWrap(menu.buildingPipe, true);
 		DebugMenuAddVarBool8("SkyGFX|Misc", "Blur PS2 Colour Filter", (int8_t*)&CPostEffects::m_bBlurColourFilter, nil);
 		if(iCanHasSunGlare)
 			menu.doglare = DebugMenuAddVarBool32("SkyGFX|Misc", "Sun Glare", &config->doglare, nil);
+		menu.sunCoronaIntensity = DebugMenuAddVar("SkyGFX|Misc", "Sun Corona Intensity", &config->sunCoronaIntensity, nil, 0.01f, 0.0f, 10.0f);
+		menu.sunCoreIntensity = DebugMenuAddVar("SkyGFX|Misc", "Sun Core Intensity", &config->sunCoreIntensity, nil, 0.01f, 0.0f, 10.0f);
+		menu.sunStreakIntensity = DebugMenuAddVar("SkyGFX|Misc", "Sun Streak Intensity", &config->sunStreakIntensity, nil, 0.01f, 0.0f, 10.0f);
+		menu.sunStreakSize = DebugMenuAddVar("SkyGFX|Misc", "Sun Streak Size", &config->sunStreakSize, nil, 0.01f, 0.0f, 10.0f);
 		menu.leedsShininessMult = DebugMenuAddVar("SkyGFX|Misc", "Leeds Car Shininess", &config->leedsShininessMult, nil, 0.1f, 0.0f, 10.0f);
 		menu.neoShininessMult = DebugMenuAddVar("SkyGFX|Misc", "Neo Car Shininess", &config->neoShininessMult, nil, 0.1f, 0.0f, 10.0f);
 		menu.neoSpecularityMult = DebugMenuAddVar("SkyGFX|Misc", "Neo Car Specularity", &config->neoSpecularityMult, nil, 0.1f, 0.0f, 10.0f);
@@ -458,7 +464,11 @@ void DrawUnifiedDebugMenu(IDirect3DDevice9 *device)
 				ImGui::Combo("Night Vision", &config->nightVision, ps2pcStr, 2);
 				ImGui::Combo("Grain Filter", &config->grainFilter, ps2pcStr, 2);
 				ImGui::Checkbox("Sun Glare", RB(config->doglare));
-				static const char *lightningStr[] = { "Sky only", "Sky and objects" };
+				ImGui::SliderFloat("Sun Corona Intensity", &config->sunCoronaIntensity, 0.0f, 10.0f);
+			ImGui::SliderFloat("Sun Core Intensity", &config->sunCoreIntensity, 0.0f, 10.0f);
+			ImGui::SliderFloat("Sun Streak Intensity", &config->sunStreakIntensity, 0.0f, 10.0f);
+			ImGui::SliderFloat("Sun Streak Size", &config->sunStreakSize, 0.0f, 10.0f);
+			static const char *lightningStr[] = { "Sky only", "Sky and objects" };
 				ImGui::Combo("Lightning", &config->lightningIlluminatesWorld, lightningStr, 2);
 				ImGui::Checkbox("PS2 Modulate Global", RB(config->ps2ModulateGlobal));
 			}

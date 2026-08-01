@@ -311,6 +311,37 @@ void Weather_Update(void){
 	if(tc.sunCoronaG < 0) tc.sunCoronaG = 0; if(tc.sunCoronaG > 255) tc.sunCoronaG = 255;
 	if(tc.sunCoronaB < 0) tc.sunCoronaB = 0; if(tc.sunCoronaB > 255) tc.sunCoronaB = 255;
 
+	// === PS2→PC conversion fix: scale sun corona/core by config multipliers ===
+	// On PS2, GS modulation (A×B)/128 ≈ MODULATE2X made sun sprites look correct.
+	// On PC, D3D9 (A×B)/255 is dimmer, but R* kept the same timecycle values.
+	// The PBR tonemap amplifies these values further, causing massive flare blowout.
+	// Scale after interpolation so the game engine uses the corrected values.
+	if(config->sunCoronaIntensity != 1.0f){
+		tc.sunCoronaR = (short)(tc.sunCoronaR * config->sunCoronaIntensity);
+		tc.sunCoronaG = (short)(tc.sunCoronaG * config->sunCoronaIntensity);
+		tc.sunCoronaB = (short)(tc.sunCoronaB * config->sunCoronaIntensity);
+		if(tc.sunCoronaR > 255) tc.sunCoronaR = 255;
+		if(tc.sunCoronaG > 255) tc.sunCoronaG = 255;
+		if(tc.sunCoronaB > 255) tc.sunCoronaB = 255;
+	}
+	if(config->sunCoreIntensity != 1.0f){
+		tc.sunCoreR = (short)(tc.sunCoreR * config->sunCoreIntensity);
+		tc.sunCoreG = (short)(tc.sunCoreG * config->sunCoreIntensity);
+		tc.sunCoreB = (short)(tc.sunCoreB * config->sunCoreIntensity);
+		if(tc.sunCoreR > 255) tc.sunCoreR = 255;
+		if(tc.sunCoreG > 255) tc.sunCoreG = 255;
+		if(tc.sunCoreB > 255) tc.sunCoreB = 255;
+	}
+
+	// Scale lens flare streak intensity and size (spriteBrightness / spriteSize)
+	// These control the horizontal streak quads and lens flare sprites drawn by CCoronas::DoSunCorona
+	if(config->sunStreakIntensity != 1.0f){
+		tc.spriteBrightness *= config->sunStreakIntensity;
+	}
+	if(config->sunStreakSize != 1.0f){
+		tc.spriteSize *= config->sunStreakSize;
+	}
+
 	// Fog — clamp fogStart to valid range
 	float altFog = altOld->fogSt * (1.0f - wInterp) + altNew->fogSt * wInterp;
 	tc.fogStart = tc.fogStart * (1.0f - t) + altFog * t;

@@ -307,6 +307,21 @@ readIni(int n)
 
 	c->coronaZtest = readint(cfg.get("SkyGfx", "coronaZtest", ""), -1);
 
+	// Sun flare control (PS2→PC conversion fix)
+	// Default 0.4 for corona, 0.6 for core — reduces massive flare from PS2 timecycle values
+	c->sunCoronaIntensity = readfloat(cfg.get("SkyGfx", "sunCoronaIntensity", ""), 0.4f);
+	c->sunCoreIntensity = readfloat(cfg.get("SkyGfx", "sunCoreIntensity", ""), 0.6f);
+	if(c->sunCoronaIntensity < 0.0f) c->sunCoronaIntensity = 0.0f;
+	if(c->sunCoronaIntensity > 2.0f) c->sunCoronaIntensity = 2.0f;
+	if(c->sunCoreIntensity < 0.0f) c->sunCoreIntensity = 0.0f;
+	if(c->sunCoreIntensity > 2.0f) c->sunCoreIntensity = 2.0f;
+	c->sunStreakIntensity = readfloat(cfg.get("SkyGfx", "sunStreakIntensity", ""), 0.5f);
+	c->sunStreakSize = readfloat(cfg.get("SkyGfx", "sunStreakSize", ""), 0.6f);
+	if(c->sunStreakIntensity < 0.0f) c->sunStreakIntensity = 0.0f;
+	if(c->sunStreakIntensity > 2.0f) c->sunStreakIntensity = 2.0f;
+	if(c->sunStreakSize < 0.0f) c->sunStreakSize = 0.0f;
+	if(c->sunStreakSize > 2.0f) c->sunStreakSize = 2.0f;
+
 	c->bYCbCrFilter = readint(cfg.get("SkyGfx", "YCbCrCorrection", ""), 0);
 	c->lumaScale = readfloat(cfg.get("SkyGfx", "lumaScale", ""), 219.0f/255.0f);
 	c->lumaOffset = readfloat(cfg.get("SkyGfx", "lumaOffset", ""), 16.0f/255.0f);

@@ -257,6 +257,15 @@ struct Config {
 	int radiosity;
 	int coronaZtest;
 
+	// Sun flare control (PS2→PC conversion fix)
+	// On PS2, GS modulation (A×B)/128 ≈ D3D MODULATE2X made sun corona look correct.
+	// On PC, D3D9 (A×B)/255 is dimmer, but R* kept the same timecycle values.
+	// The PBR tonemap amplifies these values further, causing massive flare blowout.
+	float sunCoronaIntensity;	// 0.0-2.0, scales sunCoronaR/G/B (default 0.4)
+	float sunCoreIntensity;		// 0.0-2.0, scales sunCoreR/G/B (default 0.6)
+	float sunStreakIntensity;	// 0.0-2.0, scales spriteBrightness (default 0.5) — controls lens flare streak brightness
+	float sunStreakSize;		// 0.0-2.0, scales spriteSize (default 0.6) — controls lens flare streak size
+
 	float envShininessMult;
 	float envSpecularityMult;
 	float envPower;

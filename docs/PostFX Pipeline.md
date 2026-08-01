@@ -48,7 +48,7 @@ Screen-space post-processing effects applied after the main scene render. Implem
 - **SoftKnee** highlight compression before tonemap (prevents hard clipping)
 - **PostGrade**: S-curve + brightness/contrast, adaptive to scene luminance
 - **sRGB gamma encode**: Exact OETF (not pow 1/2.2)
-- Interior/cutscene: exposure ×1.8, toe=0.30, sceneLuma=0.5, grade: contrast=1.20, brightness=0.06, lift=0.02, curve=0.25
+- Interior/cutscene: same adaptive path, exposure ×0.85 dampening (cameras face sun more often)
 - Exterior signals from timecycle (CColourSet):
   - `sceneLuma = tcAmbientLuma + tcDirLuma * 0.5`
   - `shadowNorm = tc.shadowStrength / 255.0` → [0, 1]

@@ -1028,52 +1028,49 @@ CPostEffects::ColourFilter_Modern(RwRGBA rgba1, RwRGBA rgba2)
 		float exposure, toeStrength;
 		float gradeContrast, gradeBrightness, gradeLift, gradeCurve;
 
-		if(isInterior || isCutscene){
-			// Interior/cutscene: brighter tonemap from timecycle ambient
-			exposure = baseExposure * 1.8f;
-			toeStrength = 0.30f;
-			sceneLuma = 0.5f;
-			// Gentler grading for interiors — timecycle shadow/fog less meaningful indoors
-			gradeContrast   = 1.20f;
-			gradeBrightness = 0.06f;
-			gradeLift       = 0.02f;
-			gradeCurve      = 0.25f;
-		} else {
-			// --- Exposure: reciprocal of scene brightness + timecycle dampening ---
-			float sceneExposure = 1.0f / (0.70f + sceneLuma * 2.0f);
-			sceneExposure = max(0.80f, min(1.30f, sceneExposure));
-			// Carcols env mult nudges ±5%
-			float carcolsAdapt = 0.95f + envMult * 0.05f;
-			// Bright sun → slightly less exposure (prevent highlight blowout)
-			float sunDampen = 1.0f - max(0.0f, min(0.08f, sunBright * 0.05f));
-			exposure = baseExposure * sceneExposure * carcolsAdapt * sunDampen;
+		// === Unified timecycle-driven adaptive tonemap (outdoor + cutscene + interior) ===
+		// The timecycle is the authority — cutscene/interior timecyc.dat entries already
+		// encode the correct mood. We use the same adaptive path for everything.
+		// Cutscene/interior gets a gentle dampening factor where the sun is pointing at camera.
 
-			// --- Toe: shadow lift driven by sceneLuma + timecycle shadow depth ---
-			float toeFromLuma   = 0.20f - sceneLuma * 1.0f;
-			float toeFromShadow = shadowNorm * 0.08f;  // deeper shadows → more lift
-			toeStrength = max(0.05f, min(0.25f, toeFromLuma + toeFromShadow));
+		// --- Exposure: reciprocal of scene brightness + timecycle dampening ---
+		float sceneExposure = 1.0f / (0.70f + sceneLuma * 2.0f);
+		sceneExposure = max(0.80f, min(1.30f, sceneExposure));
+		// Carcols env mult nudges ±5%
+		float carcolsAdapt = 0.95f + envMult * 0.05f;
+		// Bright sun → slightly less exposure (prevent highlight blowout)
+		float sunDampen = 1.0f - max(0.0f, min(0.08f, sunBright * 0.05f));
+		exposure = baseExposure * sceneExposure * carcolsAdapt * sunDampen;
 
-			// --- Grade params: fully timecycle-driven ---
-			// Contrast: shadow strength × fog clearance (deep shadows + clear sky = max contrast)
-			gradeContrast = 1.15f + shadowNorm * 0.25f * fogFactor;
+		// Cutscene/interior: gentle dampening (cameras face sun more often)
+		if(isInterior || isCutscene)
+			exposure *= 0.85f;
 
-			// Brightness: street lights provide fill in dark scenes
-			gradeBrightness = 0.03f + streetLights * 0.04f;
+		// --- Toe: shadow lift driven by sceneLuma + timecycle shadow depth ---
+		float toeFromLuma   = 0.20f - sceneLuma * 1.0f;
+		float toeFromShadow = shadowNorm * 0.08f;  // deeper shadows → more lift
+		toeStrength = max(0.05f, min(0.25f, toeFromLuma + toeFromShadow));
 
-			// Lift: overcast/cloudy raises blacks slightly; heavy fog also lifts
-			gradeLift = clouds * 0.015f + (1.0f - fogFactor) * 0.01f;
+		// --- Grade params: fully timecycle-driven ---
+		// Contrast: shadow strength × fog clearance (deep shadows + clear sky = max contrast)
+		gradeContrast = 1.15f + shadowNorm * 0.25f * fogFactor;
 
-			// Curve blend: brighter scenes get more S-curve for depth
-			gradeCurve = 0.25f + sceneLuma * 0.25f;
+		// Brightness: street lights provide fill in dark scenes
+		gradeBrightness = 0.03f + streetLights * 0.04f;
 
-			// Throttled diagnostic
-			static unsigned int tonemapLogCounter = 0;
-			if(tonemapLogCounter++ % 3600 == 0){
-				dbglog("[Tonemap] TC sceneLuma=%.3f shadow=%d fog=%.0f cloud=%.2f sun=%.2f street=%.2f",
-					sceneLuma, tc.shadowStrength, tc.fogStart, clouds, sunBright, streetLights);
-				dbglog("[Tonemap] VAL exp=%.3f toe=%.3f ct=%.2f br=%.3f lift=%.3f curve=%.2f",
-					exposure, toeStrength, gradeContrast, gradeBrightness, gradeLift, gradeCurve);
-			}
+		// Lift: overcast/cloudy raises blacks slightly; heavy fog also lifts
+		gradeLift = clouds * 0.015f + (1.0f - fogFactor) * 0.01f;
+
+		// Curve blend: brighter scenes get more S-curve for depth
+		gradeCurve = 0.25f + sceneLuma * 0.25f;
+
+		// Throttled diagnostic
+		static unsigned int tonemapLogCounter = 0;
+		if(tonemapLogCounter++ % 3600 == 0){
+			dbglog("[Tonemap] TC sceneLuma=%.3f shadow=%d fog=%.0f cloud=%.2f sun=%.2f street=%.2f cutscene=%d interior=%d",
+				sceneLuma, tc.shadowStrength, tc.fogStart, clouds, sunBright, streetLights, isCutscene, isInterior);
+			dbglog("[Tonemap] VAL exp=%.3f toe=%.3f ct=%.2f br=%.3f lift=%.3f curve=%.2f",
+				exposure, toeStrength, gradeContrast, gradeBrightness, gradeLift, gradeCurve);
 		}
 
 		// Pack into c5: {exposure, toeStrength, sceneLuma, flags}

@@ -51,11 +51,11 @@
 ### D. Visual quality refinement (CURRENT WORK)
 - [x] Vehicle PBR specularity/metallic/env reflections improvement — clearcoat Fresnel, metallic energy conservation, ambientObj
 - [x] Ground/street brightness at dawn — ambientObj timecycle, removed hardcoded floor
+- [x] Sun flare fix — sunCoronaIntensity (0.4), sunCoreIntensity (0.6) INI controls, unified tonemap
 - [ ] CJ character material depth
 - [ ] Glass shader transparency
 
 ### E. Housekeeping (leave to LAST)
-- [ ] **Commit working tree** — crash fix, tonemap, dawn brightness, memory-bank updates.
 - [ ] **Update PLAN.md** — mark P2/P3 done, add visual refinement tracking.
 
 ---
