@@ -110,13 +110,16 @@ float4 main(PS_INPUT IN) : COLOR
     // F0: dielectric reflectance, optionally tinted by paint color
     float3 F0 = lerp(float3(specularF0, specularF0, specularF0), paintTint * specularF0, specTint);
 
-    // Energy conservation (CryEngine fragLib pattern): reduce albedo by specular reflectance
-    baseColor *= saturate(1.0 - dot(F0, float3(0.2126, 0.7152, 0.0722)));
+    // Energy conservation: metallic paints have near-zero diffuse
+    // metallicFactor: 0 for dielectric (specF0 < 0.5), 1 for metal (specF0 > 0.5)
+    float metallicFactor = saturate((specularF0 - 0.5) * 2.0);
+    float diffuseScale = lerp(saturate(1.0 - dot(F0, float3(0.2126, 0.7152, 0.0722))), 0.05, metallicFactor);
+    baseColor *= diffuseScale;
 
     // Fresnel
     float3 F_atNdotV = F_Schlick(NdotV, F0);
     float3 kS = F_atNdotV;
-    float3 kD = 1.0 - kS;  // dielectric: diffuse = all non-reflected light
+    float3 kD = (1.0 - kS) * (1.0 - metallicFactor * 0.95);  // metallic: near-zero diffuse
 
     // ---- Cloud shadow ----
     float3 noisePos = float3(IN.WorldPos.xy * 0.0008, IN.WorldPos.z * 0.0004);
@@ -124,33 +127,47 @@ float4 main(PS_INPUT IN) : COLOR
     cloudNoise = smoothstep(0.3, 0.7, cloudNoise);
     float shadowFactor = lerp(0.6, 1.0, 1.0 - cloudNoise * 0.4);
 
-    // ---- Direct light with minimum floor for dawn/dusk ----
-    // At dawn directCol can be ~0.02-0.05. Floor of 0.15 ensures paint gets some directional shading.
-    float3 sunContrib = max(directCol.rgb, float3(0.15, 0.15, 0.18));
+    // ---- Direct light — NO floor, use raw timecycle values ----
+    // Buildings use directCol.rgb directly and look correct at all times of day.
+    // Previous 0.20 floor made vehicles artificially bright at dawn/night.
+    float3 sunContrib = directCol.rgb;
 
     float NdotL_sun = max(dot(N, L), 0.0);
     float3 H_sun = normalize(V + L);
     float VdotH_sun = max(dot(V, H_sun), 0.0);
     float burleyDiff = BurleyDiffuse(NdotL_sun, NdotV, VdotH_sun, roughness);
 
-    // ---- Ambient: fill light — at dawn this is the primary illumination ----
-    // 20% of timecycle ambient gives paint visibility at dawn without washing out daytime
-    float3 ambient = ambientColor.rgb * baseColor * 0.20;
+    // ---- Ambient: timecycle object ambient illuminating surfaces ----
+    // Uses ambientObj from timecycle (via PS c24), which is the game's own
+    // ambient for objects — properly colored, not desaturated.
+    float3 ambient = ambientColor.rgb * baseColor;
 
     // ---- Diffuse: paint color × lighting (paint MUST dominate) ----
     float3 layer1 = baseColor * kD * burleyDiff * sunContrib * shadowFactor + ambient;
 
-    // ---- Environment Reflection: SUBTLE, paint must show through ----
-    // Cars are NOT mirrors. Env reflection adds gloss hint, not mirror image.
+    // ---- Environment Reflection: clearcoat Fresnel drives visibility ----
+    // Car paint has a clearcoat — env reflections visible at all angles, stronger at grazing
     float3 R = reflect(-V, N);
     float2 envReflUV = SphereEnvMapUV(R, V);
     float3 envRefl = tex2D(envMapTex, envReflUV).rgb;
-    float3 iblTint = tex2D(iblTex, envReflUV).rgb;
-    float3 iblBlend = lerp(envRefl, envRefl + iblTint * 0.04, 0.3);
-    // Heavily attenuated: ×0.12 strength, masked by sharp Fresnel falloff
-    // Only visible at grazing angles (carpaint has clearcoat, not mirror)
-    float envMask = pow(1.0 - NdotV, 4.0) * 0.12;
-    float3 layer2 = iblBlend * envMask;
+    float3 iblSample = tex2D(iblTex, envReflUV).rgb;
+    // Blend env with subtle IBL tint for depth
+    float3 iblBlend = lerp(envRefl, envRefl + iblSample * 0.08, 0.4);
+    // Clearcoat Fresnel: F0=0.04 (dielectric), ~4% at normal, ~50% at grazing
+    float clearcoatFresnel = SchlickFresnelScalar(NdotV, 0.04);
+    // Env reflection: 3% base floor (subtle at normal) up to 25% at grazing angles
+    float envMask = lerp(0.03, 0.25, clearcoatFresnel);
+    // Metallic paints boost env reflection — metals are inherently reflective
+    envMask = lerp(envMask, envMask * 1.5, metallicFactor);
+    // Paint tinting: reflection tinted by paint color at normal incidence, white at grazing.
+    // Real paint: light passes through clearcoat, reflects off base paint, gets tinted on exit.
+    // At grazing angles Fresnel dominates and reflection becomes white (like a mirror).
+    float3 reflTint = lerp(matCol.rgb, float3(1,1,1), clearcoatFresnel * 0.6);
+    // Texture luminance mask: dark areas (tire rubber, dirt, holes, black textures) reflect less.
+    // Physically correct — dark paint absorbs more light, so less is reflected back through clearcoat.
+    float texReflMask = saturate(dot(diff.rgb, float3(0.2126, 0.7152, 0.0722)));
+    texReflMask = max(texReflMask, 0.05);  // tiny floor to prevent zero
+    float3 layer2 = iblBlend * envMask * reflTint * texReflMask;
 
     // ---- Specular: GGX/Smith for direct sun highlight ----
     float3 specTotal = float3(0, 0, 0);
@@ -162,6 +179,11 @@ float4 main(PS_INPUT IN) : COLOR
         float Vis = V_SmithCorrelated(NdotV, NdotL_sun, roughness);
         float3 F = F_Schlick(LdotH, F0);
         specTotal += D * F * Vis * NdotL_sun * sunContrib;
+        // Clearcoat specular: white dielectric highlight on top of paint
+        float D_cc = D_GGX(NdotH, 0.05);  // very smooth clearcoat
+        float Vis_cc = V_SmithCorrelated(NdotV, NdotL_sun, 0.05);
+        float3 F_cc = F_Schlick(LdotH, float3(0.04, 0.04, 0.04));  // clearcoat F0
+        specTotal += D_cc * F_cc * Vis_cc * NdotL_sun * sunContrib * 0.6;
     }
     for(int i = 0; i < 6; i++){
         float3 Ll = -lightDir[i];
@@ -174,14 +196,19 @@ float4 main(PS_INPUT IN) : COLOR
             float Vis = V_SmithCorrelated(NdotV, NdotL, roughness);
             float3 F = F_Schlick(LdotH, F0);
             specTotal += D * F * Vis * NdotL * lightCol[i].rgb;
+            // Clearcoat per-light
+            float D_cc_l = D_GGX(NdotH, 0.05);
+            float Vis_cc_l = V_SmithCorrelated(NdotV, NdotL, 0.05);
+            float3 F_cc_l = F_Schlick(LdotH, float3(0.04, 0.04, 0.04));
+            specTotal += D_cc_l * F_cc_l * Vis_cc_l * NdotL * lightCol[i].rgb * 0.6;
         }
     }
 
     // ---- COMPOSITE ----
     // Paint color (baseColor) is the DOMINANT term. Everything else is additive tint.
-    float3 color = layer1;                           // diffuse (paint × lighting) + subtle ambient
-    color += specTotal;                                // specular highlights (paint-colored via F0 tint)
-    color += layer2;                                  // env reflection (very subtle, grazing only)
+    float3 color = layer1;                           // diffuse (paint × lighting) + ambient fill
+    color += specTotal;                                // specular highlights (base + clearcoat)
+    color += layer2;                                  // env reflection (clearcoat Fresnel-driven)
 
     // Output linear HDR — PostFX TonemapPass handles everything
     return float4(max(color, 0.0), diff.a);
@@ -334,15 +361,15 @@ float4 main_building(PS_INPUT_BUILDING IN) : COLOR
     float3 kS = F_atNdotV;
     float3 kD = 1.0 - kS;  // dielectric: all non-reflected energy is diffuse
 
-    // Day/night blending (vertex color alpha)
-    float dayFactor = IN.color.a;
+    // NOTE: Ambient is already baked into IN.color.rgb by the VS
+    // (OUT.Color = (prelight*surfDiff + ambient*surfAmb) * matCol).
+    // baseColor = tex * IN.color already contains ambient.
+    // DO NOT add ambientColor again — that creates ambient² and washes out blacks.
+    // Industry precedent: Skyrim Community Shaders fixed identical double-ambient bug
+    // by setting vertexColor=1 for PBR paths.
 
-    // Ambient from timecycle (PS c24) — irradiance × albedo
-    // Provides fill light when directCol is dim (dawn/dusk/night)
-    float3 ambient = ambientColor.rgb * baseColor;
-
-    // Minimum direct light floor — ensures directional shading at dawn/dusk
-    float3 sunContrib = max(directCol.rgb, float3(0.05, 0.05, 0.05));
+    // Direct light from timecycle (PS c5) — 1:1 match with ped pipeline
+    float3 sunContrib = directCol.rgb;
 
     // Diffuse lighting (Burley)
     float3 H = normalize(V + L);
@@ -375,15 +402,15 @@ float4 main_building(PS_INPUT_BUILDING IN) : COLOR
     float2 iblUV = N.xy * 0.5 + 0.5;
     float3 iblSample = tex2D(iblTex, iblUV).rgb;
     // SM3.0 returns black for unbound textures — use ambient as fill
-    float3 ibl = (dot(iblSample, iblSample) > 1e-6) ? iblSample * 0.06 : baseColor * surfProps.x * 0.3;
+    float3 ibl = (dot(iblSample, iblSample) > 1e-6) ? iblSample * 0.15 : baseColor * surfProps.x * 0.5;
 
-    // Composite: ambient + direct diffuse + specular + IBL (CryEngine pattern)
-    float3 color = ambient + baseColor * kD * diffuse * sunContrib;
+    // Composite: vertex color AS diffuse (VS already baked ambient + directional),
+    // plus PBR specular and IBL for per-pixel detail.
+    // Xbox pipe: tex * vertexColor * 10.0 — vertex color IS the lighting.
+    // Same approach: baseColor contains full lit result from VS, don't attenuate it.
+    float3 color = baseColor;
     color += specTotal;
     color += ibl;
-
-    // Day/night blend (night = darker, more ambient)
-    color = lerp(color * 0.3, color, dayFactor);
 
     // Output linear HDR — PostFX TonemapPass handles tonemapping uniformly
     return float4(max(color, 0.0), diff.a);
@@ -392,7 +419,7 @@ float4 main_building(PS_INPUT_BUILDING IN) : COLOR
 // ============================================================
 // RUBBER/TIRE ENTRY POINT
 // Entry: main_rubber
-// Parametric rubber BRDF with dirt/wear tint and subsurface wrap
+// Pure diffuse rubber — no specular, no Fresnel sheen (tires are matte)
 // c22 = {roughness, F0, tintR, tintG}  (tireParams)
 // c23 = {tintB, dirtLevel, wearFactor, 0}  (tireParams2)
 // ============================================================
@@ -403,67 +430,38 @@ float4 main_rubber(PS_INPUT IN) : COLOR
     float3 L = length(IN.SunDir) > 1e-6 ? IN.SunDir / length(IN.SunDir) : float3(0, 0, -1);
 
     float4 diff = tex2D(diffuseTex, IN.texcoord0);
-    float3 baseColor = diff.rgb * IN.color.rgb * matCol.rgb;
+    // Same pattern as vehicle main: texture × paint color ONLY.
+    // IN.color contains VS-baked ambient × lighting — using it doubles lighting (building pipe bug).
+    float3 baseColor = diff.rgb * matCol.rgb;
 
     float roughness  = pbrParams.x;
-    float rubberF0   = pbrParams.y;
-    float tintR      = pbrParams.z;
-    float tintG      = pbrParams.w;
-    float tintB      = paintNoise.x;
     float dirtLevel  = paintNoise.y;
     float wearFactor = paintNoise.z;
-
-    float3 F0 = float3(rubberF0, rubberF0, rubberF0);
 
     float3 dirtTint = float3(0.35, 0.25, 0.15);
     float3 wearTint = float3(0.55, 0.55, 0.50);
     baseColor = lerp(baseColor, dirtTint * baseColor, dirtLevel * 0.4);
     baseColor = lerp(baseColor, wearTint * baseColor, wearFactor * 0.3);
 
-    roughness = lerp(roughness, min(roughness + 0.1, 0.98), dirtLevel * 0.5);
-
     float NdotV = max(dot(N, V), 0.0);
-
-    float3 F_atNdotV = F_Schlick(NdotV, F0);
-    float3 kS = F_atNdotV;
-    float3 kD = (1.0 - kS);
-
-    float3 diffuse = baseColor * kD;
-
-    float3 specTotal = float3(0, 0, 0);
     float NdotL_sun = max(dot(N, L), 0.0);
-    if(NdotL_sun > 0.0){
-        float3 H = normalize(V + L);
-        float NdotH = max(dot(N, H), 0.0);
-        float LdotH = max(dot(L, H), 0.0);
 
-        float D = D_GGX(NdotH, roughness);
-        float Vis = V_SmithCorrelated(NdotV, NdotL_sun, roughness);
-        float3 F = F_Schlick(LdotH, F0);
-        specTotal += D * F * Vis * NdotL_sun * directCol.rgb;
+    // Ambient from timecycle — rubber needs fill light to be visible in shadows
+    float3 ambient = ambientColor.rgb * baseColor;
 
-        float subsurface = 0.08;
-        float wrapDiffuse = saturate((NdotL_sun + subsurface) / (1.0 + subsurface));
-        diffuse += baseColor * wrapDiffuse * directCol.rgb * subsurface;
-    }
+    // Wrap diffuse — rubber scatters light broadly (subsurface wrap)
+    float subsurface = 0.15;
+    float wrapDiffuse = saturate((NdotL_sun + subsurface) / (1.0 + subsurface));
+    float3 color = baseColor * wrapDiffuse * directCol.rgb + ambient;
 
+    // Point lights — diffuse only, no specular
     for(int i = 0; i < 6; i++){
         float3 Ll = -lightDir[i];
-        float NdotL = max(dot(N, Ll), 0.0);
-        if(NdotL > 0.0){
-            float3 H = normalize(V + Ll);
-            float NdotH = max(dot(N, H), 0.0);
-            float LdotH = max(dot(Ll, H), 0.0);
-            float D = D_GGX(NdotH, roughness);
-            float Vis = V_SmithCorrelated(NdotV, NdotL, roughness);
-            float3 F = F_Schlick(LdotH, F0);
-            specTotal += D * F * Vis * NdotL * lightCol[i].rgb * 0.3;
-        }
+        float NdL = max(dot(N, Ll), 0.0);
+        float wrap = saturate((NdL + subsurface) / (1.0 + subsurface));
+        color += baseColor * wrap * lightCol[i].rgb * 0.15;
     }
 
-    float3 fresnelSheen = F_atNdotV * baseColor * 0.08;
-
-    float3 color = diffuse + specTotal + fresnelSheen;
-
+    // No specular, no Fresnel sheen — rubber is matte
     return float4(color, diff.a);
 }

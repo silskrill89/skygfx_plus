@@ -1,36 +1,49 @@
-// TonemapPass.hlsl - Hable/Uncharted 2 filmic tonemapping + exact sRGB gamma (ps_3_0)
+// TonemapPass.hlsl - Adaptive Hable/Uncharted 2 filmic tonemapping + exact sRGB gamma (ps_3_0)
 // Runs as a fullscreen pass AFTER color grading.
 //
-// Uses CryEngine's FilmMapping() parameters (HDRPostProcess.cfx lines 282-311).
-// These are tuned to output in [0,1] range directly — NO white scaling needed.
-// The old Reinhard desaturates highlights and crushes contrast; this preserves both.
+// Uses CryEngine's FilmMapping() base parameters (HDRPostProcess.cfx lines 282-311).
+// Toe strength is now timecycle-driven: night/dawn lifts shadows more aggressively,
+// midday keeps tighter contrast. Exposure adapts to scene luminance.
 //
 // Reads graded linear HDR from pRasterFrontBuffer, outputs gamma-corrected LDR.
 //
-// c5 = tonemapParams: x=exposure, y=unused, z=0, w=0
+// c5 = tonemapParams (timecycle-adaptive):
+//   x = exposure (brightness slider × scene luminance factor × CCoronas LightsMult)
+//   y = toeStrength (0.12-0.35, time-of-day adaptive)
+//   z = sceneLuma (total scene brightness estimate, 0-1)
+//   w = flags (bit0=isInterior, bit1=isCutscene)
+//
+// c6 = gradeParams (post-gamma color grading, tuned for PBR linear HDR):
+//   x = brightness offset (0.10 — raises midtones)
+//   y = contrast multiplier (1.30 — moderate S-curve push)
+//   z = shadow lift (0.02 — raises blacks from 0 to ~5/255)
+//   w = curves blend (0.35 — S-curve intensity)
 
 uniform sampler2D tex : register(s0);
 uniform float4 tonemapParams : register(c5);
+uniform float4 gradeParams : register(c6);
 
 struct PS_INPUT
 {
 	float3 texcoord0 : TEXCOORD0;
 };
 
-// Hable/Uncharted 2 filmic tonemapping — CryEngine parameters
+// Hable/Uncharted 2 filmic tonemapping — CryEngine base + adaptive toe
 // Reference: CryEngine HDRPostProcess.cfx FilmMapping() with default HDRFilmCurve=(1,1,1,1)
-// ShoStren=0.22, LinStren=0.30, LinAngle=0.10, ToeStren=0.20, ToeNum=0.01, ToeDenom=0.30
+// ShoStren=0.22, LinStren=0.30, LinAngle=0.10, ToeNum=0.01, ToeDenom=0.30
+// ToeStren is now a uniform (c5.y) driven by timecycle scene luminance.
 //
 // Output range: [0, ~0.8] for inputs [0, 5] — no white scaling needed.
 // After sRGB gamma this maps to a natural, contrasty LDR image.
-float3 FilmicTonemap(float3 x)
+float3 FilmicTonemap(float3 x, float toeStrength)
 {
-	const float A = 0.22;   // Shoulder Strength
-	const float B = 0.30;   // Linear Strength
-	const float CB = 0.03;  // Linear Angle × Linear Strength (0.10 × 0.30)
-	const float D = 0.20;   // Toe Strength
-	const float E = 0.01;   // Toe Numerator
-	const float F = 0.30;   // Toe Denominator
+	const float A = 0.22;          // Shoulder Strength
+	const float B = 0.30;          // Linear Strength
+	const float CB = 0.03;         // Linear Angle × Linear Strength (0.10 × 0.30)
+	// D = toeStrength (adaptive): night=0.35 lifts shadows, midday=0.12 keeps contrast
+	const float D = toeStrength;
+	const float E = 0.01;          // Toe Numerator
+	const float F = 0.30;          // Toe Denominator
 	return ((x * (A * x + CB) + D * E) / (x * (A * x + B) + D * F)) - E / F;
 }
 
@@ -43,19 +56,76 @@ float3 LinearToSRGB(float3 c)
 		: 1.055 * pow(c, 1.0 / 2.4) - 0.055;
 }
 
+// Post-gamma color grading: Curves + Brightness/Contrast
+// Matched from Photoshop adjustments on sunset screenshot:
+//   Curves: S-curve with shadow lift (0→15/255), midtone boost, highlight compression
+//   Brightness/Contrast: B=52, C=72 at 61% opacity → effective B≈0.124, C≈1.44
+//
+// ADAPTIVE: grading intensity scales with sceneLuma (from c5.z).
+//   Dark scenes (dawn/dusk, sceneLuma < 0.15) → minimal grading to avoid crushing shadows
+//   Bright scenes (midday, sceneLuma > 0.35) → full Photoshop-matched grading
+float3 PostGrade(float3 c, float sceneLuma)
+{
+	float brightness = gradeParams.x;
+	float contrast   = gradeParams.y;
+	float lift       = gradeParams.z;
+	float curveBlend = gradeParams.w;
+
+	// Adaptive scale: ramps 0→1 as sceneLuma goes 0.04→0.30
+	// Below 0.04 → no grading (identity). Above 0.30 → full grading.
+	// Dawn (~0.10) gets ~25% grading — enough for color pop without crushing shadows
+	float adaptive = saturate((sceneLuma - 0.04) / 0.26);
+
+	// Lerp each param toward identity (no-op) for dark scenes
+	float b = brightness * adaptive;           // identity: 0.0
+	float ct = lerp(1.0, contrast, adaptive);  // identity: 1.0
+	float lf = lift * adaptive;                // identity: 0.0
+	float cb = curveBlend * adaptive;          // identity: 0.0
+
+	// Shadow lift: raise blacks from 0 to ~lift value
+	c = c + lf * (1.0 - c);
+
+	// S-curve: smoothstep-based contrast enhancement
+	float3 s = c * c * (3.0 - 2.0 * c);
+	c = lerp(c, s, cb);
+
+	// Brightness/Contrast (Photoshop non-legacy mode)
+	c = (c - 0.5) * ct + 0.5;
+	c += b;
+
+	return saturate(c);
+}
+
+// Soft-knee highlight compression: gracefully compress values above 1.0
+// Prevents hard clamping of extreme highlights (sun disc, specular hot-spots).
+// At x=1: y=1 (continuous). At x=5: y≈2.3. At x=50: y≈5.5.
+// This spreads out extreme values so the filmic curve can distinguish them.
+float3 SoftKnee(float3 x)
+{
+	float3 r = max(x - 1.0, 0.0);
+	// Logarithmic compression above 1.0 — preserves gradient detail in highlights
+	return min(x, 1.0 + log(1.0 + r) * 0.65);
+}
+
 float4 main(PS_INPUT IN) : COLOR
 {
 	float3 c = tex2D(tex, IN.texcoord0.xy);
 
-	// Apply exposure (default 1.0 from C++)
-	float exposure = tonemapParams.x;
-	c *= exposure;
+	// Adaptive exposure from timecycle scene luminance
+	c *= tonemapParams.x;
 
-	// Hable/Uncharted 2 filmic tonemap (CryEngine params, no white scaling)
-	c = FilmicTonemap(c);
+	// Pre-compress extreme highlights so filmic tonemap can spread them
+	c = SoftKnee(c);
+
+	// Adaptive Hable/Uncharted 2 filmic tonemap (time-of-day toe strength)
+	c = FilmicTonemap(c, tonemapParams.y);
 
 	// Exact sRGB gamma encode
 	c = saturate(LinearToSRGB(c));
+
+	// Post-gamma grading: adaptive curves + brightness/contrast
+	// Intensity scales with scene luminance — dark scenes get gentler grading
+	c = PostGrade(c, tonemapParams.z);
 
 	return float4(c, 1.0f);
 }

@@ -1663,8 +1663,6 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 		}
 		surfProps.ambient = material->surfaceProps.ambient;
 		surfProps.diffuse = material->surfaceProps.diffuse;
-		if(surfProps.ambient > 0.1f && surfProps.ambient < 0.8f)
-			surfProps.ambient = max(surfProps.ambient, 0.8f);
 		RwD3D9SetVertexShaderConstant(REG_surfProps, &surfProps, 1);
 		RwD3D9SetVertexShaderConstant(21, &fxParams, 1);
 		RwD3D9SetPixelShaderConstant(0, &surfProps, 1);
@@ -1756,13 +1754,12 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 			ambientPS[3] = 1.0f;  // flag: normal buffer available
 		}
 
-		// Timecycle ambient on c24 — always set RGB even if normal buffer is missing
-		// pAmbient->color is RwRGBAReal (float 0.0-1.0, NOT 0-255)
-		if(pAmbient){
-			ambientPS[0] = pAmbient->color.red;
-			ambientPS[1] = pAmbient->color.green;
-			ambientPS[2] = pAmbient->color.blue;
-		}
+		// Object ambient from timecycle (PS c24) — ambientObj is the game's own
+		// ambient for objects (peds/vehicles), separate from world ambient.
+		// This matches how the game's default pipeline lights peds correctly.
+		ambientPS[0] = CTimeCycle__m_CurrentColours.ambientObjR;
+		ambientPS[1] = CTimeCycle__m_CurrentColours.ambientObjG;
+		ambientPS[2] = CTimeCycle__m_CurrentColours.ambientObjB;
 		RwD3D9SetPixelShaderConstant(24, ambientPS, 1);
 
 		RwD3D9SetVertexShader(vehiclePBRVS);

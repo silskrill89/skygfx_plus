@@ -356,9 +356,6 @@ CarPipe::DiffusePass(RxD3D9ResEntryHeader *header, RpAtomic *atomic)
 		RwD3D9SetVertexShaderConstant(LOC_matCol, (void*)&mat, 1);
 
 		RwSurfaceProperties surfprops = material->surfaceProps;
-		// if ambient light is too dark reflections don't look too good, so bump it
-		if(surfprops.ambient > 0.1f && surfprops.ambient < 0.8f)
-			surfprops.ambient = max(surfprops.ambient, 0.8f);
 		RwD3D9SetVertexShaderConstant(LOC_surfProps, &surfprops, 1);
 
 		float reflProps[4];

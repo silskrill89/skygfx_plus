@@ -65,16 +65,10 @@ CustomBuildingPipeline__Update(void)
 {
 	CustomBuildingPipeline__Update_orig();
 
-	// Timecyc dictates everything — use timecyc ambient values directly
+	// Timecyc dictates everything — use timecyc ambient values directly, no hardcoded floors
 	buildingAmbient.red = CTimeCycle_GetAmbientRed() * CCoronas__LightsMult;
 	buildingAmbient.green = CTimeCycle_GetAmbientGreen() * CCoronas__LightsMult;
 	buildingAmbient.blue = CTimeCycle_GetAmbientBlue() * CCoronas__LightsMult;
-
-	// Clamp minimum ambient — prevents pure-black buildings when timecycle ambient is very low
-	const float AMBIENT_FLOOR = 0.08f;
-	if(buildingAmbient.red < AMBIENT_FLOOR) buildingAmbient.red = AMBIENT_FLOOR;
-	if(buildingAmbient.green < AMBIENT_FLOOR) buildingAmbient.green = AMBIENT_FLOOR;
-	if(buildingAmbient.blue < AMBIENT_FLOOR) buildingAmbient.blue = AMBIENT_FLOOR;
 
 	if(config->lightningIlluminatesWorld && CWeather__LightningFlash && !CPostEffects__IsVisionFXActive())
 		buildingAmbient = { 1.0, 1.0, 1.0, 0.0 };

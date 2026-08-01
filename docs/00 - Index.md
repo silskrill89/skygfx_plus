@@ -54,3 +54,4 @@
 - [[Credits]] — Contributors and academic references
 - [[File Inventory]] — Every source/shader/resource file in skygfx_plus
 - [[SDK Dependencies]] — SDK dependencies and versions
+- [[RW SDK Integration Strategy]] — Full RW 3.7 .lib inventory, skin/MatFX/normmap APIs, integration plan

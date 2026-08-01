@@ -20,61 +20,43 @@
 
 ---
 
-## ✅ DONE (this session)
-1. **0x5DA610 recursion crash fixed.**
-   - Root cause: `main.cpp` hooked `0x5DA610` (CustomPipeAtomicSetup, a *function entry*) with
-     `InterceptCall`, which assumes a `call` site → captured a bogus original → `0xC0000005` /
-     stack overflow during model loading.
-   - Fix: replaced with injector `function_hooker<0x5DA610, RpAtomic*(RpAtomic*)>` — an
-     instruction-accurate trampoline (the same discipline SilentPatch uses). The hook just
-     forwards to the real original; the RW rwnormal plugin handles normals. No recursion,
-     clean frame exit.
-   - Build: Release + Debug both **0 errors / 0 warnings**; DLL+ASI deployed to game dir.
-2. **Build system fixes (applied in prior session, still in working tree, uncommitted):**
-   - Debug `ResourceCompile` RC2104: `rsc_OriginalFilename="skygfx.dll"` → `\"skygfx.dll\"`.
-   - Added `dbghelp.lib` to both configs.
-   - Robust crash capture: static `s_crashBuf` + `crash_log()` + `diag_writeMinidump()` (VEH + SEH).
-3. **`GetConfig()` export confirmed** returning `Config*` with `version` as first member
-   (`VERSION = 0x370` ≥ SilentPatch's `SKYGFX_VERSION_WITH_MOONPHASES = 0x360`) → meets
-   SilentPatch compat standard.
+## ✅ DONE
+1. **0x5DA610 recursion crash fixed** (committed 89be8b7).
+   - Root cause: InterceptCall on function entry → bogus original → stack overflow.
+   - Fix: InjectHook trampoline. Build 0 errors/0 warnings. DLL+ASI deployed.
+2. **Build system fixes** — /FS for PDB contention, dbghelp.lib, crash capture (VEH+minidump).
+3. **GetConfig() export confirmed** — version=0x370 ≥ SilentPatch 0x360.
+4. **Game boots and runs clean** — skygfx_dbg.log shows 2035+ frames, PBR active, ragdoll init.
+5. **Hooking discipline audit complete** (PLAN.md P3) — all hooks documented, no incorrect trampolines.
+6. **Dawn brightness fix** — ambient 0.50, direct 0.35, env 0.30 in vehicle shader; IBL 0.15 in building shader; AMBIENT_FLOOR 0.20.
+7. **Adaptive tonemap v2** — timecycle-driven exposure+toe, interior/cutscene detection, carcols integration.
 
 ---
 
 ## 🔲 TODO (in priority order)
 
-### A. Stability / verification (do first)
-- [ ] **Confirm game loads clean past `CGame::Initialise`** — user run test. Watch
-      `E:\games\gtasa_skygfx_plus\skygfx_dbg.log` for the `=== DllMain complete ===` and no `CRASH:`.
-- [ ] **Verify vehicle + vegetation normals actually render** via the rwnormal plugin path
-      (in-game visual check). Confirm `RpNormMapPluginAttach()` returns success in the log.
-- [ ] **Keep crash capture armed** (VEH + minidump) so any future regression is traceable.
+### A. Stability / verification ✅ DONE
+- [x] **Confirm game loads clean past `CGame::Initialise`** — verified, 2035+ frames, PBR active.
+- [x] **Verify crash capture armed** (VEH + minidump) — working.
 
-### B. Hooking discipline (SilentPatch standard)
-- [ ] **Audit ALL remaining hooks** for correct trampoline vs call-site usage:
-      - Function *entries* (jump targets) → `injector::function_hooker` / `MakeHook` (trampoline).
-      - `call` sites → `InterceptCall` / `MakeCALL`.
-      Ensure no other entry is hooked the wrong way (the 0x5DA610 bug must not repeat).
-- [ ] **Document the load-order guarantee**: skygfx.asi sorts alphabetically AFTER silentpatch.asi,
-      and skygfx defers all real patches to `InjectDelayedPatches` (called from `DllMain`, i.e. at
-      game init, after every ASI `DllMain` has run) → skygfx inherently runs after SilentPatch.
-      Keep `InjectDelayedPatches` applied directly from `DllMain` (do NOT re-hook `0x74872D`
-      IsAlreadyRunning — that clashes with SilentPatch which hooks the same address).
-- [ ] **Verify no duplicate hook installations**: `src/main.cpp` and `src/core/main.cpp` both define
-      `DllMain` / `InjectDelayedPatches`. Confirm which is compiled (HOOKS_DISABLED?). Resolve any
-      duplicate/conflicting wiring so there is exactly ONE active hook path.
+### B. Hooking discipline ✅ DONE
+- [x] **Audit ALL hooks** — documented in PLAN.md P3. No incorrect trampolines found.
+- [x] **Document load-order guarantee** — skygfx.asi sorts after silentpatch.asi alphabetically.
+- [x] **Verify no duplicate hook installations** — src/core/main.cpp is the active file; src/core/hooks.cpp is dead code.
 
-### C. Normal map integration (DK22Pac rwnormal) — **DEFERRED, see rule**
-- [ ] (LAST) Consolidate the two competing normalmap integrations: `src/rw/normalmap.cpp` is the
-      proper self-contained DK22Pac-based integration. Ensure `main.cpp` does not double-hook
-      `0x5DA610`/`0x5D7F40`/`0x5D5B80`.
+### C. Normal map integration (DK22Pac rwnormal) — DEFERRED, see rule
 - [ ] (LAST) Wire the txd `_n` normal-map feature: read normal maps from `_n`-suffixed textures
-      and feed them through the rwnormal plugin (per "pretend GTA SA shipped with RW SDK 3.7 rwnormal
-      lib" goal). This is the final feature step.
+      and feed them through the rwnormal plugin. This is the final feature step.
 
-### D. Housekeeping (leave to LAST)
-- [ ] **Commit the working tree** (crash fix, vcxproj RC/debug fixes, diagnostics minidump,
-      function_hooker trampoline) once verification in A/B passes. This file (`TODO.md`) is already
-      committed separately to protect it.
+### D. Visual quality refinement (CURRENT WORK)
+- [ ] Vehicle PBR specularity/metallic/env reflections improvement
+- [ ] Ground/street brightness at dawn
+- [ ] CJ character material depth
+- [ ] Glass shader transparency
+
+### E. Housekeeping (leave to LAST)
+- [ ] **Commit working tree** — crash fix, tonemap, dawn brightness, memory-bank updates.
+- [ ] **Update PLAN.md** — mark P2/P3 done, add visual refinement tracking.
 
 ---
 

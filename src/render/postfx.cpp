@@ -1005,15 +1005,64 @@ CPostEffects::ColourFilter_Modern(RwRGBA rgba1, RwRGBA rgba2)
 
 		// Map GTA SA brightness slider (0-384, default 256) to tonemap exposure
 		float brightness = (float)CMenuManager__m_PrefsBrightness;
-		float exposure = max(0.3f, brightness / 256.0f);  // 256 → 1.0 (neutral)
-		float tonemapP[4] = { exposure, 0.0f, 0.0f, 0.0f };
+		float baseExposure = max(0.3f, brightness / 256.0f);  // 256 → 1.0 (neutral)
+
+		// === Adaptive tonemap — timecycle + interior/cutscene aware ===
+		bool isInterior = (*CGame__currArea != 0);
+		bool isCutscene = CCutsceneMgr__ms_running;
+
+		float exposure, toeStrength;
+		float sceneLuma = 0.0f;
+
+		if(isInterior || isCutscene){
+			// Interior/cutscene: brighter tonemap — game's own lighting is often too dark
+			// Boost exposure and lift shadows to make cutscenes visible
+			exposure = baseExposure * 1.8f;
+			toeStrength = 0.30f;
+			sceneLuma = 0.5f;  // mid-range for PostGrade (full grading)
+		} else {
+			// Exterior: adaptive tonemap from timecycle scene luminance
+			CColourSet &tc = CTimeCycle__m_CurrentColours;
+			float tcAmbientLuma = 0.299f*tc.ambientR + 0.587f*tc.ambientG + 0.114f*tc.ambientB;
+			float tcDirLuma     = 0.299f*tc.directionalR + 0.587f*tc.directionalG + 0.114f*tc.directionalB;
+			sceneLuma           = tcAmbientLuma + tcDirLuma * 0.5f;
+
+			// EnvMapLightingMult from carcols — vehicle env brightness context
+			float envMult = CCustomCarEnvMapPipeline__m_EnvMapLightingMult;
+
+			// Scene exposure: reciprocal curve — gentle dark-scene lift, suppress sunset overbrightness
+			// dawn (~0.10) → ~1.1x, sunset (~0.20) → ~0.91x (reduced), midday (~0.40) → 0.80x
+			// carcols envMult nudges ±5% (range ~0.5-2.0 → 0.95-1.1)
+			float sceneExposure = 1.0f / (0.70f + sceneLuma * 2.0f);
+			sceneExposure = max(0.80f, min(1.30f, sceneExposure));
+			float carcolsAdapt = 0.95f + envMult * 0.05f;
+			exposure = baseExposure * sceneExposure * carcolsAdapt;
+
+			// Toe: moderate adaptation — shadow lift reduced for deeper blacks
+			// night (~0.01) → 0.19, dawn (~0.10) → 0.10, midday (~0.40) → 0.05
+			toeStrength = max(0.05f, min(0.20f, 0.20f - sceneLuma * 1.0f));
+
+			// Throttled diagnostic
+			static unsigned int tonemapLogCounter = 0;
+			if(tonemapLogCounter++ % 3600 == 0){
+			dbglog("[Tonemap] EXT sceneLuma=%.3f envMult=%.3f sceneExp=%.3f toe=%.3f finalExp=%.3f",
+				sceneLuma, envMult, sceneExposure, toeStrength, exposure);
+			}
+		}
+
+		// Pack into c5: {exposure, toeStrength, sceneLuma, flags}
+		// flags: bit0=isInterior, bit1=isCutscene
+		float tonemapP[4] = { exposure, toeStrength, sceneLuma, (isInterior ? 1.0f : 0.0f) + (isCutscene ? 2.0f : 0.0f) };
 		RwD3D9SetPixelShaderConstant(5, tonemapP, 1);
 
-		// Throttled diagnostic: verify brightness offset reads correctly
-		static unsigned int brightLogCounter = 0;
-		if(brightLogCounter++ % 3600 == 0){
-			dbglog("[Tonemap] brightness=%d exposure=%.3f", CMenuManager__m_PrefsBrightness, exposure);
-		}
+		// Post-gamma grading: Curves + Brightness/Contrast
+		// Tuned for deeper blacks — removed lift, lowered brightness
+		//   brightness: 0.05 (subtle lift to keep textures visible)
+		//   contrast: 1.30 (moderate S-curve push)
+		//   lift: 0.00 (no shadow floor — blacks stay black)
+		//   curveBlend: 0.35 (S-curve for depth)
+		float gradeP[4] = { 0.05f, 1.30f, 0.0f, 0.35f };
+		RwD3D9SetPixelShaderConstant(6, gradeP, 1);
 
 		overrideIm2dPixelShader = tonemapPassPS;
 		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
