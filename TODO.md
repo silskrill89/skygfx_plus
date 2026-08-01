@@ -55,21 +55,25 @@
 - [ ] CJ character material depth
 - [ ] Glass shader transparency
 
-### E. Housekeeping (leave to LAST)
+### E. Housekeeping
+- [x] **Full roadmap plan** — `docs/plans/2026-08-01-remaining-roadmap.md` (Phases 0-5, 25 safety issues, all TODOs consolidated)
 - [ ] **Update PLAN.md** — mark P2/P3 done, add visual refinement tracking.
 
 ---
 
-## Reference (broader roadmap — see `docs/Future Features.md`)
-Not scheduled now; recorded for context:
-- ImGui debug menu (deferred — SDK integration, low priority)
-- Edge tessellation (experimental)
-- Multi-pass vehicle glass with parallax (partial)
-- Collision-based edge detection (not started)
-- Cloud bleeding on trees / IBL onto vegetation
-- Wire skin/hair/vegetation enhancement passes
-- Wire normal buffer into building pipe for AO
-- Forward+ pipeline migration
+## Full Roadmap
+
+See **`docs/plans/2026-08-01-remaining-roadmap.md`** for the complete implementation plan covering:
+
+| Phase | Description | Status |
+|-------|-------------|--------|
+| 0 | Safety hardening (25 issues: normalize, div-by-zero, strcat, sprintf, raw new) | ❌ NOT STARTED |
+| 1 | Restore full compatibility (verify 9+2 pipes, dead stubs, YCbCr) | ❌ NOT STARTED |
+| 2 | Visual quality remaining (CJ depth, glass transparency, sun streaks) | ❌ NOT STARTED |
+| 3 | Architecture cleanup (config refactor, dedup, render state leaks) | ❌ NOT STARTED |
+| 4 | Platform selection UI (vehicleStyle/buildingStyle/colorStyle INI + menu) | ❌ NOT STARTED |
+| 5 | Advanced features (Forward+, skin/hair/veg, multi-agent) | ❌ NOT STARTED |
+| C | Normal map integration (DK22Pac) — **LAST per user rule** | 🔒 DEFERRED |
 
 ## Key addresses / facts
 - `0x5DA610` = CustomPipeAtomicSetup (vehicle pipe) — MUST use trampoline, never InterceptCall.
