@@ -41,9 +41,9 @@ struct PS_INPUT{
 
 float4 main(PS_INPUT IN) : COLOR
 {
-    float3 N = normalize(IN.WorldNormal);
-    float3 V = normalize(IN.ViewDir);
-    float3 L = normalize(IN.SunDir);
+    float3 N = length(IN.WorldNormal) > 1e-6 ? IN.WorldNormal / length(IN.WorldNormal) : float3(0, 1, 0);
+    float3 V = length(IN.ViewDir) > 1e-6 ? IN.ViewDir / length(IN.ViewDir) : float3(0, 0, 1);
+    float3 L = length(IN.SunDir) > 1e-6 ? IN.SunDir / length(IN.SunDir) : float3(0, 0, -1);
     float4 diff = tex2D(diffuseTex, IN.texcoord0);
 
     float NdotV = saturate(dot(N, V));
@@ -57,9 +57,9 @@ float4 main(PS_INPUT IN) : COLOR
     float m = 2.0 * sqrt(dot(R.xy, R.xy) + (R.z + 1.0) * (R.z + 1.0));
     float2 envUV = R.xy / m + 0.5;
     float4 env = tex2D(envMapTex, envUV);
-    // Dark glass: env map at ~8% keeps windows dark while showing subtle reflections.
-    // Reference photos show nearly opaque windows with minimal env bleed.
-    float envIntensity = max(IN.envColor.a, 0.1) * 0.08;
+    // Glass env reflection: boosted from 8% to 18% to make windows less opaque.
+    // Balance between subtle reflections and visible tint.
+    float envIntensity = max(IN.envColor.a, 0.1) * 0.18;
     float3 envCol = env.rgb * envIntensity;
 
     // Sun contribution
@@ -115,10 +115,10 @@ float4 main(PS_INPUT IN) : COLOR
     // IN.color.rgb = vertex color from car body, diff.rgb = glass window texture
     float3 glassBase = diff.rgb * IN.color.rgb;
 
-    // LAYER 2: Subtle env reflection — adds glossy glass surface on top of texture
-    // Very gentle Fresnel: face-on = 2% reflection, grazing = 8% reflection
-    // Reference: real car windows show minimal reflection except at extreme angles
-    float envStrength = lerp(0.02, 0.08, fresnel);
+    // LAYER 2: Env reflection — glossy glass surface on top of texture
+    // Fresnel-driven: face-on = 5% reflection, grazing = 20% reflection
+    // Real car windows are noticeably reflective at oblique angles
+    float envStrength = lerp(0.05, 0.20, fresnel);
     float3 reflLayer = envCol * envStrength;
 
     // Combine: glass texture + subtle reflection (car body shows through via alpha)
@@ -132,9 +132,11 @@ float4 main(PS_INPUT IN) : COLOR
     float tintAlpha = opacity * tintStrength * 0.05;
     color = lerp(color, color + tintColor, tintAlpha);
 
-    // Alpha: Reference photos show nearly opaque windows from outside.
-    // Higher base opacity (0.7) + stronger Fresnel at edges makes glass feel solid.
-    float alpha = saturate(opacity * 0.7 + fresnel * 0.20);
+    // Alpha: View-angle-dependent transparency.
+    // At normal incidence (looking straight through): alpha ~0.3 (very transparent).
+    // At grazing angles (edges of windows): alpha ~0.8 (more opaque/reflective).
+    // This matches real car glass behavior — transparent from front, reflective from side.
+    float alpha = lerp(0.3, 0.8, fresnel);
 
     return float4(color, saturate(alpha));
 }

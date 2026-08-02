@@ -177,6 +177,44 @@ void Weather_Init(const char *gameDir){
 }
 
 // ============================================================
+// Apply sun config multipliers to m_CurrentColours.
+// Called every frame from RenderScene_hook, after CTimeCycle::Update()
+// but before any rendering reads the values.
+// Runs unconditionally — no weather blend or alt-timecyc checks.
+// ============================================================
+
+void Weather_ApplySunConfig(void){
+	extern CColourSet &CTimeCycle__m_CurrentColours;
+	CColourSet &tc = CTimeCycle__m_CurrentColours;
+
+	// Scale sun corona color (PS2→PC conversion fix)
+	if(config->sunCoronaIntensity != 1.0f){
+		tc.sunCoronaR = (short)(tc.sunCoronaR * config->sunCoronaIntensity);
+		tc.sunCoronaG = (short)(tc.sunCoronaG * config->sunCoronaIntensity);
+		tc.sunCoronaB = (short)(tc.sunCoronaB * config->sunCoronaIntensity);
+		if(tc.sunCoronaR > 255) tc.sunCoronaR = 255;
+		if(tc.sunCoronaG > 255) tc.sunCoronaG = 255;
+		if(tc.sunCoronaB > 255) tc.sunCoronaB = 255;
+	}
+	// Scale sun core color
+	if(config->sunCoreIntensity != 1.0f){
+		tc.sunCoreR = (short)(tc.sunCoreR * config->sunCoreIntensity);
+		tc.sunCoreG = (short)(tc.sunCoreG * config->sunCoreIntensity);
+		tc.sunCoreB = (short)(tc.sunCoreB * config->sunCoreIntensity);
+		if(tc.sunCoreR > 255) tc.sunCoreR = 255;
+		if(tc.sunCoreG > 255) tc.sunCoreG = 255;
+		if(tc.sunCoreB > 255) tc.sunCoreB = 255;
+	}
+	// Scale lens flare streak intensity and size
+	if(config->sunStreakIntensity != 1.0f){
+		tc.spriteBrightness *= config->sunStreakIntensity;
+	}
+	if(config->sunStreakSize != 1.0f){
+		tc.spriteSize *= config->sunStreakSize;
+	}
+}
+
+// ============================================================
 // Update — called each frame after CTimeCycle::Update()
 // Blends game's m_CurrentColours with alternate timecyc values
 // ============================================================

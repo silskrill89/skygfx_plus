@@ -3,6 +3,7 @@
 #include "neo.h"
 #include "waterPipe.h"
 #include "chars.h"
+#include "weather.h"
 #include "Ragdoll.h"
 #include "ini_parser.hpp"
 #include "debugmenu_public.h"
@@ -872,6 +873,11 @@ RenderScene_hook(void)
 	// Process ragdoll motion BEFORE render so modified matrices are visible
 	g_ragdollMan.ProcessAllPeds(CTimer__ms_fTimeStep / 50.0f);
 	g_ragdollMan.Update(CTimer__ms_fTimeStep / 50.0f);
+
+	// Apply sun config multipliers (corona, core, streaks) to m_CurrentColours.
+	// Must run AFTER CTimeCycle::Update() (already done at this point in the frame)
+	// but BEFORE any rendering reads the values.
+	Weather_ApplySunConfig();
 
 	RenderScene_before(nil);
 	RenderScene();
