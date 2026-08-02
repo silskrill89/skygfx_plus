@@ -1353,6 +1353,11 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_mobile(RwResEntry *repEntry, void *
 			// lets have some more specularity, our light seems to be a bit
 			// darker so compensate for that
 			fxParams.specularity = hasSpec ? shininess*1.5f : 0.0f;
+			// DEAD CODE: fxParams.lightmult (c30.w) is uploaded here but the
+			// mobile VS (mobileVehicleVS) defines lightmult without using it,
+			// and the mobile PS (main_mobileVehicle) only reads fxParams.y.
+			// The C++ usage at line 1344 (shininess *= 2.5f*lightmult) is live,
+			// but the .w component of the uploaded constant is never consumed.
 			RwD3D9SetVertexShaderConstant(REG_fxParams, &fxParams, 1);
 			RwD3D9SetPixelShaderConstant(REG_fxParams, &fxParams, 1);
 			pipeSetTexture(reflectionTex, 1);

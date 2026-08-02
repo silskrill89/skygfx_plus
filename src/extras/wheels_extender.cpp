@@ -327,8 +327,11 @@ RpAtomic* WheelsExtender_RenderWheelCB(RpAtomic *atomic) {
 			logCount++;
 		}
 
-		// Geometry swap disabled — causes crash mid-frame
-		// TODO: implement safe swap using double-buffer or deferred swap
+		// DEAD CODE: Geometry swap disabled — causes crash mid-frame.
+		// RpAtomicSetGeometry on a live atomic during the render loop corrupts
+		// the instanced data and vertex buffer pointers mid-draw. A safe swap
+		// would require double-buffered geometry or a deferred swap after the
+		// frame completes, but neither is implemented. Do NOT re-enable.
 	}
 
 	extern int renderingWheel;
@@ -344,8 +347,11 @@ RpAtomic* WheelsExtender_RenderWheelCB(RpAtomic *atomic) {
 // ============================================================
 
 void WheelsExtender_Install(void) {
-	// Install wheel render hook
-	// TODO: InterceptCall(&orig_RenderWheelAtomicCB, WheelsExtender_RenderWheelCB, 0x7323C0);
+	// DEAD CODE: Wheel render hook disabled — see geometry swap comment above.
+	// The hook would intercept the game's wheel atomic render callback to
+	// swap wheel geometry at draw time, but the swap itself crashes mid-frame.
+	// Install is intentionally empty until a safe deferred-swap mechanism is built.
+	// InterceptCall(&orig_RenderWheelAtomicCB, WheelsExtender_RenderWheelCB, 0x7323C0);
 }
 
 int WheelsExtender_GetCount(void) {

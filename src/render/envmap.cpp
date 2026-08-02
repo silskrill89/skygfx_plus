@@ -623,10 +623,12 @@ RenderNormalBuffer(void)
 	RwRGBA color = { 128, 128, 255, 255 };
 	RwCameraClear(cam, &color, rwCAMERACLEARIMAGE | rwCAMERACLEARZ);
 
-	// NOTE: Scene re-rendering disabled — causes crash at 0x7F98DF
-	// when re-entering the vehicle pipe during RenderScene_after.
-	// Normal buffer is cleared to flat normal (128,128,255) = straight up.
-	// TODO: Reconstruct normals from depth buffer instead of re-rendering.
+	// CRASH at 0x7F98DF: Scene re-rendering for the normal buffer is disabled.
+	// RenderScene_after re-enters the vehicle pipe while still inside the
+	// render loop, corrupting shared D3D9 state (render targets, viewports).
+	// The normal buffer is filled with flat normal (128,128,255) = straight up
+	// instead of re-rendering geometry. TODO: Reconstruct normals from the
+	// depth buffer via a fullscreen pass rather than re-rendering the scene.
 
 	// Restore main camera
 	RwCameraSetRaster(cam, fb);

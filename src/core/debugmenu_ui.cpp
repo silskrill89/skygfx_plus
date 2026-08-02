@@ -302,9 +302,13 @@ static void EnsureImGuiInit(IDirect3DDevice9 *device)
 	unifiedImGuiInited = true;
 }
 
+// DEAD CODE: This function is never called from anywhere in the codebase.
+// The early return was added because the unified pipeline from the JuniorDjjr
+// fork was never integrated. The implementation below is retained for reference
+// in case the feature is revived. See docs/Future Features.md.
 void UploadUnifiedConstants(IDirect3DDevice9 *device)
 {
-	return; // TODO: recover unified pipeline from JuniorDjjr fork
+	return; // Not called — unified pipeline feature was never completed
 	if(!config->unifiedEnable) return;
 	if(!device) return;
 
