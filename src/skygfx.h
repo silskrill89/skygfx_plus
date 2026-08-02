@@ -587,6 +587,7 @@ struct CPostEffects
 	static void DrawFinalEffects(void);
 	static void DrawSSAO(void);
 	static void DrawSMAA(void);
+	static void DrawMotionBlur(void);
 
 	static Imf &ms_imf;
 

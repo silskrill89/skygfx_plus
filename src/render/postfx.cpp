@@ -1664,6 +1664,8 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 		if(dbglog_throttle("cf_switch"))
 			dbglog("[PostFX] ColourFilter_switch BYPASSED (colorFilterEnable=0)");
 		UpdateFrontBuffer();
+		// SSS still runs even when colour filter is bypassed - it's independent
+		chars_drawSSSBlur();
 		return;
 	}
 
@@ -1734,7 +1736,17 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 	postfxReportFrame++;
 	postfxReportSummary();
 
+	// Motion blur: after colour filter + SMAA, before final front buffer sync
+	{
+		PERF_SCOPE("MotionBlur");
+		DrawMotionBlur();
+	}
+
 	UpdateFrontBuffer();
+	// SSS post-process blur: runs after colour filter, before DrawFinalEffects
+	// Reads from pRasterFrontBuffer (colour-filtered scene), writes to camera raster.
+	// DrawFinalEffects will copy camera→front buffer via its own UpdateFrontBuffer().
+	chars_drawSSSBlur();
 	if(dbglog_throttle("cf_done"))
 		dbglog("ColourFilter_switch: done (filter=%d)", colorFilter);
 
@@ -2795,6 +2807,141 @@ CPostEffects::DrawSMAA(void)
 		dev->SetTexture(1, NULL);
 		dev->SetTexture(2, NULL);
 	}
+}
+
+void
+CPostEffects::DrawMotionBlur(void)
+{
+	if(!config->motionBlurEnable || !MotionBlur_Burnout)
+		return;
+	if(!pRasterFrontBuffer)
+		return;
+	if(IsGameInMenuOrPaused())
+		return;
+
+	IDirect3DDevice9 *dev = d3d9device;
+	if(!dev)
+		return;
+	if(!Scene.camera)
+		return;
+	RwRaster *camRas = RwCameraGetRaster(Scene.camera);
+	if(!camRas)
+		return;
+	int w = camRas->width;
+	int h = camRas->height;
+	if(w < 1 || h < 1)
+		return;
+
+	// Track camera velocity for motion blur
+	static float prevCamX = 0, prevCamY = 0, prevCamZ = 0;
+	static float prevAtX = 0, prevAtY = 0, prevAtZ = 0;
+	static bool camInitialized = false;
+
+	float cameraVelocity = 0.0f;
+	float cameraRotation = 0.0f;
+
+	RwFrame *camFrame = RwCameraGetFrame(Scene.camera);
+	if(camFrame){
+		RwMatrix *camLTM = RwFrameGetLTM(camFrame);
+		if(camLTM){
+			if(camInitialized){
+				float dx = camLTM->pos.x - prevCamX;
+				float dy = camLTM->pos.y - prevCamY;
+				float dz = camLTM->pos.z - prevCamZ;
+				cameraVelocity = sqrtf(dx*dx + dy*dy + dz*dz);
+
+				// Rotation delta (dot product of forward vectors)
+				float dot = camLTM->at.x * prevAtX +
+				            camLTM->at.y * prevAtY +
+				            camLTM->at.z * prevAtZ;
+				dot = max(-1.0f, min(1.0f, dot));
+				cameraRotation = 1.0f - dot; // 0=no rotation, 2=max rotation
+			}
+			prevCamX = camLTM->pos.x;
+			prevCamY = camLTM->pos.y;
+			prevCamZ = camLTM->pos.z;
+			prevAtX = camLTM->at.x;
+			prevAtY = camLTM->at.y;
+			prevAtZ = camLTM->at.z;
+			camInitialized = true;
+		}
+	}
+
+	// Combine camera movement into a single factor (0=still, 1=fast movement)
+	float cameraMovement = min(1.0f, (cameraVelocity * 0.1f) + (cameraRotation * 2.0f));
+
+	// Skip if barely moving
+	if(cameraMovement < 0.01f)
+		return;
+
+	// Optional: reduce blur when camera is moving very fast (camera-aware mode)
+	float effectiveStrength = config->motionBlurStrength;
+	if(config->motionBlurCameraAware && cameraMovement > 0.8f){
+		effectiveStrength *= (1.0f - (cameraMovement - 0.8f) * 2.0f);
+		effectiveStrength = max(0.05f, effectiveStrength);
+	}
+
+	if(dbglog_throttle("mb_draw"))
+		dbglog("[PostFX] DrawMotionBlur: vel=%.3f rot=%.3f mov=%.3f strength=%.3f shader=%p",
+			cameraVelocity, cameraRotation, cameraMovement, effectiveStrength, MotionBlur_Burnout);
+
+	// Setup render states
+	CPostEffects::ImmediateModeRenderStatesStore();
+	CPostEffects::ImmediateModeRenderStatesSet();
+	RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
+	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
+	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
+	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
+	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
+
+	// Bind front buffer as current frame (s0)
+	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)pRasterFrontBuffer);
+
+	// Bind front buffer as motion proxy on s1 (no velocity buffer available).
+	// Color channels will be interpreted as motion data but the radial blur
+	// and camera velocity components dominate the effect.
+	dev->SetTexture(1, NULL);
+
+	// c0: (blurStrength, radialStrength, maxSamples, speedFactor)
+	float c0[4] = {
+		effectiveStrength,
+		config->motionBlurRadial,
+		8.0f, // maxSamples (matches shader loop unroll)
+		config->motionBlurSpeedFactor
+	};
+	RwD3D9SetPixelShaderConstant(0, c0, 1);
+
+	// c1: (screenW, screenH, 1/screenW, 1/screenH)
+	float c1[4] = { (float)w, (float)h, 1.0f/w, 1.0f/h };
+	RwD3D9SetPixelShaderConstant(1, c1, 1);
+
+	// c2: (cameraVelocity, cameraRotation, deltaTime, 0)
+	float dt = CTimer__ms_fTimeStep / 50.0f; // GTA SA tick rate: 50 fps
+	float c2[4] = { cameraMovement, cameraRotation, dt, 0.0f };
+	RwD3D9SetPixelShaderConstant(2, c2, 1);
+
+	// Render fullscreen quad with motion blur shader
+	overrideIm2dPixelShader = MotionBlur_Burnout;
+	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
+	overrideIm2dPixelShader = nil;
+
+	// Cleanup texture stages
+	dev->SetTexture(1, NULL);
+
+	// Restore render states
+	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
+	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)TRUE);
+	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
+	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
+	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)NULL);
+	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
+	RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
+
+	CPostEffects::ImmediateModeRenderStatesReStore();
+
+	// Sync front buffer
+	UpdateFrontBuffer();
 }
 
 void (*CPostEffects::Initialise_orig)(void);
