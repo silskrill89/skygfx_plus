@@ -300,8 +300,9 @@ static void EnsureSSSRasters(int w, int h)
 void chars_drawSSSBlur(void)
 {
 	if(dbglog_throttle( "sss_blur"))
-		dbglog("[PostFX] chars_drawSSSBlur ENTER sssPostProcessEnable=%d SSS_Blur=%p pRasterFrontBuffer=%p",
-			config->sssPostProcessEnable, SSS_Blur, CPostEffects::pRasterFrontBuffer);
+		dbglog("[PostFX] chars_drawSSSBlur ENTER sssPostProcessEnable=%d SSS_Blur=%p pRasterFrontBuffer=%p skinEnhance=%d",
+			config->sssPostProcessEnable, SSS_Blur, CPostEffects::pRasterFrontBuffer,
+			config->skinEnhanceEnable);
 	if(!config->sssPostProcessEnable){
 		if(dbglog_throttle( "sss_bail1"))
 			dbglog("[PostFX] chars_drawSSSBlur bailing: sssPostProcessEnable=0");
@@ -338,6 +339,16 @@ void chars_drawSSSBlur(void)
 	float sssWidth = config->sssPostProcessRadius;
 	float strength = config->sssPostProcessStrength;
 
+	// Skin enhancement: boost SSS for character depth pixels
+	bool skinEnhanced = (config->skinEnhanceEnable != 0) && (config->skinSSSStrength > 0.01f);
+	float skinSSSStrength = skinEnhanced ? config->skinSSSStrength : 1.0f;
+	float warmTint = skinEnhanced ? 0.5f : 0.0f;
+	float rimStrength = skinEnhanced ? 0.3f : 0.0f;
+
+	if(skinEnhanced && dbglog_throttle("sss_skin"))
+		dbglog("[PostFX] SSS skinEnhanced: strength=%.2f warmTint=%.2f rimStr=%.2f",
+			skinSSSStrength, warmTint, rimStrength);
+
 	RwRaster *origRaster = RwCameraGetRaster(Scene.camera);
 
 	// Common render state
@@ -359,6 +370,13 @@ void chars_drawSSSBlur(void)
 
 	float depthP[4] = { nearClip, farClip, 0.0f, 0.0f };
 	RwD3D9SetPixelShaderConstant(18, depthP, 1);
+
+	// Skin material params: c19 = (skinStrength, warmTint, rimStrength, texelSizeX)
+	//                        c20 = (texelSizeY, unused, unused, unused)
+	float skinP[4] = { skinSSSStrength, warmTint, rimStrength, pixelW };
+	RwD3D9SetPixelShaderConstant(19, skinP, 1);
+	float texelP[4] = { pixelH, 0.0f, 0.0f, 0.0f };
+	RwD3D9SetPixelShaderConstant(20, texelP, 1);
 
 	// ---- Pass 0: Horizontal blur ----
 	{
@@ -430,6 +448,19 @@ void chars_drawSSSBlur(void)
 void chars_init(void)
 {
 	dbglog("chars_init: SSS system ready (part params loaded)");
+}
+
+PartSSSParams chars_getPartParams(int partType)
+{
+	if(partType < 0 || partType >= NUM_PARTTYPES)
+		return g_partSSSParams[PARTTYPE_NONE];
+	return g_partSSSParams[partType];
+}
+
+void chars_buildClassificationBuffer(void)
+{
+	// Placeholder for future per-pixel classification rendering
+	// Currently unused — SSS blur uses depth-based character masking instead
 }
 
 void chars_shutdown(void)

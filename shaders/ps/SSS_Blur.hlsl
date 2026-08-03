@@ -5,6 +5,8 @@
 //
 // c17 = (pixelSizeX * dirX, pixelSizeY * dirY, sssWidth, strength)
 // c18 = (nearClip, farClip, 0, 0)
+// c19 = (skinStrength, warmTint, rimStrength, texelSizeX)
+// c20 = (texelSizeY, unused, unused, unused)
 // s0 = scene color
 // s1 = depth buffer
 
@@ -13,6 +15,8 @@ sampler2D depthTex : register(s1);
 
 float4 SSSParams   : register(c17);
 float4 DepthParams : register(c18);
+float4 SkinParams  : register(c19);
+float4 TexelParams : register(c20);
 
 struct PS_INPUT {
     float2 texCoord : TEXCOORD0;
@@ -22,7 +26,7 @@ float LinearDepth(float2 uv) {
     float d = tex2D(depthTex, uv).r;
     float n = DepthParams.x;
     float f = DepthParams.y;
-    return n * f / (f - d * (f - n));
+    return n * f / (f - d * (f - n) + 1e-7);
 }
 
 float EdgeWeight(float sampleDepth, float centerDepth) {
@@ -30,13 +34,53 @@ float EdgeWeight(float sampleDepth, float centerDepth) {
     return exp(-diff * 100.0) * saturate(1.0 - diff * 20.0);
 }
 
+// Character depth mask: 1.0 if pixel is at typical character depth, 0.0 for sky/far background
+float CharacterMask(float linearDepth) {
+    float nearClip = DepthParams.x;
+    float farClip  = DepthParams.y;
+    // Characters typically occupy near*2 to far*0.75 in linear depth
+    float charNear = nearClip * 2.0;
+    float charFar  = farClip * 0.75;
+    float rampNear = saturate((linearDepth - charNear) / max(charNear, 1e-7));
+    float rampFar  = saturate((charFar - linearDepth) / max(farClip - charFar, 1e-7));
+    return saturate(rampNear * rampFar);
+}
+
+// Depth-based edge detection for rim lighting (4-tap cross pattern)
+float DepthEdge(float2 uv, float2 texelSize) {
+    float2 ts = texelSize;
+    float dc = LinearDepth(uv);
+    float dl = LinearDepth(uv - float2(ts.x, 0.0));
+    float dr = LinearDepth(uv + float2(ts.x, 0.0));
+    float du = LinearDepth(uv - float2(0.0, ts.y));
+    float dd = LinearDepth(uv + float2(0.0, ts.y));
+    float gradX = abs(dr - dl);
+    float gradY = abs(dd - du);
+    // Normalize gradient by depth for consistent edge detection at all distances
+    float normGrad = (gradX + gradY) / max(dc, 1e-7);
+    return saturate(normGrad * 20.0);
+}
+
 float4 main(PS_INPUT IN) : COLOR {
     float2 dir = SSSParams.xy;
     float sssWidth = SSSParams.z;
     float strength = SSSParams.w;
 
+    // Skin material params from CPU
+    float skinStrength = SkinParams.x;  // 0..1 overall skin SSS multiplier
+    float warmTint     = SkinParams.y;  // 0..1 warm subsurface tint amount
+    float rimStrength  = SkinParams.z;  // 0..1 rim lighting intensity
+    float2 texelSize   = float2(SkinParams.w, TexelParams.x);
+
     float3 centerColor = tex2D(colorTex, IN.texCoord).rgb;
     float centerDepth = LinearDepth(IN.texCoord);
+
+    // Character mask: modulate SSS by depth (no SSS on sky/background)
+    float charMask = CharacterMask(centerDepth);
+
+    // Modulate strength: characters get full SSS scaled by skinStrength,
+    // non-character pixels get minimal SSS
+    float modStrength = lerp(strength * 0.15, strength, charMask * skinStrength);
 
     // Kernel weights (symmetric, 17 samples from SeparableSSS quality 1)
     // [center, 0.0208, 0.0417, 0.0833, 0.1667, 0.3333, 0.6667, 1.3333, 2.0, 2.6667, 3.3333, 4.0, 4.6667, 5.3333, 6.0, 6.6667, 7.3333, 8.0]
@@ -128,7 +172,18 @@ float4 main(PS_INPUT IN) : COLOR {
 
     // Skin profile: red scatters more, green medium, blue least
     float3 skinProfile = float3(1.0, 0.7, 0.5);
-    float3 result = lerp(centerColor, blurred, strength * skinProfile);
+    float3 result = lerp(centerColor, blurred, modStrength * skinProfile);
+
+    // Warm subsurface tint: simulate blood/warmth in skin areas
+    // Applied during blur to spread warmth naturally
+    result += warmTint * charMask * float3(0.04, 0.015, 0.0) * modStrength;
+
+    // Rim lighting: detect silhouette edges via depth discontinuity
+    // Apply warm rim light to character-edge pixels for material depth
+    float depthEdge = DepthEdge(IN.texCoord, texelSize);
+    float rimMask = depthEdge * charMask;
+    // Rim light is strongest perpendicular to the edge, decays inward
+    result += rimStrength * rimMask * float3(0.06, 0.03, 0.01);
 
     return float4(saturate(result), 1.0);
 }
