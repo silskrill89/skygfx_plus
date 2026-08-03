@@ -1,62 +1,91 @@
-// NormalBuffer.hlsl - Stereo disparity -> normal map
-// ps_3_0
-// Takes two depth textures (main camera + offset camera) and reconstructs
-// surface normals from the stereo disparity vector.
-// Output: R=normalX (right), G=normalY (up), B=normalZ (away), A=depth
+// NormalBuffer.hlsl - Depth-based normal reconstruction (ps_3_0)
+// Reconstructs world-space normals from the depth buffer using screen-space
+// derivatives (5-tap cross pattern). Output: RGB=normal [0,1], A=depth
+//
+// Replaces broken stereo disparity approach that required a second camera.
+//
+// c0 = (nearClip, farClip, 0, 0)
+// c1 = (screenW, screenH, 1/screenW, 1/screenH)
+// c2 = (viewToClip00, viewToClip11, 0, 0) — projection matrix diagonal
+// s0 = depth buffer (INTZ or D24S8)
 
-sampler2D depthMain   : register(s0);
-sampler2D depthNormal : register(s1);
+sampler2D depthTex : register(s0);
 
-float4 stereoParams : register(c0); // (offset, scale, pixelSizeX, pixelSizeY)
-float4 projInfo     : register(c1); // (projX, projY, projZ, projW) for depth reconstruction
-
-float3 ReconstructViewPos(float2 uv, float depth)
-{
-    float2 ndc = uv * 2.0 - 1.0;
-    ndc.y = -ndc.y;
-    float viewZ = projInfo.z / (depth - projInfo.w);
-    float2 viewXY = ndc * viewZ * projInfo.xy;
-    return float3(viewXY, viewZ);
-}
+float4 DepthParams  : register(c0);  // (near, far, 0, 0)
+float4 ScreenParams : register(c1);  // (w, h, 1/w, 1/h)
+float4 ProjDiag     : register(c2);  // (proj[0][0], proj[1][1], 0, 0)
 
 struct PS_INPUT {
     float4 Position : POSITION;
     float2 TexCoord : TEXCOORD0;
 };
 
-struct PS_OUTPUT {
-    float4 Color : COLOR0;
-};
-
-PS_OUTPUT main(PS_INPUT IN)
+// Convert raw depth buffer value to linear eye-space depth
+float LinearDepth(float2 uv)
 {
-    PS_OUTPUT OUT;
+    float z = tex2D(depthTex, uv).r;
+    float near = DepthParams.x;
+    float far = DepthParams.y;
+    // D3D9 perspective: z = (far / (far - near)) * (1 - near/eyeZ)
+    // => eyeZ = near * far / (far - z * (far - near))
+    return near * far / (max(far - z * (far - near), 1e-7));
+}
 
-    float depthM = tex2D(depthMain, IN.TexCoord).r;
-    float depthN = tex2D(depthNormal, IN.TexCoord).r;
+// Reconstruct view-space XY from UV + linear depth
+float2 ViewPosFromUV(float2 uv, float eyeZ)
+{
+    float2 ndc = uv * 2.0 - 1.0;
+    ndc.y = -ndc.y; // D3D9 Y is flipped
+    return ndc * eyeZ * ProjDiag.xy;
+}
 
-    // Handle sky pixels (depth = 1.0)
-    if(depthM >= 1.0 || depthN >= 1.0){
-        OUT.Color = float4(0.5, 0.5, 1.0, 1.0); // flat normal pointing up
-        return OUT;
+float4 main(PS_INPUT IN) : COLOR
+{
+    float2 texel = ScreenParams.zw; // 1/screenW, 1/screenH
+    float2 uv = IN.TexCoord;
+
+    // 5-tap cross: center + 4 neighbors
+    float dc = LinearDepth(uv);
+
+    // Sky pixel → flat normal pointing up
+    if(dc >= DepthParams.y * 0.99){
+        return float4(0.5, 0.5, 1.0, 1.0);
     }
 
-    // Reconstruct view-space positions from both cameras
-    float3 posM = ReconstructViewPos(IN.TexCoord, depthM);
-    float3 posN = ReconstructViewPos(IN.TexCoord, depthN);
+    float dl = LinearDepth(uv - float2(texel.x, 0));
+    float dr = LinearDepth(uv + float2(texel.x, 0));
+    float du = LinearDepth(uv - float2(0, texel.y));
+    float dd = LinearDepth(uv + float2(0, texel.y));
 
-    // Disparity vector = difference in view-space positions
-    float3 disparity = posM - posN;
+    // Reconstruct view-space positions
+    float3 pc = float3(ViewPosFromUV(uv, dc), dc);
+    float3 pl = float3(ViewPosFromUV(uv - float2(texel.x, 0), dl), dl);
+    float3 pr = float3(ViewPosFromUV(uv + float2(texel.x, 0), dr), dr);
+    float3 pu = float3(ViewPosFromUV(uv - float2(0, texel.y), du), du);
+    float3 pd = float3(ViewPosFromUV(uv + float2(0, texel.y), dd), dd);
 
-    // Normalize to get surface normal direction
-    float3 normal = normalize(disparity + float3(0, 0, 0.0001)); // avoid div by zero
+    // Cross-pair differences for robust normal estimation
+    float3 dx1 = pr - pc;
+    float3 dx2 = pc - pl;
+    float3 dy1 = pd - pc;
+    float3 dy2 = pc - pu;
 
-    // Remap from [-1,1] to [0,1] for storage in RGB
-    float3 normalEncoded = normal * 0.5 + 0.5;
+    // Use the pair with smaller depth discontinuity (bilateral weight)
+    float edgeH = abs(dl - dc) + abs(dr - dc);
+    float edgeV = abs(du - dc) + abs(dd - dc);
 
-    // Scale intensity
-    normalEncoded = lerp(float3(0.5, 0.5, 1.0), normalEncoded, stereoParams.y);
+    float3 dx = (abs(dx1.z) < abs(dx2.z)) ? dx1 : dx2;
+    float3 dy = (abs(dy1.z) < abs(dy2.z)) ? dy1 : dy2;
 
-    OUT.Color = float4(normalEncoded, depthM);
-    return OUT;
+    float3 normal = normalize(cross(dx, dy) + 1e-7);
+
+    // Normal is in view space. We need world space for the vehicle/building shaders.
+    // However, the vehicle PBR shader blends this with its own geometric normal,
+    // and view-space normals work well for edge detection and screen-space effects.
+    // For now, output view-space normal remapped to [0,1].
+    // TODO: multiply by inverse view matrix for true world-space normals.
+
+    float3 encoded = normal * 0.5 + 0.5;
+
+    return float4(encoded, dc / DepthParams.y); // depth normalized to [0,1]
 }

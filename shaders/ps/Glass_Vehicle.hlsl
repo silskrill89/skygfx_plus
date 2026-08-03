@@ -66,6 +66,10 @@ float4 main(PS_INPUT IN) : COLOR
     float NdotL = saturate(dot(N, L));
     float3 sunContrib = ComputeSunContribution(N, V, L, F0, NdotL);
 
+    // Energy conservation — reduce diffuse by specular reflectance
+    // Glass F0=0.04, so ~4% of energy is reflected specularly
+    float3 diffConservation = EnergyConservation(F0);
+
     // Glass params
     float3 tint = glassParams.xyz;
     float opacity = glassParams.w;
@@ -113,7 +117,7 @@ float4 main(PS_INPUT IN) : COLOR
 
     // LAYER 1: The actual glass texture (preserves window tint from game TXD)
     // IN.color.rgb = vertex color from car body, diff.rgb = glass window texture
-    float3 glassBase = diff.rgb * IN.color.rgb;
+    float3 glassBase = diff.rgb * IN.color.rgb * diffConservation;
 
     // LAYER 2: Env reflection — glossy glass surface on top of texture
     // Fresnel-driven: face-on = 5% reflection, grazing = 20% reflection

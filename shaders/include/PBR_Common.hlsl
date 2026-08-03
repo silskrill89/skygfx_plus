@@ -94,4 +94,36 @@ float PBR_cloudFBM(float3 p) {
     return f;
 }
 
+// ---- CryEngine-Quality PBR Utilities ----
+
+// Schlick Fresnel using LdotH (energy-conserving for specular BRDF).
+// F90 micro-occlusion: reduces grazing boost for dark dielectrics.
+float3 F_SchlickLH(float LdotH, float3 F0)
+{
+    float f90 = saturate(dot(F0, float3(0.333, 0.333, 0.333)) / 0.02);
+    return lerp(F0, f90, pow(1.0 - saturate(LdotH), 5.0));
+}
+
+// Environment map Fresnel with roughness-dependent grazing damping.
+// At roughness=0: full Schlick curve. At roughness=1: heavily dampened.
+// From CryEngine GetEnvmapFresnel: pow(1-NdotV,5) / (40 - 39*gloss)
+float3 GetEnvmapFresnel(float3 F0, float gloss, float NdotV)
+{
+    return lerp(F0, float3(1,1,1), pow(1.0 - saturate(NdotV), 5.0) / (40.0 - 39.0 * max(gloss, 1e-7)));
+}
+
+// Perceptual roughness to linear roughness (CryEngine: alpha = (1-smoothness)^2)
+float SmoothnessToRoughness(float smoothness)
+{
+    float s = 1.0 - smoothness;
+    return s * s;
+}
+
+// Energy conservation: reduce diffuse by specular reflectance luminance
+// From CryEngine fragLib.cfi: diffuse *= saturate(1 - GetLuminance(F0))
+float EnergyConservation(float3 F0)
+{
+    return saturate(1.0 - dot(F0, float3(0.299, 0.587, 0.114)));
+}
+
 #endif

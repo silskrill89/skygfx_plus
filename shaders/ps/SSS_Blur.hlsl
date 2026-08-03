@@ -198,7 +198,7 @@ float4 main(PS_INPUT IN) : COLOR {
     // Screen-space normal from depth gradients — no normal buffer needed
     float3 ssNormal = ScreenSpaceNormal(IN.texCoord, texelSize);
     float NdotV_ss = saturate(ssNormal.z);  // view is +Z in screen space
-    float skinFresnel = NdotV_ss * NdotV_ss * (3.0 - 2.0 * NdotV_ss);  // smoothstep approx
+    float skinFresnel = 0.04 + 0.96 * pow(1.0 - saturate(NdotV_ss), 5.0);  // Schlick Fresnel (inline, no PBR_Common)
     // F0=0.04 (skin/glass dielectric), lerp from subtle at face-on to bright at grazing
     float fresnelStrength = lerp(0.03, 0.15, skinFresnel);
     // Fresnel highlight: warm white (subsurface glow at grazing angles)
@@ -211,14 +211,21 @@ float4 main(PS_INPUT IN) : COLOR {
     result += rimStrength * rimMask * float3(0.04, 0.02, 0.005);
 
     // === Ambient brightness matching ===
-    // Buildings use timecycle ambientObj (c24). Peds use vanilla RW ambient which may be dimmer.
-    // Add a fraction of timecycle ambient to character pixels to match building brightness.
+    // Buildings use timecycle ambientObj (c24) in their PBR shaders.
+    // Peds use vanilla RW ambient which is typically much dimmer.
+    // We add timecycle ambient to bring peds to the same brightness level.
     float3 tcAmb = TCAmbient.rgb;
     float ambLuma = TCAmbient.w;  // pre-computed luminance on CPU
-    // Only boost if the character is dimmer than the timecycle ambient
+    
+    // Always add a base fraction of timecycle ambient to peds (not conditional)
+    // This matches the ambient contribution that buildings get from their PBR shader
+    float baseBoost = ambLuma * 0.45 * charMask;
+    result += tcAmb * baseBoost;
+    
+    // Additional boost if character is darker than ambient (prevents over-brightening lit peds)
     float charLuma = dot(result, float3(0.2126, 0.7152, 0.0722));
-    float ambBoost = max(ambLuma - charLuma, 0.0) * 0.3 * charMask;
-    result += tcAmb * ambBoost;
+    float extraBoost = max(ambLuma * 1.0 - charLuma, 0.0) * 0.6 * charMask;
+    result += tcAmb * extraBoost;
 
     return float4(saturate(result), 1.0);
 }

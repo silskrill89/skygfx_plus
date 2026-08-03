@@ -1778,6 +1778,28 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 		ambientPS[2] = CTimeCycle__m_CurrentColours.ambientObjB;
 		RwD3D9SetPixelShaderConstant(24, ambientPS, 1);
 
+		// View matrix rotation for sphere map UV computation (PS c25-c27)
+		// The sphere map is rendered from the camera's viewpoint, so reflection
+		// vectors must be in view space for correct UV mapping.
+		D3DMATRIX viewMat;
+		RwD3D9GetTransform(D3DTS_VIEW, &viewMat);
+		float viewRot[12] = {
+			viewMat._11, viewMat._12, viewMat._13, 0.0f,
+			viewMat._21, viewMat._22, viewMat._23, 0.0f,
+			viewMat._31, viewMat._32, viewMat._33, 0.0f
+		};
+		RwD3D9SetPixelShaderConstant(25, viewRot, 3);
+
+		// Sky color for env reflection (PS c28)
+		// Upward-facing surfaces on the car reflect the sky from the sphere map.
+		float skyP[4] = {
+			CTimeCycle__m_CurrentColours.skyTopR / 255.0f,
+			CTimeCycle__m_CurrentColours.skyTopG / 255.0f,
+			CTimeCycle__m_CurrentColours.skyTopB / 255.0f,
+			0.6f  // skyReflectStrength — how much sky tints upward reflections
+		};
+		RwD3D9SetPixelShaderConstant(28, skyP, 1);
+
 		RwD3D9SetVertexShader(vehiclePBRVS);
 		RwD3D9SetPixelShader(VehiclePBR_Modern);
 

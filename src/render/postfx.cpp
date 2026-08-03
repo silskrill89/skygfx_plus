@@ -1042,9 +1042,7 @@ CPostEffects::ColourFilter_Modern(RwRGBA rgba1, RwRGBA rgba2)
 		float sunDampen = 1.0f - max(0.0f, min(0.08f, sunBright * 0.05f));
 		exposure = baseExposure * sceneExposure * carcolsAdapt * sunDampen;
 
-		// Cutscene/interior: gentle dampening (cameras face sun more often)
-		if(isInterior || isCutscene)
-			exposure *= 0.85f;
+		// Cutscene/interior: no dampening — timecycle encodes the correct mood
 
 		// --- Toe: shadow lift driven by sceneLuma + timecycle shadow depth ---
 		float toeFromLuma   = 0.20f - sceneLuma * 1.0f;
@@ -2372,7 +2370,7 @@ static IDirect3DTexture9* GetPipeChainTexture(int idx)
 
 void DrawNormalBufferToTexture(void)
 {
-	if(!config->normalBufferEnable || !normalTex || !NormalBufferShader)
+	if(!config->normalBufferEnable || !NormalBufferShader)
 		return;
 
 	// Ensure SSAO depth texture exists (needed for depth reconstruction)
@@ -2398,32 +2396,32 @@ void DrawNormalBufferToTexture(void)
 
 	// Get screen size
 	RwRaster *camRas = RwCameraGetRaster(Scene.camera);
-	float screenP[4] = { (float)camRas->width, (float)camRas->height,
-		1.0f/camRas->width, 1.0f/camRas->height };
+	float screenW = (float)camRas->width;
+	float screenH = (float)camRas->height;
 
-	// Stereo params: offset, scale, pixelSizeX, pixelSizeY
-	float stereoP[4] = { config->normalBufferOffset, config->normalBufferScale,
-		1.0f / (camRas->width / 2), 1.0f / (camRas->height / 2) };
-	RwD3D9SetPixelShaderConstant(0, stereoP, 1);
+	// c0 = (nearClip, farClip, 0, 0)
+	float nearClip = RwCameraGetNearClipPlane(Scene.camera);
+	float farClip = RwCameraGetFarClipPlane(Scene.camera);
+	float depthP[4] = { nearClip, farClip, 0.0f, 0.0f };
+	RwD3D9SetPixelShaderConstant(0, depthP, 1);
 
-	// Projection info for depth reconstruction (approximate for half-res)
-	float projP[4] = { 1.0f, 1.0f, 1.0f, 0.0f };
-	RwD3D9SetPixelShaderConstant(1, projP, 1);
-	RwD3D9SetPixelShaderConstant(2, screenP, 1);
+	// c1 = (screenW, screenH, 1/screenW, 1/screenH)
+	float screenP[4] = { screenW, screenH, 1.0f/screenW, 1.0f/screenH };
+	RwD3D9SetPixelShaderConstant(1, screenP, 1);
 
-	// Set depth texture on stage 0 (main camera depth)
+	// c2 = projection matrix diagonal for view-space reconstruction
+	// RwD3D9GetTransform wraps D3D9 GetTransform, output is D3DMATRIX (4x4 float, row-major)
+	static float projMat[16];
+	RwD3D9GetTransform(D3DTS_PROJECTION, projMat);
+	float projP[4] = { projMat[0], projMat[5], 0.0f, 0.0f };
+	RwD3D9SetPixelShaderConstant(2, projP, 1);
+
+	// Set depth texture on stage 0 only (single-pass depth reconstruction)
 	dev->SetTexture(0, g_ssaoDepthTex);
 	dev->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
 	dev->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
 	dev->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
 	dev->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
-
-	// Set normal camera texture on stage 1
-	RwD3D9SetTexture(normalTex, 1);
-	dev->SetSamplerState(1, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
-	dev->SetSamplerState(1, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
-	dev->SetSamplerState(1, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
-	dev->SetSamplerState(1, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
 
 	// Render fullscreen quad with normal buffer shader
 	CPostEffects::ImmediateModeRenderStatesStore();
@@ -2442,7 +2440,6 @@ void DrawNormalBufferToTexture(void)
 
 	// Cleanup
 	dev->SetTexture(0, NULL);
-	dev->SetTexture(1, NULL);
 
 	// Restore old RT
 	dev->SetRenderTarget(0, oldRT);

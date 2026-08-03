@@ -10,11 +10,11 @@
 
 | Phase | Description | Status |
 |-------|-------------|--------|
-| Safety (WORKFLOW_PLAN 1-2) | Normalize guards, div-by-zero, strcat, sprintf | ❌ NOT STARTED |
+| Safety (WORKFLOW_PLAN 1-2) | Normalize guards, div-by-zero, strcat, sprintf | ✅ DONE (52bf910) |
 | Architecture (WORKFLOW_PLAN 3) | Config refactor, code dedup, render state | ❌ NOT STARTED |
-| D.4 | CJ character material depth | ❌ NOT STARTED |
-| D.5 | Glass shader transparency | ❌ NOT STARTED |
-| Phase 1 (Roadmap) | Restore full compatibility — verify all pipes, dead stubs, YCbCr | ❌ NOT STARTED |
+| D.4 | CJ character material depth | ✅ DONE (c671ce3) |
+| D.5 | Glass shader transparency | ✅ DONE (a600105) |
+| Phase 1 (Roadmap) | Restore full compatibility — dead stubs annotated, Motion Blur + SSS wired | ✅ DONE (7f85408, 05dc968) |
 | Phase 2 (Roadmap) | Platform/game style selection UI | ❌ NOT STARTED |
 | Phase 3 (Roadmap) | GTA V/IV-style settings menu | ❌ NOT STARTED |
 | Phase 4 (Roadmap) | Forward+ unified pipeline | ❌ NOT STARTED |

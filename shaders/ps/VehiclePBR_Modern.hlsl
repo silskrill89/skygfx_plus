@@ -34,6 +34,10 @@ float4 matCol      : register(c19);
 float4 pbrParams   : register(c22); // {glossiness, specular, specTint, envFresnel}
 float4 paintNoise  : register(c23); // x=wheel, y=noiseScale, z=edgeBlend
 float4 ambientColor : register(c24); // xyz=ambient rgb from timecycle, w=normalBuf enable (0/1)
+float3 viewRight    : register(c25); // view matrix row 0 (world→view rotation)
+float3 viewUp       : register(c26); // view matrix row 1
+float3 viewFwd      : register(c27); // view matrix row 2
+float4 skyParams    : register(c28); // xyz=skyTop color (0-1), w=skyReflect strength
 
 float whiteNoise(float2 p){
     return frac(sin(dot(p, float2(12.9898, 78.233))) * 43758.5453);
@@ -82,22 +86,25 @@ float4 main(PS_INPUT IN) : COLOR
             N = normalize(lerp(N, ssNormal, 0.3));
     }
 
-    // ---- PBR material properties (glossiness workflow) ----
+    // ---- PBR material properties (KHR_materials_pbrSpecularGlossiness workflow) ----
     // Everything is dielectric. No metalness.
-    // pbrParams.x = glossiness (1=smooth/shiny, 0=rough)
+    // pbrParams.x = glossiness (1=smooth/shiny, 0=rough) — PRIMARY variable
     // pbrParams.y = specular reflectance (F0 at normal incidence, ~0.04 for dielectrics)
     // pbrParams.z = specular color tint (0=white, 1=tinted by paint)
     // pbrParams.w = envFresnel
+    // glTF KHR_materials_pbrSpecularGlossiness:
+    //   α = (1 - glossiness)^2  — our D_GGX/V_SmithCorrelated square internally,
+    //   so we pass (1 - glossiness) as σ, giving α² correctly.
+    //   c_diff = diffuse * (1 - max(specular.r, specular.g, specular.b))
     float glossiness  = pbrParams.x;
-    float roughness   = 1.0 - glossiness;
     float specularF0  = pbrParams.y;
     float specTint    = pbrParams.z;
     float envFresnel  = pbrParams.w;
 
-    // Wheel roughness override
+    // Wheel roughness override: reduce glossiness for wheels (tires are rough)
     float isWheel = paintNoise.x;
     float wheelNoise = whiteNoise(IN.texcoord0 * 47.0);
-    roughness = lerp(roughness, 0.15, isWheel * wheelNoise * 0.5);
+    glossiness = lerp(glossiness, 0.85, isWheel * wheelNoise * 0.5);
 
     // (paintNoise.y/z = noiseScale/edgeBlend, reserved for future reflection breakup)
 
@@ -135,7 +142,9 @@ float4 main(PS_INPUT IN) : COLOR
     float NdotL_sun = max(dot(N, L), 0.0);
     float3 H_sun = normalize(V + L);
     float VdotH_sun = max(dot(V, H_sun), 0.0);
-    float burleyDiff = BurleyDiffuse(NdotL_sun, NdotV, VdotH_sun, roughness);
+    // Derive roughness at point of use: α = (1 - glossiness)^2
+    // BurleyDiffuse takes linear roughness σ = 1 - glossiness
+    float burleyDiff = BurleyDiffuse(NdotL_sun, NdotV, VdotH_sun, 1.0 - glossiness);
 
     // ---- Ambient: timecycle object ambient illuminating surfaces ----
     // Uses ambientObj from timecycle (via PS c24), which is the game's own
@@ -145,44 +154,62 @@ float4 main(PS_INPUT IN) : COLOR
     // ---- Diffuse: paint color × lighting (paint MUST dominate) ----
     float3 layer1 = baseColor * kD * burleyDiff * sunContrib * shadowFactor + ambient;
 
+    // Energy conservation: reduce diffuse by specular reflectance (CryEngine approach)
+    float diffuseEnergy = EnergyConservation(F0);
+    layer1 *= diffuseEnergy;
+
     // ---- Environment Reflection: clearcoat Fresnel drives visibility ----
     // Car paint has a clearcoat — env reflections visible at all angles, stronger at grazing
-    float3 R = reflect(-V, N);
-    float2 envReflUV = SphereEnvMapUV(R, V);
+    float3 R_world = reflect(-V, N);
+    // Transform R from world space to view space — the sphere map was rendered
+    // from the camera's viewpoint, so UVs must be computed in camera space.
+    float3 R_view = float3(dot(R_world, viewRight), dot(R_world, viewUp), dot(R_world, viewFwd));
+    float3 V_view = float3(dot(V, viewRight), dot(V, viewUp), dot(V, viewFwd));
+    float2 envReflUV = SphereEnvMapUV(R_view, V_view);
     float3 envRefl = tex2D(envMapTex, envReflUV).rgb;
     float3 iblSample = tex2D(iblTex, envReflUV).rgb;
     // Blend env with subtle IBL tint for depth
     float3 iblBlend = lerp(envRefl, envRefl + iblSample * 0.08, 0.4);
-    // Clearcoat Fresnel: F0=0.04 (dielectric), matches Glass shader approach
+    // Sky contribution: upward-facing surfaces reflect sky color from the top of the sphere map
+    float skyBlend = saturate(N.y) * skyParams.w;
+    iblBlend = lerp(iblBlend, skyParams.rgb, skyBlend * 0.5);
+    // Clearcoat Fresnel: carcols shininess drives roughness→env intensity mapping
+    // High shininess (shiny paint) = strong reflections at all angles
+    // Low shininess (matte) = roughness kills reflections faster
+    // Replaces split-sum LUT — carcols data IS the LUT
+    // fxParams.y = envData->GetShininess() * 8 * envShininessMult (from carcols)
     float clearcoatFresnel = SchlickFresnelScalar(NdotV, 0.04);
-    // Env reflection: 5% base (consistent with Glass) up to 20% at grazing
-    float envMask = lerp(0.05, 0.20, clearcoatFresnel);
+    float carcolsShine = saturate(fxParams.y);  // 0..1 normalized carcols shininess
+    float roughnessResponse = lerp(1.0, 0.05, (1.0 - carcolsShine) * (1.0 - glossiness));
+    float envMask = lerp(0.15, 0.50, clearcoatFresnel) * roughnessResponse;
     // Metallic paints boost env reflection — metals are inherently reflective
     envMask = lerp(envMask, envMask * 1.5, metallicFactor);
     // Paint tinting: reflection tinted by paint color at normal incidence, white at grazing.
     // Real paint: light passes through clearcoat, reflects off base paint, gets tinted on exit.
     // At grazing angles Fresnel dominates and reflection becomes white (like a mirror).
-    float3 reflTint = lerp(matCol.rgb, float3(1,1,1), clearcoatFresnel * 0.6);
-    // Texture luminance mask: dark areas (tire rubber, dirt, holes, black textures) reflect less.
-    // Physically correct — dark paint absorbs more light, so less is reflected back through clearcoat.
-    float texReflMask = saturate(dot(diff.rgb, float3(0.2126, 0.7152, 0.0722)));
-    texReflMask = max(texReflMask, 0.05);  // tiny floor to prevent zero
-    float3 layer2 = iblBlend * envMask * reflTint * texReflMask;
+    float3 reflTint = lerp(matCol.rgb, float3(1,1,1), envMask * 0.6);
+    // Multiply env by diffuse texture — preserves baked AO, dirt, panel lines.
+    // Dark areas in texture (shadows, dirt) dim the reflection naturally.
+    // Small floor keeps clearcoat visible even on dark/black paint.
+    float3 envTexMod = max(diff.rgb, float3(0.05, 0.05, 0.05));
+    float3 layer2 = iblBlend * envMask * reflTint * envTexMod;
 
     // ---- Specular: GGX/Smith for direct sun highlight ----
+    // glTF KHR_materials_pbrSpecularGlossiness: D_GGX and V_SmithCorrelated
+    // take σ = (1 - glossiness) and square internally to get α = σ²
     float3 specTotal = float3(0, 0, 0);
     if(NdotL_sun > 0.0){
         float3 H = normalize(V + L);
         float NdotH = max(dot(N, H), 0.0);
         float LdotH = max(dot(L, H), 0.0);
-        float D = D_GGX(NdotH, roughness);
-        float Vis = V_SmithCorrelated(NdotV, NdotL_sun, roughness);
-        float3 F = F_Schlick(LdotH, F0);
+        float D = D_GGX(NdotH, 1.0 - glossiness);
+        float Vis = V_SmithCorrelated(NdotV, NdotL_sun, 1.0 - glossiness);
+        float3 F = F_SchlickLH(LdotH, F0);
         specTotal += D * F * Vis * NdotL_sun * sunContrib;
         // Clearcoat specular: white dielectric highlight on top of paint
         float D_cc = D_GGX(NdotH, 0.05);  // very smooth clearcoat
         float Vis_cc = V_SmithCorrelated(NdotV, NdotL_sun, 0.05);
-        float3 F_cc = F_Schlick(LdotH, float3(0.04, 0.04, 0.04));  // clearcoat F0
+        float3 F_cc = F_SchlickLH(LdotH, float3(0.04, 0.04, 0.04));  // clearcoat F0
         specTotal += D_cc * F_cc * Vis_cc * NdotL_sun * sunContrib * 0.6;
     }
     for(int i = 0; i < 6; i++){
@@ -192,14 +219,14 @@ float4 main(PS_INPUT IN) : COLOR
         float NdotH = max(dot(N, H), 0.0);
         float LdotH = max(dot(Ll, H), 0.0);
         if(NdotL > 0.0){
-            float D = D_GGX(NdotH, roughness);
-            float Vis = V_SmithCorrelated(NdotV, NdotL, roughness);
-            float3 F = F_Schlick(LdotH, F0);
+            float D = D_GGX(NdotH, 1.0 - glossiness);
+            float Vis = V_SmithCorrelated(NdotV, NdotL, 1.0 - glossiness);
+            float3 F = F_SchlickLH(LdotH, F0);
             specTotal += D * F * Vis * NdotL * lightCol[i].rgb;
             // Clearcoat per-light
             float D_cc_l = D_GGX(NdotH, 0.05);
             float Vis_cc_l = V_SmithCorrelated(NdotV, NdotL, 0.05);
-            float3 F_cc_l = F_Schlick(LdotH, float3(0.04, 0.04, 0.04));
+            float3 F_cc_l = F_SchlickLH(LdotH, float3(0.04, 0.04, 0.04));
             specTotal += D_cc_l * F_cc_l * Vis_cc_l * NdotL * lightCol[i].rgb * 0.6;
         }
     }
@@ -209,6 +236,12 @@ float4 main(PS_INPUT IN) : COLOR
     float3 color = layer1;                           // diffuse (paint × lighting) + ambient fill
     color += specTotal;                                // specular highlights (base + clearcoat)
     color += layer2;                                  // env reflection (clearcoat Fresnel-driven)
+
+    // Edge highlight: Fresnel rim catches light at grazing angles.
+    // Simulates the way real car paint shows bright edges when viewed from the side.
+    float rimFresnel = pow(1.0 - saturate(NdotV), 3.0);
+    float3 rimLight = sunContrib * rimFresnel * 0.25; // visible sun-colored rim at grazing
+    color += rimLight;
 
     // Output linear HDR — PostFX TonemapPass handles everything
     return float4(max(color, 0.0), diff.a);
