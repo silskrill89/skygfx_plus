@@ -173,6 +173,107 @@ TagRenderCB(RpAtomic *atomic, RxD3D9ResEntryHeader *resEntryHeader, RxD3D9Instan
 	RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTIONREF, (void*)alpharef);
 }
 
+// =============================================================================
+// Shared building render helpers
+// =============================================================================
+
+void
+buildingPipe_setupResEntry(RwResEntry *repEntry, RxD3D9ResEntryHeader **outHeader, RxD3D9InstanceData **outData)
+{
+	*outHeader = (RxD3D9ResEntryHeader*)(repEntry + 1);
+	*outData = (RxD3D9InstanceData*)(*outHeader + 1);
+	if((*outHeader)->indexBuffer)
+		RwD3D9SetIndices((*outHeader)->indexBuffer);
+	_rwD3D9SetStreams((*outHeader)->vertexStream, (*outHeader)->useOffsets);
+	RwD3D9SetVertexDeclaration((*outHeader)->vertexDeclaration);
+}
+
+void
+buildingPipe_setUVTransform(RpMaterial *material, RwMatrix *ident)
+{
+	RwMatrix *m1, *m2;
+	int effect = RpMatFXMaterialGetEffects(material);
+	if(effect == rpMATFXEFFECTUVTRANSFORM){
+		RpMatFXMaterialGetUVTransformMatrices(material, &m1, &m2);
+		if(m1)
+			RwD3D9SetVertexShaderConstant(REG_texmat, m1, 4);
+		else
+			RwD3D9SetVertexShaderConstant(REG_texmat, ident, 4);
+	}else
+		RwD3D9SetVertexShaderConstant(REG_texmat, ident, 4);
+}
+
+void
+buildingPipe_cleanup()
+{
+	RwD3D9SetTexture(NULL, 1);
+	RwD3D9SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+	RwD3D9SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
+	RwD3D9SetTextureStageState(1, D3DTSS_TEXCOORDINDEX, 1);
+	RwD3D9SetTextureStageState(1, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_DISABLE);
+}
+
+RwV3d
+buildingPipe_getEyePos()
+{
+	RwV3d eye = {0, 0, 0};
+	RwCamera *cam = (RwCamera*)RWSRCGLOBAL(curCamera);
+	if(cam){
+		RwFrame *camFrame = RwCameraGetFrame(cam);
+		if(camFrame){
+			RwMatrix *camLTM = RwFrameGetLTM(camFrame);
+			if(camLTM) eye = camLTM->pos;
+		}
+	}
+	return eye;
+}
+
+struct BuildingRenderState {
+	int alphafunc, alpharef;
+	int src, dst;
+	int fog;
+	int zwrite;
+};
+
+void
+buildingPipe_saveRenderState(BuildingRenderState *state)
+{
+	RwRenderStateGet(rwRENDERSTATEALPHATESTFUNCTIONREF, &state->alpharef);
+	RwRenderStateGet(rwRENDERSTATEALPHATESTFUNCTION, &state->alphafunc);
+	RwRenderStateGet(rwRENDERSTATESRCBLEND, &state->src);
+	RwRenderStateGet(rwRENDERSTATEDESTBLEND, &state->dst);
+	RwRenderStateGet(rwRENDERSTATEFOGCOLOR, &state->fog);
+	RwRenderStateGet(rwRENDERSTATEZWRITEENABLE, &state->zwrite);
+}
+
+void
+buildingPipe_restoreRenderState(const BuildingRenderState *state)
+{
+	RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTIONREF, (void*)state->alpharef);
+	RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION, (void*)state->alphafunc);
+}
+
+void*
+buildingPipe_selectPS(TexInfo *texinfo, bool hasEnvMap)
+{
+	if(hasEnvMap){
+		if(texinfo->stochastic && config->stochastic)
+			return xboxBuildingStochasticPS;
+		else
+			return xboxBuildingPS;
+	}
+	if(config->detailMaps && texinfo->detail){
+		float tile = texinfo->detailtile/10.0f;
+		RwD3D9SetPixelShaderConstant(1, &tile, 1);
+		pipeSetTexture(texinfo->detail, 2);
+		if(texinfo->stochastic && config->stochastic)
+			return simpleDetailStochasticPS;
+		else
+			return simpleDetailPS;
+	}
+	return simplePS;
+}
+
 void
 CCustomBuildingDNPipeline__CustomPipeRenderCB_PS2(RwResEntry *repEntry, void *object, RwUInt8 type, RwUInt32 flags)
 {
@@ -196,7 +297,7 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PS2(RwResEntry *repEntry, void *ob
 	RwMatrix envmat;
 	RwV3d eye;
 	float transform[16];
-	RwMatrix ident, *m1, *m2;
+	RwMatrix ident;
 
 	atomic = (RpAtomic*)object;
 	RwMatrixSetIdentity(&ident);
@@ -209,46 +310,26 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PS2(RwResEntry *repEntry, void *ob
 	pipeGetComposedTransformMatrix(atomic, transform);
 	RwD3D9SetVertexShaderConstant(REG_transform, transform, 4);
 
-	resEntryHeader = (RxD3D9ResEntryHeader*)(repEntry + 1);
-	instancedData = (RxD3D9InstanceData*)(resEntryHeader + 1);;
-	if(resEntryHeader->indexBuffer)
-		RwD3D9SetIndices(resEntryHeader->indexBuffer);
-	_rwD3D9SetStreams(resEntryHeader->vertexStream, resEntryHeader->useOffsets);
-	RwD3D9SetVertexDeclaration(resEntryHeader->vertexDeclaration);
+	buildingPipe_setupResEntry(repEntry, &resEntryHeader, &instancedData);
 
 	setDnParams(atomic);
 
 	CustomBuildingEnvMapPipeline__SetupEnv(atomic, NULL, &envmat);
 	RwD3D9SetVertexShaderConstant(REG_envmat, &envmat, 3);
 
-
 	//for gloss - with null checks
-	eye = {0, 0, 0};
-	RwCamera *cam = (RwCamera*)RWSRCGLOBAL(curCamera);
-	if(cam){
-		RwFrame *camFrame = RwCameraGetFrame(cam);
-		if(camFrame){
-			RwMatrix *camLTM = RwFrameGetLTM(camFrame);
-			if(camLTM) eye = camLTM->pos;
-		}
-	}
+	eye = buildingPipe_getEyePos();
 	RwD3D9SetVertexShaderConstant(34, &eye, 1);
 	RwD3D9SetPixelShaderConstant(2, &eye, 1);
 
 	pipeUploadLightColorPS(pDirect, REG_directCol);
 	pipeUploadLightDirectionPS(pDirect, REG_directDir);
 
-
-	int alphafunc, alpharef;
-	int src, dst;
-	int fog;
-	int zwrite;
-	RwRenderStateGet(rwRENDERSTATEALPHATESTFUNCTIONREF, &alpharef);
-	RwRenderStateGet(rwRENDERSTATEALPHATESTFUNCTION, &alphafunc);
-	RwRenderStateGet(rwRENDERSTATESRCBLEND, &src);
-	RwRenderStateGet(rwRENDERSTATEDESTBLEND, &dst);
-	RwRenderStateGet(rwRENDERSTATEFOGCOLOR, &fog);
-	RwRenderStateGet(rwRENDERSTATEZWRITEENABLE, &zwrite);
+	BuildingRenderState rs;
+	buildingPipe_saveRenderState(&rs);
+	int alphafunc = rs.alphafunc, alpharef = rs.alpharef;
+	int src = rs.src, dst = rs.dst;
+	int fog = rs.fog, zwrite = rs.zwrite;
 
 	for(numMeshes = resEntryHeader->numMeshes; numMeshes--; instancedData++){
 		material = instancedData->material;
@@ -260,15 +341,7 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PS2(RwResEntry *repEntry, void *ob
 		RwD3D9SetPixelShaderConstant(0, &colorScale, 1);
 		RwD3D9SetVertexShaderConstant(REG_shaderParams, &colorScale, 1);
 
-		int effect = RpMatFXMaterialGetEffects(material);
-		if(effect == rpMATFXEFFECTUVTRANSFORM){
-			RpMatFXMaterialGetUVTransformMatrices(material, &m1, &m2);
-			if(m1)
-				RwD3D9SetVertexShaderConstant(REG_texmat, m1, 4);
-			else
-				RwD3D9SetVertexShaderConstant(REG_texmat, &ident, 4);
-		}else
-			RwD3D9SetVertexShaderConstant(REG_texmat, &ident, 4);
+		buildingPipe_setUVTransform(material, &ident);
 
 
 		DefinedVertexShader definedVertexShader = (DefinedVertexShader)GetDefinedShader(atomic);
@@ -295,49 +368,11 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PS2(RwResEntry *repEntry, void *ob
 		}else if (definedVertexShader == DefinedVertexShader::WIND && instancedData->vertexAlpha) {
 			setWindParams(atomic, frame);
 			RwD3D9SetVertexShader(ps2BuildingWindVS);
-
-			if(config->detailMaps && texinfo->detail){
-				float tile = texinfo->detailtile/10.0f;
-				RwD3D9SetPixelShaderConstant(1, &tile, 1);
-				pipeSetTexture(texinfo->detail, 2);
-				if (texinfo->stochastic && config->stochastic) {
-					RwD3D9SetPixelShader(simpleDetailStochasticPS);
-				}
-				else {
-					RwD3D9SetPixelShader(simpleDetailPS);
-				}
-			}
-			else {
-				if (texinfo->stochastic && config->stochastic) {
-					RwD3D9SetPixelShader(simplePS);
-				}
-				else {
-					RwD3D9SetPixelShader(simplePS);
-				}
-			}
+			RwD3D9SetPixelShader(buildingPipe_selectPS(texinfo, false));
 		}
 		else {
 			RwD3D9SetVertexShader(ps2BuildingVS);
-
-			if(config->detailMaps && texinfo->detail){
-				float tile = texinfo->detailtile/10.0f;
-				RwD3D9SetPixelShaderConstant(1, &tile, 1);
-				pipeSetTexture(texinfo->detail, 2);
-				if (texinfo->stochastic && config->stochastic) {
-					RwD3D9SetPixelShader(simpleDetailStochasticPS);
-				}
-				else {
-					RwD3D9SetPixelShader(simpleDetailPS);
-				}
-			}
-			else {
-				if (texinfo->stochastic && config->stochastic) {
-					RwD3D9SetPixelShader(simplePS);
-				}
-				else {
-					RwD3D9SetPixelShader(simplePS);
-				}
-			}
+			RwD3D9SetPixelShader(buildingPipe_selectPS(texinfo, false));
 		}
 
 		if(material->pipeline == (RxPipeline*)TagRenderCB){
@@ -378,13 +413,8 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PS2(RwResEntry *repEntry, void *ob
 			RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION, (void*)alphafunc);
 		}
 	}
-	RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTIONREF, (void*)alpharef);
-	RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION, (void*)alphafunc);
-	RwD3D9SetTexture(NULL, 1);
-	RwD3D9SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
-	RwD3D9SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
-	RwD3D9SetTextureStageState(1, D3DTSS_TEXCOORDINDEX, 1);
-	RwD3D9SetTextureStageState(1, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_DISABLE);
+	buildingPipe_restoreRenderState(&rs);
+	buildingPipe_cleanup();
 }
 
 // The PC callback cannot be salvaged. Just do it Xbox-style instead
@@ -410,7 +440,7 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *o
 	RwV4d envXform;
 	RwMatrix envmat;
 	float transform[16];
-	RwMatrix ident, *m1, *m2;
+	RwMatrix ident;
 
 	atomic = (RpAtomic*)object;
 	RwMatrixSetIdentity(&ident);
@@ -426,12 +456,7 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *o
 	pipeGetComposedTransformMatrix(atomic, transform);
 	RwD3D9SetVertexShaderConstant(REG_transform, transform, 4);
 
-	resEntryHeader = (RxD3D9ResEntryHeader*)(repEntry + 1);
-	instancedData = (RxD3D9InstanceData*)(resEntryHeader + 1);;
-	if(resEntryHeader->indexBuffer)
-		RwD3D9SetIndices(resEntryHeader->indexBuffer);
-	_rwD3D9SetStreams(resEntryHeader->vertexStream, resEntryHeader->useOffsets);
-	RwD3D9SetVertexDeclaration(resEntryHeader->vertexDeclaration);
+	buildingPipe_setupResEntry(repEntry, &resEntryHeader, &instancedData);
 
 
 	DefinedVertexShader definedVertexShader = (DefinedVertexShader)GetDefinedShader(atomic);
@@ -456,15 +481,7 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *o
 
 		pipeSetTexture(material->texture, 0);
 
-		int effect = RpMatFXMaterialGetEffects(material);
-		if(effect == rpMATFXEFFECTUVTRANSFORM){
-			RpMatFXMaterialGetUVTransformMatrices(material, &m1, &m2);
-			if(m1)
-				RwD3D9SetVertexShaderConstant(REG_texmat, m1, 4);
-			else
-				RwD3D9SetVertexShaderConstant(REG_texmat, &ident, 4);
-		}else
-			RwD3D9SetVertexShaderConstant(REG_texmat, &ident, 4);
+		buildingPipe_setUVTransform(material, &ident);
 
 		if (vertexAlphaIsAlpha) {
 			hasAlpha = (bool)(instancedData->vertexAlpha || instancedData->material->color.alpha != 255);
@@ -499,30 +516,9 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *o
 			envXform.w = envData->GetScaleY();
 			RwD3D9SetVertexShaderConstant(REG_envXform, &envXform, 1);
 			RwD3D9SetVertexShaderConstant(REG_fxParams, &fxParams, 1);
-			if (texinfo->stochastic && config->stochastic) {
-				RwD3D9SetPixelShader(xboxBuildingStochasticPS);
-			}
-			else {
-				RwD3D9SetPixelShader(xboxBuildingPS);
-			}
-		}else if(config->detailMaps && texinfo->detail){
-			float tile = texinfo->detailtile/10.0f;
-			RwD3D9SetPixelShaderConstant(1, &tile, 1);
-			pipeSetTexture(texinfo->detail, 2);
-			if (texinfo->stochastic && config->stochastic) {
-				RwD3D9SetPixelShader(simpleDetailStochasticPS);
-			}
-			else {
-				RwD3D9SetPixelShader(simpleDetailPS);
-			}
-		}
-		else {
-			if (texinfo->stochastic && config->stochastic) {
-				RwD3D9SetPixelShader(simplePS);
-			}
-			else {
-				RwD3D9SetPixelShader(simplePS);
-			}
+			RwD3D9SetPixelShader(buildingPipe_selectPS(texinfo, true));
+		}else{
+			RwD3D9SetPixelShader(buildingPipe_selectPS(texinfo, false));
 		}
 
 		if(material->pipeline == (RxPipeline*)TagRenderCB){
@@ -532,11 +528,7 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *o
 
 		D3D9RenderDual(config->dualPassBuilding, resEntryHeader, instancedData, texinfo);
 	}
-	RwD3D9SetTexture(NULL, 1);
-	RwD3D9SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
-	RwD3D9SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
-	RwD3D9SetTextureStageState(1, D3DTSS_TEXCOORDINDEX, 1);
-	RwD3D9SetTextureStageState(1, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_DISABLE);
+	buildingPipe_cleanup();
 }
 
 extern RwRGBAReal spheremapfog;
@@ -550,7 +542,7 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Sphere(RwResEntry *repEntry, void 
 	RwInt32	numMeshes;
 	RwBool hasAlpha;
 	float transform[16];
-	RwMatrix ident, *m1, *m2;
+	RwMatrix ident;
 
 	atomic = (RpAtomic*)object;
 	RwMatrixSetIdentity(&ident);
@@ -570,12 +562,7 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Sphere(RwResEntry *repEntry, void 
 //	RwD3D9SetVertexShaderConstant(45, fog, 1);
 	RwD3D9SetPixelShaderConstant(2, fog, 1);
 
-	resEntryHeader = (RxD3D9ResEntryHeader*)(repEntry + 1);
-	instancedData = (RxD3D9InstanceData*)(resEntryHeader + 1);;
-	if(resEntryHeader->indexBuffer)
-		RwD3D9SetIndices(resEntryHeader->indexBuffer);
-	_rwD3D9SetStreams(resEntryHeader->vertexStream, resEntryHeader->useOffsets);
-	RwD3D9SetVertexDeclaration(resEntryHeader->vertexDeclaration);
+	buildingPipe_setupResEntry(repEntry, &resEntryHeader, &instancedData);
 
 	setDnParams(atomic);
 
@@ -601,15 +588,7 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Sphere(RwResEntry *repEntry, void 
 
 		pipeSetTexture(material->texture, 0);
 
-		int effect = RpMatFXMaterialGetEffects(material);
-		if(effect == rpMATFXEFFECTUVTRANSFORM){
-			RpMatFXMaterialGetUVTransformMatrices(material, &m1, &m2);
-			if(m1)
-				RwD3D9SetVertexShaderConstant(REG_texmat, m1, 4);
-			else
-				RwD3D9SetVertexShaderConstant(REG_texmat, &ident, 4);
-		}else
-			RwD3D9SetVertexShaderConstant(REG_texmat, &ident, 4);
+		buildingPipe_setUVTransform(material, &ident);
 
 		hasAlpha = instancedData->vertexAlpha != 0 || instancedData->material->color.alpha != 255;
 		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)hasAlpha);
@@ -663,25 +642,14 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 	pipeGetWorldMatrix(worldMat);
 	RwD3D9SetVertexShaderConstant(24, worldMat, 4);
 
-	RxD3D9ResEntryHeader *resEntryHeader = (RxD3D9ResEntryHeader*)(repEntry + 1);
-	RxD3D9InstanceData *instancedData = (RxD3D9InstanceData*)(resEntryHeader + 1);
-	if(resEntryHeader->indexBuffer)
-		RwD3D9SetIndices(resEntryHeader->indexBuffer);
-	_rwD3D9SetStreams(resEntryHeader->vertexStream, resEntryHeader->useOffsets);
-	RwD3D9SetVertexDeclaration(resEntryHeader->vertexDeclaration);
+	RxD3D9ResEntryHeader *resEntryHeader;
+	RxD3D9InstanceData *instancedData;
+	buildingPipe_setupResEntry(repEntry, &resEntryHeader, &instancedData);
 
 	setDnParams(atomic);
 
 	// Eye position (PBR addition) - with null checks like vehicle pipe
-	RwV3d eyePos = {0, 0, 0};
-	RwCamera *curCam = (RwCamera*)RWSRCGLOBAL(curCamera);
-	if(curCam){
-		RwFrame *camFrame = RwCameraGetFrame(curCam);
-		if(camFrame){
-			RwMatrix *camLTM = RwFrameGetLTM(camFrame);
-			if(camLTM) eyePos = camLTM->pos;
-		}
-	}
+	RwV3d eyePos = buildingPipe_getEyePos();
 	RwD3D9SetVertexShaderConstant(36, &eyePos, 1);
 	RwD3D9SetPixelShaderConstant(2, &eyePos, 1);
 
@@ -733,16 +701,8 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 	float ambientPS[4] = { buildingAmbient.red, buildingAmbient.green, buildingAmbient.blue, 0.0f };
 	RwD3D9SetPixelShaderConstant(24, ambientPS, 1);
 
-	int alphafunc, alpharef;
-	int src, dst;
-	int fog;
-	int zwrite;
-	RwRenderStateGet(rwRENDERSTATEALPHATESTFUNCTIONREF, &alpharef);
-	RwRenderStateGet(rwRENDERSTATEALPHATESTFUNCTION, &alphafunc);
-	RwRenderStateGet(rwRENDERSTATESRCBLEND, &src);
-	RwRenderStateGet(rwRENDERSTATEDESTBLEND, &dst);
-	RwRenderStateGet(rwRENDERSTATEFOGCOLOR, &fog);
-	RwRenderStateGet(rwRENDERSTATEZWRITEENABLE, &zwrite);
+	BuildingRenderState rs;
+	buildingPipe_saveRenderState(&rs);
 
 	for(int numMeshes = resEntryHeader->numMeshes; numMeshes--; instancedData++){
 		RpMaterial *material = instancedData->material;
@@ -754,17 +714,7 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 		RwD3D9SetVertexShaderConstant(REG_shaderParams, &colorScale, 1);
 
 		// UV transform support
-		RwMatrix ident, *m1, *m2;
-		RwMatrixSetIdentity(&ident);
-		int effect = RpMatFXMaterialGetEffects(material);
-		if(effect == rpMATFXEFFECTUVTRANSFORM){
-			RpMatFXMaterialGetUVTransformMatrices(material, &m1, &m2);
-			if(m1)
-				RwD3D9SetVertexShaderConstant(REG_texmat, m1, 4);
-			else
-				RwD3D9SetVertexShaderConstant(REG_texmat, &ident, 4);
-		}else
-			RwD3D9SetVertexShaderConstant(REG_texmat, &ident, 4);
+		buildingPipe_setUVTransform(material, &ident);
 
 		// Vertex alpha handling
 		bool hasAlpha;
