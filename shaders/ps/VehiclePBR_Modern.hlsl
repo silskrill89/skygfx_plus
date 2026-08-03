@@ -153,10 +153,10 @@ float4 main(PS_INPUT IN) : COLOR
     float3 iblSample = tex2D(iblTex, envReflUV).rgb;
     // Blend env with subtle IBL tint for depth
     float3 iblBlend = lerp(envRefl, envRefl + iblSample * 0.08, 0.4);
-    // Clearcoat Fresnel: F0=0.04 (dielectric), ~4% at normal, ~50% at grazing
+    // Clearcoat Fresnel: F0=0.04 (dielectric), matches Glass shader approach
     float clearcoatFresnel = SchlickFresnelScalar(NdotV, 0.04);
-    // Env reflection: 3% base floor (subtle at normal) up to 25% at grazing angles
-    float envMask = lerp(0.03, 0.25, clearcoatFresnel);
+    // Env reflection: 5% base (consistent with Glass) up to 20% at grazing
+    float envMask = lerp(0.05, 0.20, clearcoatFresnel);
     // Metallic paints boost env reflection — metals are inherently reflective
     envMask = lerp(envMask, envMask * 1.5, metallicFactor);
     // Paint tinting: reflection tinted by paint color at normal incidence, white at grazing.

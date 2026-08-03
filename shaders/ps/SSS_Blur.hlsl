@@ -17,6 +17,7 @@ float4 SSSParams   : register(c17);
 float4 DepthParams : register(c18);
 float4 SkinParams  : register(c19);
 float4 TexelParams : register(c20);
+float4 TCAmbient   : register(c21);  // timecycle ambientObj RGB + luminance
 
 struct PS_INPUT {
     float2 texCoord : TEXCOORD0;
@@ -59,6 +60,20 @@ float DepthEdge(float2 uv, float2 texelSize) {
     // Normalize gradient by depth for consistent edge detection at all distances
     float normGrad = (gradX + gradY) / max(dc, 1e-7);
     return saturate(normGrad * 20.0);
+}
+
+// Screen-space normal estimation from depth buffer (cross product of depth gradients)
+float3 ScreenSpaceNormal(float2 uv, float2 texelSize) {
+    float dc = LinearDepth(uv);
+    float dl = LinearDepth(uv - float2(texelSize.x, 0.0));
+    float dr = LinearDepth(uv + float2(texelSize.x, 0.0));
+    float du = LinearDepth(uv - float2(0.0, texelSize.y));
+    float dd = LinearDepth(uv + float2(0.0, texelSize.y));
+    // In screen space, view is along +Z
+    float3 dx = float3(texelSize.x * 2.0, 0, dr - dl);
+    float3 dy = float3(0, texelSize.y * 2.0, dd - du);
+    float3 n = cross(dx, dy);
+    return normalize(n + 1e-7);
 }
 
 float4 main(PS_INPUT IN) : COLOR {
@@ -174,16 +189,36 @@ float4 main(PS_INPUT IN) : COLOR {
     float3 skinProfile = float3(1.0, 0.7, 0.5);
     float3 result = lerp(centerColor, blurred, modStrength * skinProfile);
 
-    // Warm subsurface tint: simulate blood/warmth in skin areas
-    // Applied during blur to spread warmth naturally
-    result += warmTint * charMask * float3(0.04, 0.015, 0.0) * modStrength;
+    // Warm subsurface tint: multiplicative warm shift for skin areas
+    // Brighter in lit areas, preserves dark areas — more natural than additive
+    float3 warmMul = lerp(float3(1,1,1), float3(1.04, 1.015, 1.0), warmTint * charMask * modStrength);
+    result *= warmMul;
 
-    // Rim lighting: detect silhouette edges via depth discontinuity
-    // Apply warm rim light to character-edge pixels for material depth
+    // === Fresnel-driven specular highlight (Glass shader approach) ===
+    // Screen-space normal from depth gradients — no normal buffer needed
+    float3 ssNormal = ScreenSpaceNormal(IN.texCoord, texelSize);
+    float NdotV_ss = saturate(ssNormal.z);  // view is +Z in screen space
+    float skinFresnel = NdotV_ss * NdotV_ss * (3.0 - 2.0 * NdotV_ss);  // smoothstep approx
+    // F0=0.04 (skin/glass dielectric), lerp from subtle at face-on to bright at grazing
+    float fresnelStrength = lerp(0.03, 0.15, skinFresnel);
+    // Fresnel highlight: warm white (subsurface glow at grazing angles)
+    float3 fresnelHighlight = fresnelStrength * rimStrength * charMask * float3(1.0, 0.95, 0.9);
+    result += fresnelHighlight;
+
+    // Rim lighting: depth-edge-based warm rim (supplements Fresnel)
     float depthEdge = DepthEdge(IN.texCoord, texelSize);
     float rimMask = depthEdge * charMask;
-    // Rim light is strongest perpendicular to the edge, decays inward
-    result += rimStrength * rimMask * float3(0.06, 0.03, 0.01);
+    result += rimStrength * rimMask * float3(0.04, 0.02, 0.005);
+
+    // === Ambient brightness matching ===
+    // Buildings use timecycle ambientObj (c24). Peds use vanilla RW ambient which may be dimmer.
+    // Add a fraction of timecycle ambient to character pixels to match building brightness.
+    float3 tcAmb = TCAmbient.rgb;
+    float ambLuma = TCAmbient.w;  // pre-computed luminance on CPU
+    // Only boost if the character is dimmer than the timecycle ambient
+    float charLuma = dot(result, float3(0.2126, 0.7152, 0.0722));
+    float ambBoost = max(ambLuma - charLuma, 0.0) * 0.3 * charMask;
+    result += tcAmb * ambBoost;
 
     return float4(saturate(result), 1.0);
 }

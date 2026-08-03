@@ -378,6 +378,16 @@ void chars_drawSSSBlur(void)
 	float texelP[4] = { pixelH, 0.0f, 0.0f, 0.0f };
 	RwD3D9SetPixelShaderConstant(20, texelP, 1);
 
+	// Timecycle ambient for brightness matching: c21 = (ambientR, ambientG, ambientB, luminance)
+	// Buildings use timecycle ambientObj (c24). Peds use vanilla RW ambient which may be dimmer.
+	// The shader uses this to boost character brightness toward building levels.
+	float ambR = CTimeCycle__m_CurrentColours.ambientObjR;
+	float ambG = CTimeCycle__m_CurrentColours.ambientObjG;
+	float ambB = CTimeCycle__m_CurrentColours.ambientObjB;
+	float ambLuma = ambR * 0.2126f + ambG * 0.7152f + ambB * 0.0722f;
+	float tcAmbP[4] = { ambR, ambG, ambB, ambLuma };
+	RwD3D9SetPixelShaderConstant(21, tcAmbP, 1);
+
 	// ---- Pass 0: Horizontal blur ----
 	{
 		RwCameraEndUpdate(Scene.camera);
