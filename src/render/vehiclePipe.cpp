@@ -1479,7 +1479,7 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 
 			float glassP[4] = { ltR, ltG, ltB, opacity };
 			RwD3D9SetPixelShaderConstant(22, glassP, 1);
-			float lightP[4] = { 1.0f, isTaillight ? 1.8f : 2.5f, 0.0f, 0.0f };
+			float lightP[4] = { 1.0f, isTaillight ? 1.5f : 1.2f, 0.0f, 0.0f };
 			RwD3D9SetPixelShaderConstant(23, lightP, 1);
 		}else{
 			float gtR, gtG, gtB, gtStr;
@@ -1492,6 +1492,15 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 		}
 
 		pipeUploadMatCol(flags, material, REG_matCol);
+		// sRGB→linear for glass tint (same as opaque paint path)
+		RwRGBAReal glassMatColRGBA;
+		if(flags & rpGEOMETRYMODULATEMATERIALCOLOR){
+			RwRGBARealFromRwRGBA(&glassMatColRGBA, &material->color);
+			glassMatColRGBA.red   = powf(glassMatColRGBA.red,   2.2f);
+			glassMatColRGBA.green = powf(glassMatColRGBA.green, 2.2f);
+			glassMatColRGBA.blue  = powf(glassMatColRGBA.blue,  2.2f);
+			RwD3D9SetPixelShaderConstant(REG_matCol, &glassMatColRGBA, 1);
+		}
 		surfProps.ambient = material->surfaceProps.ambient;
 		surfProps.diffuse = material->surfaceProps.diffuse;
 		RwD3D9SetVertexShaderConstant(REG_surfProps, &surfProps, 1);
@@ -1534,6 +1543,15 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 		VehShaders_GetTireProps(modelIndex, &tireRough, &tireRefl, &tireTR, &tireTG, &tireTB);
 
 		pipeUploadMatCol(flags, material, REG_matCol);
+		// sRGB→linear for rubber (same as opaque paint path)
+		RwRGBAReal rubberMatColRGBA;
+		if(flags & rpGEOMETRYMODULATEMATERIALCOLOR){
+			RwRGBARealFromRwRGBA(&rubberMatColRGBA, &material->color);
+			rubberMatColRGBA.red   = powf(rubberMatColRGBA.red,   2.2f);
+			rubberMatColRGBA.green = powf(rubberMatColRGBA.green, 2.2f);
+			rubberMatColRGBA.blue  = powf(rubberMatColRGBA.blue,  2.2f);
+			RwD3D9SetPixelShaderConstant(REG_matCol, &rubberMatColRGBA, 1);
+		}
 		surfProps.ambient = material->surfaceProps.ambient;
 		surfProps.diffuse = material->surfaceProps.diffuse;
 		RwD3D9SetVertexShaderConstant(REG_surfProps, &surfProps, 1);
@@ -1608,6 +1626,10 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 		RwRGBAReal matColRGBA;
 		if(flags & rpGEOMETRYMODULATEMATERIALCOLOR){
 			RwRGBARealFromRwRGBA(&matColRGBA, &material->color);
+			// sRGB→linear: carcols colors are gamma-encoded, PBR needs linear
+			matColRGBA.red   = powf(matColRGBA.red,   2.2f);
+			matColRGBA.green = powf(matColRGBA.green, 2.2f);
+			matColRGBA.blue  = powf(matColRGBA.blue,  2.2f);
 			RwD3D9SetPixelShaderConstant(REG_matCol, &matColRGBA, 1);
 		}else{
 			matColRGBA = { 1.0f, 1.0f, 1.0f, 1.0f };
@@ -1641,6 +1663,9 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 		// own BRDF from the unified library
 		// ================================================================
 		int surfType = VehShaders_GetSurfaceType(texName);
+		// Interior materials: make matte by default so they don't clash with reflections
+		if(surfType == SURFACE_CAR_PLASTIC || surfType == SURFACE_CAR_LEATHER || surfType == SURFACE_CAR_FABRIC)
+			surfType = SURFACE_CAR_MATTE;
 		if(surfType != SURFACE_CAR_BODY){
 			// Non-paint surface: use unified BRDF
 			const BRDFMaterial *matBRDF = GetBRDF(surfType);

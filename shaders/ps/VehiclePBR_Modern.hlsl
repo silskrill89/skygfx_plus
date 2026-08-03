@@ -72,11 +72,12 @@ float4 main(PS_INPUT IN) : COLOR
     // IN.SunDir from VS is LOCAL-space (wrong for rotated vehicles).
     float3 L = length(directDir) > 1e-6 ? -normalize(directDir) : float3(0, 0, -1);
 
-    // ---- Base color ----
+    // ---- Base color: game lighting from VS (matches building pipe) ----
     float4 diff = tex2D(diffuseTex, IN.texcoord0);
-    // Albedo = texture × paint color ONLY. Vertex color (IN.color) contains
-    // VS-baked lighting × matCol — using it doubles lighting and matCol.
-    float3 baseColor = diff.rgb * matCol.rgb;
+    // IN.color.rgb = VS-baked game lighting (ambient + 7 directional × matCol).
+    // Same approach as main_building: vertex color IS the diffuse lighting.
+    // Our PBR specular/env/reflection layers sit on top of this.
+    float3 baseColor = diff.rgb * IN.color.rgb;
 
     // Blend with screen-space normal (if available)
     // ambientColor.w > 0 means normal buffer is bound and valid
@@ -117,46 +118,23 @@ float4 main(PS_INPUT IN) : COLOR
     // F0: dielectric reflectance, optionally tinted by paint color
     float3 F0 = lerp(float3(specularF0, specularF0, specularF0), paintTint * specularF0, specTint);
 
-    // Energy conservation: metallic paints have near-zero diffuse
-    // metallicFactor: 0 for dielectric (specF0 < 0.5), 1 for metal (specF0 > 0.5)
+    // Energy conservation for specular ONLY — diffuseScale is NOT applied to
+    // baseColor because IN.color.rgb already has game lighting baked in.
+    // Applying it to vertex-lit color would darken/wash out the paint.
     float metallicFactor = saturate((specularF0 - 0.5) * 2.0);
-    float diffuseScale = lerp(saturate(1.0 - dot(F0, float3(0.2126, 0.7152, 0.0722))), 0.05, metallicFactor);
-    baseColor *= diffuseScale;
 
-    // Fresnel
+    // Fresnel for specular energy split (kD not used — diffuse comes from VS vertex color)
     float3 F_atNdotV = F_Schlick(NdotV, F0);
-    float3 kS = F_atNdotV;
-    float3 kD = (1.0 - kS) * (1.0 - metallicFactor * 0.95);  // metallic: near-zero diffuse
 
-    // ---- Cloud shadow ----
-    float3 noisePos = float3(IN.WorldPos.xy * 0.0008, IN.WorldPos.z * 0.0004);
-    float cloudNoise = PBR_cloudFBM(noisePos);
-    cloudNoise = smoothstep(0.3, 0.7, cloudNoise);
-    float shadowFactor = lerp(0.6, 1.0, 1.0 - cloudNoise * 0.4);
+    // ---- Diffuse: VS vertex color already has full game lighting ----
+    // Ambient + 7 directional lights baked into IN.color.rgb by the VS.
+    // PBR specular and env reflection layer ON TOP of game-lit base.
+    // Matches building pipe approach (main_building line 366).
+    float3 layer1 = baseColor;
 
-    // ---- Direct light — NO floor, use raw timecycle values ----
-    // Buildings use directCol.rgb directly and look correct at all times of day.
-    // Previous 0.20 floor made vehicles artificially bright at dawn/night.
+    // Sun direction for specular (from PS c12, same as buildings)
     float3 sunContrib = directCol.rgb;
-
     float NdotL_sun = max(dot(N, L), 0.0);
-    float3 H_sun = normalize(V + L);
-    float VdotH_sun = max(dot(V, H_sun), 0.0);
-    // Derive roughness at point of use: α = (1 - glossiness)^2
-    // BurleyDiffuse takes linear roughness σ = 1 - glossiness
-    float burleyDiff = BurleyDiffuse(NdotL_sun, NdotV, VdotH_sun, 1.0 - glossiness);
-
-    // ---- Ambient: timecycle object ambient illuminating surfaces ----
-    // Uses ambientObj from timecycle (via PS c24), which is the game's own
-    // ambient for objects — properly colored, not desaturated.
-    float3 ambient = ambientColor.rgb * baseColor;
-
-    // ---- Diffuse: paint color × lighting (paint MUST dominate) ----
-    float3 layer1 = baseColor * kD * burleyDiff * sunContrib * shadowFactor + ambient;
-
-    // Energy conservation: reduce diffuse by specular reflectance (CryEngine approach)
-    float diffuseEnergy = EnergyConservation(F0);
-    layer1 *= diffuseEnergy;
 
     // ---- Environment Reflection: clearcoat Fresnel drives visibility ----
     // Car paint has a clearcoat — env reflections visible at all angles, stronger at grazing
@@ -231,17 +209,17 @@ float4 main(PS_INPUT IN) : COLOR
         }
     }
 
-    // ---- COMPOSITE ----
-    // Paint color (baseColor) is the DOMINANT term. Everything else is additive tint.
-    float3 color = layer1;                           // diffuse (paint × lighting) + ambient fill
-    color += specTotal;                                // specular highlights (base + clearcoat)
-    color += layer2;                                  // env reflection (clearcoat Fresnel-driven)
+    // Edge highlight: subtle Fresnel rim catches sun at grazing angles.
+    // Reduced from 0.45 — game lighting already has edge detail from VS.
+    float rimFresnel = pow(1.0 - saturate(NdotV), 2.0);
+    float3 rimLight = sunContrib * rimFresnel * 0.15;
 
-    // Edge highlight: Fresnel rim catches light at grazing angles.
-    // Simulates the way real car paint shows bright edges when viewed from the side.
-    float rimFresnel = pow(1.0 - saturate(NdotV), 3.0);
-    float3 rimLight = sunContrib * rimFresnel * 0.25; // visible sun-colored rim at grazing
-    color += rimLight;
+    // ---- COMPOSITE ----
+    // layer1 = VS game lighting (ambient + 7 directional × matCol, matches building pipe)
+    // layer2 = clearcoat Fresnel-driven env reflection
+    float3 color = layer1 + layer2;
+    color += specTotal;                                // specular highlights (base + clearcoat)
+    color += rimLight;                                 // Fresnel rim on top of clearcoat
 
     // Output linear HDR — PostFX TonemapPass handles everything
     return float4(max(color, 0.0), diff.a);
@@ -463,38 +441,37 @@ float4 main_rubber(PS_INPUT IN) : COLOR
     float3 L = length(IN.SunDir) > 1e-6 ? IN.SunDir / length(IN.SunDir) : float3(0, 0, -1);
 
     float4 diff = tex2D(diffuseTex, IN.texcoord0);
-    // Same pattern as vehicle main: texture × paint color ONLY.
-    // IN.color contains VS-baked ambient × lighting — using it doubles lighting (building pipe bug).
     float3 baseColor = diff.rgb * matCol.rgb;
 
     float roughness  = pbrParams.x;
     float dirtLevel  = paintNoise.y;
     float wearFactor = paintNoise.z;
 
-    float3 dirtTint = float3(0.35, 0.25, 0.15);
-    float3 wearTint = float3(0.55, 0.55, 0.50);
-    baseColor = lerp(baseColor, dirtTint * baseColor, dirtLevel * 0.4);
-    baseColor = lerp(baseColor, wearTint * baseColor, wearFactor * 0.3);
+    // Wet mud DARKENS tires (not brightens). Dry dust is the only brightener.
+    float3 wetMud = float3(0.15, 0.12, 0.10);  // dark wet mud
+    float3 dryDust = float3(0.35, 0.30, 0.25);  // light dry dust
+    baseColor = lerp(baseColor, wetMud, dirtLevel * 0.5);    // wet mud darkens
+    baseColor = lerp(baseColor, dryDust * baseColor, wearFactor * 0.15);  // dry dust lightens slightly
 
     float NdotV = max(dot(N, V), 0.0);
     float NdotL_sun = max(dot(N, L), 0.0);
 
-    // Ambient from timecycle — rubber needs fill light to be visible in shadows
-    float3 ambient = ambientColor.rgb * baseColor;
+    // Ambient: rubber is dark and matte — reduce ambient to 35% of timecycle value
+    // so tires don't glow brighter than hub caps or wheel wells
+    float3 ambient = ambientColor.rgb * baseColor * 0.35;
 
-    // Wrap diffuse — rubber scatters light broadly (subsurface wrap)
-    float subsurface = 0.15;
+    // Wrap diffuse — tighter wrap than before, rubber shouldn't scatter this much
+    float subsurface = 0.08;
     float wrapDiffuse = saturate((NdotL_sun + subsurface) / (1.0 + subsurface));
     float3 color = baseColor * wrapDiffuse * directCol.rgb + ambient;
 
-    // Point lights — diffuse only, no specular
+    // Point lights — reduced contribution, rubber should stay dark
     for(int i = 0; i < 6; i++){
         float3 Ll = -lightDir[i];
         float NdL = max(dot(N, Ll), 0.0);
         float wrap = saturate((NdL + subsurface) / (1.0 + subsurface));
-        color += baseColor * wrap * lightCol[i].rgb * 0.15;
+        color += baseColor * wrap * lightCol[i].rgb * 0.08;
     }
 
-    // No specular, no Fresnel sheen — rubber is matte
     return float4(color, diff.a);
 }

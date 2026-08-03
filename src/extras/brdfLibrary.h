@@ -446,7 +446,7 @@ static const BRDFMaterial g_brdfTable[NUM_SURFACE_TYPES] = {
     
     // --- Vehicle-Specific Materials ---
     { "Car Body",             0.04f, 0.85f, 0.9f, 0.0f, 1.0f, 1.0f, 1.0f },  // Clearcoat paint
-    { "Car Chrome",           0.95f, 0.95f, 0.0f, 0.0f, 0.95f, 0.95f, 0.95f },  // Chrome: very high specular, white tint
+    { "Car Chrome",           0.56f, 0.90f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f },  // Chrome: F0=0.56 (real chrome), neutral reflections
     { "Car Plastic",          0.04f, 0.55f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f },
     { "Car Rubber",           0.04f, 0.12f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f },
     { "Car Glass",            0.04f, 0.95f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f },

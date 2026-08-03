@@ -62,6 +62,20 @@
 
 ---
 
+### F. Atmospheric & Shadow Features (NEW — research complete)
+- [x] Stencil shadow research — Z-Fail Carmack's Reverse, D3D9 states documented, addresses mapped
+- [x] Cloud research — GTAV geometry dome (not raymarching), VolumetricCloudsExtended.SA (no conflicts)
+- [x] FusionShaders initialized — SunShafts_PS.hlsl, DeferredShadow*.asm available for reference
+- [ ] **Commit uncommitted vehicle shader work** (sRGB, vertex color base, rubber darkening, interior→matte, chrome BRDF)
+- [ ] **Stencil shadow port** — hook RenderStencilShadows (0x7113B0), let game handle geometry generation
+- [ ] **Volumetric clouds** — integrate VolumetricCloudsExtended.SA or build GTAV-style (density+normal maps, HG phase)
+- [ ] **Screen-space god rays** — radial blur toward sun (15 segments), SM3.0 feasible
+- [ ] **Crytek height fog** — density × exp(-heightFalloff × z), timecycle-driven
+- [ ] **Cloud ground shadows** — scroll cloud texture in world XZ (enhance existing g_shadowTex)
+- [ ] Update docs/plans with atmospheric roadmap
+
+---
+
 ## Full Roadmap
 
 See **`docs/plans/2026-08-01-remaining-roadmap.md`** for the complete implementation plan covering:
@@ -71,7 +85,8 @@ See **`docs/plans/2026-08-01-remaining-roadmap.md`** for the complete implementa
 | 0 | Safety hardening (normalize guards, div-by-zero, strcat, sprintf, fxParams init) | ✅ DONE (52bf910) |
 | 1 | Restore full compatibility (dead stubs annotated, Motion Blur wired, SSS wired) | ✅ DONE (7f85408, 05dc968) |
 | 2 | Visual quality (CJ depth, glass, sun streaks, CryEngine PBR, glossiness, env reflections) | ✅ DONE (a600105, c671ce3, f09e50a) |
-| 3 | Architecture cleanup (config refactor, dedup, render state leaks) | ❌ NOT STARTED |
+| 3 | Architecture cleanup (vehiclePipe dedup, buildingPipe dedup, FOGENABLE fix) | ✅ DONE (aa8693b, 4ef8ce3, b680e31) |
+| **F** | **Atmospheric features (stencil shadows, clouds, god rays, height fog)** | **🔲 NEXT** |
 | 4 | Platform selection UI (vehicleStyle/buildingStyle/colorStyle INI + menu) | ❌ NOT STARTED |
 | 5 | Advanced features (Forward+, skin/hair/veg, multi-agent) | ❌ NOT STARTED |
 | C | Normal map integration (DK22Pac) — **LAST per user rule** | 🔒 DEFERRED |
