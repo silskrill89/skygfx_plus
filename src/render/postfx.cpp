@@ -693,6 +693,7 @@ CPostEffects::Radiosity_shader(int intensityLimit, int filterPasses, int renderP
 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
 	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
 	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
+	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)TRUE);
 
 	UpdateFrontBuffer();
 }
@@ -861,6 +862,8 @@ CPostEffects::Radiosity(int intensityLimit, int filterPasses, int renderPasses, 
 	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)NULL);
 	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
 	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
+	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
+	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)TRUE);
 
 	UpdateFrontBuffer();
 }
@@ -902,6 +905,7 @@ CPostEffects::ColourFilter_Generic(RwRGBA rgb1, RwRGBA rgb2, void *ps)
 	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
 	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)NULL);
 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
+	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)TRUE);
 }
 
 void
@@ -1196,6 +1200,7 @@ CPostEffects::ColourFilter_Mobile(RwRGBA rgba1, RwRGBA rgba2)
 	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
 	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)NULL);
 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
+	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)TRUE);
 }
 
 void
@@ -1276,6 +1281,7 @@ CPostEffects::ColourFilter_PS2(RwRGBA rgba1, RwRGBA rgba2)
 	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)NULL);
 	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
 	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
+	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)TRUE);
 
 	overrideColorMod = -1;
 	overrideAlphaMod = -1;
@@ -1844,6 +1850,7 @@ CPostEffects::DrawFinalEffects(void)
 	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
 	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)NULL);
 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
+	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)TRUE);
 
 	UpdateFrontBuffer();
 }
