@@ -446,6 +446,84 @@ uploadNoLights(void)
 	RwD3D9SetVertexShaderConstant(REG_ambient, black, 1+2*7);
 }
 
+struct VehicleRenderState {
+	int alphafunc, src, dst, fog;
+};
+
+// ResEntry setup: extracts header, instanced data, sets indices/streams/declaration
+// Returns numMeshes via pointer
+static void vehiclePipe_setupResEntry(RwResEntry *repEntry,
+	RxD3D9ResEntryHeader **outHeader, RxD3D9InstanceData **outData, RwInt32 *outMeshes)
+{
+	*outHeader = (RxD3D9ResEntryHeader *)(repEntry + 1);
+	*outData = (RxD3D9InstanceData *)(*outHeader + 1);
+	if((*outHeader)->indexBuffer != NULL)
+		RwD3D9SetIndices((*outHeader)->indexBuffer);
+	_rwD3D9SetStreams((*outHeader)->vertexStream, (*outHeader)->useOffsets);
+	RwD3D9SetVertexDeclaration((*outHeader)->vertexDeclaration);
+	*outMeshes = (*outHeader)->numMeshes;
+}
+
+// Render state save bundle
+static void vehiclePipe_saveRenderState(VehicleRenderState *state)
+{
+	RwRenderStateGet(rwRENDERSTATEALPHATESTFUNCTION, &state->alphafunc);
+	RwRenderStateGet(rwRENDERSTATESRCBLEND, &state->src);
+	RwRenderStateGet(rwRENDERSTATEDESTBLEND, &state->dst);
+	RwRenderStateGet(rwRENDERSTATEFOGCOLOR, &state->fog);
+}
+
+// Cleanup: unbind shaders, textures, disable TSS
+static void vehiclePipe_cleanup()
+{
+	RwD3D9SetVertexShader(NULL);
+	RwD3D9SetPixelShader(NULL);
+	RwD3D9SetTexture(NULL, 1);
+	RwD3D9SetTexture(NULL, 2);
+	RwD3D9SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+	RwD3D9SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
+	RwD3D9SetTextureStageState(1, D3DTSS_TEXCOORDINDEX, 1);
+	RwD3D9SetTextureStageState(1, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_DISABLE);
+}
+
+// FX additive blend pass: sets states, renders, restores
+static void vehiclePipe_fxAdditiveBlend(RxD3D9ResEntryHeader *header,
+	RxD3D9InstanceData *data, const VehicleRenderState *state)
+{
+	RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION, (void*)rwALPHATESTFUNCTIONALWAYS);
+	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
+	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
+	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDONE);
+	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDONE);
+	RwRenderStateSet(rwRENDERSTATEFOGCOLOR, (void*)0);
+	D3D9Render(header, data);
+	RwRenderStateSet(rwRENDERSTATEFOGCOLOR, (void*)state->fog);
+	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
+	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)state->src);
+	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)state->dst);
+	RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION, (void*)state->alphafunc);
+}
+
+// Material common setup: alpha check, texture, matcol, surfProps
+// Returns false if alpha==0 (skip this mesh)
+static bool vehiclePipe_setupMaterial(RxD3D9InstanceData *inst, RwUInt32 flags,
+	RpMaterial **outMaterial, RwBool *outAlpha)
+{
+	*outMaterial = inst->material;
+	if((*outMaterial)->color.alpha == 0)
+		return false;
+	pipeSetTexture((*outMaterial)->texture, 0);
+	*outAlpha = inst->vertexAlpha != 0 || (*outMaterial)->color.alpha != 255;
+	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)*outAlpha);
+	pipeUploadMatCol(flags, *outMaterial, REG_matCol);
+	float surfProps[4];
+	surfProps[0] = (*outMaterial)->surfaceProps.ambient;
+	surfProps[2] = (*outMaterial)->surfaceProps.diffuse;
+	surfProps[3] = flags & rpGEOMETRYPRELIT ? 1.0f : 0.0f;
+	RwD3D9SetVertexShaderConstant(REG_surfProps, surfProps, 1);
+	return true;
+}
+
 void
 CCustomCarEnvMapPipeline__CustomPipeRenderCB_PS2(RwResEntry *repEntry, void *object, RwUInt8 type, RwUInt32 flags)
 {
@@ -496,21 +574,10 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_PS2(RwResEntry *repEntry, void *obj
 	}else
 		uploadNoLights();
 
-	resEntryHeader = (RxD3D9ResEntryHeader *)(repEntry + 1);
-	instancedData = (RxD3D9InstanceData *)(resEntryHeader + 1);
-	if(resEntryHeader->indexBuffer != NULL)
-		RwD3D9SetIndices(resEntryHeader->indexBuffer);
-	_rwD3D9SetStreams(resEntryHeader->vertexStream,resEntryHeader->useOffsets);
-	RwD3D9SetVertexDeclaration(resEntryHeader->vertexDeclaration);
-	numMeshes = resEntryHeader->numMeshes;
+	vehiclePipe_setupResEntry(repEntry, &resEntryHeader, &instancedData, &numMeshes);
 
-	int alphafunc;
-	int src, dst;
-	int fog;
-	RwRenderStateGet(rwRENDERSTATEALPHATESTFUNCTION, &alphafunc);
-	RwRenderStateGet(rwRENDERSTATESRCBLEND, &src);
-	RwRenderStateGet(rwRENDERSTATEDESTBLEND, &dst);
-	RwRenderStateGet(rwRENDERSTATEFOGCOLOR, &fog);
+	VehicleRenderState state;
+	vehiclePipe_saveRenderState(&state);
 
 	noFx = CVisibilityPlugins__GetAtomicId(atomic) & 0x6000;
 	fxParams.lightmult = CCustomCarEnvMapPipeline__m_EnvMapLightingMult;
@@ -519,22 +586,8 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_PS2(RwResEntry *repEntry, void *obj
 	RwD3D9SetVertexShaderConstant(REG_lightdir, &specdir, 1);
 
 	for(; numMeshes--; instancedData++){
-		material = instancedData->material;
-
-		if(instancedData->material->color.alpha == 0)
+		if(!vehiclePipe_setupMaterial(instancedData, flags, &material, &hasAlpha))
 			continue;
-
-		pipeSetTexture(material->texture, 0);
-
-		hasAlpha = instancedData->vertexAlpha != 0 || instancedData->material->color.alpha != 255;
-		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)hasAlpha);
-
-		pipeUploadMatCol(flags, material, REG_matCol);
-		float surfProps[4];
-		surfProps[0] = material->surfaceProps.ambient;
-		surfProps[2] = material->surfaceProps.diffuse;
-		surfProps[3] = flags & rpGEOMETRYPRELIT ? 1.0f : 0.0f;
-		RwD3D9SetVertexShaderConstant(REG_surfProps, surfProps, 1);
 
 		if(config->ivMode){
 			RwD3D9SetVertexShader(gtaivVehicleVS);
@@ -614,28 +667,10 @@ if(betaEnvmaptest){
 			RwD3D9SetVertexShaderConstant(REG_fxParams, &fxParams, 1);
 			RwD3D9SetVertexShaderConstant(REG_envXform, &envXform, 1);
 
-			RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION, (void*)rwALPHATESTFUNCTIONALWAYS);
-			RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
-			RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
-			RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDONE);
-			RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDONE);
-			RwRenderStateSet(rwRENDERSTATEFOGCOLOR, (void*)0);
-			D3D9Render(resEntryHeader, instancedData);
-			RwRenderStateSet(rwRENDERSTATEFOGCOLOR, (void*)fog);
-			RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
-			RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)src);
-			RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)dst);
-			RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION, (void*)alphafunc);
+			vehiclePipe_fxAdditiveBlend(resEntryHeader, instancedData, &state);
 		}
 	}
-	RwD3D9SetVertexShader(NULL);
-	RwD3D9SetPixelShader(NULL);
-	RwD3D9SetTexture(NULL, 1);
-	RwD3D9SetTexture(NULL, 2);
-	RwD3D9SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
-	RwD3D9SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
-	RwD3D9SetTextureStageState(1, D3DTSS_TEXCOORDINDEX, 1);
-	RwD3D9SetTextureStageState(1, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_DISABLE);
+	vehiclePipe_cleanup();
 }
 
 void
@@ -682,21 +717,10 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Specular(RwResEntry *repEntry, void
 	else
 		uploadNoLights();
 
-	resEntryHeader = (RxD3D9ResEntryHeader *)(repEntry + 1);
-	instancedData = (RxD3D9InstanceData *)(resEntryHeader + 1);
-	if(resEntryHeader->indexBuffer != NULL)
-		RwD3D9SetIndices(resEntryHeader->indexBuffer);
-	_rwD3D9SetStreams(resEntryHeader->vertexStream,resEntryHeader->useOffsets);
-	RwD3D9SetVertexDeclaration(resEntryHeader->vertexDeclaration);
-	numMeshes = resEntryHeader->numMeshes;
+	vehiclePipe_setupResEntry(repEntry, &resEntryHeader, &instancedData, &numMeshes);
 
-	int alphafunc;
-	int src, dst;
-	int fog;
-	RwRenderStateGet(rwRENDERSTATEALPHATESTFUNCTION, &alphafunc);
-	RwRenderStateGet(rwRENDERSTATESRCBLEND, &src);
-	RwRenderStateGet(rwRENDERSTATEDESTBLEND, &dst);
-	RwRenderStateGet(rwRENDERSTATEFOGCOLOR, &fog);
+	VehicleRenderState state;
+	vehiclePipe_saveRenderState(&state);
 
 	noFx = CVisibilityPlugins__GetAtomicId(atomic) & 0x6000;
 	fxParams.lightmult = CCustomCarEnvMapPipeline__m_EnvMapLightingMult;
@@ -712,20 +736,8 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Specular(RwResEntry *repEntry, void
 		material = instancedData->material;
 		if(!material) continue;
 
-		if(material->color.alpha == 0)
+		if(!vehiclePipe_setupMaterial(instancedData, flags, &material, &hasAlpha))
 			continue;
-
-		pipeSetTexture(material->texture, 0);
-
-		hasAlpha = instancedData->vertexAlpha != 0 || material->color.alpha != 255;
-		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)hasAlpha);
-
-		pipeUploadMatCol(flags, material, REG_matCol);
-		float surfProps[4];
-		surfProps[0] = material->surfaceProps.ambient;
-		surfProps[2] = material->surfaceProps.diffuse;
-		surfProps[3] = !!(flags & rpGEOMETRYPRELIT);
-		RwD3D9SetVertexShaderConstant(REG_surfProps, surfProps, 1);
 
 		RwD3D9SetVertexShader(vehiclePipeVS);
 		RwD3D9SetPixelShader(simplePS);
@@ -790,28 +802,10 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Specular(RwResEntry *repEntry, void
 			RwD3D9SetVertexShaderConstant(REG_fxParams, &fxParams, 1);
 			RwD3D9SetVertexShaderConstant(REG_envXform, &envXform, 1);
 
-			RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION, (void*)rwALPHATESTFUNCTIONALWAYS);
-			RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
-			RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
-			RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDONE);
-			RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDONE);
-			RwRenderStateSet(rwRENDERSTATEFOGCOLOR, (void*)0);
-			D3D9Render(resEntryHeader, instancedData);
-			RwRenderStateSet(rwRENDERSTATEFOGCOLOR, (void*)fog);
-			RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
-			RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)src);
-			RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)dst);
-			RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION, (void*)alphafunc);
+			vehiclePipe_fxAdditiveBlend(resEntryHeader, instancedData, &state);
 		}
 	}
-	RwD3D9SetVertexShader(NULL);
-	RwD3D9SetPixelShader(NULL);
-	RwD3D9SetTexture(NULL, 1);
-	RwD3D9SetTexture(NULL, 2);
-	RwD3D9SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
-	RwD3D9SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
-	RwD3D9SetTextureStageState(1, D3DTSS_TEXCOORDINDEX, 1);
-	RwD3D9SetTextureStageState(1, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_DISABLE);
+	vehiclePipe_cleanup();
 }
 
 // OLD
@@ -927,13 +921,7 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *ob
 
 	RwD3D9GetRenderState(D3DRS_LIGHTING, &lighting);
 
-	resEntryHeader = (RxD3D9ResEntryHeader *)(repEntry + 1);
-	instancedData = (RxD3D9InstanceData *)(resEntryHeader + 1);
-	if(resEntryHeader->indexBuffer != NULL)
-		RwD3D9SetIndices(resEntryHeader->indexBuffer);
-	_rwD3D9SetStreams(resEntryHeader->vertexStream,resEntryHeader->useOffsets);
-	RwD3D9SetVertexDeclaration(resEntryHeader->vertexDeclaration);
-	numMeshes = resEntryHeader->numMeshes;
+	vehiclePipe_setupResEntry(repEntry, &resEntryHeader, &instancedData, &numMeshes);
 
 	for(; numMeshes--; instancedData++){
 		material = instancedData->material;
@@ -1098,21 +1086,11 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_leeds(RwResEntry *repEntry, void *o
 	else
 		uploadNoLights();
 
-	resEntryHeader = (RxD3D9ResEntryHeader *)(repEntry + 1);
-	instancedData = (RxD3D9InstanceData *)(resEntryHeader + 1);
-	if(resEntryHeader->indexBuffer != NULL)
-		RwD3D9SetIndices(resEntryHeader->indexBuffer);
-	_rwD3D9SetStreams(resEntryHeader->vertexStream,resEntryHeader->useOffsets);
-	RwD3D9SetVertexDeclaration(resEntryHeader->vertexDeclaration);
-	numMeshes = resEntryHeader->numMeshes;
+	vehiclePipe_setupResEntry(repEntry, &resEntryHeader, &instancedData, &numMeshes);
 
-	int alphafunc;
-	int src, dst;
-	int fog;
-	RwRenderStateGet(rwRENDERSTATEALPHATESTFUNCTION, &alphafunc);
-	RwRenderStateGet(rwRENDERSTATESRCBLEND, &src);
-	RwRenderStateGet(rwRENDERSTATEDESTBLEND, &dst);
-	RwRenderStateGet(rwRENDERSTATEFOGENABLE, &fog);
+	VehicleRenderState state;
+	vehiclePipe_saveRenderState(&state);
+	RwRenderStateGet(rwRENDERSTATEFOGENABLE, &state.fog);	// Leeds saves fog enable, not fog color
 
 	noFx = CVisibilityPlugins__GetAtomicId(atomic) & 0x6000;
 	fxParams.lightmult = CCustomCarEnvMapPipeline__m_EnvMapLightingMult;
@@ -1129,17 +1107,9 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_leeds(RwResEntry *repEntry, void *o
 	RwD3D9SetVertexShaderConstant(36, &envtexmat, 4);
 
 	for(; numMeshes--; instancedData++){
-		material = instancedData->material;
-
-		if(instancedData->material->color.alpha == 0)
+		if(!vehiclePipe_setupMaterial(instancedData, flags, &material, &hasAlpha))
 			continue;
-
-		pipeSetTexture(material->texture, 0);
-
-		hasAlpha = instancedData->vertexAlpha != 0 || instancedData->material->color.alpha != 255;
-		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)hasAlpha);
-
-		pipeUploadMatCol(flags, material, REG_matCol);
+		// Leeds-specific: clamp surfProps[0]
 		float surfProps[4];
 		surfProps[0] = material->surfaceProps.ambient;
 		if(surfProps[0] > 0.1f && surfProps[0] < 1.0f)
@@ -1190,18 +1160,11 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_leeds(RwResEntry *repEntry, void *o
 
 		RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
 
-		RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)fog);
+		RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)state.fog);
 		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
-		RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION, (void*)alphafunc);
+		RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION, (void*)state.alphafunc);
 	}
-	RwD3D9SetVertexShader(NULL);
-	RwD3D9SetPixelShader(NULL);
-	RwD3D9SetTexture(NULL, 1);
-	RwD3D9SetTexture(NULL, 2);
-	RwD3D9SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
-	RwD3D9SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
-	RwD3D9SetTextureStageState(1, D3DTSS_TEXCOORDINDEX, 1);
-	RwD3D9SetTextureStageState(1, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_DISABLE);
+	vehiclePipe_cleanup();
 }
 
 void
@@ -1246,13 +1209,7 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_mobile(RwResEntry *repEntry, void *
 	else
 		uploadNoLights();
 
-	resEntryHeader = (RxD3D9ResEntryHeader *)(repEntry + 1);
-	instancedData = (RxD3D9InstanceData *)(resEntryHeader + 1);
-	if(resEntryHeader->indexBuffer != NULL)
-		RwD3D9SetIndices(resEntryHeader->indexBuffer);
-	_rwD3D9SetStreams(resEntryHeader->vertexStream,resEntryHeader->useOffsets);
-	RwD3D9SetVertexDeclaration(resEntryHeader->vertexDeclaration);
-	numMeshes = resEntryHeader->numMeshes;
+	vehiclePipe_setupResEntry(repEntry, &resEntryHeader, &instancedData, &numMeshes);
 
 	noFx = CVisibilityPlugins__GetAtomicId(atomic) & 0x6000;
 	fxParams.lightmult = CCustomCarEnvMapPipeline__m_EnvMapLightingMult;
@@ -1283,23 +1240,9 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_mobile(RwResEntry *repEntry, void *
 
 
 	for(; numMeshes--; instancedData++){
-		material = instancedData->material;
-
-		if(instancedData->material->color.alpha == 0)
+		if(!vehiclePipe_setupMaterial(instancedData, flags, &material, &hasAlpha))
 			continue;
-
 		bool lighttex = material->texture && strstr(material->texture->name, "vehiclelights");
-		pipeSetTexture(material->texture, 0);
-
-		hasAlpha = instancedData->vertexAlpha || instancedData->material->color.alpha != 255;
-		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)hasAlpha);
-
-		pipeUploadMatCol(flags, material, REG_matCol);
-		float surfProps[4];
-		surfProps[0] = material->surfaceProps.ambient;
-		surfProps[2] = material->surfaceProps.diffuse;
-		surfProps[3] = !!(flags & rpGEOMETRYPRELIT);
-		RwD3D9SetVertexShaderConstant(REG_surfProps, surfProps, 1);
 
 		materialFlags = *(RwUInt32*)&material->surfaceProps.specular;
 		hasEnv1  = !!(materialFlags & 1);
@@ -1370,14 +1313,7 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_mobile(RwResEntry *repEntry, void *
 
 		D3D9RenderDual(config->dualPassVehicle, resEntryHeader, instancedData);
 	}
-	RwD3D9SetVertexShader(NULL);
-	RwD3D9SetPixelShader(NULL);
-	RwD3D9SetTexture(NULL, 1);
-	RwD3D9SetTexture(NULL, 2);
-	RwD3D9SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
-	RwD3D9SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
-	RwD3D9SetTextureStageState(1, D3DTSS_TEXCOORDINDEX, 1);
-	RwD3D9SetTextureStageState(1, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_DISABLE);
+	vehiclePipe_cleanup();
 }
 
 void

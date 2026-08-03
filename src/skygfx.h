@@ -513,6 +513,7 @@ extern bool gHasExternalNormalMapPlugin;
 struct RxPipeline;
 extern RxPipeline *gNormalMapAtomicPipelines[2];
 void normalmap_init(void);
+void normalmap_tryAttach(void);
 void normalmap_shutdown(void);
 
 /* Env map */

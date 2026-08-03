@@ -879,6 +879,10 @@ RenderScene_hook(void)
 	// but BEFORE any rendering reads the values.
 	Weather_ApplySunConfig();
 
+	// Deferred normal-map plugin attach: polls until the RW engine is up,
+	// then attaches once. No-op after success (guarded by normalmapInitialized).
+	normalmap_tryAttach();
+
 	RenderScene_before(nil);
 	RenderScene();
 	RenderScene_after(nil);

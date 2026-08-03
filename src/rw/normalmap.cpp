@@ -6,9 +6,20 @@
 #include "MemoryMgr.h"
 #include <Windows.h>
 #include <cstdio>
+#include <d3d9.h>
 #include <rwcore.h>
 #include <rpworld.h>
 #include <rpnormmap.h>
+
+// NOTE: RwEngineInstance (void*) is declared by rwplcore.h (via rpnormmap.h).
+// _RwD3DDevice (LPDIRECT3DDEVICE9) is declared by rwcore.h only when _D3D9_H_
+// is defined; declare it explicitly here to be safe. rpnormmap.lib resolves
+// both to the stubs in normmap_stubs.cpp (default 0); they MUST be pointed at
+// the game's real engine + device before the plugin attaches and before any
+// normalmap rendering (DK22Pac does the same).
+extern "C" {
+    extern LPDIRECT3DDEVICE9 _RwD3DDevice;
+}
 
 // Game function wrappers (by address, since we don't link game symbols)
 static RpGeometry *(__cdecl *game_RpAtomicGetGeometry)(void *atomic) = (RpGeometry *(__cdecl*)(void *))0x749AB0;
@@ -279,18 +290,31 @@ static void UnsetAmbientLight()
 
 static bool normalmapInitialized = false;
 
-void normalmap_init()
+void normalmap_tryAttach()
 {
     if(normalmapInitialized)
         return;
 
-    dbglog("normalmap: attaching RpNormMapPlugin...");
+    // The RW engine must be fully initialized before the plugin can attach.
+    // normalmap_init() runs from DllMain (too early), so poll the game's
+    // engine-instance pointer and defer until it is valid. This replicates
+    // DK22Pac's FUNC_REGISTER_RW_PLUGIN timing. Called each frame from
+    // RenderScene_hook until it succeeds.
+    int engine = *(int *)0xC97B24;
+    if(!engine)
+        return;
+
+    // Point rpnormmap.lib's stub engine globals at the game's real values.
+    RwEngineInstance = (void *)engine;
+    _RwD3DDevice = *(LPDIRECT3DDEVICE9 *)0xC97C28;
+
+    dbglog("normalmap: deferred attach - engine=%08X device=%08X", engine, (unsigned int)_RwD3DDevice);
     if(!RpNormMapPluginAttach())
     {
-        dbglog("normalmap: RpNormMapPluginAttach FAILED");
+        dbglog("normalmap: deferred RpNormMapPluginAttach FAILED");
         return;
     }
-    dbglog("normalmap: RpNormMapPluginAttach OK");
+    dbglog("normalmap: RpNormMapPluginAttach OK (deferred)");
 
     gHasExternalNormalMapPlugin = true;
 
@@ -310,6 +334,15 @@ void normalmap_init()
 
     normalmapInitialized = true;
     dbglog("normalmap: initialization complete");
+}
+
+void normalmap_init()
+{
+    // Runs from DllMain. The RW engine is not ready yet, so the actual
+    // attach is deferred to normalmap_tryAttach() (polled each frame from
+    // RenderScene_hook until the engine is up). Attempt once here in case
+    // the engine happens to be ready already.
+    normalmap_tryAttach();
 }
 
 void normalmap_shutdown()

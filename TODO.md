@@ -52,8 +52,9 @@
 - [x] Vehicle PBR specularity/metallic/env reflections improvement — clearcoat Fresnel, metallic energy conservation, ambientObj
 - [x] Ground/street brightness at dawn — ambientObj timecycle, removed hardcoded floor
 - [x] Sun flare fix — sunCoronaIntensity (0.4), sunCoreIntensity (0.6) INI controls, unified tonemap
-- [ ] CJ character material depth
-- [ ] Glass shader transparency
+- [x] CJ character material depth — SSS depth-based character mask, Fresnel highlight, timecycle ambient matching
+- [x] Glass shader transparency — env intensity boost, view-angle-dependent alpha, Schlick Fresnel
+- [x] Vehicle env reflections — view-space transform, sky contribution, carcols-driven envMask, glossiness workflow
 
 ### E. Housekeeping
 - [x] **Full roadmap plan** — `docs/plans/2026-08-01-remaining-roadmap.md` (Phases 0-5, 25 safety issues, all TODOs consolidated)
@@ -67,9 +68,9 @@ See **`docs/plans/2026-08-01-remaining-roadmap.md`** for the complete implementa
 
 | Phase | Description | Status |
 |-------|-------------|--------|
-| 0 | Safety hardening (25 issues: normalize, div-by-zero, strcat, sprintf, raw new) | ❌ NOT STARTED |
-| 1 | Restore full compatibility (verify 9+2 pipes, dead stubs, YCbCr) | ❌ NOT STARTED |
-| 2 | Visual quality remaining (CJ depth, glass transparency, sun streaks) | ❌ NOT STARTED |
+| 0 | Safety hardening (normalize guards, div-by-zero, strcat, sprintf, fxParams init) | ✅ DONE (52bf910) |
+| 1 | Restore full compatibility (dead stubs annotated, Motion Blur wired, SSS wired) | ✅ DONE (7f85408, 05dc968) |
+| 2 | Visual quality (CJ depth, glass, sun streaks, CryEngine PBR, glossiness, env reflections) | ✅ DONE (a600105, c671ce3, f09e50a) |
 | 3 | Architecture cleanup (config refactor, dedup, render state leaks) | ❌ NOT STARTED |
 | 4 | Platform selection UI (vehicleStyle/buildingStyle/colorStyle INI + menu) | ❌ NOT STARTED |
 | 5 | Advanced features (Forward+, skin/hair/veg, multi-agent) | ❌ NOT STARTED |
