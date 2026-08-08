@@ -318,6 +318,16 @@ void chars_drawSSSBlur(void)
 			dbglog("[PostFX] chars_drawSSSBlur bailing: pRasterFrontBuffer=NULL");
 		return;
 	}
+	// SSS needs valid scene depth for the character mask. With SSAO disabled the
+	// depth texture is absent or stale (never rendered) — sampling it smears the
+	// blur across the whole frame and corrupts the tonemapped image. Skip until
+	// a standalone depth fallback exists.
+	if(!config->ssaoEnable || !g_ssaoDepthTex){
+		if(dbglog_throttle( "sss_bail4"))
+			dbglog("[PostFX] chars_drawSSSBlur bailing: no valid depth (ssaoEnable=%d depthTex=%p)",
+				config->ssaoEnable, g_ssaoDepthTex);
+		return;
+	}
 
 	IDirect3DDevice9 *dev = d3d9device;
 	if(!dev) return;

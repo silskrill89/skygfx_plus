@@ -1853,7 +1853,10 @@ CPostEffects::DrawFinalEffects(void)
 {
 	// SMAA: pure D3D9 RT switching — safe regardless of camera Begin/EndUpdate state.
 	// Runs before ImGui so the debug menu stays on top (test requires menu open).
+	// Sync front buffer first so HUD (already drawn into camera raster) survives
+	// SMAA's full-frame repaint from pRasterFrontBuffer.
 	if(config->smaaEnable && SMAA_Edge){
+		UpdateFrontBuffer();
 		DrawSMAA();
 	}
 
@@ -3378,6 +3381,14 @@ CPostEffects::DrawSMAA(void)
 		dev->SetTexture(2, NULL);
 		dev->SetTexture(3, NULL);
 	}
+
+	// Restore RW render states (match ColourFilter_Modern pattern) so any
+	// subsequent game 2D/HUD draws are unaffected by SMAA's pass states.
+	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
+	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)TRUE);
+	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
+	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
+	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
 
 	ImmediateModeRenderStatesReStore();
 }
