@@ -14,9 +14,7 @@
 #include <stdio.h>
 #include <excpt.h>
 
-// Stubs for debug menu (excluded for now - no imgui)
-void refreshMenu(void) {}
-void installMenu(void) {}
+// Debug menu stubs (legacy — actual implementation in debugmenu_ui.cpp)
 
 // normalmap_init() and normalmap_shutdown() are now in normalmap.cpp
 
@@ -471,20 +469,20 @@ SetLightsWithTimeOfDayColour(RpWorld *world)
 		memset(ambBlue, 0, 184);
 	}
 	SetLightsWithTimeOfDayColour_orig(world);
-return;
 
 	// Multiplied by 1.5 on mobile
+	if(config->pipeline == PIPELINE_MOBILE){
+		float mult = 1.5f;
 
-	float mult = 1.5f;
+		AmbientLightColourForFrame_PedsCarsAndObjects.red = clamp(AmbientLightColourForFrame_PedsCarsAndObjects.red*mult, 1.0f);
+		AmbientLightColourForFrame_PedsCarsAndObjects.green = clamp(AmbientLightColourForFrame_PedsCarsAndObjects.green*mult, 1.0f);
+		AmbientLightColourForFrame_PedsCarsAndObjects.blue = clamp(AmbientLightColourForFrame_PedsCarsAndObjects.blue*mult, 1.0f);
 
-	AmbientLightColourForFrame_PedsCarsAndObjects.red = clamp(AmbientLightColourForFrame_PedsCarsAndObjects.red*mult, 1.0f);
-	AmbientLightColourForFrame_PedsCarsAndObjects.green = clamp(AmbientLightColourForFrame_PedsCarsAndObjects.green*mult, 1.0f);
-	AmbientLightColourForFrame_PedsCarsAndObjects.blue = clamp(AmbientLightColourForFrame_PedsCarsAndObjects.blue*mult, 1.0f);
-
-	DirectionalLightColourForFrame.red = clamp(DirectionalLightColourForFrame.red*mult, 1.0f);
-	DirectionalLightColourForFrame.green = clamp(DirectionalLightColourForFrame.green*mult, 1.0f);
-	DirectionalLightColourForFrame.blue = clamp(DirectionalLightColourForFrame.blue*mult, 1.0f);
-	RpLightSetColor(pDirect, &DirectionalLightColourForFrame);
+		DirectionalLightColourForFrame.red = clamp(DirectionalLightColourForFrame.red*mult, 1.0f);
+		DirectionalLightColourForFrame.green = clamp(DirectionalLightColourForFrame.green*mult, 1.0f);
+		DirectionalLightColourForFrame.blue = clamp(DirectionalLightColourForFrame.blue*mult, 1.0f);
+		RpLightSetColor(pDirect, &DirectionalLightColourForFrame);
+	}
 }
 
 
@@ -831,6 +829,9 @@ RenderScene_before(void*)
 	RwCameraEndUpdate(Scene.camera);
 	RwCameraBeginUpdate(Scene.camera);
 
+	// Forward+ tiled light culling (before scene render)
+	ForwardPlus_CullAndUpload();
+
 	// update wind
 	float freq = 0.01f;
 	float modifierX = freq + (freq * CWeather__WindDir.x);
@@ -856,9 +857,10 @@ RenderScene_after(void*)
 void
 RenderScene_hook(void)
 {
-	// F4 to toggle debug menu
+	// Ctrl+4 to toggle debug menu
 	static bool s_f4Prev = false;
-	bool f4Now = (GetAsyncKeyState(VK_F4) & 0x8000) != 0;
+	bool ctrlHeld = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+	bool f4Now = ctrlHeld && (GetAsyncKeyState('4') & 0x8000) != 0;
 	if(f4Now && !s_f4Prev){
 		if(config->debugMenuOpen){
 			config->debugMenuOpen = 0;
@@ -1730,6 +1732,232 @@ reloadAllInis(void)
 	refreshIni();
 }
 
+void
+saveConfig(void)
+{
+	char modulePath[MAX_PATH];
+	GetModuleFileName(dllModule, modulePath, MAX_PATH);
+	linb::ini cfg;
+	cfg.load_file(modulePath);
+
+	Config *c = config;
+
+	// Pipeline
+	static const char* pipelineNames[] = {"PBR", "PS2", "Xbox", "Mobile", "GTAIV"};
+	if(c->pipeline >= 0 && c->pipeline < 5)
+		cfg.set("SkyGfx", "pipeline", pipelineNames[c->pipeline]);
+	cfg.set("SkyGfx", "pipelineOverride", std::to_string(c->pipelineOverride));
+
+	// Pipe overrides (written by readIni from INI)
+	static const char* buildPipeNames[] = {"PS2", "Xbox", "GTAIV", "PBR"};
+	if(c->buildingPipe >= 0 && c->buildingPipe < 4)
+		cfg.set("SkyGfx", "buildingPipe", buildPipeNames[c->buildingPipe]);
+
+	static const char* vehPipeNames[] = {"PS2", "PC", "Xbox", "Specular", "Mobile", "Neo", "Leeds", "VCS", "Env", "GTAIV", "Modern"};
+	if(c->vehiclePipe >= 0 && c->vehiclePipe < 11)
+		cfg.set("SkyGfx", "vehiclePipe", vehPipeNames[c->vehiclePipe]);
+
+	static const char* colorFilterNames[] = {"None", "PS2", "PC", "Mobile", "III", "VC", "VCS", "GTAIV", "Modern"};
+	if(c->colorFilter >= 0 && c->colorFilter < 9)
+		cfg.set("SkyGfx", "colorFilter", colorFilterNames[c->colorFilter]);
+
+	// Pipeline switches
+	cfg.set("SkyGfx", "ps2Modulate", std::to_string(c->ps2ModulateGlobal));
+	cfg.set("SkyGfx", "dualPass", std::to_string(c->dualPassGlobal));
+	cfg.set("SkyGfx", "detailMaps", std::to_string(c->detailMaps));
+	cfg.set("SkyGfx", "stochasticTexturing", std::to_string(c->stochastic));
+	cfg.set("SkyGfx", "ps2ModulateBuilding", std::to_string(c->ps2ModulateBuilding));
+	cfg.set("SkyGfx", "dualPassBuilding", std::to_string(c->dualPassBuilding));
+	cfg.set("SkyGfx", "dualPassVehicle", std::to_string(c->dualPassVehicle));
+	cfg.set("SkyGfx", "dualPassGrass", std::to_string(c->dualPassGrass));
+	cfg.set("SkyGfx", "dualPassDefault", std::to_string(c->dualPassDefault));
+	cfg.set("SkyGfx", "dualPassPed", std::to_string(c->dualPassPed));
+	cfg.set("SkyGfx", "ps2ModulateGrass", std::to_string(c->ps2ModulateGrass));
+	cfg.set("SkyGfx", "grassAddAmbient", std::to_string(c->grassAddAmbient));
+	cfg.set("SkyGfx", "grassBackfaceCull", std::to_string(c->backfaceCull));
+	cfg.set("SkyGfx", "grassFixPlacement", std::to_string(c->fixGrassPlacement));
+	cfg.set("SkyGfx", "sunGlare", std::to_string(c->doglare));
+	cfg.set("SkyGfx", "neoWaterDrops", std::to_string(c->neoWaterDrops));
+	cfg.set("SkyGfx", "neoBloodDrops", std::to_string(c->neoBloodDrops));
+
+	cfg.set("SkyGfx", "pedShadows", std::to_string(c->pedShadows));
+	cfg.set("SkyGfx", "stencilShadows", std::to_string(c->stencilShadows));
+	cfg.set("SkyGfx", "lightningIlluminatesWorld", std::to_string(c->lightningIlluminatesWorld));
+	cfg.set("SkyGfx", "doRadiosity", std::to_string(c->doRadiosity));
+
+	// Radiosity
+	static const char* radiosityNames[] = {"PS2", "Shader"};
+	if(c->radiosity >= 0 && c->radiosity < 2)
+		cfg.set("SkyGfx", "radiosity", radiosityNames[c->radiosity]);
+	cfg.set("SkyGfx", "vcsTrails", std::to_string(c->vcsTrails));
+	cfg.set("SkyGfx", "trailsLimit", std::to_string(c->trailsLimit));
+	cfg.set("SkyGfx", "trailsIntensity", std::to_string(c->trailsIntensity));
+	cfg.set("SkyGfx", "trailsResolution", std::to_string(c->trailsResolution));
+	cfg.set("SkyGfx", "radiosityFilterPasses", std::to_string(c->radiosityFilterPasses));
+	cfg.set("SkyGfx", "radiosityRenderPasses", std::to_string(c->radiosityRenderPasses));
+	cfg.set("SkyGfx", "radiosityIntensity", std::to_string(c->radiosityIntensity));
+
+	// Shininess
+	cfg.set("SkyGfx", "leedsShininessMult", std::to_string(c->leedsShininessMult));
+	cfg.set("SkyGfx", "neoShininessMult", std::to_string(c->neoShininessMult));
+	cfg.set("SkyGfx", "neoSpecularityMult", std::to_string(c->neoSpecularityMult));
+	cfg.set("SkyGfx", "envShininessMult", std::to_string(c->envShininessMult));
+	cfg.set("SkyGfx", "envSpecularityMult", std::to_string(c->envSpecularityMult));
+	cfg.set("SkyGfx", "envPower", std::to_string(c->envPower));
+	cfg.set("SkyGfx", "envFresnel", std::to_string(c->envFresnel));
+	cfg.set("SkyGfx", "envMapSize", std::to_string(c->envMapSize));
+	cfg.set("SkyGfx", "envMapFarClipMult", std::to_string(c->envMapFarClipMult));
+	cfg.set("SkyGfx", "envMapUseLODs", std::to_string(c->envMapUseLODs));
+
+	// Normal mapping
+	cfg.set("SkyGfx", "normalMapEnable", std::to_string(c->normalMapEnable));
+	cfg.set("SkyGfx", "normalMapIntensity", std::to_string(c->normalMapIntensity));
+	cfg.set("SkyGfx", "normalMapPlayerOnly", std::to_string(c->normalMapPlayerOnly));
+
+	// Dual-pass thresholds
+	cfg.set("SkyGfx", "zwriteThreshold", std::to_string(c->zwriteThreshold));
+	cfg.set("SkyGfx", "zwriteThresholdGrass", std::to_string(c->zwriteThresholdGrass));
+	cfg.set("SkyGfx", "zwriteThresholdPed", std::to_string(c->zwriteThresholdPed));
+
+	// Corona/sun
+	cfg.set("SkyGfx", "coronaZtest", std::to_string(c->coronaZtest));
+	cfg.set("SkyGfx", "sunCoronaIntensity", std::to_string(c->sunCoronaIntensity));
+	cfg.set("SkyGfx", "sunCoreIntensity", std::to_string(c->sunCoreIntensity));
+	cfg.set("SkyGfx", "sunStreakIntensity", std::to_string(c->sunStreakIntensity));
+	cfg.set("SkyGfx", "sunStreakSize", std::to_string(c->sunStreakSize));
+
+	// YCbCr
+	cfg.set("SkyGfx", "YCbCrCorrection", std::to_string(c->bYCbCrFilter));
+	cfg.set("SkyGfx", "lumaScale", std::to_string(c->lumaScale));
+	cfg.set("SkyGfx", "lumaOffset", std::to_string(c->lumaOffset));
+	cfg.set("SkyGfx", "CbScale", std::to_string(c->cbScale));
+	cfg.set("SkyGfx", "CbOffset", std::to_string(c->cbOffset));
+	cfg.set("SkyGfx", "CrScale", std::to_string(c->crScale));
+	cfg.set("SkyGfx", "CrOffset", std::to_string(c->crOffset));
+
+	// SSAO
+	cfg.set("SkyGfx", "ssaoEnable", std::to_string(c->ssaoEnable));
+	cfg.set("SkyGfx", "ssaoRadius", std::to_string(c->ssaoRadius));
+	cfg.set("SkyGfx", "ssaoPower", std::to_string(c->ssaoPower));
+	cfg.set("SkyGfx", "ssaoKernelSize", std::to_string((int)c->ssaoKernelSize));
+	cfg.set("SkyGfx", "ssaoSampleCount", std::to_string(c->ssaoSampleCount));
+
+	// SSAO overhaul
+	cfg.set("SkyGfx", "ssaoTemporalEnable", std::to_string(c->ssaoTemporalEnable));
+	cfg.set("SkyGfx", "ssaoTemporalBlend", std::to_string(c->ssaoTemporalBlend));
+	cfg.set("SkyGfx", "ssaoBlurPasses", std::to_string(c->ssaoBlurPasses));
+	cfg.set("SkyGfx", "ssaoBlurRadius", std::to_string(c->ssaoBlurRadius));
+	cfg.set("SkyGfx", "ssaoDepthThreshold", std::to_string(c->ssaoDepthThreshold));
+
+	// SMAA
+	cfg.set("SkyGfx", "smaaEnable", std::to_string(c->smaaEnable));
+	cfg.set("SkyGfx", "smaaPreset", std::to_string(c->smaaPreset));
+	cfg.set("SkyGfx", "smaaPredication", std::to_string(c->smaaPredication));
+	cfg.set("SkyGfx", "smaaTemporal", std::to_string(c->smaaTemporal));
+
+	// Motion blur
+	cfg.set("SkyGfx", "motionBlurEnable", std::to_string(c->motionBlurEnable));
+	cfg.set("SkyGfx", "motionBlurStrength", std::to_string(c->motionBlurStrength));
+	cfg.set("SkyGfx", "motionBlurRadial", std::to_string(c->motionBlurRadial));
+	cfg.set("SkyGfx", "motionBlurSpeedFactor", std::to_string(c->motionBlurSpeedFactor));
+	cfg.set("SkyGfx", "motionBlurCameraAware", std::to_string(c->motionBlurCameraAware));
+
+	// SSS post-process
+	cfg.set("SkyGfx", "sssPostProcessEnable", std::to_string(c->sssPostProcessEnable));
+	cfg.set("SkyGfx", "sssPostProcessStrength", std::to_string(c->sssPostProcessStrength));
+	cfg.set("SkyGfx", "sssPostProcessRadius", std::to_string(c->sssPostProcessRadius));
+	cfg.set("SkyGfx", "sssPostProcessThreshold", std::to_string(c->sssPostProcessThreshold));
+
+	// Skin enhancement
+	cfg.set("SkyGfx", "skinEnhanceEnable", std::to_string(c->skinEnhanceEnable));
+	cfg.set("SkyGfx", "skinWrapFactor", std::to_string(c->skinWrapFactor));
+	cfg.set("SkyGfx", "skinSpecularPower", std::to_string(c->skinSpecularPower));
+	cfg.set("SkyGfx", "skinSpecularStrength", std::to_string(c->skinSpecularStrength));
+	cfg.set("SkyGfx", "skinSSSStrength", std::to_string(c->skinSSSStrength));
+
+	// Hair enhancement
+	cfg.set("SkyGfx", "hairEnhanceEnable", std::to_string(c->hairEnhanceEnable));
+	cfg.set("SkyGfx", "hairAnisotropicPower", std::to_string(c->hairAnisotropicPower));
+	cfg.set("SkyGfx", "hairAnisotropicStrength", std::to_string(c->hairAnisotropicStrength));
+	cfg.set("SkyGfx", "hairSSSStrength", std::to_string(c->hairSSSStrength));
+
+	// Vegetation enhancement
+	cfg.set("SkyGfx", "vegetationEnhanceEnable", std::to_string(c->vegetationEnhanceEnable));
+	cfg.set("SkyGfx", "vegetationSSSStrength", std::to_string(c->vegetationSSSStrength));
+	cfg.set("SkyGfx", "vegetationAmbientBoost", std::to_string(c->vegetationAmbientBoost));
+
+	// Edge tessellation
+	cfg.set("SkyGfx", "edgeTessEnable", std::to_string(c->edgeTessEnable));
+	cfg.set("SkyGfx", "edgeTessStrength", std::to_string(c->edgeTessStrength));
+	cfg.set("SkyGfx", "edgeTessThreshold", std::to_string(c->edgeTessThreshold));
+
+	// GTA IV
+	cfg.set("SkyGfx", "ivMode", std::to_string(c->ivMode));
+	cfg.set("SkyGfx", "ivDesaturation", std::to_string(c->ivDesaturation));
+	cfg.set("SkyGfx", "ivGamma", std::to_string(c->ivGamma));
+	cfg.set("SkyGfx", "ivSaturation", std::to_string(c->ivSaturation));
+	cfg.set("SkyGfx", "ivCurves", std::to_string(c->ivCurves));
+	cfg.set("SkyGfx", "ivVignetteIntensity", std::to_string(c->ivVignetteIntensity));
+	cfg.set("SkyGfx", "ivVignetteRadius", std::to_string(c->ivVignetteRadius));
+	cfg.set("SkyGfx", "ivVignetteContrast", std::to_string(c->ivVignetteContrast));
+	cfg.set("SkyGfx", "ivBloomIntensity", std::to_string(c->ivBloomIntensity));
+	cfg.set("SkyGfx", "ivExposure", std::to_string(c->ivExposure));
+
+	// Atmospheric: Height Fog
+	cfg.set("SkyGfx", "heightFogEnable", std::to_string(c->heightFogEnable));
+	cfg.set("SkyGfx", "heightFogDensity", std::to_string(c->heightFogDensity));
+	cfg.set("SkyGfx", "heightFogHeightFalloff", std::to_string(c->heightFogHeightFalloff));
+	cfg.set("SkyGfx", "heightFogStartHeight", std::to_string(c->heightFogStartHeight));
+	cfg.set("SkyGfx", "heightFogR", std::to_string(c->heightFogR));
+	cfg.set("SkyGfx", "heightFogG", std::to_string(c->heightFogG));
+	cfg.set("SkyGfx", "heightFogB", std::to_string(c->heightFogB));
+	cfg.set("SkyGfx", "heightFogTimecycleScale", std::to_string(c->heightFogTimecycleScale));
+
+	// Atmospheric: God Rays
+	cfg.set("SkyGfx", "godRaysEnable", std::to_string(c->godRaysEnable));
+	cfg.set("SkyGfx", "godRaysExposure", std::to_string(c->godRaysExposure));
+	cfg.set("SkyGfx", "godRaysDecay", std::to_string(c->godRaysDecay));
+	cfg.set("SkyGfx", "godRaysDensity", std::to_string(c->godRaysDensity));
+	cfg.set("SkyGfx", "godRaysWeight", std::to_string(c->godRaysWeight));
+	cfg.set("SkyGfx", "godRaysNumSamples", std::to_string(c->godRaysNumSamples));
+
+	// Velocity buffer
+	cfg.set("SkyGfx", "velocityBufferEnable", std::to_string(c->velocityBufferEnable));
+
+	// Forward+ tiled lighting
+	cfg.set("SkyGfx", "forwardPlusEnable", std::to_string(c->forwardPlusEnable));
+
+	// Normal buffer
+	cfg.set("SkyGfx", "normalBufferEnable", std::to_string(c->normalBufferEnable));
+	cfg.set("SkyGfx", "normalBufferOffset", std::to_string(c->normalBufferOffset));
+	cfg.set("SkyGfx", "normalBufferScale", std::to_string(c->normalBufferScale));
+
+	// Pipe chain
+	cfg.set("SkyGfx", "pipeChainEnable", std::to_string(c->pipeChainEnable));
+	cfg.set("SkyGfx", "pipeChainIntensity", std::to_string(c->pipeChainIntensity));
+
+	// Debug toggles
+	cfg.set("SkyGfx", "colorFilterEnable", std::to_string(c->colorFilterEnable));
+	cfg.set("SkyGfx", "radiosityEnable", std::to_string(c->radiosityEnable));
+	cfg.set("SkyGfx", "grainEnable", std::to_string(c->grainEnable));
+
+	// Blur offsets
+	cfg.set("SkyGfx", "blurLeft", std::to_string(c->offLeft));
+	cfg.set("SkyGfx", "blurTop", std::to_string(c->offTop));
+	cfg.set("SkyGfx", "blurRight", std::to_string(c->offRight));
+	cfg.set("SkyGfx", "blurBottom", std::to_string(c->offBottom));
+
+	// Timecycle
+	cfg.set("SkyGfx", "usePCTimecyc", std::to_string(c->usePCTimecyc));
+
+	// rgb multipliers
+	cfg.set("SkyGfx", "rgb1Mult", std::to_string(c->rgb1Mult));
+	cfg.set("SkyGfx", "rgb2Mult", std::to_string(c->rgb2Mult));
+
+	cfg.write_file(modulePath);
+	dbglog("skygfx: config saved to INI");
+}
+
 // load asi ini again after having read stream ini as we need to know radiosity settings
 void __declspec(naked)
 afterStreamIni(void)
@@ -2126,6 +2354,10 @@ DllMain(HINSTANCE hInst, DWORD reason, LPVOID)
 	}
 
 	if(reason == DLL_PROCESS_DETACH){
+		ReleaseDefaultPoolResources();
+		dbglog("D3DPOOL_DEFAULT resources released");
+		ForwardPlus_ReleaseResources();
+		dbglog("Forward+ resources released");
 		g_ragdollMan.Exit();
 		dbglog("Ragdoll manager shut down");
 	}

@@ -14,7 +14,11 @@ void *SMAA_BlendNeighbor = nullptr;
 void *SMAA_Temporal = nullptr;
 void *SSAO = nullptr;
 void *SSAO_VertexDepth = nullptr;
+void *SSAO_Temporal = nullptr;
+void *SSAO_BilateralBlur = nullptr;
+void *SSAO_Upsample = nullptr;
 void *MotionBlur_Burnout = nullptr;
+void *VelocityReconstruct = nullptr;
 void *ColorFilter_CrossMix = nullptr;
 void *SSS_Blur = nullptr;
 void *VehiclePaint_GTAIV = nullptr;
@@ -29,6 +33,8 @@ void *PBR_Lighting = nullptr;
 void *ClampShader = nullptr;
 void *DynamicSky = nullptr;
 void *SkinPBR = nullptr;
+void *HeightFog = nullptr;
+void *GodRays = nullptr;
 void *NormalBufferShader = nullptr;
 void *PipeChainShader = nullptr;
 void *GTAIV_PS = nullptr;
@@ -421,7 +427,15 @@ makeVS(int res, void **sh)
 {
 	if(*sh == NULL){
 		HRSRC resource = FindResource(dllModule, MAKEINTRESOURCE(res), RT_RCDATA);
+		if(resource == NULL){
+			dbglog("  makeVS(%d): FindResource FAILED", res);
+			return;
+		}
 		RwUInt32 *shader = (RwUInt32*)LoadResource(dllModule, resource);
+		if(shader == NULL){
+			dbglog("  makeVS(%d): LoadResource FAILED", res);
+			return;
+		}
 		RwD3D9CreateVertexShader(shader, sh);
 		FreeResource(shader);
 	}
@@ -488,6 +502,9 @@ CreateShaders(void)
 	makePS(IDR_SMAAEDGEMOTIONDEPTHPS, &SMAA_EdgeMotionDepth);
 	makePS(IDR_SMAATEMPPS, &SMAA_Temporal);
 	makePS(IDR_SSAO_VERTEXDEPTH, &SSAO_VertexDepth);
+	makePS(IDR_SSAO_TEMPORAL_PS, &SSAO_Temporal);
+	makePS(IDR_SSAO_BILATERALBLUR_PS, &SSAO_BilateralBlur);
+	makePS(IDR_SSAO_UPSAMPLE_PS, &SSAO_Upsample);
 
 	// PostFX effects
 	makePS(IDR_MOTIONBLUR_BURNOUT, &MotionBlur_Burnout);
@@ -515,7 +532,10 @@ CreateShaders(void)
 	makePS(IDR_PBR_LIGHTING, &PBR_Lighting);
 	makePS(IDR_CLAMP, &ClampShader);
 	makePS(IDR_DYNAMICSKY, &DynamicSky);
-	makePS(IDR_SKINPBR, &SkinPBR);
+	//makePS(IDR_SKINPBR, &SkinPBR); // Unused: shader never referenced in any render callback
+	makePS(IDR_HEIGHTFOG, &HeightFog);
+	makePS(IDR_GODRAYS, &GodRays);
+	makePS(IDR_VELOCITYRECONSTRUCT, &VelocityReconstruct);
 
 	// Utility shaders
 	makePS(IDR_SIMPLEPS, &simplePS);

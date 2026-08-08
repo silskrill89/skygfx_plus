@@ -20,6 +20,9 @@
 #define IDR_SMAAEDGECOMBINEDPS      128
 #define IDR_SMAAEDGEMOTIONDEPTHPS   129
 #define IDR_SSAO_VERTEXDEPTH        130
+#define IDR_SSAO_TEMPORAL_PS        131
+#define IDR_SSAO_BILATERALBLUR_PS   132
+#define IDR_SSAO_UPSAMPLE_PS        133
 
 // PostFX (140-159)
 #define IDR_MOTIONBLUR_BURNOUT      140
@@ -84,3 +87,10 @@
 #define IDR_NORMMAPVEHICLEPS        237
 #define IDR_BUILDINGPBRVS           238
 #define IDR_BUILDINGPBRPS           239
+
+// Atmospheric (250-259)
+#define IDR_HEIGHTFOG               250
+#define IDR_GODRAYS                 251
+
+// Velocity
+#define IDR_VELOCITYRECONSTRUCT     252

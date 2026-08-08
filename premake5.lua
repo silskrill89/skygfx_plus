@@ -19,6 +19,8 @@ workspace "skygfx"
 	files { "src/render/*.*" }
 	files { "src/rw/*.*" }
 	files { "E:/SDKs/imgui-master/*.cpp" }
+	files { "E:/SDKs/imgui-master/backends/imgui_impl_dx9.cpp" }
+	files { "E:/SDKs/imgui-master/backends/imgui_impl_win32.cpp" }
    
 	includedirs { "external/injector/include" }
 	includedirs { "external" }

@@ -13,10 +13,12 @@
 //   s0 = current frame (front buffer)
 //   s1 = previous frame
 //   s2 = depth buffer (INTZ or packed)
+//   s3 = velocity buffer (RG=velocity XY, B=magnitude)
 
-sampler2D currentTex : register(s0);
-sampler2D prevTex    : register(s1);
-sampler2D depthTex   : register(s2);
+sampler2D currentTex  : register(s0);
+sampler2D prevTex     : register(s1);
+sampler2D depthTex    : register(s2);
+sampler2D velocityTex : register(s3);
 
 uniform float4 edgeParams : register(c0); // x=lumaThresh, y=motionThresh, z=motionScale, w=cameraMovement
 uniform float4 screenSize : register(c1);
@@ -62,23 +64,31 @@ float4 main(PS_INPUT IN) : COLOR
     // Camera movement increases threshold to reduce jitter
     float dynamicMotionThresh = edgeParams.y + (edgeParams.w * 0.5f); // base + camera movement
     
+    // Signal 1: Luma diff (scene changes — explosions, spawning, lighting shifts)
     float3 current = tex2D(currentTex, texcoord).rgb;
     float3 prev = tex2D(prevTex, texcoord).rgb;
-    float motion = abs(Luma(current) - Luma(prev)) * edgeParams.z;
+    float lumaMotion = abs(Luma(current) - Luma(prev)) * edgeParams.z;
     
-    // Check neighbors for motion gradient
+    // Signal 2: Velocity buffer (actual per-pixel motion vectors from depth reconstruction)
+    float velocityMag = tex2D(velocityTex, texcoord).b;
+    float velocityMotion = velocityMag * edgeParams.z;
+    
+    // Combine: max of both signals catches all motion sources
+    float combinedMotion = max(lumaMotion, velocityMotion);
+    
+    // Check neighbors for luma gradient (spatial enhancement)
     float3 prevN = tex2D(prevTex, texcoord + float2(0, -pixel.y)).rgb;
     float3 prevS = tex2D(prevTex, texcoord + float2(0, pixel.y)).rgb;
     float3 prevE = tex2D(prevTex, texcoord + float2(pixel.x, 0)).rgb;
     float3 prevW = tex2D(prevTex, texcoord + float2(-pixel.x, 0)).rgb;
     
-    float maxMotion = max(motion, max(
+    float maxSpatialMotion = max(combinedMotion, max(
         max(abs(Luma(current) - Luma(prevN)), abs(Luma(current) - Luma(prevS))),
         max(abs(Luma(current) - Luma(prevE)), abs(Luma(current) - Luma(prevW)))
     )) * edgeParams.z;
     
     // Apply dynamic threshold based on camera movement
-    float motionEdge = saturate(maxMotion / max(0.001f, dynamicMotionThresh));
+    float motionEdge = saturate(maxSpatialMotion / max(0.001f, dynamicMotionThresh));
     
     // ===== Depth Sampling (A) =====
     float depth = tex2D(depthTex, texcoord).r;

@@ -290,6 +290,13 @@ struct Config {
 	float ssaoKernelSize;
 	int ssaoSampleCount;
 
+	// SSAO overhaul (quarter-res temporal)
+	RwBool ssaoTemporalEnable;     // default 1
+	float  ssaoTemporalBlend;      // default 0.1 (90% history)
+	int    ssaoBlurPasses;         // default 2
+	float  ssaoBlurRadius;         // default 3.0
+	float  ssaoDepthThreshold;     // default 0.01
+
 	// SMAA
 	RwBool smaaEnable;
 	int smaaPreset; // 0=LOW, 1=MEDIUM, 2=HIGH, 3=ULTRA
@@ -484,6 +491,28 @@ struct Config {
 	RwBool radiosityEnable;		// 0=disable radiosity postfx
 	RwBool grainEnable;			// 0=disable film grain
 	int pipelineOverride;		// -1=use normal pipeline, 0-4=force specific pipeline
+
+	// Atmospheric: Height Fog (Crytek exponential)
+	RwBool heightFogEnable;		// 0=disable height fog
+	float heightFogDensity;		// fog density (default 0.002)
+	float heightFogHeightFalloff;	// height falloff factor (default 0.8)
+	float heightFogStartHeight;	// fog start height in world units (default 0.0)
+	float heightFogR, heightFogG, heightFogB; // fog color (from timecycle)
+	float heightFogTimecycleScale;	// timecycle fog influence (0-5, default 1.0)
+
+	// Atmospheric: God Rays (screen-space radial blur)
+	RwBool godRaysEnable;		// 0=disable god rays
+	float godRaysExposure;		// brightness per sample (default 0.0034)
+	float godRaysDecay;		// falloff per sample (default 1.0)
+	float godRaysDensity;		// ray density (default 0.84)
+	float godRaysWeight;		// ray weight (default 1.0)
+	int godRaysNumSamples;		// number of samples (default 20)
+
+	// Velocity Buffer (per-pixel motion vectors via depth reconstruction)
+	RwBool velocityBufferEnable;		// 0=disable velocity buffer
+
+	// Forward+ Tiled Lighting (O3DE Atom-inspired 16×16 screen tiles)
+	RwBool forwardPlusEnable;		// 0=disable forward+ lighting
 };
 extern int numConfigs;
 extern int currentConfig;
@@ -495,6 +524,7 @@ void resetValues(void);
 void refreshIni(void);
 void refreshMenu(void);
 void reloadAllInis(void);
+void saveConfig(void);
 void installMenu(void);
 void setConfig(void);
 
@@ -651,6 +681,17 @@ struct CPostEffects
 	static void UpdateFrontBuffer(void);
 };
 
+// D3DPOOL_DEFAULT resource cleanup (call on DLL_PROCESS_DETACH and device lost)
+void ReleaseDefaultPoolResources(void);
+void ReleaseSSAOOverhaulResources(void);
+// SMAA resource cleanup (called internally by ReleaseDefaultPoolResources)
+void ReleaseSMAAStaticResources(void);
+
+// Forward+ tiled lighting (O3DE Atom-inspired)
+void ForwardPlus_CullAndUpload(void);
+void ForwardPlus_ReleaseResources(void);
+void ForwardPlus_SetConstants(void);
+
 char *getpath(char *path);
 
 
@@ -755,6 +796,9 @@ extern void *SMAA_BlendNeighbor;
 extern void *SMAA_Temporal;
 extern void *SSAO;
 extern void *SSAO_VertexDepth;
+extern void *SSAO_Temporal;
+extern void *SSAO_BilateralBlur;
+extern void *SSAO_Upsample;
 extern void *MotionBlur_Burnout;
 extern void *ColorFilter_CrossMix;
 extern void *VehiclePaint_GTAIV;
@@ -769,6 +813,9 @@ extern void *ClampShader;
 extern void *DynamicSky;
 extern void *SkinPBR;
 extern void *GTAIV_PS;
+extern void *HeightFog;
+extern void *GodRays;
+extern void *VelocityReconstruct;
 
 // Vehicle legacy
 extern void *vehiclePipeVS;

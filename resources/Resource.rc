@@ -23,6 +23,9 @@ IDR_SMAATEMPPS          RCDATA "cso/SMAA_Temporal.cso"
 IDR_SMAAEDGECOMBINEDPS  RCDATA "cso/SMAA_EdgeCombined.cso"
 IDR_SMAAEDGEMOTIONDEPTHPS RCDATA "cso/SMAA_EdgeMotionDepth.cso"
 IDR_SSAO_VERTEXDEPTH    RCDATA "cso/SSAO_VertexDepth.cso"
+IDR_SSAO_TEMPORAL_PS        RCDATA "cso/SSAO_Temporal.cso"
+IDR_SSAO_BILATERALBLUR_PS   RCDATA "cso/SSAO_BilateralBlur.cso"
+IDR_SSAO_UPSAMPLE_PS        RCDATA "cso/SSAO_Upsample.cso"
 
 // PostFX
 IDR_MOTIONBLUR_BURNOUT  RCDATA "cso/MotionBlur_Burnout.cso"
@@ -81,3 +84,10 @@ IDR_NORMMAPBUILDINGPS   RCDATA "cso/normMapBuildingPS.cso"
 IDR_NORMMAPVEHICLEPS    RCDATA "cso/normMapVehiclePS.cso"
 IDR_BUILDINGPBRVS       RCDATA "cso/buildingPBRVS.cso"
 IDR_BUILDINGPBRPS       RCDATA "cso/BuildingPBRPS.cso"
+
+// Atmospheric
+IDR_HEIGHTFOG            RCDATA "cso/HeightFog.cso"
+IDR_GODRAYS              RCDATA "cso/GodRays.cso"
+
+// Velocity
+IDR_VELOCITYRECONSTRUCT  RCDATA "cso/VelocityReconstruct.cso"

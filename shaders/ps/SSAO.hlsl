@@ -53,8 +53,26 @@ float4 main(PS_INPUT IN) : COLOR
     float3 normal = GetNormal(IN.texCoord);
     float normalLen = length(normal);
     if(normalLen < 0.5){
-        // Normal buffer not available or sky, fall back to depth-only
-        normal = float3(0, 0, 1);
+        // Normal buffer not available — decode D3D9 NULL texture (0,0,0,0) gives (-1,-1,-1)
+        // or genuinely small normal. Reconstruct from depth as fallback.
+        float2 texel = screenSize.zw;
+        float dc = centerDepth;
+        float dl = tex2D(depthTexture, IN.texCoord - float2(texel.x, 0)).r;
+        float dr = tex2D(depthTexture, IN.texCoord + float2(texel.x, 0)).r;
+        float du = tex2D(depthTexture, IN.texCoord - float2(0, texel.y)).r;
+        float dd = tex2D(depthTexture, IN.texCoord + float2(0, texel.y)).r;
+        float3 pc = GetViewPos(IN.texCoord, dc);
+        float3 pl = GetViewPos(IN.texCoord - float2(texel.x, 0), dl);
+        float3 pr = GetViewPos(IN.texCoord + float2(texel.x, 0), dr);
+        float3 pu = GetViewPos(IN.texCoord - float2(0, texel.y), du);
+        float3 pd = GetViewPos(IN.texCoord + float2(0, texel.y), dd);
+        float3 dx1 = pr - pc;
+        float3 dx2 = pc - pl;
+        float3 dy1 = pd - pc;
+        float3 dy2 = pc - pu;
+        float3 dx = (abs(dx1.z) < abs(dx2.z)) ? dx1 : dx2;
+        float3 dy = (abs(dy1.z) < abs(dy2.z)) ? dy1 : dy2;
+        normal = normalize(cross(dx, dy) + 1e-7);
     }
 
     float2 noiseScale = ssaoParams.z * screenSize.xy;
@@ -75,7 +93,7 @@ float4 main(PS_INPUT IN) : COLOR
             abs(rand.z) * 2.0 - 0.5  // bias towards hemisphere
         );
         sample = normalize(sample);
-        sample *= rand.x * radius;
+        sample *= abs(rand.x) * radius;
         kernel[i] = mul(sample, TBN);  // orient by surface normal
         rand = tex2D(randomTexture, float2(i * 0.1, 0.0)).rgb * 2.0 - 1.0;
     }
@@ -97,7 +115,7 @@ float4 main(PS_INPUT IN) : COLOR
 
             // Range check and angle-aware occlusion
             float diff = length(sampleViewPos - centerPos);
-            float rangeCheck = smoothstep(0.0, radius, diff);
+            float rangeCheck = smoothstep(radius, 0.0, diff);
             float nDotS = max(dot(normal, normalize(samplePos - centerPos)), 0.0);
             occlusion += rangeCheck * step(sampleViewPos.z, centerPos.z) * nDotS;
         }

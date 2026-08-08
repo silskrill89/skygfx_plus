@@ -39,6 +39,12 @@ float3 viewUp       : register(c26); // view matrix row 1
 float3 viewFwd      : register(c27); // view matrix row 2
 float4 skyParams    : register(c28); // xyz=skyTop color (0-1), w=skyReflect strength
 
+// Forward+ clustered lights
+sampler2D clusterTex : register(s5);   // 128x128 RGBA8 tile light index texture
+float4 clusterParams : register(c45);  // (gridOffsetX, gridOffsetZ, tileSize, lightCount)
+float4 clusterLightPos[8] : register(c29);  // (pos.x, pos.y, pos.z, radius) per light
+float4 clusterLightCol[8] : register(c37);  // (col.r*intensity, col.g*intensity, col.b*intensity, 0) per light
+
 float whiteNoise(float2 p){
     return frac(sin(dot(p, float2(12.9898, 78.233))) * 43758.5453);
 }
@@ -206,6 +212,52 @@ float4 main(PS_INPUT IN) : COLOR
             float Vis_cc_l = V_SmithCorrelated(NdotV, NdotL, 0.05);
             float3 F_cc_l = F_SchlickLH(LdotH, float3(0.04, 0.04, 0.04));
             specTotal += D_cc_l * F_cc_l * Vis_cc_l * NdotL * lightCol[i].rgb * 0.6;
+        }
+    }
+
+    // ---- Clustered Point Lights (Forward+) ----
+    if(clusterParams.w > 0.0) {  // lightCount > 0
+        float2 tileUV = (IN.WorldPos.xz - clusterParams.xy) / clusterParams.z;
+        tileUV = clamp(tileUV, 0.0, 1.0);
+        float4 clusterSample = tex2D(clusterTex, tileUV);
+        
+        int indices[4];
+        indices[0] = (int)(clusterSample.r * 255.0 + 0.5);
+        indices[1] = (int)(clusterSample.g * 255.0 + 0.5);
+        indices[2] = (int)(clusterSample.b * 255.0 + 0.5);
+        indices[3] = (int)(clusterSample.a * 255.0 + 0.5);
+        
+        [unroll] for(int ci = 0; ci < 4; ci++) {
+            if(indices[ci] <= 0) continue;
+            int li = indices[ci] - 1;  // 0-based index (0 in texture = no light)
+            if(li < 0 || li >= 8) continue;
+            
+            float4 clPos = clusterLightPos[li];
+            float4 clCol = clusterLightCol[li];
+            float3 ToLight = clPos.xyz - IN.WorldPos.xyz;
+            float dist = length(ToLight);
+            float radius = clPos.w;
+            
+            if(dist < radius && dist > 1e-6) {
+                float3 Lc = ToLight / dist;
+                float atten = saturate(1.0 - dist / radius);
+                atten *= atten;  // quadratic falloff
+                float NdotLc = max(dot(N, Lc), 0.0);
+                if(NdotLc > 0.0) {
+                    float3 Hc = normalize(V + Lc);
+                    float NdotHc = max(dot(N, Hc), 0.0);
+                    float LdotHc = max(dot(Lc, Hc), 0.0);
+                    float Dc = D_GGX(NdotHc, 1.0 - glossiness);
+                    float Visc = V_SmithCorrelated(NdotV, NdotLc, 1.0 - glossiness);
+                    float3 Fc = F_SchlickLH(LdotHc, F0);
+                    specTotal += Dc * Fc * Visc * NdotLc * clCol.rgb * atten;
+                    // Clearcoat per-cluster-light
+                    float Dc_cc = D_GGX(NdotHc, 0.05);
+                    float Visc_cc = V_SmithCorrelated(NdotV, NdotLc, 0.05);
+                    float3 Fc_cc = F_SchlickLH(LdotHc, float3(0.04, 0.04, 0.04));
+                    specTotal += Dc_cc * Fc_cc * Visc_cc * NdotLc * clCol.rgb * atten * 0.6;
+                }
+            }
         }
     }
 
@@ -409,6 +461,52 @@ float4 main_building(PS_INPUT_BUILDING IN) : COLOR
         }
     }
 
+    // ---- Clustered Point Lights (Forward+) ----
+    float3 clusterDiffuse = float3(0, 0, 0);
+    if(clusterParams.w > 0.0) {
+        float2 tileUV = (IN.WorldPos.xz - clusterParams.xy) / clusterParams.z;
+        tileUV = clamp(tileUV, 0.0, 1.0);
+        float4 clusterSample = tex2D(clusterTex, tileUV);
+        
+        int indices[4];
+        indices[0] = (int)(clusterSample.r * 255.0 + 0.5);
+        indices[1] = (int)(clusterSample.g * 255.0 + 0.5);
+        indices[2] = (int)(clusterSample.b * 255.0 + 0.5);
+        indices[3] = (int)(clusterSample.a * 255.0 + 0.5);
+        
+        [unroll] for(int ci = 0; ci < 4; ci++) {
+            if(indices[ci] <= 0) continue;
+            int li = indices[ci] - 1;
+            if(li < 0 || li >= 8) continue;
+            
+            float4 clPos = clusterLightPos[li];
+            float4 clCol = clusterLightCol[li];
+            float3 ToLight = clPos.xyz - IN.WorldPos.xyz;
+            float dist = length(ToLight);
+            float radius = clPos.w;
+            
+            if(dist < radius && dist > 1e-6) {
+                float3 Lc = ToLight / dist;
+                float atten = saturate(1.0 - dist / radius);
+                atten *= atten;
+                float NdotLc = max(dot(N, Lc), 0.0);
+                if(NdotLc > 0.0) {
+                    float3 Hc = normalize(V + Lc);
+                    float NdotHc = max(dot(N, Hc), 0.0);
+                    float LdotHc = max(dot(Lc, Hc), 0.0);
+                    float Dc = D_GGX(NdotHc, roughness);
+                    float Visc = V_SmithCorrelated(NdotV, NdotLc, roughness);
+                    float3 Fc = F_Schlick(LdotHc, F0);
+                    specTotal += Dc * Fc * Visc * NdotLc * clCol.rgb * atten;
+                    // Diffuse from cluster lights (Burley)
+                    float VdotHc = max(dot(V, Hc), 0.0);
+                    float diffc = BurleyDiffuse(NdotLc, NdotV, VdotHc, roughness);
+                    clusterDiffuse += baseColor * diffc * clCol.rgb * atten * kD / 3.14159;
+                }
+            }
+        }
+    }
+
     // IBL (ambient) — fallback to flat ambient when iblTex not bound
     float2 iblUV = N.xy * 0.5 + 0.5;
     float3 iblSample = tex2D(iblTex, iblUV).rgb;
@@ -422,6 +520,7 @@ float4 main_building(PS_INPUT_BUILDING IN) : COLOR
     float3 color = baseColor;
     color += specTotal;
     color += ibl;
+    color += clusterDiffuse;
 
     // Output linear HDR — PostFX TonemapPass handles tonemapping uniformly
     return float4(max(color, 0.0), diff.a);

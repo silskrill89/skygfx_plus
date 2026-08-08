@@ -153,6 +153,7 @@
     <ClCompile Include="..\src\rw\defaultFuncs.cpp" />
     <ClCompile Include="..\src\render\envmap.cpp" />
     <ClCompile Include="..\src\rw\extendedplg.cpp" />
+    <ClCompile Include="..\src\render\forwardplus.cpp" />
     <ClCompile Include="..\src\rw\gta.cpp" />
     <ClCompile Include="..\src\render\iv_mode.cpp" />
     <ClCompile Include="..\src\core\main.cpp" />
@@ -179,7 +180,13 @@
     <ClCompile Include="..\src\extras\wheels.cpp" />
     <ClCompile Include="..\src\extras\wheels_extender.cpp" />
     <ClCompile Include="..\src\render\xbox_mode.cpp" />
-    <!-- <ClCompile Include="..\src\core\debugmenu_ui.cpp" /> -->
+    <ClCompile Include="..\src\core\debugmenu_ui.cpp" />
+    <ClCompile Include="E:\SDKs\imgui-master\imgui.cpp" />
+    <ClCompile Include="E:\SDKs\imgui-master\imgui_draw.cpp" />
+    <ClCompile Include="E:\SDKs\imgui-master\imgui_tables.cpp" />
+    <ClCompile Include="E:\SDKs\imgui-master\imgui_widgets.cpp" />
+    <ClCompile Include="E:\SDKs\imgui-master\backends\imgui_impl_dx9.cpp" />
+    <ClCompile Include="E:\SDKs\imgui-master\backends\imgui_impl_win32.cpp" />
     <!-- <ClCompile Include="..\src\rw\normalmap_plugin.cpp" /> -->
     <!-- <ClCompile Include="..\src\render\SMAA.cpp" /> -->
   </ItemGroup>
