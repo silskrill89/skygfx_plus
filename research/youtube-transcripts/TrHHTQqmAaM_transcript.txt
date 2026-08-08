@@ -1,0 +1,1643 @@
+# Transcript: TrHHTQqmAaM
+# Fetched: 2026-08-07T06:23:38.076892
+# Entries: 975
+# Duration: 3107s
+
+[00:17] Tala moana, exiles.
+[00:19] My name is Alexander Sannikov.
+[00:21] I am a senior graphics
+programmer of Grinding Gear Games.
+[00:25] Some of you might remember me
+from the previous ExileCon
+[00:28] when I did a presentation of the graphics
+techniques that we used
+[00:30] in Path of Exile back then.
+[00:33] Boy, do I have more for you.
+[00:36] And I also want to go,
+[00:37] this time I want to go deeper in explaining
+how these techniques actually work.
+[00:41] So it's probably going
+to get quite intense.
+[00:45] I guess brace yourselves. 
+[00:47] There's a lot of stuff.
+[00:49] The first technique.
+[00:51] Let's just get straight into it,
+right onto it.
+[00:53] The first technique I want to talk to
+you about is Flowing Materials.
+[00:57] It's a very basic technique
+[01:00] that is used everywhere in our game,
+and it's a pretty typical effect.
+[01:05] So how do we do this? Let's break it down.
+[01:08] This is
+[01:09] an effect that is driven by velocity maps.
+[01:12] So the goal is to have a texture
+that flows according to some flow
+[01:16] that we calculate from somewhere
+provided as a texture, or we calculate it.
+[01:20] The way you would naively try to
+do this is what if you
+[01:23] try to apply a displacement to a texture
+and then just keeps increasing
+[01:27] that displacement over time?
+[01:28] Well this is what it creates.
+[01:29] It creates this nasty warped texture.
+[01:31] You just cannot keep
+distorting the texture indefinitely.
+[01:34] So how do we solve this problem?
+[01:36] Well, the way this problem is solved
+is usually you have layers.
+[01:40] So you see this layer appears, shifts
+a little bit and then disappears.
+[01:44] It fades in, shifts
+a little bit, fades out.
+[01:46] And then if we apply two of these layers
+that shift out of sync with each other,
+[01:52] you get a perfectly smooth transition
+from one
+[01:55] to another, so you don't see
+how they actually fade. But,
+[02:00] we went further.
+[02:01] This technique has a downside
+that if you stare carefully enough,
+[02:05] you can see
+the fade in between these two layers
+[02:08] because one entire layer fades out
+and then the other layer fades in.
+[02:12] You can see some sort of a transition.
+[02:14] The way you can solve this is
+you can also apply some sort of a noise
+[02:18] to each of these layers
+to create this more random looking,
+[02:21] more organic looking transition
+so that each layer flows.
+[02:25] But instead of fading in and out entirely,
+[02:28] it has some sort of noise applied to it.
+[02:31] And if we apply two of these layers
+together, then it looks much smoother.
+[02:35] It looks like much smoother transition.
+[02:37] So we use this for lava, for water,
+for any sort of liquid, basically.
+[02:44] By the way, for this specific technique.
+[02:46] I prepared a Shadertoy demonstration
+because I very frequently
+[02:51] I'm asked this question,
+how do I start programming graphics?
+[02:55] Like what do I do
+if I want to start graphics programming?
+[02:57] Well, I always answer that
+[02:59] in my opinion, the best thing to learn
+graphics is just do graphics.
+[03:04] Try programming shaders
+and a great way to start programming
+[03:07] shaders is get a shader that works.
+[03:09] For example,
+this shader that I provide here
+[03:11] that implements this effect
+and just start hacking at it.
+[03:14] You can modify,
+you can see its effects on Shadertoy,
+[03:16] here is a link, and just experiment
+with it and learn this way.
+[03:21] Next technique that I call
+Subsurface Raymarching.
+[03:26] Here's an example of what it allows to do.
+[03:28] You're going to see a lot of Ranger
+because we
+[03:31] typically use the model for all our tests.
+[03:34] So what is Raymarching?
+[03:36] Raymarching is a
+[03:37] process in computer graphics of rendering
+any sort of volumetric material.
+[03:41] So when you have fog, when you have water,
+when you have some sort of material
+[03:45] that transmits light
+and doesn't block it entirely.
+[03:49] Challenges with Raymarching is that it
+usually involves some sort of a loop.
+[03:53] When you raymarch through a volume,
+you need to apply light.
+[03:56] You need to calculate lighting
+for every step of your ray.
+[03:59] And that's typically very expensive.
+[04:01] But you can see that
+a lot of games still do this
+[04:03] because if you have to render a volume,
+there is nothing else you can do.
+[04:06] So you do this anyway.
+[04:07] But there is a better way.
+[04:09] What if you raymarch in a texture space
+instead, then we don't need to store
+[04:13] actually a 3D volume data.
+[04:14] We can just use a single 2D texture
+and derive multiple layers from it.
+[04:19] So here's an illustration of how
+this can work.
+[04:21] Blue is a view ray.
+[04:24] Orange is a surface that we are rendering,
+and there is a bunch of parallel planes
+[04:28] that are subsurface planes,
+so we can calculate
+[04:31] texture coordinates
+for these subsurface planes.
+[04:33] And if we align them together,
+they look like a volume.
+[04:35] So here's an example
+of what it looks like.
+[04:37] For example, you see multiple
+volumes of water, sort of debris floating
+[04:42] and you see the nice parallax
+between them.
+[04:46] Another example,
+[04:47] you can also do a bunch of effects
+that look, they all look like
+[04:51] there is multiple surfaces,
+but they are all actually one surface.
+[04:54] And the look of multiple surfaces
+is created in the shader by introducing
+[04:58] multiple layers
+that are blended in the shader.
+[05:01] Some more examples.
+[05:03] This is a life orb
+that we planned to use for the UI
+[05:06] but unfortunately didn’t make it 
+in ExileCon.
+[05:09] But you can go further.
+[05:10] The thing that you can also do is
+you can use data
+[05:14] that is already present on your screen
+to calculate colour of each volume
+[05:18] and what it allows is it allows you to
+calculate lighting of a surface only once,
+[05:24] and then reuse that information
+multiple times to render multiple layers.
+[05:28] This is how we can render stuff like fur.
+[05:31] And actually this technique I noticed,
+is used in quite a lot of games recently,
+[05:35] but I don't think it has like
+enough academic weight
+[05:38] so that people publish papers about it.
+[05:40] Different companies keep using
+[05:42] similar techniques, they keep inventing
+similar clever techniques,
+[05:46] but nobody really talks about them
+because, well I don't know why.
+[05:49] I just think these ideas are worth sharing
+and they're worth knowing about.
+[05:54] Another example is
+[05:56] some bear with an isotropic
+[06:00] lighting model
+and some more experiments with a Ranger.
+[06:05] The way these techniques function
+[06:06] is they rely heavily on this
+transformation called TBN.
+[06:10] TBN is a basis that allows us to translate
+[06:14] small steps in world space
+into small steps in UV space.
+[06:19] So this way, when we are raymarching
+a world ray, we can also calculate
+[06:22] small offsets in a texture.
+[06:26] It's used in lots of other techniques
+such as parallax snapping, etc., etc..
+[06:30] It's not like a new invention,
+but if you are interested in computer
+[06:33] graphics, I really advise you to
+familiarise yourself with this technique
+[06:37] just because of the huge range of effects
+you can implement with it.
+[06:44] Next technique I want to discuss, by
+the way, uses TBN rays as well,
+[06:47] is called Subsurface Shadows.
+[06:49] This is an example of a technique
+that allows to render
+[06:53] translucent sort of shadows.
+[06:54] So like, imagine,
+[06:56] for example, if there is a
+[06:57] shadow in smoke,
+you don't see a harsh shadow.
+[07:01] It gets blurred along the light direction.
+[07:05] And typically,
+in order to simulate these shadows,
+[07:08] you again need to employ volume rendering,
+which can be quite expensive.
+[07:12] But there is a much cheaper way.
+[07:14] And the way this can be done
+and the reason why it can be implemented
+[07:18] this way is because typical shadow
+map implementation involves
+[07:22] an operation called Percentage
+Closer Filtering, which is a loop
+[07:27] that samples texture in a small radius
+to create this blurry look.
+[07:32] But if there is already a loop, the cost
+[07:36] the expensive part of a shadow
+mapping operation is already paid.
+[07:40] So we have come up,
+[07:41] we have come up with this idea of
+what if we use the same loop to also raymarch
+[07:45] along the ray and also blur the shadow
+not only in a radius but in depth as well.
+[07:51] And this is basically how it works.
+[07:52] You can create for free
+[07:54] because the cost is already paid of
+PCF, the cost is already paid.
+[07:58] We can just spread our samples
+instead of spreading them in radius,
+[08:02] just spread them along a ray.
+[08:04] You get this translucent effect for free.
+[08:08] Next technique
+[08:09] that we have employed
+we called Contact Parallax.
+[08:13] This is an example of what it looks like.
+[08:15] A very typical problem
+that comes with artists
+[08:19] excessively over using parallax
+because artists love
+[08:22] parallax, obviously, is that
+[08:26] in order for parallax surfaces
+to intersect with each other,
+[08:29] you need to either write fragment
+depth for each
+[08:32] fragment of a parallax surface or
+[08:36] or do something similar.
+[08:37] But it's very expensive
+[08:39] because if a fragment writes depth,
+the shader becomes very expensive.
+[08:43] However, there is a much better way
+that avoids writing depth.
+[08:47] Oh, by the way, another significant
+drawback of writing depth.
+[08:52] It also creates nasty aliasing
+because when a parallax
+[08:55] mapped surface intersects
+with another surface, it creates
+[08:58] nasty aliasing
+that is very hard to get rid of.
+[09:01] But there is a much better way.
+[09:03] What if you just
+get rid of the depth test?
+[09:04] And what if you just fade surfaces?
+[09:06] So here's an example of a surface.
+[09:10] Here's an example of a surface.
+[09:12] Yellow is a surface and it intersects
+with this ground, black ground here.
+[09:17] But instead of applying depth
+test that creates this
+[09:20] harsh intersection line
+between parallax surface and the ground,
+[09:23] what if you just apply a smooth transition
+from one to the other and create
+[09:26] this much nicer effect,
+basically again for free?
+[09:29] So you see, this allows us to blend
+[09:33] parallax surface into ground
+that creates a much nicer transition.
+[09:36] Again, this is a technique
+that is kind of at some point well,
+[09:40] in some sense it's obvious,
+[09:42] but nobody really talks about it because
+I guess people consider it too obvious.
+[09:46] I'm not sure.
+[09:47] I know that a lot of other games
+do do this same thing.
+[09:50] Like I notice Diablo 4
+does this, a bunch of other games
+[09:52] do the same thing,
+but I've never seen a publication on it.
+[09:55] So I think it's just worth discussing so
+that people get inspired by these ideas.
+[10:01] Next technique
+[10:03] was developed to solve
+a very prolific problem.
+[10:07] in Path of Exile specifically and honestly
+in many other games.
+[10:11] This is rendering decals.
+[10:13] What is a decal?
+[10:14] Decal is basically a flat surface
+that you want to make it look like
+[10:18] like it's sitting on the ground.
+[10:19] But a very typical problem that happens
+when you try to do this is your surface
+[10:23] intersects the ground ever so slightly
+and you get these nasty intersection lines
+[10:29] when your surface, your decal intersects
+[10:31] the ground
+and there is sort of workarounds
+[10:36] that people employ
+to mitigate this problem.
+[10:39] For example,
+lifting decals slightly above ground.
+[10:42] There is another technique
+called projective decals
+[10:45] that has a lot of drawbacks.
+[10:47] It's also very expensive. So
+[10:51] while thinking about like,
+what do we do about this problem,
+[10:54] you see, like this nasty line.
+[10:56] The reason why this line appears
+is because of depth test.
+[10:59] Again,
+because when two surfaces intersect,
+[11:02] only one of them wins,
+the one that is closer to you. So
+[11:06] either one surface wins the depth test,
+either
+[11:09] the ground or the decal,
+and you always can see only one of them.
+[11:12] So we asked ourselves, what if you just
+get rid of the depth test?
+[11:18] And the better way to do
+this is if you just disable
+[11:21] depth test completely
+and replace it again with smooth fade.
+[11:24] This allows us to create
+a much nicer transition.
+[11:28] But however, in order
+to mitigate the problem of surface look,
+[11:32] surfaces having wrong parallax
+when they appear under the surface.
+[11:37] We can also correct their UVs to a UV
+[11:41] that they would have had if they were
+sitting perfectly on the ground.
+[11:45] This is relatively easy to do.
+[11:46] It's techniques again
+similar to Parallax Occlusion Mapping,
+[11:49] but this combination of correcting UVs
+[11:52] to a UVs of a surface
+sitting perfect, to a surface
+[11:56] sitting perfectly on the ground
+as well as disabling
+[11:58] depth test allows us to create
+basically perfect decals
+[12:02] that have none of the drawbacks
+of the typical decals.
+[12:05] And they're very easy
+for artists to set up. So here is how this
+[12:09] decal intersects the ground.
+[12:11] You see, it never sharply appears,
+it never sharply disappears.
+[12:14] It never creates harsh transitions.
+[12:17] It's a very smooth,
+very easy to use for artists.
+[12:20] And here is a side by side comparison,
+what it looks like
+[12:23] on a player scale with
+and without this technique.
+[12:27] And next technique
+that I think is worth discussing.
+[12:31] Again, it's not exactly a novel technique.
+[12:34] It's used actually pretty widely
+[12:37] in compressing videos.
+[12:41] Very difficult thing
+[12:42] that artists like to do is they build flip
+books of effects.
+[12:45] So basically a flip book
+is a bunch of frames, usually 16
+[12:49] or nine frames of a certain animation
+that they flick through.
+[12:53] And if you just flick
+through frames of an animation,
+[12:56] you see the transition
+from one to another.
+[12:58] It looks like shifting like interpolating
+sharply between frames.
+[13:03] But the way to mitigate
+this is called Motion Vectors.
+[13:05] You can distort source frame towards
+the destination frame and you can distort
+[13:10] the destination frame towards the source
+frame as they blend from one to another.
+[13:14] And this way you can create
+a much smoother transition with very low
+[13:17] frame rates.
+[13:19] So this flipbook, for example,
+has just 16 frames
+[13:23] during the entire animation.
+[13:25] But if you apply motion vectors to this,
+it can look much smoother,
+[13:29] like it's the same amount of memory used
+but looks like a much smoother transition.
+[13:33] The big question is always
+how do you calculate Motion Vectors?
+[13:35] And this question has no simple answer.
+[13:38] There is no algorithm
+that gives you perfect Motion Vectors.
+[13:41] They are even defined
+in the kind of sort of ambiguous way.
+[13:45] So every game company
+that uses this technique
+[13:48] has to basically reinvent
+their Motion Vectors in some sense.
+[13:52] And I want to tell you how we do this.
+[13:55] Another example of just two frames
+blending.
+[13:58] So this is source
+frame, destination frame,
+[14:00] you see how they smoothly blend
+into each other because of Motion Vectors.
+[14:03] The way we do this is we build this
+hierarchical representation of Motion Vectors.
+[14:08] First, define Motion Vectors
+in a very low resolution way.
+[14:12] So just a very coarse picture of what
+our Motion Vectors would look like on the
+[14:16] on the left. Then on the right
+you see more,
+[14:19] we refined that representation
+of Motion Vectors and we can adaptively
+[14:23] find perfect Motion Vectors by stacking
+these levels of details of Motion Vectors.
+[14:28] Here's an example.
+[14:29] This is a source frame of some flipbook.
+[14:32] This is the destination
+frame of a flipbook.
+[14:34] We need to find motion vectors
+that translate this image into this image.
+[14:37] Basically, we need to distort
+one image towards the other.
+[14:41] The way we are going to do this is first
+we are going to overlay them.
+[14:44] I am showing the first frame in red here
+and the second frame in green here.
+[14:50] And when you combine red and green,
+you get yellow.
+[14:54] So if we apply perfect Motion Vectors
+[14:56] to this image,
+it should get completely yellow.
+[14:59] So let's try to yellow this image.
+[15:02] First, we are going to apply a very rough,
+I think it's just 4x4 Motion Vectors displacement.
+[15:07] And you see like these frames already
+kind of sort of match,
+[15:10] but in a very crude way.
+[15:11] Then I'm going to keep refining
+[15:13] and adding higher and higher resolution
+Motion Vectors.
+[15:16] And see here
+the iterative process that converges
+[15:19] these images together and finds
+finer and finer refinements.
+[15:23] And this is what it looks like
+when we apply the Motion Vectors
+[15:26] to these two frames.
+[15:27] You see a nice smooth transition
+from one frame to another frame.
+[15:31] So this is a technique that we use
+[15:33] well for all our skills for, for flipbooks,
+for flames, for all that sort of VFX.
+[15:39] Another technique I want to discuss
+[15:41] today is Bent Normals Shadows.
+[15:46] Here's what it looks like.
+[15:48] Bent Normals Shadows on,
+Bent Normals Shadows off.
+[15:52] Here's a comparison
+side by side, on the left,
+[15:54] Bent Normals Shadows off,
+Bent Normals Shadows on.
+[15:57] The problem they’re solving is
+that when we have a texture of a material
+[16:01] that contains in it some big geometry,
+for example, a normal map.
+[16:05] This texture never encodes information
+about shadowing.
+[16:09] So normal maps don't shadow themselves.
+[16:13] Like, put it this way.
+[16:14] So how do we overcome this problem?
+[16:15] How do we make it
+[16:16] so that the micro details in a normal map
+also cast shadows onto each other?
+[16:21] Well, actually, the answer is
+that there is the information needed for
+[16:24] this is already encoded
+into the normal map.
+[16:27] It's encoded in AO.
+[16:29] Ambient Occlusion is a map that encodes
+information about adjacent geometry
+[16:35] to every point, and we can actually
+reuse that information to cast shadows.
+[16:41] Yeah.
+[16:42] What if we use Baked Occlusion for this?
+[16:44] The way it works
+is for every point we have,
+[16:48] we can define a cone
+that is guaranteed to not occlude
+[16:52] any light
+that's coming from within this cone.
+[16:55] The angle of this cone can be derived
+from AO, and the direction of this cone
+[17:00] can be derived from a thing
+called Bent Normals.
+[17:03] So Bent Normals,
+basically for each surface point, defines
+[17:06] the direction
+that the light is most visible from.
+[17:11] So this is the direction that you least
+expect to see a shadow from.
+[17:14] So this is obviously an approximation,
+[17:17] but it's a pretty neat approximation
+because we can use even normals
+[17:21] or LoD (Limit of Detection) of a normal,
+a mipmap of a normal,
+[17:24] for the bent normal direction.
+[17:26] We can use AO for the angle of the cone
+to create self shadowing for
+[17:31] for very cheaply.
+[17:31] It's almost free applying this thing
+to a shadow in a shadow shader.
+[17:36] And this is actually the technique
+that we use for lighting on the Path of Exile UI.
+[17:41] Like actually the UI is completely 2D,
+but all the shadows
+[17:44] that you see from ingame
+light sources are done with bent normals.
+[17:50] Next subject, GPU particles.
+[17:55] GPU particles is,
+[17:57] here's an example what it looks like.
+[17:59] This is one of the very early tests.
+[18:01] Do you recognise the Ranger?
+[18:06] The point of GPU particles
+[18:07] is if you have a finite amount of time,
+for example, one frame,
+[18:12] where would you rather spend this one
+frame worth of calculation,
+[18:15] for example, one millisecond,
+on the CPU or on the GPU?
+[18:18] Well, the answer is it really depends
+on what exactly you’re calculating.
+[18:21] For example, calculating gameplay
+is much more efficient on the CPU.
+[18:25] You're much better off
+spending one millisecond
+[18:28] calculating a gameplay code on the CPU
+rather than the GPU.
+[18:31] But GPU is really good for calculating
+[18:33] very simple,
+very repetitive tasks in huge amounts
+[18:37] and particles is exactly that. So
+[18:41] that's why it's just very natural
+[18:43] to calculate
+particle behavior on the GPU.
+[18:48] And also it comes with very nice benefits
+that particle systems
+[18:52] have access to stuff that is only present
+on the GPU, such as depth buffer.
+[18:55] So you can do
+a bunch of interesting things with it.
+[18:58] We actually developed
+a pretty intense, pretty in depth
+[19:02] GPU particle system that even
+allows some minor physics simulation.
+[19:06] This is simulating some particles
+interacting with the ground.
+[19:11] And we fully integrated
+with our graph editing system.
+[19:14] So our materials are designed
+with these with these graphs
+[19:17] that VFX artists can use
+just visually connect things.
+[19:20] And we just implemented our
+GPU particles into the same pipeline.
+[19:24] Here's
+another example of a GPU particle system
+[19:26] you see now we can allow
+having many more particles, like
+[19:31] two orders of magnitude more particles
+in the same calculation time as before.
+[19:35] Just because we have offloaded
+that calculation from the CPU onto the GPU.
+[19:40] In the same amount of time, your GPU can
+calculate many more particles than your CPU.
+[19:45] Here's another example
+of GPU particles.
+[19:47] And here’s a bunch of
+[19:49] I really like these player skills.
+[19:52] So you see when the meteor strikes,
+when the nova strikes,
+[19:55] there is a whole bunch of particles
+activated by the shockwave.
+[20:00] And another example
+[20:02] and not sure if it was shown yet,
+but this is a player skill
+[20:06] with an ice shield and these ice
+particles, they too reflect, they react
+[20:12] to players moving.
+[20:13] They react to attacks from monsters.
+[20:18] Next technique, rendering water.
+[20:21] Last time we already discussed
+[20:24] some things about rendering water
+related to flow maps.
+[20:27] But in my opinion,
+the hardest part about rendering water
+[20:30] is rendering specifically waves
+that wash up on the shore.
+[20:34] That is just so hard.
+[20:36] If you look up on the internet,
+how to render water or whatever articles
+[20:40] you can find like a million articles
+of how
+[20:42] to render water surface,
+of how to render rivers.
+[20:46] But you will find no articles whatsoever
+[20:49] about how to render beach waves
+because it's so hard.
+[20:53] Like there is simply no accepted solutions
+like here's how you do it,
+[20:57] because it's good and it just works
+because all solutions to render
+[21:01] that types of waves are either bad
+or really complicated.
+[21:05] So today
+I want to tell you the way we do this,
+[21:10] just to give you the idea.
+[21:15] This is the effect
+that I'm talking about.
+[21:17] So basically,
+when waves wash up on the shore,
+[21:20] they dissipate, etc., etc.
+[21:23] So the unfortunate part about this task
+is that there is almost nothing
+[21:28] you can pre calculate,
+like even approaching this task, like
+[21:33] what do we even do?
+[21:35] It's a pretty complicated task
+[21:38] and there is a lot of moving parts.
+[21:40] So one very important
+thing is when you come up,
+[21:44] when you need to solve
+such a complex task as rendering
+[21:47] waves that wash up on the shore,
+it really helps to break it down
+[21:51] into parts and try to make them
+as independent as possible.
+[21:54] So, for example, rendering water surface
+itself should be completely decoupled
+[21:58] from constructing the geometry of
+water surface because these tasks,
+[22:03] these two tasks can be solved
+completely independently
+[22:05] and they should be solved
+[22:06] completely independently,
+it’s just much easier to tackle them this way.
+[22:09] Another thing that I sort of
+[22:12] taken away from doing this
+is that there is going to be
+[22:16] a lot of parameters.
+Like controlling behavior of water,
+[22:19] there's literally hundreds
+[22:21] of numerical parameters, there
+is thousands of functional parameters,
+[22:25] and the only way to deal with them
+is to limit the range of each parameter,
+[22:29] basically to define the correct range
+that each parameter is allowed to have.
+[22:33] So, for example,
+[22:36] distance can be only positive,
+right? 
+[22:37] distance cannot be negative, etc..
+[22:39] Basically just basic physical limitations
+and you re-normalise every parameter
+[22:44] to have this correct range of 0 to 1
+so that you can never have a
+[22:48] temptation to have like, well,
+I would rather set this parameter to 1.3.
+[22:52] No, just define a set range of parameters
+that are safe
+[22:55] that you guarantee your shader
+will always work correctly with.
+[22:58] If your parameters are within this range.
+[23:01] Well, let's break down
+how the shader works.
+[23:04] So first we break water into these zones.
+[23:08] You see these parallel zones,
+and within each zone
+[23:12] there is a layer that carries one wave.
+[23:18] I am here applying
+[23:20] a noise to this wave that shapes it
+in the maximum possible amplitude.
+[23:24] So this noise is just a sine
+wave that goes from -1 to 1.
+[23:27] So the wave cannot be deformed
+any more than this.
+[23:30] And this is very important.
+Let me show you why.
+[23:33] Because if we apply two of these layers,
+[23:37] you need these layers
+to never intersect with each other
+[23:40] because the shader only calculates
+two layers for any given point.
+[23:43] And if we allow the waves
+to deform any more than this,
+[23:46] then they will start overlapping
+and the shader would stop working.
+[23:49] That's why I brought up the allowed range.
+[23:53] So again,
+what happened here is there is one layer.
+[23:56] Then I colour different way,
+then I overlay multiple layers
+[24:00] and you see we are already creating in
+sort of a seamless flank that
+[24:04] where one wave overlaps correctly
+with another wave.
+[24:08] Next thing is we colour it
+in a more natural way.
+[24:10] Then we replace this sine
+wave dummy noise
+[24:14] with just a texture noise
+that looks nicer.
+[24:17] Next step is we apply some sort of
+[24:20] screening
+on top of each one of these layers.
+[24:23] Then we apply distortion
+to make these layers more organic,
+[24:27] and that's
+how we get the final effect, basically.
+[24:30] So just to get through this again,
+this is layers.
+[24:36] Then we overlap these layers,
+then we color them,
+[24:40] then we apply more organic noise,
+more noise,
+[24:44] and this is the final effect
+that you get.
+[24:49] Next technique.
+[24:50] And actually a lot of previous techniques,
+they all often intertwine.
+[24:54] Like you see, most of these techniques
+use, for example, TBN bases
+[24:57] in some sense,
+most of these techniques use fields.
+[25:00] So what is fields? Fields allow creating
+any sort of liquid looking surfaces.
+[25:05] Basically
+when a passage of a surface is in some way
+[25:08] connected to its normal map,
+which is always the case for liquids.
+[25:12] So whenever a liquid dissipates,
+it has like a vertical normal.
+[25:15] When it doesn't dissipate,
+it has like a horizontal line.
+[25:17] So this basically
+allows creating sort of blobs.
+[25:21] The way, fields is not an
+our invention thing.
+[25:23] They are widely used in all
+sorts of shader demos and demoscene.
+[25:27] It's a very popular technique.
+But for some reason,
+[25:33] well,
+it rarely gets into the hands of artists.
+[25:35] Like demosceners
+use this thing all the time,
+[25:38] but for some reason, VFX artists
+don't use it that often.
+[25:41] And I decided like,
+how can we expose it to artists?
+[25:44] How can we give them this tool
+that allows them to create
+[25:48] liquid surfaces? Basically a field is
+simply put, is just a value.
+[25:54] And the vector that says
+how much this value changes.
+[25:57] So basically it's a value
+plus its gradient.
+[26:00] And then you can add
+these fields just by adding a value
+[26:03] and its gradient,
+you can multiply them the same way
+[26:05] how you add a value
+and the gradient etc., etc.
+[26:08] You can do all sorts of operations
+that you usually do with
+[26:11] just the floating point value,
+but you can do them via the field.
+[26:14] And this field carries information
+about a surface opacity
+[26:17] and at the same time about the normal
+associated with the surface.
+[26:21] So it basically allows
+conducting all sorts of surface operations
+[26:25] with preserving correct normals
+[26:28] that react correctly to light,
+that react correctly to rotations.
+[26:32] Here's another example of
+[26:34] fields, which is a Druid skill, Volcano.
+[26:39] That's done with fields.
+[26:40] Again, fields are integrated
+into our graph editor
+[26:44] so that artists can basically utilise
+them.
+[26:47] Here's another example,
+just some test effect with water.
+[26:52] And the last but not least,
+[26:54] probably my proudest achievement
+that I want to discuss.
+[26:59] Global Illumination.
+[27:01] What is Global Illumination?
+[27:02] Well, Global Illumination is the process
+of light bouncing between surfaces.
+[27:07] Here is what it looks like
+if this scene has Global Illumination on.
+[27:11] Here's the same thing with our Global
+Illumination off, you can see that
+[27:15] light gets propagated from really bright
+areas into darker areas.
+[27:20] And the way that this process works
+is each
+[27:24] point of the scene casts
+light onto every other point of the scene,
+[27:28] and every point of the scene receives
+light from every other point of the scene.
+[27:32] And also each point of the scene can block
+[27:36] light between arbitrary other points.
+[27:39] This many to many interaction
+is just notoriously hard to calculate.
+[27:43] Calculating Global Illumination
+is an extremely hard problem.
+[27:46] I would dare to say it's the hardest problem
+in computer graphics and
+[27:50] actually calculating
+Global Illumination is relatively easy.
+[27:52] There is algorithm called
+path tracing, is just the only problem is
+[27:55] that it takes like minutes
+to render every frame.
+[27:58] It's extremely slow.
+[27:59] The hard part is calculating in real time
+like in a game scenario,
+[28:03] and there is a lot of typical ways
+that they solve this in the industry and
+[28:09] unfortunately none of them really fit us
+[28:12] and we had to do better than that.
+[28:15] And our previous solution that we talked
+about on the previous ExileCon was
+[28:20] dare I say the first of its kind
+in the industry.
+[28:23] We implemented it in Path of Exile
+[28:24] and Path of Exile was the first game
+[28:26] that shipped with screen space
+global illumination based on variance.
+[28:30] And it was very novel at the time.
+[28:35] But it had just a few drawbacks
+[28:38] that really kept
+annoying me in my sleep.
+[28:43] I really wanted to solve them.
+[28:44] And these drawbacks come primarily
+from the fact that our screen space
+[28:49] shadows had very important properties
+that our global illumination didn't.
+[28:53] And these properties is that parts
+of our screen space shadow algorithm
+[28:57] that don't require much detail
+[29:01] are calculated in a much lower resolution.
+[29:03] So our shadows are implemented via
+these cascades.
+[29:06] So you see the first cascade here has only
+a low resolution part of its shadow.
+[29:11] Second part, second image
+has only higher resolution of the shadows.
+[29:15] And the last part is a tiny bit
+that requires shadows to be calculated
+[29:19] in the highest resolution.
+[29:20] But it means that each of these
+can be calculated
+[29:23] in vastly different resolutions,
+making it much cheaper to calculate this
+[29:27] in a downscaled resolution,
+rather than if we were trying
+[29:30] to calculate the entirety of the thing
+in the same highest resolution.
+[29:34] So this is, this was very,
+this is a very important property
+[29:38] that our shadow mapping algorithm
+has that actually I still haven't seen
+[29:42] any other game implement this in this way
+with the cascaded shadow maps.
+[29:47] And I really wanted to adapt
+this property to our lighting.
+[29:51] So I wanted our GI, Global Illumination
+to have this property as well.
+[29:57] So the typical way people
+[30:01] implement Global Illumination
+is with Radiance Probes.
+[30:05] Radiance Probes are these,
+[30:08] you can think of them as tiny cameras
+that you put all around your
+[30:12] your level,
+your geometry that take a cube map,
+[30:15] basically
+a photo of what surrounds each point.
+[30:19] And then you use that information
+encoded in these cube
+[30:22] maps, in these light probes to light
+any object, basically,
+[30:25] see if I'm standing here, I'm checking
+what's the nearest camera to me contain.
+[30:30] It contains this cube map.
+[30:31] I'm applying this lighting to myself here.
+[30:33] And this is a
+an approximation of Global Illumination
+[30:36] But the big question to ask here
+is how many of these cameras do I need?
+[30:40] What resolution do I need to use
+for each of these probes?
+[30:44] And you can
+[30:46] you can see that every game development
+studio comes up with their own answer.
+[30:50] Some game development studios use lots
+of tiny probes, other game development
+[30:54] studios use a lot of, use much fewer,
+much higher resolution probes.
+[30:59] And it seems like there is no answer.
+[31:01] But what if we use them all?
+[31:04] What if you create a hierarchy
+when we have both high resolution probes,
+[31:09] but very few of them
+and we use another grid
+[31:12] with much more probes where each probe
+has much lower resolution.
+[31:17] This is what I call
+Radiance Probe Hierarchy.
+[31:20] I was struck with this idea
+and I just needed to implement this.
+[31:23] Implementing with 3-D was very hard,
+[31:26] so I just decided to do a 2D test.
+[31:28] By the way, 2D Global Illumination is
+almost as hard as 3D Global Illumination.
+[31:33] So I just decided to test in 2D.
+[31:36] Those of you subscribed to my
+YouTube channel,
+[31:37] you might have seen this experiment.
+[31:40] Where this is 2D Global Illumination
+[31:42] basically works perfectly, like this idea
+[31:46] worked perfectly on the first
+implementation, which never happens.
+[31:51] And here is a breakdown
+of how it works.
+[31:55] You can see that
+[31:57] there is these cascades, that each cascade
+contains a different number of rays,
+[32:01] which corresponds to different resolution
+of the light probe.
+[32:06] And if I change the cascades,
+they converge to proper lighting.
+[32:11] So this is a final image
+[32:15] and this is how it is constructed,
+constructed from these cascades.
+[32:19] Well, let's see in closer detail
+how these cascades work.
+[32:22] On the left you see a grid of
+[32:25] cascades, a grid of probes
+where each probe casts just four rays.
+[32:29] So see like four rays from this probe,
+four rays from this probe, etc..
+[32:33] Just a grid of probes.
+The right cascade contains
+[32:37] fewer probes,
+but each probe casts more rays.
+[32:41] But the question is how many rays
+do we get if we combine these
+[32:46] these two cascades?
+It gets very messy.
+[32:50] You cannot,
+[32:51] you cannot really read
+[32:52] easily what's happening on the left image,
+just what happens
+[32:55] when they combine the probes.
+[32:56] But if you look at every individual probe,
+we can see that we can actually
+[33:00] construct eight rays per probe,
+these rays are not perfect.
+[33:05] They are slightly bent.
+[33:06] You see, well rays are normally straight
+lines, right.
+[33:10] But these rays are slightly bent.
+[33:12] However, if we make these segments
+shorter, they will
+[33:16] they will start approximating lines
+more and more perfectly so we can actually
+[33:20] this thing converges to perfect rays.
+[33:23] But there is eight rays per probe
+and there are 16 probes.
+[33:26] So the first image contains
+64 segments.
+[33:32] The second one contains 32 segments.
+[33:34] But when we combine them,
+we can create 128 rays total.
+[33:39] Well, this is curious.
+[33:41] This means that
+[33:45] if we increase
+the number of these cascades
+[33:47] so I have just shown three, right.
+[33:49] The number of rays that we cast
+[33:52] by, if you increase
+the number of cascades is 64, 128, 256.
+[33:56] It's power of two.
+[33:57] But the total cost for calculating
+these cascades approaches a constant.
+[34:02] We can calculate a hundred cascades
+at almost the same cost as we calculate
+[34:07] one cascade because each next
+cascade is cheaper than the previous one.
+[34:12] When I first realised this fact,
+my mind was blown
+[34:16] because this is a property that you see in
+no other rendering approach out there.
+[34:21] At least
+I haven't seen anything like this.
+[34:23] This means that the number of rays
+increases exponentially with the number
+[34:29] of cascades that we use and the total cost
+[34:34] of infinite number of cascades is bound.
+[34:37] It's less than the constant.
+[34:39] Like what?
+[34:42] But this is literally what it is.
+[34:44] This is what I learned when I implemented
+the first 2D version of GI.
+[34:48] Rays get exponentially cheaper
+with more cascades.
+[34:53] So the more rays you have,
+the cheaper they get.
+[34:57] But this is literally what it is.
+[34:59] Well, I was quite excited
+when that 2D demo worked.
+[35:02] Obviously, the next question was
+[35:05] how to adapt this to Path of Exile?
+Because Path of Exile is 3D,
+[35:10] and the implementation was,
+my first implementation was 2D.
+[35:14] Well, long story short, we did get there.
+[35:17] We did implement this algorithm in 3D.
+Here's how it works.
+[35:21] This is the first cascade.
+[35:23] You see it captures information
+about only a tiny vicinity of each point.
+[35:27] Basically, it looks like bad
+AO that you typically see in games
+[35:31] next cascade captures
+longer field information
+[35:35] and it's lower frequency,
+next contains even lower frequency and so on.
+[35:39] So we create this hierarchy of probes
+where each hierarchy, where each level
+[35:43] of hierarchy captures only specific range
+of radiance, of light, basically.
+[35:49] But then the magic happens
+when we combine them all
+[35:53] because this way we can get
+[35:55] details of all scales from fine details
+[35:59] to very long distance details
+in the same image.
+[36:04] By combining information
+from all of the hierarchy levels.
+[36:10] This is how we encode for those of
+you graphics program aficionados.
+[36:14] This is how we encode
+[36:17] the screen space probes
+basically in these tiny grids,
+[36:19] you can see that
+this level contains these tiny probes.
+[36:22] There is a lot of them,
+[36:23] and this level contains much larger probes
+and there is much less of them.
+[36:27] But the memory that each layer,
+[36:30] that each cascade level contains actually
+decreases the more cascades you have.
+[36:35] So the first cascade
+is the more expensive one.
+[36:37] Weirdly enough, the cascade
+that contains the tiniest bit of occlusion
+[36:42] is the most expensive one,
+and they get exponentially cheaper
+[36:44] the more cascades you have.
+[36:47] Here is the implementation
+of the same technique in 2D.
+[36:49] So the previous one I always implement
+these like highly experimental 90%
+[36:54] going to fail techniques
+in my like test bed pet engine.
+[36:58] But then I implemented in Path of Exile.
+[37:00] So this is again glowing Ranger, classic,
+[37:03] lighting the scene
+with only indirect light.
+[37:07] I should have probably mentioned this
+before, but calculating
+[37:10] light from emissive
+surfaces is computationally equivalent
+[37:13] to calculating light
+from directly lit surfaces.
+[37:16] It's basically the same thing for GI.
+[37:18] That's why it's very typical
+to test global illumination algorithms
+[37:22] by just having emissive objects.
+[37:26] This implementation that we have in game
+uses screen space information,
+[37:30] it uses screen space probes, but actually
+it can also be used in, for other games
+[37:35] it might be more appropriate to use the
+same hierarchy of cascades in world space.
+[37:39] And this demo that I also posted on
+my channel actually does just that.
+[37:43] It has no screen space information,
+it’s fully world space information,
+[37:47] which means that it can calculate
+light sources behind the camera,
+[37:50] which we don't have in Path of Exile,
+which we don't need to worry about.
+[37:54] By the way,
+[37:54] this technique, since it basically
+allows encoding light reaching
+[37:59] every point from every direction,
+we can also use it to calculate specular.
+[38:02] So basically reflections.
+[38:04] So here you see one of the dungeons
+basically made of mirror material
+[38:08] so we can calculate specular GI
+the same way.
+[38:11] Here is the same thing.
+[38:12] You can see the highlights on the curtain
+from like a porcelain like material
+[38:18] that has a specular part
+in its lighting model.
+[38:22] Here is another example of specularly
+lit scene, and here's
+[38:27] an example of a combined diffuse
+plus specular in game.
+[38:31] This implementation is even faster
+than the previous one,
+[38:36] so basically all global illumination solutions
+converge to the same result.
+[38:40] Because the correct result is known,
+[38:44] that's why I'm not
+even showing you side by side
+[38:46] comparison,
+because if two Global Illumination
+[38:48] algorithms are correct,
+they should produce the same image.
+[38:51] The question is how quickly they produce
+this image, and this algorithm
+[38:54] just scales so much better
+than everything else I've ever seen.
+[38:59] It scales
+even better than our previous one,
+[39:01] even though the previous
+one was pretty good, honestly.
+[39:05] So yeah, this property of
+[39:08] absolute double dipping in double exponential
+when each cascade captures
+[39:12] twice more rays for twice less speed
+is a totally OP exploit in reality,
+[39:18] and you're the first audience
+to learn about it, thank you.
+[39:25] Thank you very much.
+[39:25] I hope we have some time for Q&A
+from Octavian here.
+[39:31] Hello.
+[39:32] Hello, Hello.
+[39:34] Yes, there's a QR code up behind me right
+[39:36] now, so if you've got any questions,
+be sure to scan that and send them in.
+[39:39] I'll be vetting them as they come.
+[39:41] But until then,
+I've got a couple of questions as well.
+[39:45] So you mentioned during the talk
+a few times about like
+[39:48] what other game companies might do or what
+other games are doing.
+[39:51] In the course of your work,
+[39:52] have you just like developed an eye
+for being able to see like,
+[39:54] oh, they're using this technique
+or that technique,
+[39:56] or are you actually like,
+do you actually, you know,
+[40:00] you know, have you asked people in
+the industry?
+[40:01] Thanks, that's a good question, I like it.
+[40:04] The way it works is when I just started
+working in graphics programming
+[40:07] I was obviously curious.
+[40:08] I always looked like at what other games do.
+[40:10] But over time, you just
+you absolutely do develop an eye.
+[40:13] You just see the same things over
+and over, like I'm playing Monster Hunter,
+[40:16] I’m immediately seeing how
+they’re doing their fur.
+[40:19] Of course they're doing in screen space.
+[40:20] It just naturally moved
+to the edge of my screen
+[40:22] and it produces the artifact
+that every screen space fur
+[40:25] should produce and like, ah.
+[40:28] So can you play games normally anymore
+or not?
+[40:30] I cannot.
+[40:32] Play Elden Ring
+and I try to get under every rat
+[40:34] to see it from the nastiest angle possible.
+[40:38] All right,
+we've got some questions coming in
+[40:40] the first one here is something that
+you'll probably understand more than me.
+[40:45] Do you have to vary the number of cascades
+for different levels or geometries?
+[40:48] Say it again, please.
+[40:49] Do you have to vary,
+for Global Illumination
+[40:51] do you have to vary the number of cascades
+based on the level or geometry present?
+[40:55] So the thing about that algorithm is the
+cascades are always put in a fixed grid.
+[41:00] The grid hierarchy is completely fixed.
+[41:03] It's independent of the scene complexity.
+[41:05] I should have mentioned that,
+[41:06] but the cost of that algorithm
+is completely constant.
+[41:08] Whatever happens on your screen,
+if you have one fireball
+[41:12] on your screen or 1 million fireballs
+on your screen, it doesn't matter.
+[41:15] The cost of that technique
+is absolutely constant,
+[41:17] so it can never dip your FPS
+in the heat of battle.
+[41:20] It has a constant technique.
+[41:22] It has a constant cost of about like
+one millisecond or something like that.
+[41:27] All right.
+[41:28] Next question.
+[41:28] Do you feel you have an advantage
+by using our own bespoke
+[41:32] engine versus something off the shelf,
+[41:35] that, you know, might have more
+documentation to it or something?
+[41:37] Yes. Probably worth mentioning
+that we have our fully custom
+[41:41] engine that we have implemented
+for our own purposes.
+[41:44] Right.
+[41:44] Because our game is not a general,
+[41:50] we don't need to implement an engine that
+allows to implement any other game.
+[41:55] We are implementing an engine
+that specifically supports
+[41:59] our game with our own limitations,
+with our own things that we can exploit.
+[42:03] For example, fixed camera, right?
+[42:05] We never have to calculate lights
+that are behind us
+[42:07] because there's no lights behind us.
+[42:09] That's why our Global Illumination solution
+can work perfectly fine in screen space
+[42:13] because all the lights that you care about
+are on your screen.
+[42:17] And yes,
+since we are developing our own engine.
+[42:20] We have kind of personal attachment to it.
+[42:22] And it's also why it's much easier
+for us to modify it.
+[42:24] And it just feels natural
+for us to be working so closely with it.
+[42:28] You mentioned towards the end of the talk,
+having a video of one of your techniques
+[42:31] on your YouTube channel.
+[42:32] People want to know what the channel is
+in case
+[42:34] they can go check it out
+and find some interesting stuff.
+[42:36] I'm sure that somebody
+will put that in the show captions.
+https://www.youtube.com/@Alexander_Sannikov
+[42:40] But yes, usually if you want to see
+like sneak peeks into stuff
+[42:43] that has a non-zero chance to end up
+in Path of Exile, you can follow my channel where
+[42:47] I usually post all these experiments,
+like all these 2D GI
+[42:51] experiments were posted, like way
+before they actually ended up in game.
+[42:55] I was just playing with
+and I was just trying things
+[42:58] like they had a very high chance to
+not work out, but it's fine.
+[43:02] Are there any
+[43:03] remaining parts of Path of Exile’s renderer
+that are expensive or annoy you?
+[43:07] So sort of like the GI problem.
+[43:09] You said it kept you up at night.
+Anything else?
+[43:11] GI is absolutely the hardest,
+computationally hardest problem
+[43:16] that I am aware of
+in computer graphics period.
+[43:19] There is nothing harder than GI.
+[43:20] Okay.
+[43:21] And we've solved it
+better than anyone else.
+[43:24] I, that is my belief.
+[43:26] It’s a big question.
+[43:27] I do believe that our solution
+has properties that no other solution has.
+[43:31] And I have never seen anything
+even similar to this.
+[43:35] If you have, let me know.
+[43:39] Well, actually
+this runs into the previous question.
+[43:41] Besides the light occlusion,
+what's another technique
+[43:43] you're proud of implementing
+into Path of Exile?
+[43:45] Well, honestly,
+just watching the trailer felt
+[43:50] unexpectedly emotional for me because,
+[43:53] like, I put my finger onto literally
+any point on the screen
+[43:57] and there is something
+I contributed here, like
+[44:00] whether it is a lighting model
+or there is like a fog here
+[44:04] or I am extremely ashamed of specular
+aliasing that I see here.
+[44:08] Or like there is some personal thing
+in every pixel of the game for me.
+[44:13] So yes, I do feel proud that we got there,
+[44:17] but I also feel kind of sometimes a shame
+like, nobody notices this thing.
+[44:22] Oh come on, you've done excellent work,
+[44:25] You showed examples of layering techniques
+on 2D planes and some 3D simple shapes.
+[44:30] But what do you do
+if there’s say a character model
+[44:31] which is immersed in water
+or fire or something else like that?
+[44:35] Well, if a character modal is immersed,
+well, we usually try to make it
+[44:40] so that it doesn't explode
+in a really bad way,
+[44:43] like the interaction
+between some of these techniques is
+[44:47] sometimes questionable,
+which sometimes pops up in like nasty ways
+[44:50] when, for example,
+somebody decides to make
+[44:53] a microtransaction
+that turns the player into water.
+[44:56] And of course, nobody expected this,
+and now we have to deal with it.
+[45:01] Yeah, yeah, yeah.
+[45:03] How do you / Grinding Gear Games
+[45:05] decide which technical innovations
+[45:06] to treat as trade secrets
+versus share openly in a talk?
+[45:09] I don't think there is anything
+[45:12] that we keep secret, at least
+until like a big announcement like this.
+[45:17] Like because we want to make like
+a bigger announcement out of it on ExileCon
+[45:22] rather than if some of it like
+got leaked, in some sense.
+[45:26] But honestly,
+we are perfectly fine with people
+[45:29] sharing their progress when it's something
+to do with technical aspects
+[45:34] of the game, when it doesn't have to do
+with like plot or like spoilers.
+[45:37] But the technical aspects, we are
+actually free to share how we do things.
+[45:40] Like I've been, people
+that have been following my channel,
+[45:44] they knew what was happening with the GI
+from like half a year ago.
+[45:47] I just was progressively posting,
+[45:51] yeah, how,
+[45:51] how the algorithm developed. 
+This niche little channel that.
+[45:55] Yeah, it’s a pretty niche channel,
+but I'm kind of proud of it.
+[45:59] I use it like it’s my portfolio.
+[46:02] Um, let's see, what's the next one?
+[46:04] Do you have any renderer features
+you wish you got to build,
+[46:07] but Path of Exile just doesn't need
+because of our very bespoke system?
+[46:12] If there was such feature,
+I wouldn't be talking
+[46:15] right and I would be programming.
+[46:18] So there is some feature that I could say
+like, well,
+[46:22] I wish our game suited
+for this features better, right.
+[46:26] Like I wish we had TAA
+so that we would have nicer antialiasing
+[46:30] but we don't have a TAA.
+[46:32] Not because we are lazy or not because
+we don't know how to make it happen.
+[46:35] It's just because our game is
+really dynamic and TAA really breaks down
+[46:39] when you have a really dynamic game. So.
+[46:41] So we're just too good
+for that system. Well, you.
+[46:45] Sure.
+[46:45] You got to phrase it,
+you know, spin it. Yeah.
+[46:48] Some people do come with like,
+[46:49] well, you just should have implemented
+this thing.
+[46:52] But often the answer is like,
+we don't have this thing
+[46:55] because of this and this reason
+and this is just the way it is.
+[46:59] Yes, he's a smart man.
+He did think of that.
+[47:01] Have you hit any interesting problems
+supporting both
+[47:04] Path of Exile 1 and 2 in the same engine?
+[47:07] Yeah,
+[47:09] there is some like, scaling.
+[47:12] I'm just thinking of what
+I should be talking about here
+[47:14] because this can have some implications,
+but like yes, because Path of Exile 1,
+[47:19] well for example, if Path of Exile 2
+[47:22] had textures that had resolution
+just twice higher right.
+[47:25] Like from 512x512 to 1024x1024,
+[47:29] what's the difference?
+[47:31] Well, the difference
+is actually four times more memory. Right.
+[47:34] So like the challenges with increasing
+just texture resolution
+[47:37] are pretty obvious because you increase
+the resolution of textures twice
+[47:42] and it uses four times more memory.
+[47:43] So like supporting engines
+that need to deal with typical 512
+[47:47] textures versus 1024 textures.
+[47:50] Yeah that's quite different.
+[47:52] But we do want to apply
+as much of the tech
+[47:56] that we developed for Path of Exile 2
+for Path of Exile 1 as well whenever possible.
+[47:59] And sort of leading off that,
+are we going to be using these methods
+[48:02] in Path of Exile 1
+now with the recent engine update patch?
+[48:06] The GI is not going to be
+in this engine patch,
+[48:09] but we are thinking about it
+just because it's such a huge change.
+[48:13] And we were,
+I guess, decided to not ship it
+[48:16] with a whole bunch of other changes
+that are also very impactful.
+[48:20] Like they're going to change
+the way engine behaves quite a bit.
+[48:23] And I just didn't feel confident enough
+of shipping this GI solution right now.
+[48:28] Do it in waves,
+so you don’t rock the boat quite too much.
+[48:32] Which is more common, do artist creations
+[48:34] drive the need for new rendering tech
+[48:36] or does rendering tech enable artists
+to have more freedom with what they make?
+[48:39] Oh, that's another good question.
+[48:42] It's both.
+[48:43] They've got a lot of good questions.
+It's both.
+[48:45] So I should have mentioned that,
+[48:47] well,
+a lot of these effects are not my doing.
+[48:50] I just enable other people to create
+art using the techniques that I make.
+[48:56] I don't actually create art myself.
+[48:58] So everything that looks good on
+these images are created by our effects artists.
+[49:03] I mean, it’s still as much your doing.
+[49:06] However, I should also, well,
+that's kind of an interesting point
+[49:10] that in my opinion, Global Illumination
+looks beautiful
+[49:14] just on itself.
+[49:15] You don't need any artistic talent
+to create a scene
+[49:20] that looks beautiful
+because realistic lighting,
+[49:23] in my opinion, just is beautiful.
+So if you manage to create lighting
+[49:27] that behaves in a realistic way,
+it will look beautiful.
+[49:31] Yeah, I mean, I think it looks great.
+[49:32] And my job is staring at the game all day, so.
+Thank you.
+[49:37] Aside from other games, where do you learn
+about these sorts of techniques?
+[49:40] You mentioned there are some publications
+and such, articles?
+[49:44] Well, I guess you live and learn.
+[49:48] Learn something every day.
+[49:50] There is actually.
+[49:53] Well, my background is physics, right?
+[49:56] I do, I studied physics.
+[49:58] This is the primary thing
+that drives my passion, right.
+[50:03] But how is physics related to graphics?
+[50:05] Well, the answer is programming graphics
+[50:07] is programming physics,
+because programming graphics is programming
+[50:11] the behavior of light.
+Light obeys physical laws.
+[50:15] So just studying physics directly
+[50:18] is directly translated
+into being able to program graphics.
+[50:21] If you're really good at physics,
+you will be able to program graphics.
+[50:25] Of course, like
+there is like tricks and stuff,
+[50:28] but that you just pick up
+all the time.
+[50:31] Also, like just playing
+other games is very useful to like,
+[50:35] hey, how did they do this thing?
+[50:37] And you just start learning, start digging
+until you understand how you know,
+[50:40] So if somebody wanted your job,
+[50:42] they should get a physics degree and play
+a lot of video games.
+[50:44] Absolutely. Physics degree is
+[50:46] the most important thing,
+if you want to get to graphics programming.
+[50:50] Yes, that's that's the most important thing.
+I'm halfway there.
+[50:54] What are some of the other techniques
+that you've developed
+[50:57] that are in the game
+that you wish artists would use more?
+[51:02] That's a little bit embarrassing.
+[51:03] Oh, okay. Yeah.
+[51:04] When artists saw these slides, like, huh,
+we had this?
+[51:08] Like, yes, some of these techniques
+are quite hard to adopt by artists, like
+[51:14] it takes some dedication,
+like fields, right, like,
+[51:18] oh, it's a lot of scrolling,
+I'm not going to show that again.
+[51:20] But like, fields
+is a very powerful technique,
+[51:22] but it just requires like some doing
+to get used to, to using it.
+[51:26] It's not like
+a very straightforward thing.
+[51:28] It's like a different way
+of looking at your effects.
+[51:30] It requires
+some level of attention,
+[51:32] and some artists
+sometimes just don't have time.
+[51:35] Like one VFX artist
+had the time, learned fields,
+[51:38] now they're good at this.
+[51:39] But other VFX artists can just fall behind
+[51:42] and the technique can get kind of lost
+because of this, which is sad.
+[51:45] But yeah, this happens all the time.
+[51:48] So we are low on time here.
+[51:50] So I'm just going to go
+for one more question.
+[51:52] Do any isometric optimisations
+need to be changed
+[51:55] when capturing trailer footage
+specifically?
+[51:57] Oh, that's a whole thing.
+[52:00] Well, I'm glad we went with
+that as the last question.
+[52:03] You have a guy who does all the,
+well most of the filming
+[52:08] and I have a lot of issues
+come in specifically from him
+[52:11] when the game breaks down in terrible
+ways, when you just put camera at an angle
+[52:15] where it never was supposed to be.
+[52:18] Yeah, that happens all the time.
+[52:19] Yeah, generally players
+are not zooming in quite that far
+[52:22] or doing advanced camera work.
+[52:24] Yeah,
+like when players say something like,
+[52:26] Why don't you just put the camera
+horizontally?
+[52:28] Or like,
+why don't we have more cinematics?
+[52:31] Well, because a lot of assets
+are really not designed to be looked
+[52:34] at different angles from the angle
+you observe them in game.
+[52:38] All right.
+[52:38] I think that is
+just about our time, though.
+[52:40] Thank you, Octavian, for your questions.
+[52:42] Yeah, thank you all for sending them in.
+Thanks very much for listening.
+[52:48] I hope you found it
+[52:49] interesting or at least entertaining.
+[52:52] Thank you very much.

@@ -1,0 +1,19 @@
+# Sparse 3d Radiance Cascades
+Channel: Alexander Sannikov
+Duration: 02:15
+URL: https://www.youtube.com/watch?v=TGLAxW0xVDU
+
+## Description
+This is an implementation of classic full 3d world space radiance cascades, but the storage is sparse: only probes that are directly visible on the screen are added into the storage: a large hash map on the gpu, similar to radiance caching, but it's cascaded and stores radiance intervals instead of radiance. It scales almost like a screenspace technique, runs 60-100fps on my laptop, doesn't have any denoising, temporal accumulation or image space upscaling.
+
+World space resolution of radiance interval tiles is chosen per pixel, such that the area of each tile is near-constant when projected on the screen, hence the total number of tiles in memory is near-constant as well. This allows me to have an RC implementation that scales almost as well as a screenspace implementation, but it's in world space and doesn't rely on upscaling.
+
+When I freeze cache streaming, you can see that tiles disappear when I get too close to them or too far from them, it's because tiles are not only cached by their world space position, but they're also cached by their desired resolution to keep the computational load constant, so if a tile of the needed size is missing, it will render as missing.
+
+For demonstration purposes I use a very basic screenspace raymarcher as my raytracing backend, but this implementation doesn't actually rely on it, and can easily work either with hardware raytracing or SDF raymarching. It also lacks any interpolation, hence the blocky look.
+
+However, the important part is that the hash map works reasonably well and I might use it for more advanced implementations in the future.
+
+## Subtitles
+Manual: No
+Auto-generated: No

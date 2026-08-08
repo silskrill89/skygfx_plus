@@ -1,0 +1,137 @@
+{
+  "query": "shader engineer rendering breakdown GPU",
+  "results": [
+    {
+      "video_id": "C8YtdC8mxTU",
+      "title": "How do Video Game Graphics Work?",
+      "channel": "Branch Education",
+      "url": "https://www.youtube.com/watch?v=C8YtdC8mxTU"
+    },
+    {
+      "video_id": "pPStdjuYzSI",
+      "title": "Nvidia CUDA in 100 Seconds",
+      "channel": "Fireship",
+      "url": "https://www.youtube.com/watch?v=pPStdjuYzSI"
+    },
+    {
+      "video_id": "brDJVEPOeY8",
+      "title": "How Real Time Computer Graphics and Rasterization work",
+      "channel": "FloatyMonkey",
+      "url": "https://www.youtube.com/watch?v=brDJVEPOeY8"
+    },
+    {
+      "video_id": "h9Z4oGN89MU",
+      "title": "How do Graphics Cards Work?  Exploring GPU Architecture",
+      "channel": "Branch Education",
+      "url": "https://www.youtube.com/watch?v=h9Z4oGN89MU"
+    },
+    {
+      "video_id": "e6pNYHDOSAs",
+      "title": "Math Behind Realtime Graphics | Etay Meiri",
+      "channel": "Wookash Podcast",
+      "url": "https://www.youtube.com/watch?v=e6pNYHDOSAs"
+    },
+    {
+      "video_id": "53NvFT37HzQ",
+      "title": "Wicked Engine - Render Breakdown",
+      "channel": "J\u00e1nos Tur\u00e1nszki",
+      "url": "https://www.youtube.com/watch?v=53NvFT37HzQ"
+    },
+    {
+      "video_id": "TPqTtIoh-BQ",
+      "title": "Bringing the Arnold Renderer to the GPU",
+      "channel": "3D world | CG graphics",
+      "url": "https://www.youtube.com/watch?v=TPqTtIoh-BQ"
+    },
+    {
+      "video_id": "JNOsMQMI6ow",
+      "title": "How Real Time 3D Worlds Are Rendered",
+      "channel": "UT Gen",
+      "url": "https://www.youtube.com/watch?v=JNOsMQMI6ow"
+    },
+    {
+      "video_id": "tGMxmJI0ou8",
+      "title": "The Invisible Engine Behind Video Game Graphics",
+      "channel": "Binary Insight",
+      "url": "https://www.youtube.com/watch?v=tGMxmJI0ou8"
+    },
+    {
+      "video_id": "s3yjlRkXhbA",
+      "title": "How a GPU Actually Works (and Powers AI)",
+      "channel": "Bug Labs",
+      "url": "https://www.youtube.com/watch?v=s3yjlRkXhbA"
+    }
+  ],
+  "transcripts": [
+    {
+      "video_id": "C8YtdC8mxTU",
+      "title": "How do Video Game Graphics Work?",
+      "file": "E:\\dev(dave)\\skygfx_plus_expIV\\research\\youtube-transcripts\\C8YtdC8mxTU_How do Video Game Graphics Work.txt",
+      "entries": 194,
+      "duration": 1252.6799999999994
+    },
+    {
+      "video_id": "pPStdjuYzSI",
+      "title": "Nvidia CUDA in 100 Seconds",
+      "file": "E:\\dev(dave)\\skygfx_plus_expIV\\research\\youtube-transcripts\\pPStdjuYzSI_Nvidia CUDA in 100 Seconds.txt",
+      "entries": 95,
+      "duration": 385.75999999999993
+    },
+    {
+      "video_id": "brDJVEPOeY8",
+      "title": "How Real Time Computer Graphics and Rasterization work",
+      "file": "E:\\dev(dave)\\skygfx_plus_expIV\\research\\youtube-transcripts\\brDJVEPOeY8_How Real Time Computer Graphics and Rasterization.txt",
+      "entries": 240,
+      "duration": 1301.9880000000003
+    },
+    {
+      "video_id": "h9Z4oGN89MU",
+      "title": "How do Graphics Cards Work?  Exploring GPU Architecture",
+      "file": "E:\\dev(dave)\\skygfx_plus_expIV\\research\\youtube-transcripts\\h9Z4oGN89MU_How do Graphics Cards Work  Exploring GPU Architec.txt",
+      "entries": 246,
+      "duration": 1707.9999999999986
+    },
+    {
+      "video_id": "e6pNYHDOSAs",
+      "title": "Math Behind Realtime Graphics | Etay Meiri",
+      "file": "E:\\dev(dave)\\skygfx_plus_expIV\\research\\youtube-transcripts\\e6pNYHDOSAs_Math Behind Realtime Graphics  Etay Meiri.txt",
+      "entries": 2924,
+      "duration": 16686.482999999993
+    },
+    {
+      "video_id": "53NvFT37HzQ",
+      "title": "Wicked Engine - Render Breakdown",
+      "file": "E:\\dev(dave)\\skygfx_plus_expIV\\research\\youtube-transcripts\\53NvFT37HzQ_Wicked Engine - Render Breakdown.txt",
+      "entries": 710,
+      "duration": 3205.600000000001
+    },
+    {
+      "video_id": "TPqTtIoh-BQ",
+      "title": "Bringing the Arnold Renderer to the GPU",
+      "file": "E:\\dev(dave)\\skygfx_plus_expIV\\research\\youtube-transcripts\\TPqTtIoh-BQ_Bringing the Arnold Renderer to the GPU.txt",
+      "entries": 784,
+      "duration": 4453.756000000005
+    },
+    {
+      "video_id": "JNOsMQMI6ow",
+      "title": "How Real Time 3D Worlds Are Rendered",
+      "file": "E:\\dev(dave)\\skygfx_plus_expIV\\research\\youtube-transcripts\\JNOsMQMI6ow_How Real Time 3D Worlds Are Rendered.txt",
+      "entries": 2491,
+      "duration": 14845.597
+    },
+    {
+      "video_id": "tGMxmJI0ou8",
+      "title": "The Invisible Engine Behind Video Game Graphics",
+      "file": "E:\\dev(dave)\\skygfx_plus_expIV\\research\\youtube-transcripts\\tGMxmJI0ou8_The Invisible Engine Behind Video Game Graphics.txt",
+      "entries": 140,
+      "duration": 617.6399999999999
+    },
+    {
+      "video_id": "s3yjlRkXhbA",
+      "title": "How a GPU Actually Works (and Powers AI)",
+      "file": "E:\\dev(dave)\\skygfx_plus_expIV\\research\\youtube-transcripts\\s3yjlRkXhbA_How a GPU Actually Works and Powers AI.txt",
+      "entries": 100,
+      "duration": 413.0389999999998
+    }
+  ]
+}

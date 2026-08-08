@@ -1,0 +1,55 @@
+# REAC 2023 DAY 2 Lessons Learned from Far Cry Dunia Engine’s Shader Pipeline
+Channel: Rendering Engine Architecture Conference
+Duration: 58:22
+URL: https://www.youtube.com/watch?v=kbQc2cVRLSY
+
+## Chapters
+- [00:00] <Untitled Chapter 1>
+- [02:20] Presentation Overview
+- [04:54] Far Cry Code Challenges
+- [05:36] Long-term Technical Vision and Planning
+- [06:01] PSO Refresher
+- [07:38] Expressing Material connections
+- [07:56] FC6 - Shader ID to PSO transition
+- [08:31] Shader Pipeline Goal
+- [09:57] Identify the challenges to reach the goal
+- [12:49] Barrier Work (Overview)
+- [13:50] Tech Milestone
+- [14:50] FC6 challenges
+- [16:03] High Level Plan
+- [18:13] FC6 - Transition to Modern APIs
+- [22:33] Iterative Improvements
+- [23:21] Improve Shader Variations
+- [24:31] Essential vs Optional
+- [27:35] Transition Start
+- [28:56] Validation System
+- [31:30] JIRA Generation
+- [32:31] Test Coverage
+- [33:27] Automatic Testing
+- [34:25] Final Testing Process
+- [34:58] Interesting Edge Cases
+- [36:09] Custom Vertex Fetch
+- [37:54] Each ShaderID in the engine maps to a PSO!
+- [38:54] Shader Pre-compilation Process
+- [39:17] Collecting PSO Usage
+- [40:29] Priming during loading screens
+- [41:59] Lessons Learned
+
+## Description
+Full title: Lessons Learned from Establishing a Long Term Vision for Far Cry Dunia Engine’s Shader Pipeline
+
+In this talk, the 3D programming team behind Far Cry 6 will discuss the challenges they faced while developing the game, specifically in establishing a long-term technology roadmap to handle major graphics API transitions and implementing a shader pipeline for the latest title in the franchise. The team will provide specific examples of the obstacles they encountered, such as balancing technology improvements with frequent title releases, maintaining compatibility, and managing the complexities of the shader pipeline.
+
+The talk will also highlight the team’s solutions to these challenges, such as setting boundaries and demanding requirements for modernizing the rendering technologies over the years and multiple releases. It will include their tech roadmap methodology, as well as iterative development, and testing methodology. It will share the outcomes and results of their efforts, including the successful implementation of a solid shader pipeline architecture.
+
+Overall, this talk offers valuable insights into the complex and nuanced process of developing video game technology and provides practical solutions for managing technology upgrades in challenging timelines and development cycles.
+
+Speakers:
+
+Cong Hao He specializes in real-time system engineering. He joined the 3D graphics team behind Far Cry 6 to deliver a great visual experience for the players on consoles before moving to Ubisoft’s Anvil engine core tech team. Here, he is currently working on low level rendering system development as well as making improvements to engine architecture.
+
+Jendrik Illner is a 3D graphics programmer who started his full-time game industry career as a Junior 3D Programmer in 2015 at Ubisoft and left as 3D Technical Lead in 2021. Before joining Sony Santa Monica Studio, he briefly worked at Electronic Arts on the Frostbite engine. Jendrik specializes in game engine arch
+
+## Subtitles
+Manual: No
+Auto-generated: Yes

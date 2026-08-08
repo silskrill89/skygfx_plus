@@ -1,0 +1,3042 @@
+# Transcript: 1vRHUP9P6tI
+# Fetched: 2026-08-07T06:23:13.527316
+# Entries: 3037
+# Duration: 12914s
+
+[00:00] Thank you so much for for joining me for
+[00:03] uh a premirage interview. Uh I'm joined
+[00:06] with uh Octavian and Andrew. Um some are
+[00:10] already familiar with the Octavian.
+[00:11] We'll do introductions here in a sec,
+[00:12] but this is Andrew's first time at an
+[00:14] interview. I believe I saw you did a
+[00:16] XLCon thing. Um but I figured if you
+[00:19] guys can start with introducing
+[00:21] yourselves and talk a little bit about
+[00:23] what you do at Grannyear Games.
+[00:28] >> Uh my name is Andrew. I've been at GGG
+[00:31] for about 7 years now. I started off in
+[00:34] QA and then I think I moved to design
+[00:37] around Metamorph League. Out of like all
+[00:39] of the designers at GGG, I'm probably
+[00:41] the one who's like spent the highest
+[00:44] proportion of time on Path of Exile 1.
+[00:47] Not to say I haven't done a few things
+[00:48] on POE 2, but yeah. So, I'm pretty
+[00:51] familiar with like the all of the
+[00:54] leagues back since when all of them.
+[00:59] >> And is it true that you are the dev
+[01:02] check guy that whenever Chris Wilson was
+[01:04] doing like a dev check it would be you
+[01:07] answering the questions?
+[01:09] >> Uh yeah, for a period. Yep.
+[01:14] >> Cool.
+[01:15] >> Um that that's that's good to know. I
+[01:17] know a lot of people are curious about
+[01:18] that. It's a good emote on Twitch, too.
+[01:20] Uh, Octaven, do you want to introduce
+[01:22] yourselves for people who don't aren't
+[01:23] familiar with you already?
+[01:25] >> Um, sure. Though, though, first I do
+[01:27] just want to say like I feel like Andrew
+[01:28] is selling himself a little bit short.
+[01:30] Like he is essentially the the the
+[01:32] bedrock of of Path of Exile 1. Like if
+[01:36] there is a League mechanic or other
+[01:37] thing in Path of Exile one that you
+[01:39] like, he he probably did some of the
+[01:41] implementation for it.
+[01:43] >> Um, but yeah, uh, my name is Octavian.
+[01:46] Um, not my real name. Technically, my
+[01:49] real name is Chris, but there's already
+[01:50] another Chris uh at Gr or there there
+[01:53] has been another Chris at Grinding Gear.
+[01:55] Um, but yeah, my name is Octavian. I
+[01:57] joined the company about four years ago
+[01:59] now. Um, and I am, you know, design on
+[02:05] POE 1, though I started in QA like
+[02:07] Andrew and like a lot of our designers.
+[02:09] Uh, and also have touched a number of
+[02:12] things on PE2, but you know, full-time
+[02:14] POE now.
+[02:15] And for those that don't know, Octaven
+[02:17] used to be a streamer before as well.
+[02:19] So,
+[02:20] >> yes, in a past life, right?
+[02:22] >> What's that?
+[02:22] >> You're still a part-time streamer
+[02:24] >> now and again as a hobby. Um, but used
+[02:27] to be
+[02:29] [laughter]
+[02:30] >> used to be full-time. Um, you know, used
+[02:33] to be on podcasts on the other side of
+[02:35] this.
+[02:36] >> Yeah. Um, awesome. Thanks so much for
+[02:39] introducing yourselves and, uh, thank
+[02:40] you guys for for being here and giving
+[02:42] me this opportunity. I have a lot of
+[02:44] things I'm excited to talk about. So, um
+[02:47] we'll start with talking about Mirage
+[02:49] itself and uh I'm a little bit curious
+[02:53] with like when it comes to ideas and
+[02:55] stuff. Um when you're thinking up a
+[02:58] league for PE1, do you ever consider is
+[03:01] this going to be in pee 2? Is it going
+[03:03] to be used there? And how will it look
+[03:04] like when it comes to pee 2?
+[03:09] >> Um
+[03:11] not really. I I mean, I won't say that
+[03:14] it's like literally never come up as a
+[03:16] question, but it's kind of an
+[03:18] afterthought. Um, you know, like,
+[03:22] yeah, in the case of Mirage, uh, I I
+[03:25] pitched the idea originally, and that
+[03:26] certainly wasn't part of the premise.
+[03:28] No.
+[03:30] >> Um, Mirage is very very different. We've
+[03:33] seen like starting at Legion, we had
+[03:36] like the homogenization of loot. This
+[03:38] seems a little bit the opposite of that
+[03:39] where it's enhancing each league's
+[03:41] individual flavor. Um, would you talk a
+[03:45] little bit more about like the league
+[03:47] mechanic itself, especially like um just
+[03:51] basic things like what happens when you
+[03:52] die? Can you go back in?
+[03:55] >> Uh, you would use a portal in the same
+[03:58] way that you would if you died in the
+[03:59] original map.
+[04:00] >> Okay,
+[04:01] >> so yes, you can go back in if you have a
+[04:03] portal remaining. And then we saw in the
+[04:06] video that you you free the gins. Does
+[04:08] that itself drop any loot or end the
+[04:11] Mirage?
+[04:13] >> Um it doesn't prevent you from going
+[04:15] back in the Mirage if there was still
+[04:17] loot in there that you hadn't looted yet
+[04:18] and you wanted to go get. Um but the the
+[04:22] gin breaking free is kind of a flavor
+[04:24] thing. However, completing a Mirage
+[04:26] within the Mirage, so finding the the
+[04:28] astral chain and breaking that will
+[04:30] spawn a you know a case of rewards.
+[04:32] Okay, cool.
+[04:34] Um, and like I said, it it alters league
+[04:37] mechanics and boss fights. I was
+[04:39] wondering if we could have any examples
+[04:40] of that. I'm particularly curious about
+[04:42] how it interacts with ritual. Can we
+[04:44] have eight rituals? Basically,
+[04:49] >> I was going to say, um, for the majority
+[04:52] of this league cycle, Octavian has been
+[04:55] working on the league and I've been
+[04:56] working on a bunch of the other stuff.
+[04:58] >> Yeah.
+[04:58] >> So, Mirage stuff to me is like still
+[05:01] fairly fresh. I'm not familiar with it,
+[05:02] but I think I did actually do stuff
+[05:05] regarding the ritual mechanics for
+[05:06] Mirage.
+[05:07] >> It's got this weird thing going on where
+[05:09] if you had four rituals within your
+[05:11] regular map,
+[05:13] >> it will try to buff the ritual in the
+[05:15] Mirage by so much that it would give you
+[05:17] an equivalent amount of tribute. We had
+[05:19] to do a bunch of weird maths to figure
+[05:21] this out, but basically if there's only
+[05:24] if there's four rituals in your real map
+[05:27] and there's one ritual in your Mirage,
+[05:28] then that one ritual in your Mirage will
+[05:31] be super juiced and it should give you
+[05:33] an equivalent amount of tribute to what
+[05:35] you had in your real map.
+[05:37] >> Wow. Okay, cool. Um, do you have any
+[05:41] other examples that you're willing to
+[05:42] share about like how it affects and
+[05:44] changes league mechanics? That was a
+[05:46] really cool one.
+[05:47] Um, abyss is one where the so often the
+[05:53] the mirage area is much smaller than the
+[05:55] original map and an abyss can path quite
+[05:57] a distance. Um, so an abyss in a mirage
+[05:59] is often going to if it's if its pathing
+[06:03] would have taken it outside of the
+[06:04] bounds of the mirage, it will instead
+[06:05] just open up a pit and start spewing out
+[06:07] tons of monsters on the spot.
+[06:09] >> Oh, okay.
+[06:11] Um, and speaking of abyss, does it or
+[06:14] how does it interact with anything like
+[06:16] an abyssal pit, syndicate research,
+[06:18] anything that has like a separate zone,
+[06:20] whether it's a loading one or not?
+[06:23] >> Um, so what we term a child instance,
+[06:26] which is what a mirage is, it's a child
+[06:27] of the instance that it was created in,
+[06:29] cannot itself have further child
+[06:30] instances.
+[06:31] >> Uh, so that means that labyrinth trials,
+[06:34] uh, volide areas, um, abyssal depths are
+[06:37] not actually able to spawn in mirages.
+[06:39] What about stuff like Alva that is a
+[06:41] it's a portal to something else, but
+[06:42] it's not a loading screen.
+[06:45] >> Uh, that's a less hard rule. Alva
+[06:47] actually doesn't work, but that's most
+[06:48] Alva master missions in general don't
+[06:50] get recreated in mirages, but that's
+[06:52] mostly because they have meta systems
+[06:53] that need to be in a given state. And we
+[06:55] can't actually predict the state that
+[06:56] you'll be entering the Mirage in. So
+[06:58] like say you've only done half of the
+[06:59] encounters in the parent instance and
+[07:01] then you enter the Mirage.
+[07:02] >> If you're in a gin, you know, talking in
+[07:04] the context of a gin mission, we don't
+[07:06] know the state of your board. like it's
+[07:07] in flux.
+[07:09] >> Um because the state of the board is
+[07:11] recalculated at the end of all of the
+[07:12] Jin encounters, not necessarily at the
+[07:14] end of each individual one within a map.
+[07:16] >> Uh so mostly for functional reasons,
+[07:18] master missions don't work. And then
+[07:20] like I said, anything that would send
+[07:21] you to a further child instance doesn't
+[07:22] get recreated.
+[07:23] >> What about harvest?
+[07:25] >> Harvest works.
+[07:26] >> Oh, cool. Are you willing to talk about
+[07:28] how harvest works?
+[07:30] Uh if there's if the portal to the
+[07:33] harvest um grove, I guess it's what it's
+[07:36] called, is within the mirage, then you
+[07:37] can enter it. And the entire grove is is
+[07:40] valid walkable space.
+[07:41] >> Well, yeah, but is it is it different in
+[07:43] the Mirage?
+[07:45] >> Oh, yeah. There's a new kind of seed.
+[07:46] >> Oh, okay. Okay.
+[07:48] >> It does things.
+[07:49] >> Okay. It does things.
+[07:50] >> We put it on the reveal page.
+[07:51] >> Yeah. Yeah. All right. Um are there any
+[07:55] league mechanics that like completely
+[07:57] don't work? Do you want to expand more
+[07:58] on anything else that like isn't
+[08:00] workable?
+[08:03] >> I think the only one that doesn't fit in
+[08:05] the earlier list is the Vidian Wildwood
+[08:08] doesn't show up in in uh in mirages. Uh
+[08:11] there is a wish to add wisps though.
+[08:14] >> Okay. And what about delve? Does that
+[08:16] get like changed as well? Like the
+[08:17] sulfite piles?
+[08:19] >> Uh that's master missions in general
+[08:21] don't show up in so
+[08:23] >> right that makes sense. I'm curious, how
+[08:25] does a Delarium mirror work?
+[08:28] >> Um, I would have to double check this
+[08:30] because I requested it work this way,
+[08:32] but I haven't looked at the issue in a
+[08:33] while and it hasn't come back to me. But
+[08:35] the intention is that if there is a
+[08:38] delirium mirror in the overworld that
+[08:40] you interacted with, then there is one
+[08:42] in the Mirage.
+[08:43] >> Whoa. Okay. Um, does Mirage interact
+[08:47] with the Valdo tier 17 maps from the
+[08:49] puzzle boxes?
+[08:51] You can do a Mirage in Aldo map, but you
+[08:53] won't get the the reward again.
+[08:55] >> Okay.
+[08:56] >> So, you'll be able to do content again,
+[08:58] but not the like special, you know,
+[09:00] guaranteed mage blood or whatever.
+[09:02] >> You can still be sent to the void.
+[09:04] >> Yes. It inherits all the map stats of
+[09:06] the parent instance, and that is a map
+[09:08] stat. So, yes.
+[09:09] >> Right. Does um nightmare maps and
+[09:12] originator maps have like both
+[09:14] functionalities of the Mirage? like can
+[09:16] you go through like the small mirage or
+[09:18] and can you basically double the map
+[09:20] like that type of mirage?
+[09:23] >> Uh that is at odds with originator maps
+[09:26] um because the the the modifier that
+[09:29] makes a map an entire Mirage map is
+[09:31] taking up the same space as the modifier
+[09:32] that makes it an originator map. Uh and
+[09:34] that's kind of purposeful because we
+[09:36] wanted to have two different strategies
+[09:38] you could be pursuing in the endame
+[09:40] rather than just stacking every strategy
+[09:41] on top of each other. Oh,
+[09:43] >> what about nightmare maps?
+[09:46] uh nightmare map fork with miraers. Yes.
+[09:48] >> And even the like doubling it
+[09:50] >> like well so you could have like I can't
+[09:53] remember or I I actually don't just
+[09:55] don't fully know the fully name of it
+[09:56] but there's like you can you said in the
+[09:59] Q&A with Ziggy that you can do a full
+[10:01] Mirage, right? Like fully Mirage map.
+[10:04] >> I don't see any reason that wouldn't
+[10:07] work with the nightmare map, but I'm not
+[10:10] 100% certain without testing it.
+[10:12] >> Mrage map.
+[10:14] Well, that's why I was curious. You
+[10:16] >> got a fully mirage map? Uh,
+[10:18] >> fully mirageed maps have a chance to
+[10:20] drop from map bosses within a mirage.
+[10:23] >> So, are you a little bit concerned that
+[10:25] that makes it back to tier 17 meta
+[10:27] again, but you can fully mirage those,
+[10:30] >> but you can't on originator maps?
+[10:35] >> Well, you're not able to apply the Egan
+[10:37] juice, the the the blobs as been
+[10:40] lovingly termed, uh, to them. So, I
+[10:44] think it should be fine, but that is a
+[10:45] valid concern.
+[10:47] >> Okay. Okay. Well, I'm glad that's
+[10:49] brought up at least and like thought
+[10:51] about. Um, that's definitely a concern.
+[10:54] Um, another thing we did see Cyrus in a
+[10:57] mirage. Um,
+[10:59] >> Mhm.
+[11:00] >> Are you willing to share any other like
+[11:02] large bosses like that? Like, can we see
+[11:03] Ubers?
+[11:06] Um, there is a wish that spawns there is
+[11:09] a wish, a relatively rare wish that is
+[11:11] T16 plus only that spawns a random
+[11:14] feared member in your map.
+[11:17] >> And my follow question then is do they
+[11:18] have their original drop tables?
+[11:21] >> They can drop their uniques.
+[11:23] >> Very cool. Very cool. Um,
+[11:27] and I'm guessing that's like so if it's
+[11:29] on Cyrus, I'm guessing that's the normal
+[11:30] version of Cyrus and not the Uber
+[11:31] version.
+[11:33] >> Yes. It's not not not Uber.
+[11:35] >> The version that would show up in Fear,
+[11:36] which I don't think is the Uber version.
+[11:38] >> No, but you can witness both, so I
+[11:39] figured it was worth asking.
+[11:41] >> Um, cool. Um, so we have Mirage items uh
+[11:47] are coming with like new uniques and the
+[11:49] coin of restoration. Now my question
+[11:52] here is we did have a sort of similar
+[11:55] system with faded uniques from prophecy
+[11:58] uh which altered you know limbs split
+[12:00] into
+[12:02] cauterizer uh where cauterizer is just
+[12:05] better than limbsplit in every way. Is
+[12:07] this going to be a similar type system
+[12:09] where the restored unique is just better
+[12:13] in every way or are they both usable for
+[12:15] different purposes?
+[12:17] I'm sure, you know, players will will
+[12:19] define a meta where some of them are
+[12:21] more valuable or stronger than others.
+[12:22] Um, but the intent is that they are, you
+[12:25] know, roughly equivalent. Now, given
+[12:27] that they do very different things, it's
+[12:29] kind of hard to match that intent. You
+[12:31] know, one will probably be a bit
+[12:32] stronger than the other.
+[12:34] >> Uh, but no, it's not meant to be like,
+[12:36] you know, this is, you know, thing A and
+[12:39] then when you use the coin on it, it's
+[12:40] thing A plus plus.
+[12:42] >> Yeah.
+[12:42] >> It's they're meant to be meaningfully
+[12:44] different and equally viable.
+[12:46] >> Cool. Yeah, from what I've seen, they
+[12:47] look like generally the two uniques are
+[12:49] for completely different builds. So, for
+[12:51] example, rough spite is like a poison
+[12:53] themed sword and then the fire
+[12:55] equivalent is an ignite themed sword or
+[12:58] a fire dot sword.
+[12:59] >> Uh, rust bite was the internal name for
+[13:01] the the unique sword that we showed off
+[13:02] in the Q or in the live stream.
+[13:05] >> Okay. Well, that's good to know. I like
+[13:06] that. I like that. Um, next up, I really
+[13:09] want to ask about streams of the
+[13:10] desiccated, which uh in a lot of ways is
+[13:13] competing hard with or even replacing
+[13:15] mage blood. Um, is it divineable? Like,
+[13:18] can I divine resistance shrine to
+[13:20] massive shrine? I guess is my first
+[13:22] question.
+[13:22] >> No, the shrine will not change with a
+[13:24] divine orb. It works sort of like a
+[13:25] watcher's eye in that respect.
+[13:27] >> Awesome. And what shrines are we not
+[13:30] getting? Obviously, divine shrine, I
+[13:32] guess.
+[13:34] >> Um, go ahead.
+[13:36] >> Oh, no. Yeah, definitely not divine
+[13:38] shrine.
+[13:39] What about
+[13:41] >> I I know I'm going to disappoint some
+[13:43] people with this answer, but I don't
+[13:45] really want to reveal the full list. I
+[13:46] kind of I mean, it's going to be data
+[13:48] mind on release, I'm sure. Um, but
+[13:50] >> what about Can you tell us if echoing is
+[13:52] on there?
+[13:55] >> Uh,
+[13:57] all I can say is I still have the
+[13:59] balance issue on me. It's like the only
+[14:01] unique balance issue I have left. And we
+[14:03] were talking quite a lot last week about
+[14:05] it because we're we were basically
+[14:06] looking at this thing and we're like,
+[14:08] have we just power creep mage blood
+[14:10] >> because there's a lot of there's a lot
+[14:11] of interesting things you can do with it
+[14:13] because
+[14:14] >> it's basically the downside is
+[14:17] it only applies to shrine while you have
+[14:19] no flask active.
+[14:20] >> But to be honest, there's like a lot of
+[14:23] ways you can still take advantage of
+[14:24] that downside. Like for example, you can
+[14:26] take the king of the mist plus one ring
+[14:29] slot and an extra ring is certainly
+[14:31] juicy. You can use tincture still. You
+[14:33] can use instant flasks. So, the downside
+[14:36] isn't as punitive as it may first seem
+[14:38] on paper. And then if you look at what
+[14:40] the shrines actually grant, like a ton
+[14:42] of them grant completely cracked buffs.
+[14:45] And you'd also, unfortunately, this is a
+[14:48] little bit of a combo item cuz you're
+[14:49] always going to be comboing it with
+[14:50] something like the gal. You might use
+[14:53] blunderbore, but basically you'd want to
+[14:56] stack as much shrine effect as possible
+[14:57] on top. So yeah, there's certainly this
+[15:00] this item is crazy and we the balance is
+[15:04] still in progress and
+[15:07] it's probably going to end up being
+[15:08] gigar rare for like very specific
+[15:11] combinations, but
+[15:12] >> yeah, there are crack there are crazy
+[15:14] shrines on official.
+[15:15] >> I I gave Andrew a problem. [laughter]
+[15:20] >> Awesome. No, I'm I'm super excited. It
+[15:22] does look super fun and at least mage
+[15:24] like or the belt is a very competitive
+[15:26] slot, right? So, uh, that is a good
+[15:29] thing.
+[15:29] >> Sure.
+[15:30] >> Um, cool. Glad we got that. Um, don't
+[15:34] nerf it too much. It looks super fun.
+[15:35] Very big fun. Um, right. So,
+[15:39] >> oh, uh, one thing I did want to say
+[15:42] because I I mentioned this um on like,
+[15:45] you know, I was I was asked a question
+[15:46] in a Discord, but I want to mention it
+[15:47] on like a more public platform is the uh
+[15:50] the just to confirm it, the belt chooses
+[15:53] an offensive and a defensive shrine. Uh,
+[15:55] so you're never going to get, you know,
+[15:57] like brutal and diamond together. Uh,
+[16:00] double offensive buffs doesn't happen.
+[16:01] Double defensive doesn't happen.
+[16:03] >> Okay, cool. Not even a small chance.
+[16:07] >> No, it's one offensive, one defensive.
+[16:09] >> That'd be cool. Acceleration echoing.
+[16:15] All right. Um, well, speaking of power,
+[16:18] the next topic that I want to cover a
+[16:20] little bit is borrowed power. Um, and
+[16:24] we've been seeing that like that's been
+[16:26] the meta for a while now. Um, and the
+[16:29] main borrowed power we're getting this
+[16:31] league is the imbued gems, which are
+[16:33] also directly competing with uh 21 gems
+[16:37] and val gems. Um, I wanted to hear you
+[16:41] talk a little bit about the design
+[16:43] intent here when you're when you're
+[16:45] choosing like the borrowed power and how
+[16:47] it's going to be implemented.
+[16:52] Well, I wouldn't say there's necessarily
+[16:54] like this is the only borrowed power
+[16:55] you're getting this this league because
+[16:58] there's a ton of new currency items
+[17:00] coming from Mirage which are all giving
+[17:01] in essence like a little bit of borrowed
+[17:03] power here and there.
+[17:05] >> But yes, these imbues are definitely one
+[17:08] of like the bigger sources. They also
+[17:12] tend to favor attack builds, I'd say,
+[17:14] because they care less about getting
+[17:15] that level 21 as opposed to just being
+[17:18] level 20. Yeah.
+[17:22] Um,
+[17:25] you have like a baseline for for what
+[17:30] sort of power level? I guess maybe in
+[17:32] like a more damage sense uh that you're
+[17:34] aiming for for borrowed power. Uh where
+[17:37] I'd say on top of my head I would say
+[17:40] mercenary is probably where we have the
+[17:41] most borrowed power, right? uh with
+[17:43] probably the Doriani thing not maybe
+[17:45] being super intended, but do you have
+[17:47] like a rough number in mind for borrowed
+[17:49] power per league?
+[17:52] >> Well, I wouldn't even necessarily say
+[17:54] that we need to have borrowed power
+[17:56] every league, but
+[17:58] >> uh it it completely depends on the
+[17:59] league mechanic to be honest. It's like
+[18:02] mercenaries could allow for a lot more
+[18:04] borrowed power because it actually made
+[18:06] things more difficult at the same time
+[18:09] whereas most leagues borrowed power are
+[18:11] just pure power creep in that sense. But
+[18:14] I don't think there's like any hard and
+[18:16] fast rules here to be honest. Like just
+[18:20] to for clarity sake, I guess like the
+[18:22] the place that I imbue gems came from uh
+[18:25] as far as the design goal that we that I
+[18:27] wanted to fulfill is I wanted people to
+[18:30] have two decision points when choosing a
+[18:32] wish, not just like what the wish does
+[18:34] in the area, but the the imbued gems all
+[18:36] come from the the sigils associated with
+[18:38] the wish. Like if you want to get the
+[18:39] red imbued gem, you click the wish with
+[18:40] the red sigil, and that's what causes
+[18:42] monsters in that area to have a chance
+[18:43] to drop the red imbued gem or sorry, the
+[18:45] red um currency that creates them.
+[18:48] And that means that like maybe there's a
+[18:50] wish that you wouldn't normally
+[18:51] otherwise take, but you're trying to
+[18:52] farm for the red gem, so you're going to
+[18:53] take it. And I I wanted to have two axes
+[18:55] of choice for all of the wishes. And
+[18:57] that's where this came from. And it just
+[18:59] also happened to be like, oh, and this
+[19:01] can be, you know, some of the borrowed
+[19:03] power that we might want to put in the
+[19:04] league otherwise. And
+[19:05] >> are these going to be fairly plentiful,
+[19:08] as in you'll get like a decent amount
+[19:10] per day? Because obviously hitting the
+[19:12] exact gem you want looks like it's going
+[19:13] to be quite hard. And a lot of people
+[19:15] are worried that this is going to be
+[19:16] something that's like two or five divine
+[19:18] per coin.
+[19:21] >> Um,
+[19:22] I can't really predict how expensive
+[19:25] they'll end up being. Uh, I would say
+[19:28] also it's hard to say how many you'll
+[19:30] get per day because some people run two
+[19:31] maps in a day and some people run 50.
+[19:33] >> Yeah.
+[19:33] >> Uh, you definitely could get one or more
+[19:36] a day at a reasonable rate if you're
+[19:37] playing quite a bit. Uh, I don't know.
+[19:39] It's a it's a rabbit hole question kind
+[19:42] of.
+[19:43] >> It's a tough one. Um, I was actually
+[19:45] going to have this a rapid fire
+[19:47] question, but I care about it so much
+[19:48] that I moved it up. Um, cuz we're
+[19:50] talking about borrowed power. So,
+[19:53] probably my favorite item of all time is
+[19:56] that which was taken and it was taken
+[19:58] from us. There any chance that it can
+[20:00] become that which was given back? It was
+[20:03] so cool.
+[20:04] >> Well, I can't Well, to be fair, the
+[20:06] unique heart still exists because I'm
+[20:09] pretty sure that ended up being reused
+[20:11] as the new jewel from the King of the
+[20:12] Mist. It is um the lighter meaning um
+[20:16] but I think that which was that which
+[20:19] was taken was definitely a borrowed
+[20:21] power source from the affliction league.
+[20:24] It sort of only made sense in the
+[20:26] context of charms as well. It was sort
+[20:28] of giving you extra charms on top of
+[20:30] what you could already get from the
+[20:32] primalist ascendancy. And it wasn't
+[20:34] really doing anything novel. It was the
+[20:37] charm system was just like a thrown
+[20:38] together fun passive tree mechanic that
+[20:41] was just stealing effects from all over
+[20:44] the game. It isn't really providing
+[20:46] anything new. And another point to that
+[20:48] is POE one sort of has a little bit of a
+[20:52] problem where at the high end game you
+[20:55] basically just stack a ton of limit one
+[20:57] unique jewels. We already have so many
+[20:59] of them. You've got like watchers eye
+[21:00] and your forbidden jewels and your
+[21:02] timeless jewels. So, I wouldn't really
+[21:05] want to just keep on adding more and
+[21:06] more limit one jewels that every single
+[21:08] build is required to end up using.
+[21:11] >> Yeah, that's fair. I I just Yeah, I I
+[21:14] loved it a little bit because of the
+[21:16] almost like soul bun like quality that
+[21:18] it like especially in has ever really
+[21:20] approaches what you're doing next very
+[21:22] differently. Um, I did want to mention
+[21:25] that as well actually. Um, I have always
+[21:29] generally been against soulbound, but
+[21:31] you guys used that in my opinion in a
+[21:32] really good way for Sanctum,
+[21:35] um, where the relics were like soulbound
+[21:37] power. And I guess part of that is why
+[21:39] they were allowed to be so powerful.
+[21:41] >> Is that something you guys have
+[21:42] discussed bringing back in the future,
+[21:44] not necessarily with sanctum relics, but
+[21:46] with a with another mechanic?
+[21:50] >> I'm generally of the opinion that I
+[21:52] prefer most character power is tradable.
+[21:55] >> Mhm. I mean, it was fine to experiment
+[21:58] with it for a league, but I don't think
+[22:01] there's really been any discussions of
+[22:02] bringing something similar back. I don't
+[22:04] know how you feel.
+[22:06] >> I kind of agree. One of the things that
+[22:08] drew me to Path of Exile in the first
+[22:09] place was the um, you know, which is
+[22:11] funny because I now play mostly group
+[22:12] founder solo found, but was definitely
+[22:14] the economy aspect of it. Like
+[22:17] >> I really like being able to find weird
+[22:19] niches in the economy and try and
+[22:20] exploit them and take advantage of them.
+[22:22] And you know, items that are untradeable
+[22:25] can never be that niche. So that's not
+[22:27] to say that it's like never something
+[22:29] that we'll ever experiment with again.
+[22:31] You know, it didn't have that kind of
+[22:33] reaction. Uh but
+[22:36] >> there has to be a really good reason.
+[22:38] >> Um generally the assumption is character
+[22:41] power, you know, outside of your
+[22:43] ascendency and passive retrieve and
+[22:44] such. Obviously, uh itemized character
+[22:46] power should be tradable.
+[22:49] >> Cool. Um cuz I noticed that was pretty
+[22:51] much the only time that cropped up. Um
+[22:53] final question about borrowed power.
+[22:55] Have you ever considered foul forbidden
+[22:57] flame and flesh with the fiac
+[22:59] ascendency? They're they're quite liked
+[23:01] by the community but they outside of fia
+[23:04] obviously now we have the scion but
+[23:06] outside of that they're not really used.
+[23:09] >> Yeah. I think h the thing is when we
+[23:12] were coming up with the fian
+[23:14] ascendencies they were sort of just like
+[23:16] um what we could gather from all the
+[23:18] other places in the game and throw them
+[23:20] together and make a cohesive ascendy out
+[23:22] of that. So a lot of the effects from
+[23:24] the fianc ascendencies are from the base
+[23:27] ascendencies and from a bunch of other
+[23:28] unique items. So for that reason I
+[23:31] wouldn't really think it makes sense for
+[23:33] them to be part of the core game because
+[23:35] they aren't really their own unique
+[23:37] thing necessarily. Yeah.
+[23:39] >> Yeah, makes sense. Um, final Mirage
+[23:42] related question. So, most most seasons
+[23:46] or leagues that we get now, we do have
+[23:48] some sort of like league boss. I can't
+[23:50] remember the name of the boss that we're
+[23:52] getting this time.
+[23:54] >> Um,
+[23:55] >> the Res. Um.
+[23:57] >> Mhm.
+[23:57] >> Yeah. So,
+[24:00] generally with bosses like these,
+[24:02] they're at like quite a low power level
+[24:04] compared to Ubers. Um, do you think
+[24:08] we'll ever see a Uber version of a
+[24:10] League boss that is like actual on par
+[24:13] with the with the 10 Ubers?
+[24:17] >> We sort of did that a little bit in the
+[24:19] T7 nightmare maps. You'll notice that
+[24:22] all of the bosses there are just like
+[24:25] Lysair and Katarina and Utre and all
+[24:27] that. Um, but as opposed to like
+[24:30] standalone Ubers that don't have any
+[24:32] like modifiers in the area themselves,
+[24:36] like I guess we could do that at some
+[24:38] point. It would be a cool idea.
+[24:40] >> Um, yeah. I mean, I'm not against it. I
+[24:44] I I think though
+[24:48] what what can often be lost is uh you
+[24:51] know in in conversations uh with more
+[24:53] entrenched and experienced players is
+[24:55] that you know Ubers are really hard. Um
+[24:58] [laughter]
+[24:59] I know that you know people can
+[25:00] definitely get builds to the point where
+[25:01] they just like AFK stand and tank them
+[25:04] or they you know forshot them in like 10
+[25:06] seconds or whatever but most players
+[25:08] aren't doing that. Um, and we don't
+[25:11] necessarily want, you know, the new
+[25:13] shiny league mechanic content that a,
+[25:16] you know, less experienced player might
+[25:18] be diving head first into to be
+[25:20] something that is basically outside of
+[25:21] their grasp entirely. Uh, now that
+[25:24] doesn't necessarily mean that, you know,
+[25:26] we have the boss balance for the League
+[25:28] mechanic bosses in exactly the right
+[25:30] place. Maybe they do need to be a little
+[25:32] tougher. But yeah, also
+[25:36] it does feel strange and and I can't
+[25:39] come up with a good reason why it feels
+[25:40] strange to me. And usually one of one of
+[25:42] the things I've kind of learned in
+[25:44] design is usually if I can't come up
+[25:45] with a good reason why I feel the way I
+[25:47] do, that usually means I don't like
+[25:50] there isn't one and I it's, you know, a
+[25:52] subjective thing that I probably
+[25:54] shouldn't hold on to. But it feels
+[25:55] strange to me to introduce a boss and
+[25:57] its Uber version in the same patch at
+[25:59] the same time. Yeah, I do agree with
+[26:00] that. Like I feel like SES
+[26:04] within the league should probably be a
+[26:05] static difficulty and then if it goes
+[26:07] core later on then yeah, we can do all
+[26:11] sorts of weird things like ubers.
+[26:13] >> Yeah, I could see that. I guess I also
+[26:14] thought of it from the point of view of
+[26:16] uh for example like Xark, right? You
+[26:18] have the quest version that's like
+[26:19] doable a lot easier so that it is more
+[26:22] accessible for people that are like
+[26:23] getting there for the first time. Um,
+[26:26] but that might be like, you know,
+[26:27] especially for advanced players, a
+[26:29] little bit too easy.
+[26:30] I was, yeah, just wanted to bring it up
+[26:32] as a thought.
+[26:37] Um,
+[26:39] next we're pretty much done with Mirage
+[26:41] there, except for rapire questions
+[26:42] later. But, uh, next up, I want to talk
+[26:45] about game and skill balance,
+[26:47] particularly starting with the league
+[26:50] start meta. And I'd say endgame skills
+[26:53] and stuff like there's always something
+[26:54] new that we get to play with, but league
+[26:56] starters have been
+[26:59] with with some exceptions, it's been
+[27:01] pretty stale for quite a while. Um, so I
+[27:05] just want to hear you talk about that a
+[27:07] little bit. Especially a thing that's
+[27:08] brought up a lot is just like things
+[27:10] that are very little play, just give
+[27:12] them a 20, 30, 40% buff. Like there are
+[27:15] things that we don't really see used at
+[27:16] all.
+[27:19] >> It's
+[27:22] It's something that I definitely want to
+[27:24] focus on more in the next few patches.
+[27:27] Um, I feel pretty strongly about it,
+[27:29] too. But it's also something you have to
+[27:30] be really careful about. Um, because for
+[27:33] a lot of people, you know, leveling with
+[27:36] whatever skill they've become really
+[27:37] familiar and and with leveling, you
+[27:39] know, be it costic arrow or I don't
+[27:42] know, poison concoction, what whatever
+[27:43] there, you know, I could list a dozen
+[27:45] different good leveling skills. uh is
+[27:47] very comfy and it's like an easy way to
+[27:50] get into a new league where maybe the
+[27:52] endgame has changed and there's a new
+[27:53] league mechanic and there's a bunch of
+[27:54] skill buffs and nerfs and stuff and you
+[27:56] know you have this old reliable you can
+[27:58] fall back on. Um so like how do you make
+[28:01] a leveling meta less stale while also
+[28:04] making sure that there's still old
+[28:06] reliables for people to fall back on if
+[28:08] they don't want to have to approach
+[28:10] leveling with completely fresh eyes
+[28:12] because leveling isn't their most
+[28:14] favorite part of the game, you know?
+[28:16] Right. Um, and it's I'm not saying
+[28:18] there's no challenge, no changes that
+[28:20] can be made, but it is a hard balance to
+[28:22] strike.
+[28:23] >> Sure. But that's a particular concern
+[28:25] when it comes to nerfs, right? Like
+[28:28] like I think what a lot of people want
+[28:30] is to see like a big bust of skills that
+[28:32] are completely underused or hasn't been
+[28:34] touched for a very long time. Not
+[28:36] necessarily that you need to have
+[28:38] everything perfectly balanced.
+[28:43] Well, I would say that in the past
+[28:45] couple of leagues, we haven't done as
+[28:47] much meta balance as we've typically
+[28:49] done. And like historically,
+[28:51] like for example, the focus this league
+[28:53] was more we were doing a whole batch of
+[28:54] like holy skills. So, taking a close
+[28:57] look at everything related to that like
+[28:59] holy archetype that already exists in
+[29:01] the game. So, you'll see there's quite a
+[29:02] lot of buffs in the patch to things like
+[29:05] dominating blow and absolution and
+[29:08] static strike and holy flame totem. So,
+[29:11] we certainly have touched a lot of
+[29:12] skills. We just haven't touched all of
+[29:14] them. Of course,
+[29:15] >> it's mostly a time constraint thing to
+[29:17] be honest. Like,
+[29:18] >> I would love to be able to go through
+[29:20] and literally just change every single
+[29:22] skill in the game every patch. And but
+[29:25] well, from my point of view, um I mean
+[29:28] this might be a failing, but I have very
+[29:30] little loss of version. So, if if
+[29:34] poisonous concoction for some reason got
+[29:36] deleted, I wouldn't care at all. I I
+[29:39] just want
+[29:40] >> It's a [snorts] dangerous thing.
+[29:41] >> Yeah, it's a dangerous thing to say, but
+[29:43] >> I love that personally.
+[29:45] >> I'm I'm attracted to the game because I
+[29:47] like coming back each league and it just
+[29:49] feeling completely different. I like
+[29:50] change. Change is what I like.
+[29:52] >> So, I would love to just be able to like
+[29:55] massively radically change everything
+[29:57] without any thought for the consequences
+[29:59] of how people feel about if something's
+[30:01] gone up or down and that type of thing.
+[30:03] See, but you got to temper that with
+[30:05] making sure there's, you know, all
+[30:07] reliable fallbacks for people to come
+[30:08] back to. Uh, and and
+[30:11] >> it's it's basically like what Andrew
+[30:12] said at the start of that where like it
+[30:14] really is just a matter of constraints.
+[30:17] Like we have, you know, GGG has a very
+[30:20] rapid development cycle. We have four
+[30:21] months in which to make all the changes
+[30:23] that we want to do in the next
+[30:24] expansion. And there was a lot in 328.
+[30:27] We just didn't get a massive skill
+[30:29] rework into it. But
+[30:31] >> definitely it's something that's on our
+[30:32] radar.
+[30:34] >> Is it something that you think you could
+[30:35] ever do mid league that where you're
+[30:37] just like, you know what, these 10
+[30:38] skills, they're getting 10% more damage.
+[30:41] >> I I I mean, even if it's just purely
+[30:43] buffs, you end up with FOMO, right?
+[30:45] Because people um say like, "Oh, I would
+[30:47] have started that. Oh, I would have I
+[30:49] would have played that. I would have uh
+[30:50] adapted to the economy differently. I
+[30:52] would have adapted to my strategy
+[30:53] differently if you know and and like
+[30:56] maybe if you really made really
+[30:57] insignificant changes that isn't the
+[30:59] case but then why are you making the
+[31:01] changes
+[31:02] >> right but these changes are the same for
+[31:04] everybody so I don't think that is too
+[31:06] much of an issue like
+[31:09] >> yeah no maybe I'm overstating it but I'm
+[31:11] I'm personally very cautious when it
+[31:12] comes to mid-league changes that
+[31:14] actually change balance and content
+[31:16] rather than just you know bug fixes and
+[31:18] such fair um you did bring up new gem
+[31:22] And I wanted to ask you a little bit
+[31:23] about how these are developed now and
+[31:26] especially
+[31:27] um when it comes to like the baseline
+[31:29] power of them. Um
+[31:33] like what what sort of um baseline level
+[31:37] of power or how do you try to avoid that
+[31:40] they're not like dead on arrival? Talk
+[31:42] about that a little bit.
+[31:45] >> Well, I can sort of talk about how a
+[31:47] skill is balanced. So, for example, in
+[31:50] this patch cycle, Octavian designed the
+[31:53] majority of the holy skills. So,
+[31:56] basically, he'd make the skill and then
+[31:58] he'd give me an issue to sanity check
+[32:01] the balance. So, how I'd go about that
+[32:03] typically is I wouldn't even look at
+[32:05] damage first. Damage is the last thing
+[32:08] you look at for the balance of a skill.
+[32:10] So, mostly it's check that it's
+[32:12] functional. Check that what all of its
+[32:16] interactions are like support gems, etc.
+[32:18] figure out what all the scaling factors
+[32:20] are. Like for example, does it get more
+[32:22] damage if you scale up area of effect or
+[32:24] multiple projectiles or duration, that
+[32:27] type of thing. Um, and then basically
+[32:30] play test it at a very a variety of
+[32:32] well, I typically test in like early
+[32:35] game I'll usually test it like the docks
+[32:38] in act three and then late game I'll
+[32:41] probably be testing at like level 80 in
+[32:43] like a
+[32:45] T10ish map. So, not not like super duper
+[32:49] endame builds for these at all, but
+[32:52] basically I'll just like mess around
+[32:54] with my damage until I feel comfortable
+[32:57] to see if it like clears fine.
+[32:59] >> So, basically get all of the crit
+[33:02] chance, area of effect, all of those
+[33:05] bells and whistles in place before even
+[33:07] starting to look at the damage.
+[33:10] And then after that, it's sort of like
+[33:14] comparing to pre-existing skills is
+[33:16] usually a good way to start as in
+[33:19] getting a baseline for the balance. And
+[33:21] I will say that I typically try to set
+[33:24] the numbers a bit higher than what I
+[33:26] think is correct relative to
+[33:28] pre-existing skills in the game.
+[33:30] >> Um, like for example, in the last set of
+[33:34] skills we released,
+[33:36] >> kinetic fuselage is very strong in my
+[33:38] opinion. And I did league start it.
+[33:41] >> It is.
+[33:41] >> And I might have forgot to nerf it this
+[33:44] patch, but
+[33:45] >> what I forgot. Are you starting it
+[33:46] again?
+[33:48] >> Uh, no. No. I I'll be playing something
+[33:51] on the Templar for sure.
+[33:52] >> Okay. Um,
+[33:54] >> um,
+[33:54] >> well, oh, Ko,
+[33:57] >> I was just going to say just to give
+[33:59] context to that damage last thing. It's
+[34:01] It's not because it's the least
+[34:03] important factor. It's because if you
+[34:05] don't have all the other factors in
+[34:06] place, then you can't judge the damage.
+[34:08] >> Yeah. Because like if the AoE of the
+[34:10] skill does impact single target damage
+[34:12] and it's not correct and it needs to be
+[34:14] adjusted or changed, then it doesn't
+[34:16] matter what damage you set at that
+[34:17] point. If you go back and change
+[34:18] something earlier in the the chain, so
+[34:20] to speak, now they now now you no longer
+[34:22] know what the output is. So you need to
+[34:24] get all of the inputs correct and then
+[34:25] you can judge the output.
+[34:27] >> Makes sense. Um, with new skills, do you
+[34:30] feel that um, with kinetic rain, we saw
+[34:34] that it was very, very strong in the
+[34:36] preview when Ziggy played it, etc. Then
+[34:38] it later got nerfed. Are you ever
+[34:40] worried that you're trying to be too
+[34:42] safe so that sometimes new skills are
+[34:44] underperforming a little bit because you
+[34:46] don't want them to completely dominate
+[34:47] either?
+[34:49] >> What?
+[34:49] >> Well, I sort of disagree with the
+[34:51] sentiment that kinetic rain is a
+[34:55] weak skill. No, but it it did get nerfed
+[34:59] before we got to play. It was more
+[35:01] >> Well, the thing is the mistake there was
+[35:03] that the player should never have seen
+[35:05] the gym with that number, which was my
+[35:07] fault. So,
+[35:07] >> that was my mistake. Like, as Andrew
+[35:10] said, I I usually will design the skill
+[35:12] and set it up and then send it to him
+[35:14] for balance review. It did not go to
+[35:15] Andrew for balance review before it went
+[35:17] to Ziggy for, you know, gameplay
+[35:19] footage. And that was a mistake on my
+[35:21] part. Cool.
+[35:22] >> I was I was just curious about it. I
+[35:24] wanted to bring it up. Um
+[35:27] well
+[35:29] um that's it for skill gems there. Um
+[35:34] so I have an Ignite related question. So
+[35:37] Defiled Forces was changed massively and
+[35:40] that did have a bit of a strangle hold
+[35:41] on Ignite where it was sort of like the
+[35:43] correct way to play it. So changing that
+[35:46] is good. However, that does put Ignite
+[35:48] maybe in a lot of ways behind other DOT
+[35:50] archetypes. Um, do you have any plans to
+[35:53] like rework Ignite now that Defiled
+[35:55] Forces is gone?
+[35:58] >> Well, it's more of a question of like
+[36:02] usually we don't decide what we're doing
+[36:04] for balance like straight away.
+[36:07] >> Um, as in like we're starting to figure
+[36:10] out what we want to do for 329 now, but
+[36:12] we're not necessarily figuring out what
+[36:14] we're doing for 329 balance yet. We'd
+[36:16] rather see how things play out
+[36:20] at 328 launch and then after a few weeks
+[36:23] we'll be able to judge like what are the
+[36:24] type of things that no one's playing,
+[36:26] what are the type of things that are
+[36:27] weak and what are the type of things we
+[36:29] should be like focusing on improving for
+[36:32] 329. So Ignite surely might be one of
+[36:35] those things, but not to say there might
+[36:37] be new exceptional sports, there might
+[36:38] be new uniques, there might be other new
+[36:40] interactions which do cause Ignite to be
+[36:42] like quite strong this league. But yeah,
+[36:45] it's uh certainly something that we'd
+[36:48] look at if it's weak like you say.
+[36:51] >> And I I would say that we have more of a
+[36:53] structured approach to that than maybe
+[36:55] we've had in the past where like now we
+[36:56] have this this structure where we look
+[36:58] at the worst, you know, the the least
+[37:00] played couple of ascendencies every
+[37:01] league and try and get some buffs in
+[37:03] there. Um probably what we need to do is
+[37:05] start, you know, looking at the list of
+[37:08] skills and find the ones down at the
+[37:09] bottom. Maybe we need to even extend
+[37:10] that out to like looking for arc types
+[37:13] that are underplayed and yeah, Ignite
+[37:14] could be on that list. Um, it's
+[37:17] something that now that we have this
+[37:18] like dedicated PE1 team split, we can be
+[37:21] focusing more resources on that earlier
+[37:23] in the development cycle and so catch
+[37:25] more things like this.
+[37:26] >> Okay, that that's very good to hear. Um,
+[37:29] also uh apparently Virus sent me a
+[37:32] message about chat. They really want
+[37:33] some asurances on the new skills and he
+[37:35] said people really want to play the new
+[37:37] skills. Can you ask to make sure like
+[37:39] are you happy with the balance of the
+[37:41] new skills? Like are they strong uh and
+[37:43] and good for starting?
+[37:47] >> Well, I can say for holy strike in
+[37:51] particular,
+[37:52] before I even started balance testing
+[37:54] it, one of our QA was like, "This skill
+[37:56] needs to be nerfed by four times on the
+[37:58] Twilight Strand." So,
+[38:00] >> okay,
+[38:00] >> trust me, it is still better than
+[38:02] glacial hammer was for Templar Start.
+[38:04] But yeah, uh it's a it's a pretty weird
+[38:07] scaling skill though. Like it scales
+[38:09] similarly to animate weapon or
+[38:10] self-reflection. So
+[38:12] >> cool. Oh, that sounds neat. Um well, I
+[38:16] hopefully that is uh assuring for new
+[38:18] people. Uh next up is the most important
+[38:20] question. Uh transfigured explosive
+[38:23] arrow. Uh [laughter]
+[38:25] >> I uh I was going over options with this
+[38:28] with a couple of uh people in QA and and
+[38:30] I I have an idea that I want to pitch to
+[38:32] programmers. Okay, cool.
+[38:35] >> That I will not say the specifics of
+[38:36] because it may not exist if it can't
+[38:38] work.
+[38:39] >> Yeah. Okay, cool, cool, cool. I'm
+[38:41] excited.
+[38:41] >> But, uh, more broadly, um, rather than
+[38:44] just specifically on transfigured EA,
+[38:45] uh, I, like I said in the Q&A, it's a
+[38:48] kind of a personal crusade of mine that
+[38:50] every active skill in the game have at
+[38:51] least one alt gem variant, ideally
+[38:53] eventually two, because I really like
+[38:55] the alt gem system. I think it's very
+[38:56] cool, and I would like to keep iterating
+[38:58] on it. Yeah, just last week one of our
+[39:00] like senior monster designers, he loves
+[39:03] fireball. He'll just play at every
+[39:04] single league um and he's been
+[39:06] petitioning me for a long time for
+[39:08] various transfigured fireball versions.
+[39:11] So, one of our other designers like
+[39:13] after our discussion at lunch went back
+[39:15] to his desk and just straight up version
+[39:17] the issue to 329. So, I guess it's in
+[39:20] the version. It must be happening. Yeah,
+[39:22] we have
+[39:23] >> there's actually a handful that were
+[39:25] partially implemented or, you know, at
+[39:28] least designed for 328 that didn't quite
+[39:29] make it in. So, you know, we already
+[39:31] have some transfigured skills that have
+[39:34] some work done for 329. Like, there will
+[39:36] be more transfigured skills in 329.
+[39:38] >> Very cool. That's exciting. Um,
+[39:40] actually, I wanted to while we're
+[39:42] talking about gems, uh, one thing that
+[39:44] was asked about a lot was elemental hit
+[39:47] and the new breach ascendancy that
+[39:48] converged like cold and lightning to
+[39:50] fire. I can't remember the exact wording
+[39:51] on it. Does that work on gems like
+[39:53] discharge, Ellie hit, Wild Strike?
+[39:56] >> Um,
+[39:58] it works specifically on elemental hit
+[40:00] because that skill is implemented in a
+[40:03] very weird way where it's granting added
+[40:05] damage instead of base damage. And we
+[40:06] had a discussion last week about whether
+[40:08] we should change this or not. And the
+[40:10] conclusion to that discussion was it's
+[40:12] going to be busted for 328 and we'll
+[40:14] probably rework Ellie hit in 329. So
+[40:17] have fun for a league potentially.
+[40:20] >> I'm so glad I asked.
+[40:21] >> Uh and just to clarify on what added
+[40:24] damage means in this context, damage
+[40:26] gained as extra is not added damage
+[40:28] >> uh for the context of the breach lord
+[40:29] ascendy. It's it's things like you know
+[40:31] when when a ring mod might say 5 to 10
+[40:34] added physical damage to attacks. That
+[40:36] is what added damage is in this context.
+[40:38] >> Yeah. Um I think um Mark 1 who is the
+[40:42] arbiter of all descriptions in Path of
+[40:44] Exile um we have this confusion as well.
+[40:48] Uh also note that any added damage that
+[40:51] is local to a weapon is not converted
+[40:53] for this ascendy. There is been a
+[40:55] reminder text added to the bloodline for
+[40:57] this. It's just historically
+[41:01] basically what Mark1 told me is
+[41:05] it's always been wrong on weapons and it
+[41:07] should never have been described as
+[41:08] added damage in the first place.
+[41:09] >> Yeah.
+[41:10] >> But it is that way. Yeah. So any local
+[41:13] added damage on a weapon is actually
+[41:14] base damage and not affected by this
+[41:16] bloodline.
+[41:17] >> Okay.
+[41:18] >> When I uh when I pitched this stat to
+[41:20] Mark one, he gave me a very withering
+[41:22] look. [laughter]
+[41:25] >> Yeah. I mean, especially with like new
+[41:27] players. I've seen so many new players
+[41:28] throwing like a knives or blade vortex
+[41:30] with like adds physical damage and stuff
+[41:32] and I'm like, "No." But yeah, I see the
+[41:35] confusion. Um, next up, when it comes to
+[41:38] balance, um,
+[41:41] and and especially when it comes to like
+[41:43] the the new coins, there are items like
+[41:46] chains of command that add an inherent
+[41:49] ability to an item that isn't a gem that
+[41:51] we can like put a new link on. Um, are
+[41:55] items like that being left a little
+[41:57] behind this patch?
+[42:00] >> I mean, arguably, uh, generally
+[42:03] speaking, League of Mechanics will favor
+[42:05] certain builds over others. So, I
+[42:07] >> I don't see that as like a huge issue. I
+[42:10] mean that said there is a quirk of how
+[42:13] the imbued gems work which is
+[42:15] potentially relevant for skills like I
+[42:17] don't know ice storm from whispering ice
+[42:18] where so there's this limitation where
+[42:20] you can't put more than one imbued gem
+[42:22] into a set of socket links uh so like
+[42:24] into your chest piece or your boots or
+[42:26] your gloves. You can only have one
+[42:26] imbued gem at a time
+[42:28] >> and the reason for that is because the
+[42:29] support effect on the imbued gem is is a
+[42:32] support as in it is supporting
+[42:34] everything in the links. So if you had
+[42:35] another active skill in there and you
+[42:37] had say fire pen imbued. Both active
+[42:39] skills are supported by fire pen, not
+[42:40] just the one with the imbued skill.
+[42:42] >> Yeah.
+[42:42] >> And so you can't have multiple imbued
+[42:44] because then you'd be able to have what
+[42:45] seven six links in your chest piece.
+[42:47] That's a little much. Or six six links.
+[42:50] Regardless, so if you have an active
+[42:52] skill socketed in your chain of commands
+[42:54] with a support effect, it would affect
+[42:55] the skill from the chain of commands. I
+[42:57] think it's going to affect everything in
+[43:00] the support links at least or in the in
+[43:02] the the link group.
+[43:04] >> Interesting.
+[43:05] And and and just to make sure like ju
+[43:08] just to like double triple check like if
+[43:10] you had like multiple war cries but
+[43:12] they're unlin entirely like it's it's
+[43:14] per item that you can have these right.
+[43:16] It's not like per link per
+[43:18] >> it is per item. Yes.
+[43:20] >> Yeah.
+[43:20] >> So you can you can have one imbued gem
+[43:21] in your boots, one in your gloves, one
+[43:23] in your helmet, one in your chest. So
+[43:25] >> yeah. Yeah. I I was this French guy
+[43:27] wanted me to double check. Um cool. Um,
+[43:33] another question I have is spell
+[43:36] slinger, auto exert, etc. They reserve
+[43:39] mana and cost mana to use. Uh, I just
+[43:44] want to hear you talk about your
+[43:45] philosophy on this and why. Like is that
+[43:47] necessary?
+[43:49] >> Um, well, I guess the philosophy is more
+[43:51] like should triggered skills cost mana,
+[43:54] which we decided yes, they should a
+[43:57] while back. Now the how does spells
+[44:00] slinger differ to something like cast on
+[44:01] crit? Because you could argue that the
+[44:03] cost on spells slinger is the
+[44:04] reservation.
+[44:05] >> Yeah.
+[44:06] >> Well, the cost on cast on crit is the
+[44:08] trigger condition. So they they have to
+[44:11] me the reservation of spells slinger is
+[44:15] and auto exert are sort of like that is
+[44:19] the cost you're paying for the easy
+[44:21] trigger condition whereas the mana cost
+[44:24] should still be paid on all skills. I
+[44:26] mean, you could argue war cries are a
+[44:28] little different because they're not
+[44:29] spells. So maybe our trigger philosophy
+[44:32] is different for war cries compared to
+[44:34] spells, but precedents like the eternal
+[44:37] apple, I guess,
+[44:39] >> right?
+[44:39] >> Well, yeah, war cries I could go either
+[44:41] way, but I think for all spells, you
+[44:43] should be paying the cost for them.
+[44:44] >> The big cost is also a gem slot though,
+[44:46] right? That is like especially with how
+[44:48] powerful gems are and the new ones is
+[44:50] quite quite a lot of power there.
+[44:52] Yeah, but I guess ideally the damage
+[44:56] multiplier and the cool down and the
+[44:58] reservation costs on spells slinger
+[45:00] would all be balanced around that. We
+[45:01] did make pretty big buffs to spell
+[45:03] slinger last patch I believe when we
+[45:05] looked at ones.
+[45:07] >> Yes, there was. But like for example,
+[45:09] something like manifests doesn't have a
+[45:10] reservation. It only has the mana cost.
+[45:16] >> Not that we want one. But
+[45:19] >> yeah, it's a little bit hard to compare
+[45:21] because you're comparing triggered
+[45:23] spells to triggered attacks. Not to say
+[45:24] that mana forged arrow mana forged arrow
+[45:26] has a very unique cost. Its cost is
+[45:29] spending mana. So that is its cost as
+[45:31] opposed to just a straight up
+[45:33] reservation.
+[45:35] Yeah.
+[45:38] Um
+[45:39] right. So guard skills when it comes to
+[45:42] balance. Obviously last patch we had the
+[45:44] burance and stuff. So that was uh
+[45:46] interesting there, but they aren't
+[45:48] something that's staying in the game. So
+[45:50] especially Molten Shell and Arcane Cloak
+[45:52] are very dominant there. Are there any
+[45:55] plans to add more new guard skills or
+[45:58] rework others?
+[46:01] Um, I feel like historically
+[46:05] there was a time in the game where armor
+[46:07] was perceived as being very very weak.
+[46:10] And to me, molten shells being very
+[46:12] strong was almost a band-aid to armor
+[46:14] being quite weak.
+[46:16] >> And armor has progressively gotten
+[46:19] stronger over time. And not to say that
+[46:21] it's not like super duper strong, but
+[46:24] >> yeah,
+[46:25] >> molten shell has had a couple of nerfs,
+[46:28] but it's still like, yeah, it's a perk
+[46:30] of playing an armor build, but the issue
+[46:32] to me is that it's sort of like if
+[46:34] you're playing armor, you should be
+[46:36] using molten shell. Likewise, arcane
+[46:39] cloak is similar in the sense that one
+[46:42] of the benefits for having well the
+[46:44] problem with having mind over matter or
+[46:47] your entire mana pool is your defense is
+[46:50] you don't get to use as many defensive
+[46:52] auras such as grace and determination
+[46:54] and discipline and all that. So it again
+[46:58] it to me is like another axis for this
+[47:02] is part of the set of all things that
+[47:05] make up a mana defense.
+[47:08] um whether or not mana based defenses or
+[47:10] armor based defenses are stronger than
+[47:12] other ones. It's like I wouldn't really
+[47:15] be able to say either way, but it it's
+[47:18] more the case of I guess philosophically
+[47:21] should a guard skill be providing that
+[47:23] much percentage of your total defense to
+[47:25] your archetype.
+[47:28] So like arguably what we could do is
+[47:30] nerf arcane cloak and molten shell and
+[47:32] then buff up armor and then buff up mana
+[47:34] defenses for example. Not to say that we
+[47:37] will. I guess it just hasn't really been
+[47:38] on our radar.
+[47:40] >> I guess a lot of people
+[47:41] >> interesting design space though. I'm not
+[47:43] like against making new ones.
+[47:44] >> Cool. It's also I know a lot of people
+[47:46] want like a deck based one like more
+[47:48] deck space card skills.
+[47:50] >> Um
+[47:51] >> you it's it's a difficult design space
+[47:54] though because
+[47:56] it's hard to come up with ones that
+[47:57] aren't just, you know, shield bubble but
+[47:59] bigger. Uh but there's definitely stuff
+[48:01] you could do there. It's it's neat.
+[48:04] >> Yeah.
+[48:04] >> You want to think of something?
+[48:06] Yeah, maybe something with like using
+[48:08] your spell suppression or something for
+[48:09] your mission. Um,
+[48:13] and speaking of gems, uh, awaken gems
+[48:16] are being sunset in favor of exceptional
+[48:18] support gems. Uh, can you talk a little
+[48:20] bit like about like why the change, what
+[48:22] this allows you to do? Um, and also
+[48:25] people are really curious if we still
+[48:26] have regular GMP.
+[48:30] >> Uh, regular GMP or awaken GMP just
+[48:33] >> Yeah. Is it is it only awaken GMP now?
+[48:35] Like can we still get level 38 greater
+[48:37] multiple projectiles in
+[48:38] >> Oh yeah. Um so greater volley and
+[48:41] greater multiple projectiles are the two
+[48:45] greater gems that are still just in the
+[48:47] regular drop. They haven't changed their
+[48:48] location at all. I think we did rename
+[48:50] lesser multiple projectiles to multiple
+[48:52] projectiles though.
+[48:54] >> Yeah. Although awakened GMP is sunseted.
+[48:58] You don't have a exceptional version of
+[49:01] greater multiple projectiles
+[49:03] >> at all. Interesting.
+[49:04] >> No. Well, yes. Uh the design philosophy
+[49:10] behind the exceptional gems is they're
+[49:12] supposed to be like
+[49:15] more transformative. So just adding an
+[49:19] extra projectile to a support to me
+[49:21] doesn't really scream as being like
+[49:23] super duper transformative. There is an
+[49:24] exceptional that was projectile like
+[49:26] additional projectile related though,
+[49:28] right?
+[49:28] >> There are a few exceptional gems related
+[49:30] to projectiles like I think there's a
+[49:32] greater chain and a greater fork and
+[49:34] there's specifically one related to
+[49:37] spell projectiles.
+[49:38] >> Yeah, there there was one that was
+[49:40] adding them. I don't remember
+[49:40] specifically what it did though. Andrew
+[49:42] did the uh the uh exceptional support
+[49:44] gem implementation. So I only have seen
+[49:46] issues and know things in passing.
+[49:48] >> Well, but is greater multistrike not
+[49:51] like not necessarily transformative,
+[49:53] right? It is just more power than the
+[49:54] original gem.
+[49:56] >> Uh, okay. Well, yeah, this is where
+[49:58] you're getting into a fine line, but
+[50:00] greater multistrike is a little bit more
+[50:01] transformative cuz you are committing
+[50:03] yourself to an extra refeed,
+[50:05] >> right?
+[50:05] >> Okay.
+[50:06] >> It it's it [snorts] the math on it is
+[50:08] also a little bit weird cuz you start
+[50:09] off from a lower baseline, but your your
+[50:13] final strike of your combo is stronger
+[50:16] compared to the base gem.
+[50:18] >> Greater spell echo has a similar thing
+[50:20] going on, I think.
+[50:21] >> Right. Um, well, can you talk a little
+[50:23] bit about like the design philosophy for
+[50:25] like changing these and what that allows
+[50:27] you to do?
+[50:29] >> Um, well, from like a rewards point of
+[50:32] view, it allows us to
+[50:36] basically give life to a bunch of bosses
+[50:38] that may not have very valuable rewards.
+[50:40] Not to say that all of these exceptional
+[50:42] gems will end up being like five divine
+[50:44] on trade or anything,
+[50:46] >> but
+[50:48] one of the nice things was just
+[50:49] spreading it all over the Atlas and
+[50:52] basically adding rewards to basically
+[50:54] all of the endgame bosses that you do
+[50:56] access through the Atlas. Another fun
+[50:58] thing about them is you could start from
+[51:00] like a law first design a lot of the
+[51:02] time.
+[51:03] >> Yeah.
+[51:04] >> Like you'd be like, "Oh, what is the
+[51:07] king in the mist themes?" And it's like,
+[51:08] oh, he's got a lot of chaos damage and
+[51:10] curses and toads. So,
+[51:12] >> that's very cool.
+[51:13] >> You can merge them all together and you
+[51:15] can make a support out of that.
+[51:17] >> Um, speaking of like the like adding L,
+[51:21] do you worry about Maven's L table being
+[51:23] slightly weaker now? And obviously like
+[51:25] the the witnessing bosses don't have
+[51:27] that in the same way or are you happy
+[51:28] with where she is now?
+[51:30] So from the witnessing boss's point of
+[51:32] view, there are two very good rewards
+[51:35] there that are sort of novel to that. So
+[51:39] for example, we got rid of ctographers
+[51:40] chisels, but maven chisels still exist.
+[51:43] So now maven chisels are relatively more
+[51:46] valuable in my opinion because
+[51:47] previously that 20% quantity was
+[51:50] something you applied from chisels. Now
+[51:52] it is inherent to your map completion.
+[51:54] >> Yeah.
+[51:54] >> But you can also get a maven chisel on
+[51:56] top. So Maven chisels in my opinion will
+[51:59] be relatively more valuable for that
+[52:01] reason. The other thing is the new
+[52:04] astrolabes
+[52:06] are 100% drop chance from all the memory
+[52:09] bosses, but they will also once you have
+[52:12] the originator void stone for
+[52:16] killing all of the incarnation bosses,
+[52:19] that will allow astrolabes to drop from
+[52:21] final map bosses in the atlas. So Maven
+[52:24] becomes relatively more valuable for
+[52:26] farming astrolaves because she adds more
+[52:28] final map bosses um as opposed to Maven
+[52:34] herself. I will say that in my opinion
+[52:37] Maven has the most powerful
+[52:41] >> um exceptional support gem on her.
+[52:44] >> Maybe the rarest as well I think.
+[52:46] >> Okay.
+[52:46] >> And we did maybe I'm wrong and I'm about
+[52:48] to get Twitch chat mad at me, but we did
+[52:50] uh keep awakened empower and light and
+[52:52] enhance, right? Y it did. So those were
+[52:54] the three
+[52:55] >> I think those are the only
+[52:55] >> awaken gems that we get.
+[52:57] >> Are they still called awakened? I think.
+[52:59] Yeah. Yeah, they're the only gems left
+[53:00] that are called awakened.
+[53:02] >> So
+[53:04] >> um awesome. That's that done on that
+[53:06] topic. Um obviously I only found out 30
+[53:10] minutes before this podcast that we get
+[53:11] to reveal relic Aquarian. So maybe we do
+[53:14] that now. Um
+[53:16] >> Sure.
+[53:17] >> Yeah. So, I have four slides here with
+[53:20] um I'm going to full screen that to make
+[53:23] it easier for people to read so they
+[53:24] won't see us uh with this. Uh I don't
+[53:28] know if you guys can bring up what I'm
+[53:29] showing, but I'll be showing like the
+[53:31] first image of our aquarium now.
+[53:34] >> Uh we can sort of see it. It's just very
+[53:37] hard to read from
+[53:39] >> It's a little hard for me to read, too.
+[53:40] I wonder if I can bring it up somewhere
+[53:41] else. Double checking that Twitch chat
+[53:44] can see this. Hoping they
+[53:48] Um,
+[53:50] we see it good. So, we have for the
+[53:53] first node, Baruso's Ambition, Kilawa's
+[53:57] Bluster, M of Conquest, Victoria's
+[54:00] Influence, and Brass Dome. Um, this is
+[54:04] my first time seeing these as well.
+[54:05] Andrew set these up.
+[54:06] >> Same for me.
+[54:07] >> These ones I looked at last week, but
+[54:11] the ones before that I probably haven't
+[54:12] looked at in months, so they'll be new
+[54:14] to me again as well.
+[54:17] rest just giving 20% move speed is
+[54:20] pretty good.
+[54:21] >> Yep.
+[54:22] >> Yeah, that's a good start.
+[54:23] >> An interesting thing about an
+[54:25] interesting thing about Real Aquarian
+[54:26] Ascendency is it has the same you could
+[54:28] call it a problem, but it's like the
+[54:30] same asymmetry that ascendant has where
+[54:32] you're not really getting much for your
+[54:34] normal labyrinth. You're getting two
+[54:36] passive skill points, that's all. But I
+[54:39] tried to have the armor ones be a little
+[54:42] bit more powerful, I think, so that once
+[54:44] you get to your Cruel Lab, you kind of
+[54:46] get a little bit of a power spike. I
+[54:48] mean, Verus. Yeah, that looks juicy for
+[54:51] leveling.
+[54:52] >> Yeah, Brast, too looks really nice.
+[54:57] Nice. Very cool. Um, see, I'm going to
+[55:02] open slide number two because we have
+[55:03] all four of them.
+[55:07] Wow, that's a lot of movement speed so
+[55:08] far. Another
+[55:09] >> more movement speed. Terminus est and
+[55:11] gain a frenzy charge on critical strike.
+[55:17] 70 and Widow Hill is 75%. That was Ted
+[55:20] at 100, I think. Right.
+[55:22] >> No, plus one arrow. Sorry.
+[55:24] >> Yeah, [laughter]
+[55:28] that was
+[55:31] destroyed. Cool. I'm I'm so excited for
+[55:34] being able to change Reququary in every
+[55:36] single league going forward. It's great.
+[55:38] >> That is very cool.
+[55:39] >> Yeah. Makes me very nervous as well
+[55:41] because [laughter]
+[55:42] all the other Ascendencies in the game
+[55:44] have had years and years of iteration
+[55:45] and then this one we're basically
+[55:47] saying, "Oh, we'll throw it in the bin
+[55:48] every league and we'll see where it
+[55:49] lands."
+[55:50] >> No fine tuning, just regular tuning
+[55:53] every league.
+[55:54] >> That's very cool. Okay, let's show the
+[55:56] third one.
+[56:00] This the tough one. Spells fire. Two
+[56:04] additional projectiles cannot continue
+[56:06] after colliding.
+[56:14] Hail on spell hit
+[56:17] your tea gloves.
+[56:20] Teaching is very cool. Plus three
+[56:22] totems. Hello. Oh. Oh, interesting.
+[56:27] Really interesting. Wow.
+[56:30] I think Tantiel is already cooking.
+[56:33] >> Like, we can take uniques that, you
+[56:36] know, maybe people don't really use too
+[56:38] much in the endame because they don't
+[56:39] come with other stats they want or
+[56:40] they're on a base they don't really want
+[56:41] to use and we can just throw their cool
+[56:42] signature stat here and now suddenly
+[56:45] that's much more accessible. Yeah, one
+[56:47] of the original concerns with rolling
+[56:49] requarian or yeah, scavenger into core
+[56:52] was
+[56:53] >> that
+[56:56] it would sort of take away from the
+[56:57] unique if you could get that special
+[56:59] unique effect on the ascendancy.
+[57:01] >> Yeah.
+[57:02] >> But by having it that it rotates every
+[57:04] league, I think we avoid that problem,
+[57:05] which was part of the reason why we want
+[57:07] to try the rotation.
+[57:08] >> That is very cool. The last one, the one
+[57:11] with the belt and everything. Garden of
+[57:13] Truth. I don't think mage floods there.
+[57:16] >> No mage floods.
+[57:17] >> Not this patch. Sorry,
+[57:18] >> not this patch.
+[57:20] >> Maybe next patch.
+[57:24] Air of purity.
+[57:27] Wow.
+[57:28] >> I had to get that one nerfed in.
+[57:29] Apparently that's like bonkers and
+[57:31] ruthless. [laughter]
+[57:33] >> I believe it. Yeah,
+[57:34] >> I believe it.
+[57:37] Wow.
+[57:37] >> The warp time piece one is the one that
+[57:39] seems most dangerous to me.
+[57:41] Yeah,
+[57:42] >> that's a that's a spooky stat.
+[57:45] >> Armor from Bunny Armor.
+[57:46] >> Yeah, it's very good with those. I can't
+[57:49] remember the name. The Delarium boots.
+[57:51] >> Yeah, beacon of madness.
+[57:52] >> Yep.
+[57:54] >> Oh, true.
+[57:57] Okay, cool. Well, thank you for letting
+[58:00] us share that. That was very neat. Um
+[58:06] >> cool. I'm I'm so excited for the fact
+[58:09] that it's like a rotating ascendy. I do
+[58:11] love that there'll be something a little
+[58:13] bit fresh like every uh every league.
+[58:17] >> I mean, on sort of a
+[58:19] >> on sort of a broader level, I think one
+[58:21] of Path of Exile's biggest strengths is
+[58:24] how many modular systems we have that we
+[58:26] can iterate on every expansion. You
+[58:28] know, like we have bloodlines, we have
+[58:29] transfigured gems, we have, you know,
+[58:31] now requarian changes every single time.
+[58:33] We have tons and tons of systems like
+[58:35] that. so that we, you know, we have the
+[58:37] new content we add and then we can also
+[58:39] just iterate on all these systems a
+[58:41] little bit and that that helps have more
+[58:43] new exciting stuff for all the different
+[58:44] kinds of players who might be coming
+[58:45] back.
+[58:47] >> I Yeah. No, I'm I even have another
+[58:50] question about that later. Um,
+[58:54] >> uh, okay. So, some more generic topics.
+[58:58] Um, league rewards are moving more to
+[59:00] leagues. Um, and I mentioned this at the
+[59:04] start, but we have things like fossils,
+[59:07] clusters, visuals are mostly removed
+[59:10] from non-lead content, right? It's like
+[59:11] fossils are only found in Delve. Um, are
+[59:16] resonators and fossils are the drop rate
+[59:19] buffed to compensate on that? Because,
+[59:20] for example, Legion was a big source of
+[59:22] fossils for a lot of us.
+[59:27] >> Um,
+[59:30] have we? I Yeah. So, at the moment,
+[59:33] we're just stripping fossils from
+[59:35] everywhere. We weren't really
+[59:36] compensating any of the rewards. We were
+[59:38] just like, fossils should be exclusive
+[59:40] to D. So, I guess what happens when you
+[59:43] do strip out fossils from Legion is all
+[59:47] the other rewards can become more common
+[59:49] as a result. So,
+[59:51] >> whether or not those other rewards are
+[59:53] more valuable than fossils, it's like,
+[59:56] not sure,
+[59:56] >> right? I'm just concerned about 20 to 40
+[59:58] chaos per uh dense fossil.
+[60:01] >> Well, the primary goal was to make some
+[60:04] of these mechanics that have had their
+[60:06] rewards diluted be more valuable. Like,
+[60:10] you know, a common complaint that I've
+[60:12] had and that I've seen a lot of people
+[60:13] in the community have is that delving
+[60:14] doesn't really feel worth the time
+[60:16] unless you're at like giga deep depths.
+[60:18] And even then, I've seen people say it
+[60:20] doesn't feel worth the time. Uh, so is
+[60:24] if a pristine fossil is worth 8C each,
+[60:27] isn't that gonna help address that?
+[60:30] >> Yeah, it will a little bit, but it does
+[60:33] also
+[60:34] >> that said, I'm I'm being kind of
+[60:36] tongue-in-cheek. Like, I can see the
+[60:37] other side of this where particularly
+[60:38] people playing in solo cell might find
+[60:40] it a little frustrating to farm up
+[60:41] enough fossils to do their crafts. So,
+[60:43] like I am also fine with taking an eye
+[60:45] towards delve and potentially,
+[60:47] >> you know, buffing some of the rooms
+[60:48] that, you know, taking some of the rooms
+[60:50] nobody will ever bother with and
+[60:51] replacing them with better ones. Buffing
+[60:52] some of the rooms. I just don't know how
+[60:54] much of that we have time for in the
+[60:55] next 3 days,
+[60:57] >> right? I I I guess the primary concern
+[60:59] is Delve's power compared to essences
+[61:02] and other things, right? like if the and
+[61:03] and recominators and still the Genesis
+[61:06] tree even though he can make weapons. If
+[61:07] it's like super far behind and it's not
+[61:10] worth for a player at all to delve let's
+[61:11] say 150 to 300 which is what most like
+[61:14] average players aren't really getting
+[61:16] past 300 that is a concern.
+[61:19] >> I'd be surprised if delve isn't
+[61:20] significantly more valuable to do in 328
+[61:22] though.
+[61:23] >> Yeah. I also wouldn't be against
+[61:25] increasing the number of fossils you get
+[61:27] from Delve at the same time. like I that
+[61:31] and that is something that we can do
+[61:32] relatively quickly. So we'll probably
+[61:34] discuss that directly after this.
+[61:36] >> Nice. Glad I brought it up. Um
+[61:40] what about uh so everything like fossil
+[61:42] incubators and delarium morphs are gone,
+[61:44] right?
+[61:48] >> Um I'm not actually sure about that one.
+[61:51] I'll need to check after this to be
+[61:52] honest.
+[61:53] >> And then
+[61:54] >> uh in your initial question you said
+[61:56] cluster and abyss jewels. I mean, that
+[61:57] is something maybe we'd eventually want
+[61:59] to do, but they haven't gotten as
+[62:00] extensive a treatment in this regard as
+[62:02] fossils.
+[62:02] >> Yeah, I think we only removed it from
+[62:04] King's March Mapping and Tujen. And the
+[62:06] primary reason for that is
+[62:10] no, they haven't actually been removed
+[62:12] at all. I think they were removed from 2
+[62:14] Jin, but from King's March mapping, I
+[62:16] think we level cap them at 83 because we
+[62:19] want item level 84 abyss jewels to pro
+[62:23] uh sorry, not abyss, delarium cluster
+[62:26] jewels to only be coming from the
+[62:28] appropriate delarium content. Feels very
+[62:30] cheap to be getting like an insanely
+[62:32] [snorts] valuable jewel from like
+[62:36] >> a King's March shipping or mapping
+[62:39] window. And this is something that I
+[62:40] feel really strongly on that it's it's
+[62:42] incredibly important to the health of
+[62:43] the game's economy to have special
+[62:47] rewards from certain mechanics be
+[62:48] sequestered to those mechanics where
+[62:50] possible. That is at odds with making
+[62:53] new things feel rewarding and cool,
+[62:54] right? So like you have to balance that
+[62:57] and it's really easy to just take stuff
+[62:59] people already want, put it in the new
+[63:01] thing, there you go. Uh, but that's, you
+[63:04] know, that's a bit of a copout and it it
+[63:07] it's a hard thing to do, but it should
+[63:08] be the case that every mechanic that is
+[63:10] added has some distinct and new and cool
+[63:12] thing that it can be specialized at. Um,
+[63:15] so that like the reason this is
+[63:16] important is because of what we saw in
+[63:18] something like Affliction League, for
+[63:19] instance, where you had maps that were
+[63:21] printing oodles and oodles and oodles of
+[63:23] loot. Um, but fossils were still worth
+[63:25] something in Affliction League because
+[63:27] you couldn't use the the the broken
+[63:30] overpowered strat to print them. So, the
+[63:33] more little corners of the game you have
+[63:34] like that where they have something that
+[63:36] they specialize in that you can't get
+[63:38] from another source or at least you
+[63:39] can't easily get from another source
+[63:40] because technically at that time you
+[63:41] could get fossils elsewhere, just not in
+[63:43] as much bulk. Um, the the more safe the
+[63:48] economy is against, you know, mistakes
+[63:50] on our part. It's like it's like if you
+[63:53] had an ecology where you know all you
+[63:56] grew and ate was rice and absolutely
+[63:58] nothing else and then suddenly there's a
+[64:00] horrible disease that wipes out all the
+[64:01] rice. Now everybody dies. But if you
+[64:03] have multiple kinds of crops, you're
+[64:05] more resistant to that.
+[64:06] >> Yeah. No, I mean that's that's really
+[64:08] good to hear in my opinion. Even as
+[64:10] somebody who like does prefer SSF, I do
+[64:12] prefer when things are not homogenized.
+[64:14] So So that's really good. But that makes
+[64:16] me want to ask about Sanctum because
+[64:18] Sanctum is probably the mechanic that
+[64:20] like the least stands out. It doesn't
+[64:21] really have its own rewards except does
+[64:23] have the uniques at the end, but
+[64:24] Sanctum's main place in the game right
+[64:26] now is a crazy farm. It's been targeted
+[64:28] a lot. U is that something you guys are
+[64:30] discussing like giving Sanctum its own
+[64:31] things that is a little bit more
+[64:33] special.
+[64:34] >> Yeah. Oh, I'm I don't want to sound like
+[64:36] I'm deflecting the question, but I am
+[64:38] going to pop out for two minutes and
+[64:39] I'll be back.
+[64:40] >> He's running, guys. I asked about
+[64:42] Sanctum and he ran. [laughter] That's
+[64:44] all good.
+[64:45] >> Uh, I will handle that one. Um,
+[64:49] Sanctum, I agree with you. I
+[64:52] >> He's facing Sanctum right now.
+[64:53] >> I was in uh I was in QA at the time when
+[64:56] Sanctum was being developed.
+[64:57] >> Um, and this was actually a concern that
+[65:01] I raised then. I I don't like how
+[65:03] onedimensional the reward structure of
+[65:05] Sanctum is.
+[65:06] >> Yeah.
+[65:06] >> Partially for this reason, which as I
+[65:07] said, I've always felt strongly about
+[65:09] like you need to have sequestered
+[65:10] corners of the economy that do different
+[65:12] things. But also it becomes incredibly
+[65:14] easy to judge the reward output of
+[65:16] Sanctum, right? Yeah. Like on the player
+[65:18] side, you can get an incredibly clear
+[65:20] picture of Sanctum creates this much
+[65:22] currency per hour on average and then
+[65:24] that makes it really hard to actually
+[65:26] balance Sanctum in a way that's okay for
+[65:27] the the broader economy because you have
+[65:30] to like land it super precisely on the
+[65:32] exact amount of currency per hour that
+[65:34] players will deem acceptable in order to
+[65:36] run the content.
+[65:37] >> Yeah. Um whereas with other things that
+[65:39] have more like that have a reward that
+[65:42] might be more valuable one league and
+[65:44] less valuable another league and and
+[65:46] might be more valuable to some players
+[65:47] and less valuable to other players. You
+[65:48] have a little more leeway there. You
+[65:49] have a little more obscurity so to
+[65:51] speak.
+[65:52] >> So does that mean that you want to give
+[65:54] it its own unique thing that is new? Cuz
+[65:56] that we haven't seen that before, right?
+[65:57] We haven't really seen like an old
+[65:59] mechanic. We had the breach rework, but
+[66:01] we haven't seen like an old mechanic
+[66:02] like suddenly get something new that is
+[66:05] very special. That usually does come
+[66:06] during its actual league.
+[66:08] >> I can't really unilaterally say that
+[66:10] we're going to make that change. Um, so
+[66:12] like all I can speak to is is what I
+[66:15] would prefer course and like yes if if I
+[66:17] had infinite time and I could just,
+[66:20] >> you know,
+[66:20] >> say we're doing this, we're doing that,
+[66:22] then I would definitely rework Sanctum
+[66:25] to have something cooler and more unique
+[66:26] and special that it gives as a reward
+[66:28] while also still trying to aim to make
+[66:29] it more competitive as a mechanic. Like
+[66:32] I don't, you know, I don't really like
+[66:34] the place that Sanctum sits in right now
+[66:35] where a lot of people view it as like
+[66:37] not really worth running or if we were
+[66:39] to buff the rewards a bunch, everybody
+[66:41] starts viewing it as like this is the
+[66:42] only viable strategy early on.
+[66:44] >> Yeah.
+[66:44] >> Like that's what I'm saying with the the
+[66:46] whole,
+[66:47] >> you know, when when it rewards just raw
+[66:49] pure currency and nothing else. It kind
+[66:51] of sits on that nice edge. Like it's
+[66:53] either it's perceived as this busted OP
+[66:55] thing that you have to do or it's not
+[66:57] worth doing at all. Don't bother. like
+[66:59] it's it's very hard to land on the
+[67:01] middle there.
+[67:02] >> It was really interesting during the
+[67:04] past few leagues because so many people
+[67:06] were in the camp of it's not worth doing
+[67:07] at all, don't bother, which meant that
+[67:09] it actually was super worth doing
+[67:10] because the the toss were free, right?
+[67:12] There were just 1 C or maybe even like.5
+[67:15] C. So, it did balance itself out a
+[67:17] little bit that way. I'm a huge sanctum
+[67:18] enjoyer. So,
+[67:19] >> there there is a floor. Yeah,
+[67:21] absolutely. It'll be it'll be
+[67:22] self-correcting to some degree with the
+[67:24] with the economy, but yeah, regardless.
+[67:26] >> Cool. Uh, speaking of the economy, we
+[67:29] have instant trading currency auction
+[67:31] house. Uh, I have some questions about
+[67:33] that. First, uh, are you there were a
+[67:36] lot of concerns about fast being added,
+[67:38] uh, to the core game and and instant
+[67:40] buyout and stuff. Are you guys happy
+[67:42] pretty much with how that went? They
+[67:44] obviously has a lot of connotations with
+[67:46] player power.
+[67:48] Um, I mean, I can't speak to like, you
+[67:51] know, how the game directors might feel
+[67:53] or the the company at large, but I
+[67:55] personally am happy it's in the game.
+[67:57] Um, I yeah, I a more grounded answer. I
+[68:01] I certainly have seen an impact in the
+[68:03] rate at which I can acquire, you know,
+[68:05] good, decent, even great rares in a in a
+[68:08] um in a trade league when I do play
+[68:10] trade league.
+[68:10] >> Yeah.
+[68:11] >> But like
+[68:12] >> I would say it's worth the trade-off
+[68:14] personally. Like it's just so nice to
+[68:16] interact with trade in general now.
+[68:19] >> Like it just seems worth it to me. Yes,
+[68:21] >> we're talking about fastest. Welcome
+[68:22] back. Um well,
+[68:25] >> while talking about fast, currently he
+[68:27] has a limit of 10. Is that something
+[68:30] that'll ever get changed, made a larger
+[68:32] limit. It's maybe a little low for a lot
+[68:34] of people.
+[68:36] >> Uh there was an issue to change that. It
+[68:39] didn't quite make it into 328.
+[68:41] >> Okay, so that's coming. Cool. Um
+[68:44] Especially white maps being tradable on
+[68:46] the currency currency exchange or is
+[68:48] that going to be a merchant tab thing
+[68:49] only?
+[68:50] >> I don't think they're allowed to be.
+[68:53] Yeah, it might be a technical limitation
+[68:55] because you're only allowed to trade
+[68:56] homogeneous items on the currency
+[68:58] exchange and even a white map does not
+[69:01] count as a homogeneous item.
+[69:03] >> Yeah, sense. Um, can we get the ability
+[69:06] to price an entire merchant tab similar
+[69:09] to the way we can do with a premium tab?
+[69:11] Uh, I think I specifically requested
+[69:14] this because I'm
+[69:17] basically I play trade league and I do
+[69:21] the same thing every single league start
+[69:23] where I'll get to around level 90 or so
+[69:25] and then I'll just farm rogue for like a
+[69:28] few three or four days. I'm I I'm sort
+[69:32] of crazy in that I think I'm one of
+[69:34] these rare players who actually enjoys
+[69:35] trading with other people, but Async
+[69:37] trade did make Frog like way better. And
+[69:40] that was my biggest frustration of like
+[69:42] the jank of having to like I'll have
+[69:45] like 10 tabs with like 10 chaos, 20
+[69:47] chaos, 30 chaos, and I'm like, "Okay,
+[69:49] none of my 30 chaos is selling. I want
+[69:51] to make it 20k." And I couldn't do that
+[69:53] easily. So, yep.
+[69:54] >> Awesome. Awesome.
+[69:55] >> I will push for it at some point.
+[69:58] >> That's really good.
+[70:00] um
+[70:01] with the UI. Oh, here I am.
+[70:04] >> Just one of the reasons why some of this
+[70:06] Q stuff has been a little I mean slow is
+[70:09] the wrong word, but you know has been
+[70:11] taking a few leagues is because while we
+[70:13] have incredibly talented UI programmers,
+[70:16] we just don't have enough of them. So,
+[70:18] if you are a talented UI programmer in
+[70:21] New Zealand, please apply.
+[70:24] >> Branding Gear Games. Thank you.
+[70:26] [laughter]
+[70:26] >> Good ad. Um, next topic is UI. This is a
+[70:30] very big personal thing for me. For
+[70:32] around 20 minutes, we had an energy
+[70:35] shield overlay next to our health bar in
+[70:36] the middle of the screen that would
+[70:37] separate the energy shield UI uh and
+[70:40] make it above life so that we had a blue
+[70:43] bar. Um, it's really annoying,
+[70:46] especially for builds like Zakqua where
+[70:48] there's a bypass and nuda shield thing
+[70:50] and it just overlays your life bar and
+[70:52] just makes it hard to see. Can we have
+[70:54] that back? I know there were bugs with
+[70:56] it, but we had it for 20 minutes and
+[70:58] they were like, "You you guys said, "Oh,
+[70:59] we're removing it. We need to fix it."
+[71:00] That was four years ago.
+[71:04] >> Uh, sorry, I cannot recall this at all.
+[71:07] But I'm certain I can find someone at
+[71:08] the company who's familiar with this and
+[71:10] I can bring it up.
+[71:11] >> Awesome. Please, please give me that
+[71:13] back. I really I really want it. It
+[71:15] would mean a lot.
+[71:18] Um, and speaking of UI stuff, um,
+[71:22] mercenary UI for Anime Guardian.
+[71:27] >> Uh, I think the programmers would
+[71:28] probably shoot me if I [laughter]
+[71:31] suggested that. Um,
+[71:35] it's certainly one of these things where
+[71:37] I just don't think it's going to ever be
+[71:39] worth the technical effort to get in the
+[71:43] game for what Animate Guardian just does
+[71:45] as like a single solo skill.
+[71:48] >> Um, I'm not going to say no for sure,
+[71:50] but I just think
+[71:52] >> we did bring it up at some point. I
+[71:54] can't remember the exact reasons why,
+[71:55] but yeah, I'm pretty sure I'd get shot
+[71:58] by the programmers.
+[72:00] >> Okay, that's fair. Um, I I hope I hope
+[72:03] it can be added. Um,
+[72:06] another thing as well, like the the UI
+[72:08] can be a little bit cluttered right now
+[72:10] with boss bars like covering our buffs
+[72:13] and stuff. Is there going to be any like
+[72:15] positioning change, tidy up, clean up,
+[72:17] anything like that?
+[72:19] Um I've seen some or heard some
+[72:22] discussion and seen some issues floating
+[72:24] around regarding that uh specifically
+[72:28] like in the on the POE2 issue tracker
+[72:29] and that is the same implementation
+[72:31] across both games there for the boss
+[72:33] bar. Uh so I can't really promise when
+[72:36] or what form that will take but it is on
+[72:38] people's radar. Uh that is something
+[72:40] that would be more you know Jonathan and
+[72:42] Mark's decisions uh as it as it does
+[72:44] impact both games.
+[72:46] >> Yeah. Yeah. I'm just trying to plant as
+[72:48] many seeds as possible for things that
+[72:49] aren't being done. And
+[72:51] >> um I'm guessing they also watch some of
+[72:53] this. So
+[72:54] >> yeah, we're probably the wrong people to
+[72:55] ask about UI type of things.
+[72:58] >> Yeah. Um
+[73:00] why
+[73:02] you're going to hate the next two
+[73:03] questions, but then it gets great again.
+[73:05] Um
+[73:06] >> go for it.
+[73:07] >> In the past, there has been talk about
+[73:08] importing pre-planned trees to POE, just
+[73:10] in case you know the status of that.
+[73:14] like a
+[73:15] >> not specifically the status but there is
+[73:17] someone who has been working on it.
+[73:18] >> Cool.
+[73:18] >> I can tell you that much.
+[73:20] >> Awesome. That's that's great to hear. Um
+[73:23] muting our own specters other player
+[73:25] sounds. I know we got a minion you can
+[73:27] buy to kill other people's minions. Uh
+[73:29] but even muting our own specters.
+[73:31] >> Oh, actually there is one to kill them
+[73:32] too, isn't there?
+[73:33] >> There is. Yeah, I have it. It was
+[73:34] mandatory for trade league. [laughter]
+[73:39] >> Yeah. Can we mute?
+[73:43] Um, I think we added some tech a while
+[73:45] back that allows you to mute certain
+[73:48] effects in your hideout. Usually those
+[73:50] effects were related to like automated
+[73:51] war cries.
+[73:52] >> Yeah.
+[73:53] >> Um,
+[73:54] >> but the thing is the way that was set up
+[73:56] was it was on a per effect basis. And if
+[74:00] we were to do that with specters, well
+[74:02] then does that mean we need to go
+[74:03] through every single spectraable monster
+[74:05] in the game and pull out all of their
+[74:07] effects? There there'll be a much
+[74:09] >> we need a more dynamic solution.
+[74:10] >> Dynamic solution for that for sure.
+[74:12] Somebody that enjoyed forge frost
+[74:14] bearers last patch did not enjoy my
+[74:16] hideout last patch.
+[74:17] >> Yeah, I think I remember when I played
+[74:19] slave driver specters once and those
+[74:21] things were the most erratic
+[74:23] >> people ever in my hideout. Yeah,
+[74:25] >> that's it's it's it's a legit concern.
+[74:28] Um, since we have the baseline tech to
+[74:30] mute things selectively in your hideout,
+[74:32] it seems like a good place to utilize
+[74:33] it. So, I'll put it on the list for uh
+[74:35] you know, Q stuff to look into for 329.
+[74:38] >> Cool. Um,
+[74:41] yeah. So, next question are about
+[74:44] bosses. Um, obviously the game has been
+[74:47] going for a while now and some bosses
+[74:49] were added a long time. Um, is there any
+[74:51] talk of like updating older bosses? Like
+[74:55] for example, the Shaper still has three
+[74:57] phases that were sort of oneshotting.
+[75:00] Uh, not necessarily cutting out phases,
+[75:02] either buffing the I don't know. Like,
+[75:03] you know what I mean? Like a little bit
+[75:05] of a refresher on older bosses. Elder
+[75:08] very, very outdated by now.
+[75:10] >> Yeah. Well, one of the more honest
+[75:13] answers here is that those very old
+[75:15] bosses are set up in a much more hacky
+[75:19] way than the newer bosses are. They
+[75:21] aren't using like our new designer
+[75:23] friendly scripting language. So whenever
+[75:27] someone tries to go in and change
+[75:28] things, it's a little bit of a
+[75:30] minefield, which is probably just shows
+[75:33] our reticence to like if we were to fix
+[75:36] fix those fights, then we'd probably
+[75:38] just want to rework them entirely
+[75:40] >> using our scripting language and change
+[75:42] all of their skills.
+[75:43] >> Whether or not that will happen or maybe
+[75:45] at some point we'd phase out the shaper
+[75:47] and outer instead, that might be the
+[75:49] better solution. Honestly,
+[75:50] >> I think what you'd want to do is
+[75:52] hybridize changing those bosses and
+[75:54] changing older content with introducing
+[75:57] new stuff. Um because that's probably
+[75:59] the most efficient use of the design and
+[76:01] development resources is like you know
+[76:04] >> whatever storyline beats we go to next
+[76:07] could potentially include also
+[76:09] >> there's some change that has occurred
+[76:11] that means that we can justify going
+[76:13] back and and
+[76:14] >> to a degree recconing and to a degree
+[76:16] reviewing some of these older bosses
+[76:18] that don't hold up to modern standards
+[76:20] >> sense on the off chance that it's an
+[76:22] easy fix. Would it be easy to you know
+[76:25] the when the elder spawns for elder
+[76:27] guardian and does like the feels like
+[76:28] four or five second portal is that easy
+[76:30] to make like half a second?
+[76:32] >> Oh, I wish that was an easy fix.
+[76:33] >> The thing is I thought that one of our
+[76:37] senior monster digners
+[76:39] sped it up a few leagues ago or am I
+[76:41] imagining that?
+[76:42] >> I think so.
+[76:43] >> Yeah, I it's not that fast.
+[76:44] >> I think I know who you're thinking of.
+[76:46] Yeah,
+[76:46] >> I I I have discussed
+[76:48] >> I can't remember if that went live or
+[76:50] not, but he was looking into seeing if
+[76:53] there was some simple change he could
+[76:55] make to speed up those portals and that
+[76:58] was the best he could come up with given
+[77:00] only a designer's time and not getting a
+[77:01] programmer to go and
+[77:03] >> yeah,
+[77:04] >> look at the the real technical aspect of
+[77:06] it.
+[77:06] >> I do think it it gets sped up a little
+[77:08] bit, but it's it's still quite slow. Um
+[77:13] well um one of the really big
+[77:15] announcements for Mirage was like ground
+[77:18] loot is starting to be touched now
+[77:19] you're doubling the currency but could
+[77:22] you go into what doubling currency means
+[77:25] a little bit for example does it affect
+[77:27] scarabs
+[77:29] that a currency
+[77:30] >> it does not affect scarabs so the things
+[77:33] that it will affect are all the core
+[77:36] drop currency but I guess from a
+[77:38] player's point of view that might not be
+[77:41] immediately clear. So, it's all your
+[77:43] standard currency items, including
+[77:45] quality currency. It will also include a
+[77:47] couple of
+[77:48] >> Well, okay, actually, so the doubling
+[77:51] loot currency. I don't know if I should
+[77:52] be giving away all the the secret
+[77:55] waitings.
+[77:57] >> Well, to be fair, these are the
+[77:58] waitings, but there were there were
+[78:00] certain currencies we did not want to
+[78:02] double the rate of from ground loop. For
+[78:03] example, mirrors of Kandra have not been
+[78:06] doubled. They are actually slightly more
+[78:09] common than before, but they have not
+[78:11] got the same buff to ground loot that
+[78:14] all the other currencies did, just
+[78:16] because we want mirrors to remain just
+[78:17] as special as they are now.
+[78:19] >> They are very special. Um,
+[78:20] >> only found four.
+[78:22] >> There are a couple void keys are not
+[78:24] more common. Volto puzzle boxes are not
+[78:27] more common. Is there any other specific
+[78:29] items you'd want to ask about there?
+[78:31] >> And it requires lock
+[78:33] >> not more common.
+[78:34] >> Oh, interesting. That is a choice.
+[78:37] >> We were treating that at the same
+[78:39] specialness as a mirror of Kalandra.
+[78:42] >> Ah um well I mean okay so the obvious
+[78:44] ones are also um a lot there's a lot of
+[78:46] concern with all the harbinger
+[78:47] currencies now um because like
+[78:51] >> yeah like on ancient orbs and stuff are
+[78:53] they way more farmable now or like
+[78:56] >> uh well arguably they were more farmable
+[78:59] before cuz if you wanted anal orbs you'd
+[79:01] go and do harbinger right.
+[79:02] >> Yes. But analment orbs are more common
+[79:05] in so aside from everything getting
+[79:08] doubled, we did actually look at a bunch
+[79:10] of the specific currencies and change
+[79:13] their weightings relative to each other.
+[79:15] So announcement orbs are actually much
+[79:17] more common from than they were before
+[79:20] relative to the other currencies.
+[79:22] >> Same as exalted orbs and regal orbs were
+[79:25] the other two notable ones that are now
+[79:27] much more common than before.
+[79:29] >> Okay. Fracturing orbs.
+[79:32] Fracturing orbs have been added to the
+[79:33] core drop pool, but I'm not going to
+[79:35] state how common or how rare they are.
+[79:38] >> Right. Okay.
+[79:39] >> Relative to other currencies.
+[79:42] >> Um,
+[79:44] nice.
+[79:45] Um,
+[79:47] one thing that was brushed up on a
+[79:49] little bit in the Ziggy Q&A, uh, was
+[79:52] tiered loot. Um, can you talk a little
+[79:56] bit why quantity is an issue with tiered
+[79:59] loot? And I have a potential solution
+[80:01] idea pitball.
+[80:04] >> Um, can you expand on the question a
+[80:06] little bit?
+[80:07] >> So, I'm not
+[80:08] >> for example, when it comes to tier loot
+[80:10] from POE 2, right, where they identified
+[80:12] a better tier. I'm a huge fan of the
+[80:14] idea of that because I would like to see
+[80:16] less
+[80:17] even in P2, I haven't necessarily
+[80:19] identified a really good tier five loot,
+[80:21] but I I do think the system is really
+[80:23] cool. Big fan of it. There was a mention
+[80:25] in the Ziggy Q&A that um the quantity
+[80:30] uh and player bonus would be an issue
+[80:32] with introducing tier loot and P1 like
+[80:35] quant bonus.
+[80:37] >> I'm not 100% sure what that was
+[80:40] referring to, but quantity will give you
+[80:43] more memory strand items. We did
+[80:45] significantly buff memory strand items.
+[80:47] >> Yeah. So, memory strand items are
+[80:50] effectively our version of tiered loot
+[80:52] from POE2.
+[80:55] Um, so the more quant you have, the more
+[80:58] of those items you will get. So, I'm not
+[81:00] 100% sure what the quantity issue is
+[81:02] here.
+[81:02] >> I guess the main difference is that the
+[81:04] the memory strand items don't kick in
+[81:06] until you're in the endame, whereas the
+[81:08] tiered loots starts in like the latter
+[81:10] half of the story in POE 2. So, it's a
+[81:12] bit feels a bit more core, I guess. But,
+[81:13] they are pretty similar
+[81:14] >> that too. But, I don't know. I'm this
+[81:16] could be like very very at odds of what
+[81:18] the community feels, but I feel like
+[81:19] there's a very big difference with uh
+[81:21] that and identifying like it doesn't it
+[81:24] feels more like crafting to me. It
+[81:25] doesn't feel like finding an item.
+[81:27] >> Um I guess I wish I was finding a little
+[81:30] bit more rare items. Like it does feel
+[81:33] with with the memory strands item. I
+[81:35] feel a little bit more like I have to
+[81:37] have a strategy. I have to think a
+[81:39] little bit about how to craft them and
+[81:40] how to best use utilize those memory
+[81:42] strands as opposed to something like I
+[81:45] don't want to call it smart loot but
+[81:46] like the smart loot from heist right
+[81:48] where wow that is a really good item
+[81:52] >> but isn't that essentially just I don't
+[81:53] mean to be combative or anything but
+[81:55] isn't that essentially just memory
+[81:56] strands except they go away when you
+[81:58] craft on them
+[82:00] >> really identify an item with memory
+[82:02] strands the memory strands are affecting
+[82:03] the identified mods I believe.
+[82:05] >> Yep.
+[82:07] >> Yeah.
+[82:09] I I guess for [clears throat] me they
+[82:10] haven't felt as special or as like
+[82:13] identifying an item.
+[82:15] >> Yeah. And I think the reason for that is
+[82:17] just because we've got so many other
+[82:18] sources of like better rares spread
+[82:21] throughout the game. So for example from
+[82:23] King's March and from the breach tree
+[82:25] and from heist and from rogue and that
+[82:28] type of thing. Um, yeah, I can't. Yeah,
+[82:31] ground picking up rares
+[82:34] on the ground is a very tricky topic to
+[82:38] address. And I do even wonder if players
+[82:40] do want to be picking up rares off the
+[82:42] ground to find the best items.
+[82:44] Theoretically, I would love it that you
+[82:46] could drop the best item in the game
+[82:48] from the ground, which is why I sort of
+[82:51] have other separate issues with systems
+[82:54] like synthesis, implicit, and exclusive
+[82:56] mods, but completely different topic.
+[82:59] >> Yeah, it it is a tricky one. Like I
+[83:01] don't want to be like identifying and
+[83:02] picking up every rare item for sure. But
+[83:04] I do, at least in my head, obviously
+[83:07] it's hard to know if that's the case,
+[83:08] but I do love the idea of like, let's
+[83:10] say a tier five amulet being something
+[83:11] that's actually quite rare, like
+[83:12] something you don't drop every day, and
+[83:14] you're excited to identify it because it
+[83:16] has a very big chance to be good. I do
+[83:18] like that idea in my head.
+[83:21] Another one of the issues which is I
+[83:24] think more noticeable in POE 1 is
+[83:30] if you look at an amulet in POE2 and you
+[83:32] get a tier five amulet. Basically every
+[83:34] single one of the mods that can roll on
+[83:36] the amulet in my opinion can be a very
+[83:39] good and generically good mod. There is
+[83:42] a lot more filler mods on amulets in POE
+[83:44] 1 compared to POE 2, which means that
+[83:46] even if all the mods roll at their
+[83:48] highest ti, it just doesn't necessarily
+[83:50] mean that it's like a very good amulet
+[83:52] cuz it could be rolling with some filler
+[83:54] mods or some incompatible mods,
+[83:56] >> which I think because the POE2 mod
+[83:59] system is much more streamlined.
+[84:00] >> I feel like on average, if you found a
+[84:04] tiered loot in POE 1 and POE 2, the POE2
+[84:07] one is probably going to feel better.
+[84:09] >> It will. It will. There is a lot of
+[84:11] filler for sure. No. Um it's it's a
+[84:14] tricky one. Um have you guys talked
+[84:15] about like drop only mods similar? Like
+[84:18] we did have that in incursion. I'm a big
+[84:19] fan of drop only mods. Thoughts on that?
+[84:23] >> Um I mean I've specifically brought it
+[84:26] up because it's something that I like in
+[84:28] in other games and also liked incursion
+[84:30] but like it's it is it has been
+[84:33] discussed. It's been a part of the topic
+[84:35] of discussion. It's certainly not
+[84:37] something that I can say we'll commit
+[84:39] to.
+[84:41] >> Yeah. Oh, um, quick thing I remembered.
+[84:44] Um, any chance of getting something like
+[84:47] shift click or control click to use
+[84:49] wisdom scrolls in your inventory? Like
+[84:51] when you're mid map, sometimes you'll
+[84:52] find like keep yourself a trove. You'll
+[84:54] still have 20 rings in your inventory,
+[84:56] but you don't necessarily want to go
+[84:57] back to your hideout. Very small feature
+[84:59] that we also see in things like Project
+[85:01] Diablo 2 that I'm a huge fan of.
+[85:05] I reckon this is one that we'd have to
+[85:07] elevate to Mark and Jonathan as being
+[85:09] like is it removing too much item
+[85:11] weight.
+[85:14] >> Like as in as in you use the wisdom
+[85:16] scroll from your inventory.
+[85:18] >> It still uses the wisdom scroll. I just
+[85:20] don't have to click the wisdom scroll.
+[85:21] Hold shift. It feels really nice. It's
+[85:24] surprisingly good.
+[85:28] >> We're still using wisdom scrolls.
+[85:34] Yeah, but like I said, I feel like that
+[85:36] would definitely be a Mark or Jonathan
+[85:38] question.
+[85:38] >> Yeah.
+[85:40] >> Um,
+[85:42] juicing always a hot topic. Um,
+[85:45] >> sure.
+[85:47] >> What What's the main problem you feel
+[85:49] Astrolib solve? And also,
+[85:53] um,
+[85:55] is for the people that do really like
+[85:57] juicing, do you feel like Astrolabes
+[85:59] will still allow you to sort of like I
+[86:02] don't necessarily do this a lot myself,
+[86:03] but will you still be able to like, you
+[86:04] know, pre-roll 100 maps, grab 100
+[86:07] scarabs and with astrolabes achieve that
+[86:10] similar flow state to before?
+[86:16] >> Um, I think yeah, you should be able to.
+[86:18] So basically the way that the astrolade
+[86:20] the shaped regions work is when you
+[86:22] complete one of the maps then it will
+[86:25] add modifiers to the other maps. Now you
+[86:27] wouldn't really want to be like having
+[86:29] to care too much about what those
+[86:30] additional modifiers are
+[86:32] >> because that might say what you mean
+[86:34] where it's like oh I rolled this map but
+[86:36] actually now I need to change my atlas
+[86:38] tree and my scarab.
+[86:39] >> So all of the mods should be related to
+[86:41] the current mechanic
+[86:42] >> but there might be some generic ones
+[86:44] added on top. Um I think we might have
+[86:47] showed one I can't remember in the live
+[86:49] stream which I might have removed since
+[86:50] like adding essences or something to
+[86:52] like a harvest astrolab. I wouldn't
+[86:55] really want that type of thing for
+[86:57] example. So most of if you've got like a
+[87:00] harvest astrolab then all of the mods
+[87:02] will either be generic stuff like pack
+[87:04] size quan
+[87:05] >> or something related to the harvest
+[87:08] mechanic juicing it itself. So you
+[87:10] shouldn't necessarily need to be
+[87:11] changing what harvest scarabs you're
+[87:13] using.
+[87:13] >> Cool. And do do you think there'll be a
+[87:15] need to like hover over the maps before
+[87:17] and see which one you're starting with?
+[87:20] >> Um,
+[87:26] I'd need to play around with that and
+[87:28] find out from like a how I how I would
+[87:32] behave as a player if like this one's
+[87:35] got a good mod, so I need to save it
+[87:37] till last. So, should I run these ones
+[87:39] first? Yeah, there might be a little bit
+[87:41] of that.
+[87:41] >> Yeah. Cool.
+[87:43] >> Although, if you're using the the
+[87:45] keystone, then you don't need to bother
+[87:46] with that at all.
+[87:47] >> Yeah, I I do I do like how you guys
+[87:49] added that.
+[87:50] >> Pretty cool. Um,
+[87:53] next up, King's March. Very very hot
+[87:56] topic. Uh, especially because it feels
+[87:59] very mandatory.
+[88:01] Uh, how do you guys feel about King's
+[88:03] March and do you think the current
+[88:05] change with moving it to the ore
+[88:08] addresses that issue? Are you still
+[88:10] like? Yeah, I would personally say it
+[88:12] feels a bit mandatory.
+[88:15] >> Uh, I would want to see how all of the
+[88:17] changes we made this league have played
+[88:19] out. It's more of like a first step in
+[88:21] the direction of evaluating like we'll
+[88:25] see if these changes help address the
+[88:27] King's M problem and if they're still a
+[88:28] problem, we'll just keep making more
+[88:29] changes.
+[88:30] >> Yeah. Um,
+[88:33] mercenaries is another one that is
+[88:35] potentially coming back and mercenaries
+[88:37] is also something that I would be also
+[88:39] worried about would be feeling very
+[88:41] mandatory. Have you ever discussed
+[88:44] rotating le mechanics?
+[88:54] It's one of those situations like I said
+[88:55] earlier in the podcast where like I
+[88:59] don't on a fundamental like subjective
+[89:01] level I don't really feel like that's
+[89:03] good but I can't put my finger on
+[89:05] exactly why I probably would have to
+[89:06] think about it more.
+[89:07] >> Um mercenaries is a difficult one
+[89:10] though. I mean that's the main reason it
+[89:11] hasn't come back right because like
+[89:13] functionally we we could probably just
+[89:15] slap it in with a couple of weeks of you
+[89:17] know a week or two of a programmer's
+[89:19] time to try and solve all the problems
+[89:20] with sending it core and all the
+[89:22] database related stuff and all that. Um
+[89:24] but like there are design questions
+[89:27] there that are very difficult to answer.
+[89:29] Um
+[89:31] >> and it'll come back when we have good
+[89:33] answers to those.
+[89:35] >> Yeah. I mean, mercenaries is definitely
+[89:37] for me something where I love the
+[89:39] league, but I was like, please don't go
+[89:40] core because it would feel very
+[89:42] mandatory. I do see those issues.
+[89:45] >> Um, cool. Um, all right. I'm sort of at
+[89:50] the uh those were the main topics we had
+[89:52] and then I have um some rapid fire Q&A.
+[89:56] Um, can uh relic querin use forbidden
+[90:00] flame and flesh at all from like normal
+[90:02] scion?
+[90:04] Uh, Reququarian can use the ascendants,
+[90:07] forbidden flame, and forbidden flesh
+[90:09] jewels, but she does not have her own.
+[90:11] And the reason we didn't add her own is
+[90:13] because the whole we're rotating the
+[90:15] uniques every league thing.
+[90:16] >> Yeah, makes sense.
+[90:19] >> Ascendants are allowed to be well, Scion
+[90:22] ascendancies are allowed to be weird
+[90:24] >> and different.
+[90:26] >> Target dummies.
+[90:30] >> No, no plans that I'm aware of.
+[90:33] really want target dummies.
+[90:35] >> That that would be a Mark and Jonathan
+[90:37] question. Sorry.
+[90:37] >> Yeah. Um the console players were asking
+[90:42] if they can have crossplay or if they
+[90:44] can't have crossplay, if they can be
+[90:45] part of our economy.
+[90:50] >> Also have no idea. Sorry. Yeah, this is
+[90:53] and I I don't want to seem like we're
+[90:55] dodging questions here, but this is
+[90:57] something that,
+[90:58] >> you know, definitely is more like um
+[91:00] this would actually be more of a
+[91:02] question for our
+[91:03] >> uh less often seen game director uh
+[91:05] Trevor, who is the the the lead on all
+[91:07] the console related stuff.
+[91:09] >> Well, uh I just figured I'd bring it up.
+[91:11] There were so many console players
+[91:13] asking about it. Um
+[91:16] scrying and the sear, is that still a
+[91:18] thing?
+[91:20] >> Uh yeah.
+[91:20] >> Yeah. Uh, it I think it works basically
+[91:23] the exact same as it currently does in
+[91:25] life.
+[91:26] >> Um,
+[91:28] you guys ever discussed anything like
+[91:29] color coding for map mods, any like
+[91:32] change to map mods, things like that?
+[91:35] Like re remaking them? Both of those I
+[91:37] think asked a lot.
+[91:40] >> I mean, revamping them and adding some
+[91:42] some new ones or removing some or
+[91:44] something like that is certainly a
+[91:46] possibility. Uh, color coding is
+[91:48] something that I might get some flack
+[91:50] for saying, but I'm personally kind of
+[91:52] against because I don't like the
+[91:54] aesthetic direction that it takes the
+[91:55] items in the game if you do that too
+[91:56] much.
+[91:57] >> When you say color coding, what do you
+[91:59] specifically want colorcoded?
+[92:01] >> I think I don't want it myself for the
+[92:04] record. Um, I just like I know a lot of
+[92:06] people want to be able to filter map
+[92:07] mods uh for people that aren't using
+[92:09] Megex, I guess, to use. So, being able
+[92:11] to filter out reflect and stuff like
+[92:14] that and make that red, I don't
+[92:16] necessarily care. Don't really have a
+[92:18] problem with any mods.
+[92:19] >> I know. Well, hopefully reflect is a lot
+[92:22] easier to deal with this patch due to
+[92:23] >> Oh, thank you. Thank you for that. I'll
+[92:25] buy you guys some uh some beers or food
+[92:27] at Excelon. That was uh big fan big fan
+[92:30] of those changes, [laughter]
+[92:33] >> especially for users, right?
+[92:36] >> Thank you. Um, oh, uh, can we have
+[92:40] multiple astrolaves in one region at the
+[92:41] same time?
+[92:44] >> No, you can. Well, we've split the atlas
+[92:47] into what we're calling four quadrants.
+[92:49] And each of the quadrants,
+[92:51] um,
+[92:53] if when you apply an astrolab to a
+[92:55] quadrant, you can only have one shaped
+[92:58] region in a time. So, four total on your
+[93:00] atlas. And depending on which region you
+[93:03] put it in depend determines which memory
+[93:06] vault you go to. And the memory vaults
+[93:07] each have their own distinct set of
+[93:09] rewards which I'm sure eventually a meta
+[93:11] will shape out. But yeah,
+[93:14] >> try it and find out.
+[93:16] >> Nice. That sounds very exciting. Um are
+[93:19] Metacraft locations changed at all? Are
+[93:22] still in their respective maps like Cure
+[93:24] Blade and stuff?
+[93:26] >> Yeah. Um, so although you don't need to
+[93:30] complete all of the unique maps anymore
+[93:32] to get your maximum atlas completion,
+[93:35] there are still some unique maps that
+[93:37] you'll need to do to get those um
+[93:40] specific metacrafts.
+[93:42] Cool. Okay.
+[93:45] Yeah, makes sense. Um,
+[93:48] so with the change to nightmare maps
+[93:50] tier 17s and 16.5s, are is going to be
+[93:54] more of a scarcity on item level 86?
+[93:58] base steps.
+[94:00] >> Yeah, I'd imagine so. Uh there are still
+[94:02] sources of them. Um
+[94:05] personally, as a player, I'm kind of
+[94:07] okay with that. I think it's cool when
+[94:08] the very tippy top of bases are scarce
+[94:11] and valuable.
+[94:12] >> Yeah, I was contemplating adding plus
+[94:14] one level as a very rare mod to shaped
+[94:18] regions.
+[94:19] >> I haven't yet, but
+[94:23] I think I want to avoid it to be honest.
+[94:25] I mean, it definitely does add some
+[94:27] value back to Delve because Del has
+[94:29] that.
+[94:30] >> Yes.
+[94:33] >> Cool.
+[94:35] Um,
+[94:37] can we log directly into the hideout
+[94:39] like in PE2?
+[94:45] >> Mark and Jonathan question for sure on
+[94:47] that. I'm not 100% sure why they're
+[94:50] different in both games, but
+[94:51] >> yeah, that seems strange. I'll bring it
+[94:53] up. One of us will
+[94:55] >> um
+[94:56] >> hopefully someone we can revisit this
+[94:59] list of questions afterwards.
+[95:01] >> The old memories were baked into Kak
+[95:05] with like the the blue text special
+[95:07] memory maps like Kak harvest beasts et
+[95:10] are they gone?
+[95:13] >> Uh well the Kak harvest beasts already
+[95:15] exist in the core best pool. They're
+[95:17] just extremely rare.
+[95:19] >> Yeah. I I think all of them except one
+[95:23] are now two to four times more common.
+[95:25] If you want to guess which one I did not
+[95:27] make more common
+[95:30] >> them one now that it's been reworked.
+[95:33] >> Uh it's the re-rolling symptom plus one.
+[95:36] >> Ah wow. Wow. That's going to be very
+[95:38] expensive then.
+[95:40] >> Yeah. Well to be honest we wanted to do
+[95:43] a like small rework to synthesis
+[95:45] itemization this patch but we might end
+[95:47] up doing it next patch.
+[95:50] I think synthesis items are in a little
+[95:52] bit of a weird spot at the moment where
+[95:53] it's like you don't even get them from
+[95:54] synthesis maps and
+[95:56] >> a lot of people want that.
+[95:57] >> Then you have these crafts where you can
+[96:00] like the base type doesn't matter if you
+[96:02] can just continuously roll your
+[96:04] something plus it's forever.
+[96:06] It's it's probably going to be quite
+[96:07] controversial for very very endgame
+[96:09] crafters, but it's still in the game for
+[96:12] now.
+[96:12] >> I love it. Um yeah. No, I would love to
+[96:15] see synth items drop from the synth maps
+[96:17] like Cortex and stuff. That'd be very
+[96:19] cool. Um,
+[96:22] support gems. I I I realize this is
+[96:24] probably not the perfect question for
+[96:25] you, but it's something I want you to
+[96:26] bring up. Support gems are still like
+[96:27] class locked and in a lot of a lot of
+[96:30] cases don't necessarily make sense. Like
+[96:32] Templar doesn't have faster attacks, but
+[96:33] it does have a lot of like attack based
+[96:36] things. Um, do they still need to be
+[96:39] class looked early on?
+[96:46] I had someone asked me that exact
+[96:47] question two days ago. So now I'm
+[96:49] wondering if they told you or you told
+[96:51] them to ask me it.
+[96:53] >> Um, sorry that brought it up.
+[96:56] >> This is one of the things that PE2's
+[96:58] uncut support system kind of solved in a
+[97:00] much more elegant way where like you
+[97:02] have the benefit of the class locking is
+[97:04] there's fewer options displayed to a new
+[97:06] player, right? And Path of Exile is
+[97:08] already a complex enough game that it's
+[97:09] really difficult to get into. Um, but
+[97:13] you are correct that it's like it's kind
+[97:16] of weird and arbitrary that you just
+[97:17] can't get faster attacks randomly on
+[97:19] Templar early on. Like that that's not
+[97:20] really for some super significant
+[97:22] balance reason. It's just because we
+[97:24] don't want to throw even more options in
+[97:25] the face of a new player. Like
+[97:28] >> so so the uncut kind of allows for that,
+[97:30] right? Where like you have here's the
+[97:31] menu that gets shown immediately and
+[97:33] then you can click down here if you want
+[97:34] literally everything. Actually, I want
+[97:36] to sort of run a hypothetical by you
+[97:38] because this sort of relates to our
+[97:40] conversation earlier of shaking up the
+[97:42] leveling meta. What if you started a
+[97:45] Templar and you couldn't get like 30
+[97:49] options by the end of act one for what
+[97:51] main skill you can use and you only got
+[97:53] like five instead?
+[97:56] >> That sounds horrible.
+[97:59] [laughter]
+[98:02] >> Yeah. Basically, what we'd be saying
+[98:04] then is we're prescribing you exactly
+[98:06] what skill you're allowed to level with.
+[98:09] >> No, I I think that that sounds awful. I
+[98:12] think I would literally be lynched by
+[98:14] the community if I said I like that. Um,
+[98:16] it's also I feel like you're already
+[98:19] sort of bypassing the whole like
+[98:20] overwhelming thing by what support gems
+[98:22] you're offering the players for free.
+[98:24] Uh, because like when I'm watching when
+[98:26] I'm coaching or helping a new player,
+[98:27] that's mostly what they're looking at,
+[98:29] right? They're looking at the offer gems
+[98:31] and in the actual sales window, we're
+[98:33] talking about the difference between
+[98:34] like 90 or 100 support gems. Anyway,
+[98:37] you're searching for that and it can
+[98:39] often be more convoluted for new players
+[98:41] because um it's maybe in the guide. Um
+[98:46] but like yeah, they they don't know why
+[98:48] they don't have access to it. Um
+[98:52] >> yeah, that's fair. I mean, I think it's
+[98:55] it comes with the territory of the
+[98:57] earlier conversation around like, you
+[98:58] know, stale leveling meta and stale
+[99:00] leveling skills and that sort of thing.
+[99:01] Um, and that is something that we want
+[99:03] to try and look into and address in 329.
+[99:06] So, this is probably worth having in
+[99:08] that
+[99:08] >> scope document to discuss. So, get it in
+[99:11] there.
+[99:11] >> No, for sure. I think it's a good thing
+[99:12] to talk about. I definitely don't think
+[99:14] like support gems are what's gating uh
+[99:17] that, but yeah, I would love love to see
+[99:18] that.
+[99:20] Well, it almost makes me wonder if we
+[99:22] should have the lolly vendor just be
+[99:26] >> like in every town.
+[99:27] >> Yep.
+[99:28] >> Or something.
+[99:28] >> Yeah, basically. But supports only. Or
+[99:31] should it be for skills too then?
+[99:33] >> I don't know.
+[99:34] >> It is more important on support gems
+[99:35] than it is on active skills. But I do
+[99:37] think it's a big W for the game if it is
+[99:40] on both. I think most of what's like
+[99:42] changing meta and stuff is the region
+[99:44] that they're in on the tree and the
+[99:46] ascendancies anyway, right? Not so much
+[99:48] what gems you have access to. If I have
+[99:49] access to dual list gets fireball, I'm
+[99:51] not going to suddenly start playing a
+[99:52] fireball build for most things.
+[99:55] >> Yeah.
+[99:57] Um, cool. Also, looking out the corner
+[100:00] of my eye or the chat interaction,
+[100:01] everyone is saying yes, please. Um,
+[100:05] yeah.
+[100:07] Um,
+[100:08] people want confirmation that double
+[100:10] Falbor uni still exist with the Genesis
+[100:12] tree adjustments.
+[100:15] >> Uh, yeah, they still exist. The unique
+[100:18] side of the Genesis tree hasn't gotten a
+[100:20] huge amount of adjustments. The majority
+[100:22] of the adjustments slashnerfs uh to the
+[100:25] equipment tree.
+[100:27] >> Nice. Was there ever any talk of making
+[100:30] um
+[100:32] balbor unis dropable from breach content
+[100:34] as a natural drop?
+[100:36] Um, they do sort of drop as in they all
+[100:41] drop from the chests that you find in
+[100:43] the high fortresses
+[100:45] boss encounter
+[100:46] >> and I think the breach bosses also have
+[100:48] a decently high chance to drop them as
+[100:50] well.
+[100:51] >> What about killing normal monsters
+[100:53] >> in world?
+[100:55] >> Um, wait, say that again. Sorry.
+[100:56] >> What about from like killing normal?
+[100:58] Like say you're doing an unstable breach
+[100:59] and you're killing the three rares or a
+[101:01] bunch of the normal monsters. Uh, not
+[101:04] currently, but I guess you could maybe
+[101:06] it's makes sense to add it as like a
+[101:08] small chance to drop from Veron. So when
+[101:10] you do the wild boss in a map,
+[101:13] >> could be something that we iterate on
+[101:15] with the Atlas passage as well, but
+[101:16] yeah, not not currently in 328.
+[101:18] >> Cool. Um, could you bring us the Path of
+[101:22] Exile 2 gambling box to pee one
+[101:25] >> to sneak that in?
+[101:27] >> The the the vendors one that's like all
+[101:29] the little cogs that spin and stuff.
+[101:31] >> I love it. Yeah, that would be cool.
+[101:32] >> Yeah, we actually had some discussions
+[101:36] maybe like a month or so ago because we
+[101:37] were a little bit concerned with the
+[101:39] changes we're making this patch like is
+[101:41] gold less useful now that we're making
+[101:43] these changes to King's March. So, we're
+[101:45] like, "Oh, maybe we should be adding
+[101:46] some more gold syncs in." So, we were
+[101:48] considering bringing the vendors box
+[101:50] back. I think we might have had some
+[101:52] like something related to Cadero as
+[101:55] well. So, you never know, maybe
+[101:56] something in 329 that will allow you to
+[101:58] do some big gambas with gold. Oh, nice.
+[102:01] I love that. That'd be really cool. Oh,
+[102:04] uh I think I meant to bring up that I
+[102:06] missed it from my sheet, but
+[102:09] um with Beyond, we saw that there was a
+[102:11] change now that allows you to have three
+[102:13] Beyond bosses spawn, right? Uh which is
+[102:16] cool. But personally, I feel like
+[102:20] hopefully that does fix it a little bit.
+[102:22] But I feel like with Beyond, it has been
+[102:24] a little bit antithetical
+[102:26] to a reward feeling cuz I feel punished
+[102:29] for the boss spawning because without
+[102:31] doing anything special, it's prevents
+[102:32] Beyond from spawning. Um, we thought
+[102:36] about or discussed buffing the loot from
+[102:39] the bosses so that it does feel more
+[102:40] like a win condition when you actually
+[102:42] see them and not as much as like, oh no,
+[102:44] now beyond rares don't spawn anymore.
+[102:47] Yeah, I mean I think that has happened
+[102:49] once or twice, but if it's still the
+[102:51] case that they feel like a punishment
+[102:53] rather than a reward, then
+[102:55] >> I mean there's
+[102:56] >> they need more buffs.
+[102:56] >> There's quite a large contention between
+[102:58] the natural behav u behavior of beyond
+[103:02] spawning and the endless tide keystone
+[103:05] because you need a balance around a
+[103:06] certain level of juice effectively. So
+[103:09] basically
+[103:10] for the majority of players who aren't
+[103:13] juicing very much, you probably
+[103:15] shouldn't be taking the endless tide
+[103:16] keystone. But at some point once you're
+[103:19] juicing a lot, then the endless tide
+[103:21] keystone is basically mandatory for you.
+[103:23] You reach this critical point where you
+[103:25] should not be using the keystone and
+[103:27] then you definitely should be using the
+[103:28] keystone.
+[103:29] >> Yeah.
+[103:30] >> Yeah. No, I I just I would love that to
+[103:32] be looked at a little bit because it
+[103:33] does feel it does feel a little bit
+[103:34] weird with beyond which especially
+[103:36] because he used to be such a big part of
+[103:37] the game, right? Um
+[103:41] there are a few zones like Kings Marge,
+[103:44] Magerie, Delve that delete, especially
+[103:48] like the corpse specters when they're
+[103:49] when they're taken out. Um they don't go
+[103:51] on the ground, they just vaporize. Um,
+[103:56] can that be changed so that they at
+[103:58] least do like itemize on the ground?
+[104:02] >> Maybe. Um, [laughter]
+[104:04] >> yeah, I don't know if it's a technical
+[104:06] >> I would like it to work that way. Uh,
+[104:08] the Menagerie is cursed. It's it's a
+[104:12] horrible ancient cursed area. The
+[104:14] Bestiary in general is ancient and
+[104:16] cursed. And basically just know that
+[104:19] every iteration we've made to best Jerry
+[104:21] for new scarabs and the passive tree and
+[104:23] all that has been brought into the game
+[104:24] kicking and screaming and causing 17
+[104:26] different bugs. Uh so yes, I would like
+[104:29] to do that. As to whether it's worth,
+[104:32] you know, the hair that will be torn out
+[104:34] of a poor programmer's head for trying
+[104:36] to go back and make Menagerie do
+[104:37] something different. We'll see. Well,
+[104:40] yeah, it was a it was definitely like a
+[104:43] jarring thing is like Spectrus wasn't I
+[104:45] haven't played that much Spectras lately
+[104:46] and they was vaporized and um cool. Um
+[104:52] vendors in the campaign did get changed
+[104:55] somewhat recently like 6 years ago, 5
+[104:57] years ago to where they do not refresh
+[104:59] their entire inventory on level up but
+[105:02] instead remove some items and add some
+[105:04] items. Um how do you guys feel about
+[105:06] that? Is that something you'd
+[105:07] potentially change?
+[105:09] Yeah, personally I don't like it very
+[105:11] much. I have had frustrations with it. I
+[105:13] just haven't thought about it in a
+[105:14] while. So, yeah, I'm of the opinion that
+[105:18] we should go back to what it used to be
+[105:19] where it's very clear when an item will
+[105:21] be rotate in and out cuz I think I was
+[105:24] like looking for a specific quiver base
+[105:26] type in act two and I kept on going back
+[105:28] level after level and it's like none of
+[105:30] the quivers are refreshing.
+[105:32] >> Yeah. Yeah. It's a bit frustrating. Same
+[105:34] with like the cost is a little bit odd.
+[105:36] Like it's maybe it's very hard for me to
+[105:38] buy if I actually do see an item during
+[105:41] leveling it's like wow that's actually a
+[105:42] good item but it's like four alchemies
+[105:43] or like two chaos and I'm like I don't I
+[105:45] don't have that in act two.
+[105:47] >> Um
+[105:48] >> well you might now.
+[105:50] >> Yeah sure
+[105:51] >> double currency. I was doing some play
+[105:53] testing over the weekend and got a lot
+[105:55] more currency while leveling than I have
+[105:56] in previous experiences.
+[105:58] >> That's exciting.
+[105:59] >> I if I may have a tangent here. I was
+[106:02] just going to say with
+[106:05] buffing the rate of a currency is like
+[106:07] it has a lot of collateral effects
+[106:09] throughout the game. Like for example,
+[106:11] you can buff drastically buff the number
+[106:13] of exalted orbs that drop. But now all
+[106:16] of a sudden the crafting object the
+[106:18] crafting bench
+[106:20] crafts that cost exalted orbs are now
+[106:22] relatively cheaper than the second tier
+[106:24] crafts that cost chaos orbs. And then
+[106:27] yeah, there's just like so many
+[106:29] different places that you need to
+[106:31] change. Like I think we've changed the
+[106:35] influenced item recipe no longer gives
+[106:37] exalted shards now gives exalted orbs.
+[106:39] Um
+[106:41] the gilded fossil, the chase outcome
+[106:44] used to be an exalted orb. I think I
+[106:45] might have stealth buffed that. So maybe
+[106:48] gilded fossils and now better this
+[106:49] league.
+[106:50] >> Wow.
+[106:51] >> Might not be giving an exalted orb
+[106:52] anymore.
+[106:54] >> Yeah. So, a lot of subtle things
+[106:57] throughout the game might end up feeling
+[107:00] quite a bit different this league
+[107:01] because of these like few small changes
+[107:03] to currency weights.
+[107:05] >> Those are huge changes. Like those those
+[107:08] are pretty big.
+[107:10] Wow. Okay. Um the Swedish guy wants to
+[107:15] know about wretched defilers. Are they
+[107:16] still exclusive to like nightmare maps?
+[107:18] Like are are they tier 17 only?
+[107:22] Um, there is that Atlas passive that
+[107:25] allows you to get T17 map packs in
+[107:27] regular maps, but I assume those aren't
+[107:29] an efficient way to farm them because
+[107:31] >> they don't show up very often. So,
+[107:33] >> there's a Mirage wish that adds those
+[107:35] map packs to the Mirage area.
+[107:37] >> Okay.
+[107:38] >> So,
+[107:39] >> target that wish if you want those
+[107:40] monsters as a spectre.
+[107:42] >> All right. Can we spectre the new Mirage
+[107:44] monsters?
+[107:46] >> Yeah.
+[107:47] >> Cool. Go forth, Gazi. Buy me a good one.
+[107:50] Um, awesome. That was pretty much every
+[107:54] question that I had. I'll end with uh
+[107:57] pineapple on pizza. Yuri,
+[108:02] >> yes.
+[108:03] >> I I sure I don't feel strongly. I've had
+[108:07] I I worked at a pizza place a while ago
+[108:09] that did, you know, much weirder stuff.
+[108:11] So, I've become kind of I don't know.
+[108:14] It's It's become blas to me. It's
+[108:16] >> fair. I in Sweden, they have like banana
+[108:18] on pizza. something.
+[108:20] >> Yeah, that I'm not as on board.
+[108:22] >> Tried that.
+[108:24] >> Yeah.
+[108:24] >> And my favorite that we made was pulled
+[108:26] pork and mango. That was very good.
+[108:28] >> Oh, interesting.
+[108:31] All right. Well, I'm very traditional
+[108:33] with my pizza, but I won't judge. I I do
+[108:35] though. I do judge. Um,
+[108:38] awesome. Thank you guys so much for uh
+[108:41] taking time out of your days to come and
+[108:42] chat with me here and dropped a lot of
+[108:45] cool info and yeah, just great answers
+[108:48] to everything. So yeah, just thank you
+[108:50] guys so much. Everybody in chat, it's
+[108:52] going to be clap for Tavian and Andrew.
+[108:54] Um yeah, thank you. Really appreciate
+[108:58] it.
+[108:58] >> Yeah, thanks for having us.
+[108:59] >> Thank you, sis.
+[109:00] >> Awesome. Um good luck on Friday with the
+[109:03] servers not burning. So uh we'll we'll
+[109:06] wrap it up there and uh I'll see you
+[109:08] guys there.
+[109:10] I

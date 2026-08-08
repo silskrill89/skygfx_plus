@@ -1,0 +1,21 @@
+{
+  "video_id": "TGLAxW0xVDU",
+  "title": "Sparse 3d Radiance Cascades",
+  "channel": "Alexander Sannikov",
+  "channel_id": "UCly0QRJAaJ2UGSGycOQoOdA",
+  "upload_date": "20251102",
+  "duration": 135,
+  "view_count": 11734,
+  "like_count": 621,
+  "tags": [],
+  "categories": [
+    "Science & Technology"
+  ],
+  "chapters": [],
+  "has_manual_subs": false,
+  "has_auto_subs": false,
+  "subtitles_available": [],
+  "auto_subtitles_available": [],
+  "desc_timestamps": [],
+  "description_preview": "This is an implementation of classic full 3d world space radiance cascades, but the storage is sparse: only probes that are directly visible on the screen are added into the storage: a large hash map on the gpu, similar to radiance caching, but it's cascaded and stores radiance intervals instead of radiance. It scales almost like a screenspace technique, runs 60-100fps on my laptop, doesn't have any denoising, temporal accumulation or image space upscaling.\n\nWorld space resolution of radiance in"
+}

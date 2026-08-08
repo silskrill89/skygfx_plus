@@ -1,0 +1,367 @@
+# Transcript: ElBUUMi_L5c
+# Fetched: 2026-08-07T06:23:56.780141
+# Entries: 362
+# Duration: 1666s
+
+[00:00] I kid you not. Days after our last video
+[00:03] was released showing all these in-depth
+[00:05] reasons why MSAA had a manufactured
+[00:08] downfall and why it's completely viable
+[00:10] with modern affordable hardware. This
+[00:12] Nvidia page that documented various
+[00:14] aspects of MSAA and deferred rendering,
+[00:17] a site that has been up for more than a
+[00:19] decade, all of a sudden was taken down
+[00:21] right after we made that video. So,
+[00:23] we're going to continue our research by
+[00:25] measuring the settings usually set by
+[00:27] content creators along with a few
+[00:28] commands you can read about in the pin
+[00:30] comment. This is to explain why
+[00:32] performance is so bad with these
+[00:34] unoptimized settings as 60 fps at 1080p
+[00:37] on a desktop 30 is barely possible. This
+[00:40] is the frame that we captured. So, let's
+[00:42] go right ahead. First, the pipeline
+[00:45] processes six shadow map cascades for
+[00:47] the sun/moon light. All of these are
+[00:49] rendered with 32-bit precision and take
+[00:51] under 1.3 milliseconds to process. Then
+[00:54] a 384x 384 reflective shadow map or RSM
+[00:59] is rendered, outputting three render
+[01:01] targets and a depth buffer. Onscreen
+[01:04] geometry is rendered from this
+[01:05] perspective to provide a rough estimate
+[01:07] of world space information required to
+[01:09] approximate global illumination. This
+[01:11] data is then processed by the GPU to
+[01:14] produce three indirect lighting atlases
+[01:16] that will be represented on screen with
+[01:18] spherical harmonic probe lighting. Like
+[01:20] you would see with Frostbite's Need for
+[01:22] Speed 2015, only the depth stencil
+[01:25] buffer is cleared for the base pass and
+[01:26] prepass processing. The prepass is
+[01:29] slower than usual because it also
+[01:31] outputs additional results to the
+[01:33] normal/roughness render target, causing
+[01:35] slow pixel invocations that wouldn't
+[01:37] exist with standalone depth rendering.
+[01:40] The first half of the base pass outputs
+[01:42] four different render targets along with
+[01:44] the depth stencil. This R32 stores the
+[01:47] scene depth at a higher precision than
+[01:49] the depth stencil buffer. And this R8
+[01:52] stores data related to parallax
+[01:53] occlusion mapping. In comparison with a
+[01:56] non MSAA pipeline, this pass is 34%
+[01:59] slower with two times MSAA enabled. This
+[02:02] next portion of the base pass doesn't
+[02:04] render any additional depth and renders
+[02:06] parallax occlusion detail on top of
+[02:08] existing geometry. In the two times MSAA
+[02:11] pipeline, this pass is 29% slower. At
+[02:14] first, it seems like the two times MSAA
+[02:17] base pass cost adds up to a full
+[02:19] millisecond, but this is a debugging
+[02:21] illusion that dissipates when the entire
+[02:23] base pass portions are measured
+[02:25] together, revealing a8 millisecond cost
+[02:28] induced by two times MSAA. Considering
+[02:31] how extremely geometrically dense the
+[02:33] scene is and how much it lacked in terms
+[02:35] of a more optimized prepass, two times
+[02:38] MSAA performance hit is pretty
+[02:39] forward-looking. While the MSAA cost
+[02:42] will grow later in the pipeline, if you
+[02:44] remember that this base pass will
+[02:46] provide the rendering density of four
+[02:48] times SSAA at 60 fps,8 milliseconds
+[02:51] really isn't too bad. The R32 depth
+[02:54] buffer and normal buffer are passed
+[02:56] through subresource resolve draws in
+[02:58] place of copy resource draws where the
+[03:00] sample frequency data is blended into a
+[03:03] single pixel value. These are used
+[03:05] alongside the decal draws that project
+[03:07] data into the original multis-sampled
+[03:09] render targets. The relevant render
+[03:11] targets are cleared just before the
+[03:13] standalone sample zero data is copied
+[03:15] into their non-multled counterparts.
+[03:18] This is a very different step from the
+[03:20] subresource resolve which wrote to the
+[03:22] same render targets beforehand. Take
+[03:24] notice that the sample zero depth
+[03:26] stencil only derived data from the MSAA
+[03:29] R32 and two different non MSAA R32
+[03:33] buffers are created. The sample zero
+[03:35] variant is used in the alternating pixel
+[03:37] frequency passes whereas the second non
+[03:40] MSAA R32 is exclusively used in the
+[03:43] visual effect pass. This is apparently a
+[03:46] performance hack explained in the Crisis
+[03:48] 3 rendering documents. The inadequate
+[03:50] MSAA stencil mask is also produced in
+[03:53] this draw which has its sensitivity
+[03:55] slightly altered to maximize worst case
+[03:58] scenario shading timings. The base pass
+[04:00] stencil is almost cleared by a quad
+[04:02] before having the MSAA stencil rendered
+[04:05] inside of it. The higher precision R32
+[04:07] depth is MIPC chained and used to create
+[04:10] a number of formats just before the
+[04:12] indirect lighting atlases have their
+[04:14] alpha channel data refined. SSDO is
+[04:16] shaded using a precomputed noise texture
+[04:19] and non-multled resources. It is
+[04:21] denoised with a depthaware smoothing
+[04:23] pass all done at native resolution. A
+[04:26] 4KX 4K shadow map atlas later used as a
+[04:30] close-up cascade has a 1KX 1K portion
+[04:33] reserved for a local scene light. This
+[04:35] allocation is repeated for another light
+[04:38] source. A small 64x1 RGBA8 is cleared
+[04:42] for a small bit of rendered information
+[04:44] and is then used in the main ambient
+[04:47] lighting pass which does not use the
+[04:49] non-multsampled render targets in the
+[04:51] pixel frequency pass. This is where the
+[04:53] light preppass begins and is followed by
+[04:56] a few non-stile small lights. A screen
+[04:59] space reflection pass begins afterwards.
+[05:02] This pass is partially denoised with a
+[05:04] depthare blur and is then fully
+[05:06] deninoised with another depthware blur
+[05:08] as it's shaded exclusively into the
+[05:10] specular prepass. Merging a secondary
+[05:12] smoothing pass with what would usually
+[05:14] be a separate composite stage is an
+[05:16] optimization no other channel but this
+[05:18] one would bring awareness to. And this
+[05:20] leads us to an important topic as this
+[05:22] video and many of our data packed
+[05:24] analysis require backbreaking hours of
+[05:26] work to create. YouTube's revenue is
+[05:28] extremely unrewarding unless your
+[05:30] monthly views break into the millions or
+[05:32] unless you produce videos on a daily or
+[05:34] fewday basis. None of which our efforts
+[05:36] fall into because our topics are so
+[05:38] niche yet complex, requiring quadruple
+[05:40] plus checking that delay our releases,
+[05:43] consultation input, and specialized
+[05:45] communicative writing that both consumer
+[05:46] and developer can understand. These
+[05:48] videos would not be possible without our
+[05:50] current Patreon members, but we need
+[05:52] viewers like you to aid in the
+[05:54] sustainability of our work. As I stated
+[05:56] in our channel FAQ, we want to expand,
+[05:59] but that's extremely reliant on
+[06:01] community support. So, if you finish the
+[06:03] video and continue to learn, take a look
+[06:05] at your budget and see if you can spare
+[06:07] a small percentage for our monthly
+[06:08] subscription to get exclusive access to
+[06:10] behindthe-scenes rendering data and a
+[06:12] shout out in all of our videos, knowing
+[06:14] you're raising the value of real
+[06:16] optimization. Please enjoy the rest of
+[06:18] the video. The indirect lighting is
+[06:19] shaded exclusively into the diffused
+[06:21] prepass, but only with a pixel frequency
+[06:24] pass. This, of course, means a negative
+[06:27] visual impact on MSAA. This is easily
+[06:30] seen in a secondary capture. Several
+[06:32] lights, mostly non-shadowed, are shaded
+[06:35] with stencil logic akin to Fox Engine
+[06:37] quality, but these lights are shaded
+[06:39] without any stencil logic outside of
+[06:41] sample and pixel frequency shading. The
+[06:43] SSDO is then exclusively composited on
+[06:46] the diffuse prepass at pixel frequency.
+[06:48] World space water ripples are updated
+[06:51] and while the result is oluded from this
+[06:53] perspective, it is only shaded at a
+[06:55] pixel frequency. A quad is used to clear
+[06:57] the shadow map atlas instead of a
+[06:59] hardware clear, incurring a 10 times
+[07:01] worse cost than needed. After the shadow
+[07:04] contents render faster than the clear,
+[07:06] the MSAA stencil alpha channel is
+[07:08] cleared with a quad, followed by several
+[07:11] geometry draws that write cascaded
+[07:13] shadow bounds within the non MSAA depth
+[07:15] stencil. These stencil values are used
+[07:18] to project the cascaded shadows on that
+[07:20] previously cleared alpha channel with
+[07:22] additional cloud shadows. This shadow
+[07:25] mask is used in the deferred resolve
+[07:27] stage where the light prepass data and
+[07:29] albido specular are combined into a
+[07:31] single RGBA 16 as the final directional
+[07:34] light is shaded. The stencil is then
+[07:36] prepared for QMAP forward shading which
+[07:39] is done for certain reflective objects
+[07:41] like enemies and weapons. The current
+[07:43] stage is saved in a subresource resolved
+[07:46] RG11B10 but is never called again in the
+[07:48] pipeline. Subsurface scattered materials
+[07:51] like alien flesh are forward rendered.
+[07:53] Next, halfresolution volutric fog
+[07:57] utilizes several cascaded shadow maps
+[07:59] with precomputed noise. This is quickly
+[08:01] smoothed and shaded onto the scene. A
+[08:04] halfresolution nonSAA copy of the scene
+[08:07] is made so that water reflections can be
+[08:09] shaded. Two non MSAA scene copies are
+[08:13] created for the effect pass. Then
+[08:15] several resources are created for the
+[08:17] depth of field which have no effect in
+[08:19] this frame. Motion blur draws take place
+[08:22] in between the depth of field pass
+[08:24] starting with animated motion vectors
+[08:26] followed by motion blur shading with a
+[08:28] halfresolution downscale of the motion
+[08:30] vectors. Bloom processing begins next
+[08:33] followed by tone mapping which provides
+[08:36] two 24-bit colored outputs each render
+[08:38] target containing different subsample
+[08:40] values. Then a non multis-sampled RGBA
+[08:44] 16 is recycled for composite screen
+[08:46] effects. The final steps for
+[08:48] anti-aliasing are computed. Next, SMA
+[08:52] uses one of the tonemapped RGBA88 to
+[08:55] produce a stencil and edge mask. That
+[08:58] edge mask is used alongside SMA's
+[09:01] precomputed edge detection textures to
+[09:03] create a blend mask. The pixel shader
+[09:06] invocations remain low because of the
+[09:08] stencil created beforehand. The RGBA A8
+[09:11] used before is copied to another render
+[09:14] target with edge detection smoothing
+[09:16] applied. The same thing is done with the
+[09:18] second tonemapped RGBA
+[09:21] except the smoothing pass combines the
+[09:23] result with the last smoothed tone map
+[09:25] RGBA8.
+[09:27] The result at this stage is called SMA
+[09:30] S2X and it takes about4 milliseconds to
+[09:33] resolve when you account for the related
+[09:35] render target clears. The next step
+[09:37] composits the screen space effects but
+[09:40] also incorporates the SMA2TX logic. But
+[09:43] instead of reproing the previous SMA
+[09:46] frame like SMA2TX would normally do, the
+[09:49] previous SMA S2X frame is projected,
+[09:53] which is why it's referenced as SMA4X.
+[09:57] The UI is drawn and composited on the
+[09:59] final frame before it's sent to the
+[10:01] display. The final millisecond budget
+[10:03] matches up pretty well with the in-game
+[10:05] FPS and GPU utilization. If we isolate
+[10:08] the main outliers and optimize them
+[10:10] collectively by a modest 20%, that's an
+[10:13] extra nine frames on this hardware.
+[10:15] Again, this is a very modest estimation
+[10:18] because we can easily subtract the cost
+[10:20] of half of these based on performance
+[10:22] standards this channel has measured in
+[10:23] other analyses. For instance, Days Gone
+[10:26] displays a much better distance ratio
+[10:28] for openw world shadow maps that only
+[10:30] uses four cascades. Also notice how
+[10:33] increasing the shadow map resolution
+[10:34] based on what was observed in that game
+[10:36] doesn't really compare to the sevenle
+[10:38] cascade cost in Crisis 3. Days Gone also
+[10:42] displays a more optimized micro
+[10:43] detailing system, shadow projections,
+[10:46] and compute shaderbased indirect
+[10:47] lighting updates. The micro detail
+[10:50] system in Crisis 3 introduces a lot more
+[10:52] overdraw and another 2 milliseconds
+[10:54] could be easily clawed back with more
+[10:56] elaborate prepass and draw sorting
+[10:58] logic. I personally have a very strong
+[11:00] dislike for reflective shadow maps
+[11:02] because they're very inaccurate and
+[11:04] limited. The data sampled by RSM could
+[11:07] be baked down at a higher/ more accurate
+[11:09] frequency and could then be compressed
+[11:11] based on average data. That explanation
+[11:14] might need a dedicated video, but let's
+[11:16] go ahead and move on. SSDO is not only
+[11:19] expensive to sample but prone to dated
+[11:21] SSAO artifacts like haloing in
+[11:23] comparison with cheaper and better-l
+[11:25] lookinging horizonbased techniques shown
+[11:27] in previous analysis. Now these aspects
+[11:30] are a little harder in terms of
+[11:31] estimating a more optimized timing since
+[11:34] they're either much more conditional or
+[11:36] lack comparable engine counterparts
+[11:38] measured on this channel. Though I do
+[11:40] want to discuss the visual effects,
+[11:42] which in other scenes can be really
+[11:43] heavy due to full resolution shading and
+[11:46] extremely dense geometry. The newer Cry
+[11:49] Engine versions, such as the one used
+[11:51] for Crisis 2 Remastered, provides
+[11:53] halfresolution effect shading, but
+[11:55] suffers from halfresolution artifacts
+[11:57] that Fox Engine solved 6 years before
+[11:59] this title. Halfresolution effects in
+[12:02] modern Cry Engine suffer from an
+[12:03] extremely incompetent solution as it
+[12:05] only shades the result on a single
+[12:07] buffer while still using extremely dense
+[12:10] triangles instead of simple quads. The
+[12:12] Phantom Pain on the other hand, which
+[12:14] cost a lot more in this scene due to
+[12:16] extreme overlap and larger effects on
+[12:18] screen, shades two versions of the
+[12:21] effect within a singular draw, each
+[12:23] containing different depth
+[12:24] discontinuities based on a minmax depth
+[12:26] input buffer. While a min only depth
+[12:29] buffer is used for hardware Z testing,
+[12:31] which Cole's oluded pixels from being
+[12:33] evaluated, the difference between modern
+[12:36] half-resolution effects and Fox Engine's
+[12:38] default result, is extremely apparent,
+[12:40] and you can even see a big difference in
+[12:42] the grass. Anti-consumer vendor
+[12:44] exclusive technologies like DLSS thrive
+[12:47] on this kind of graphics incompetence
+[12:49] because in motion, the lowresolution
+[12:51] artifacts manufacture more unneeded
+[12:53] temporal instabilities. When you use
+[12:55] settings that are reasonable, 60fps with
+[12:58] two times MSAA is provided with plenty
+[13:00] of headroom for conditional action. But
+[13:03] many people like to justify worse
+[13:05] performance in newer games because they
+[13:07] supposedly look better, which 90% of the
+[13:09] time isn't true, and our channel proves
+[13:11] that. But what nobody accounts for is
+[13:14] the fact that newer games also have the
+[13:16] opportunity to build off of newer
+[13:18] optimized research. And that's what
+[13:20] people need to see when they look at
+[13:21] Crisis 3 performance. And that's what
+[13:24] people need to recognize as a lacking
+[13:26] factor in modern engines. If you would
+[13:28] like to learn more about graphics
+[13:30] rendering, what makes graphics truly
+[13:32] great, and what real optimization is
+[13:34] instead of lies based on incompetent
+[13:36] temporal anti-aliasing, binge watch our
+[13:39] content in order of release, and you
+[13:41] will be ahead of most developers in the
+[13:42] industry. And make sure to subscribe
+[13:45] because that shows the industry that
+[13:46] their customers, including developers,
+[13:49] are waking up to graphical incompetence.
+[13:51] Until the next video.

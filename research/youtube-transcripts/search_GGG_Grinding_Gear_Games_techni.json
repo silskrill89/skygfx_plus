@@ -1,0 +1,137 @@
+{
+  "query": "GGG Grinding Gear Games technical talk",
+  "results": [
+    {
+      "video_id": "TrHHTQqmAaM",
+      "title": "ExileCon 2023 - Rendering Path of Exile 2",
+      "channel": "Path of Exile",
+      "url": "https://www.youtube.com/watch?v=TrHHTQqmAaM"
+    },
+    {
+      "video_id": "FKeNw-IQeZE",
+      "title": "30 Reacts: GGG's IGN Interview of POE2",
+      "channel": "30NSG",
+      "url": "https://www.youtube.com/watch?v=FKeNw-IQeZE"
+    },
+    {
+      "video_id": "2DE1T5Bue2c",
+      "title": "From Garage To Glory - The Story of Grinding Gear Games",
+      "channel": "Gavryn",
+      "url": "https://www.youtube.com/watch?v=2DE1T5Bue2c"
+    },
+    {
+      "video_id": "V9E43cCJHWU",
+      "title": "ExileCon - Q&A with Grinding Gear Games Founders",
+      "channel": "Path of Exile",
+      "url": "https://www.youtube.com/watch?v=V9E43cCJHWU"
+    },
+    {
+      "video_id": "EXnoHTqO7TE",
+      "title": "ExileCon Dev Talk - Procedural World Generation in Path of Exile",
+      "channel": "Path of Exile",
+      "url": "https://www.youtube.com/watch?v=EXnoHTqO7TE"
+    },
+    {
+      "video_id": "tmuy9fyNUjY",
+      "title": "Designing Path of Exile to Be Played Forever",
+      "channel": "GDC Festival of Gaming",
+      "url": "https://www.youtube.com/watch?v=tmuy9fyNUjY"
+    },
+    {
+      "video_id": "1vRHUP9P6tI",
+      "title": "The Future of PoE1 with a Dedicated Dev Team - Developer Interview with GGG",
+      "channel": "Zizaran",
+      "url": "https://www.youtube.com/watch?v=1vRHUP9P6tI"
+    },
+    {
+      "video_id": "EAANEoInx_0",
+      "title": "The Huge Difference Between Blizzard And Grinding Gear Games",
+      "channel": "Talkative Tri",
+      "url": "https://www.youtube.com/watch?v=EAANEoInx_0"
+    },
+    {
+      "video_id": "Gu7SCIjSe-0",
+      "title": "\"Here's what GGG should PRIORITIZE first...\" Path of Exile 2 Podcast With aer0",
+      "channel": "Talkative Tri",
+      "url": "https://www.youtube.com/watch?v=Gu7SCIjSe-0"
+    },
+    {
+      "video_id": "Ngc0MIAnPZc",
+      "title": "Balancing Path of Exile - The GGG Interview with Andrew and Octavian | TAKING THE BAIT EP 1",
+      "channel": "jungroan",
+      "url": "https://www.youtube.com/watch?v=Ngc0MIAnPZc"
+    }
+  ],
+  "transcripts": [
+    {
+      "video_id": "TrHHTQqmAaM",
+      "title": "ExileCon 2023 - Rendering Path of Exile 2",
+      "file": "E:\\dev(dave)\\skygfx_plus_expIV\\research\\youtube-transcripts\\TrHHTQqmAaM_ExileCon 2023 - Rendering Path of Exile 2.txt",
+      "entries": 975,
+      "duration": 3107.0109999999995
+    },
+    {
+      "video_id": "FKeNw-IQeZE",
+      "title": "30 Reacts: GGG's IGN Interview of POE2",
+      "file": "E:\\dev(dave)\\skygfx_plus_expIV\\research\\youtube-transcripts\\FKeNw-IQeZE_30 Reacts GGGs IGN Interview of POE2.txt",
+      "entries": 1976,
+      "duration": 7859.275000000004
+    },
+    {
+      "video_id": "2DE1T5Bue2c",
+      "title": "From Garage To Glory - The Story of Grinding Gear Games",
+      "file": "E:\\dev(dave)\\skygfx_plus_expIV\\research\\youtube-transcripts\\2DE1T5Bue2c_From Garage To Glory - The Story of Grinding Gear.txt",
+      "entries": 760,
+      "duration": 3019.5389999999998
+    },
+    {
+      "video_id": "V9E43cCJHWU",
+      "title": "ExileCon - Q&A with Grinding Gear Games Founders",
+      "file": "E:\\dev(dave)\\skygfx_plus_expIV\\research\\youtube-transcripts\\V9E43cCJHWU_ExileCon - QA with Grinding Gear Games Founders.txt",
+      "entries": 1022,
+      "duration": 2752.5599999999977
+    },
+    {
+      "video_id": "EXnoHTqO7TE",
+      "title": "ExileCon Dev Talk - Procedural World Generation in Path of Exile",
+      "file": "E:\\dev(dave)\\skygfx_plus_expIV\\research\\youtube-transcripts\\EXnoHTqO7TE_ExileCon Dev Talk - Procedural World Generation in.txt",
+      "entries": 809,
+      "duration": 2531.6850000000013
+    },
+    {
+      "video_id": "tmuy9fyNUjY",
+      "title": "Designing Path of Exile to Be Played Forever",
+      "file": "E:\\dev(dave)\\skygfx_plus_expIV\\research\\youtube-transcripts\\tmuy9fyNUjY_Designing Path of Exile to Be Played Forever.txt",
+      "entries": 2079,
+      "duration": 7080.2890000000025
+    },
+    {
+      "video_id": "1vRHUP9P6tI",
+      "title": "The Future of PoE1 with a Dedicated Dev Team - Developer Interview with GGG",
+      "file": "E:\\dev(dave)\\skygfx_plus_expIV\\research\\youtube-transcripts\\1vRHUP9P6tI_The Future of PoE1 with a Dedicated Dev Team - Dev.txt",
+      "entries": 3037,
+      "duration": 12913.564000000033
+    },
+    {
+      "video_id": "EAANEoInx_0",
+      "title": "The Huge Difference Between Blizzard And Grinding Gear Games",
+      "file": "E:\\dev(dave)\\skygfx_plus_expIV\\research\\youtube-transcripts\\EAANEoInx_0_The Huge Difference Between Blizzard And Grinding.txt",
+      "entries": 254,
+      "duration": 1208.12
+    },
+    {
+      "video_id": "Gu7SCIjSe-0",
+      "title": "\"Here's what GGG should PRIORITIZE first...\" Path of Exile 2 Podcast With aer0",
+      "file": "E:\\dev(dave)\\skygfx_plus_expIV\\research\\youtube-transcripts\\Gu7SCIjSe-0_Heres what GGG should PRIORITIZE first Path of Exi.txt",
+      "entries": 1627,
+      "duration": 7747.357999999999
+    },
+    {
+      "video_id": "Ngc0MIAnPZc",
+      "title": "Balancing Path of Exile - The GGG Interview with Andrew and Octavian | TAKING THE BAIT EP 1",
+      "file": "E:\\dev(dave)\\skygfx_plus_expIV\\research\\youtube-transcripts\\Ngc0MIAnPZc_Balancing Path of Exile - The GGG Interview with A.txt",
+      "entries": 3886,
+      "duration": 14454.23999999999
+    }
+  ]
+}

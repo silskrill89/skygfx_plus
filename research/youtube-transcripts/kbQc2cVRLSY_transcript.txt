@@ -1,0 +1,1606 @@
+# Transcript: kbQc2cVRLSY
+# Fetched: 2026-08-07T06:22:46.230117
+# Entries: 1601
+# Duration: 6796s
+
+[00:01] [Music]
+[00:03] hi good morning and I hope you're
+[00:07] excited for our first talk of the day uh
+[00:09] Kang hahi specializes in real-time
+[00:12] system engineering he joined the 3D
+[00:14] Graphics team behind Far Cry 6 deliver
+[00:15] great visual experiences for players on
+[00:17] Console before moving to ubisoft's Anvil
+[00:19] engine core Tech Team where he's
+[00:20] currently working on low-level rendering
+[00:22] system development as well as making
+[00:23] improvements to engine architecture
+[00:25] Andrew gilner is a 3D Graphics
+[00:26] programmer who started this full-time
+[00:27] game industry career as a junior 3D
+[00:29] program in 2015 at Ubisoft and left is
+[00:31] 3D technically in 2021 for joining Sony
+[00:34] Monica Sony Santa Monica Studio he
+[00:36] briefly worked Electronic Arts in the
+[00:37] frostbite engine and yandere specializes
+[00:40] in game engine architecture and GPU
+[00:41] driven rendering techniques he runs a
+[00:43] very popular weekly Roundup for graphics
+[00:45] programming related news without further
+[00:47] Ado please enjoy their talk Lessons
+[00:48] Learned From establishing a long-term
+[00:50] vision for Far Cry Junior engines Shader
+[00:54] pipeline
+[01:02] good morning good evening or whatever
+[01:05] time it is for you right now thanks so
+[01:07] much for coming to our presentation
+[01:09] about the Shader Pipeline on the Far Cry
+[01:12] Junior engine people will be talking
+[01:14] about the long-term visions
+[01:16] the legend we learned and everything in
+[01:18] between
+[01:20] who are we my name is yandere gilna I'm
+[01:23] a senior rendering engineer currently at
+[01:25] Santa Monica where I started when in
+[01:27] 2022.
+[01:28] but this tour is not about my time at
+[01:30] Santa Monica Raza is at my time at
+[01:33] Ubisoft Montreal where I joined in 2015
+[01:36] as a junior 3D programmer to work on Far
+[01:38] Cry primal and have worked for a number
+[01:40] of years until the final left in 2021 as
+[01:44] a pre-technical lead on Far Cry 6. with
+[01:47] me today is calm hi I'm com I'm a 3D
+[01:50] programmer currently working at Ubisoft
+[01:52] Montreal I joined the company back in
+[01:54] 2019 to work on the latest Far Cry 6
+[01:56] with the Hendrick and the rest of the
+[01:58] team in Montreal
+[02:00] previously it was more into a system
+[02:01] engineering set of things for a graphic
+[02:03] driver ice ticket development and
+[02:05] computer vision looking to try something
+[02:07] new Far Cry became the first Triple A
+[02:09] title project which on which I worked
+[02:11] and from which I learned a lot
+[02:14] so without further Ado let's see what we
+[02:16] have for you today
+[02:19] here's an overview of today's
+[02:20] presentation we will first explore the
+[02:22] challenges in content on working with a
+[02:24] legacy code base from Far Cry 3. then we
+[02:28] will discuss our long-term Tech vision
+[02:30] for supporting the new API and our
+[02:33] Shader pipeline system
+[02:34] we will also dive into details on how we
+[02:36] executed our plans for architectural
+[02:38] change
+[02:39] bringing our Visions to life
+[02:41] in the end we will talk about testing
+[02:43] fine-tuning and polishing the rendering
+[02:45] system of Far Cry 6 and the lesson
+[02:47] learned
+[02:50] but before we go into all this let's
+[02:52] have a quick look back in time to invest
+[02:55] to understand where we are coming from
+[02:59] the parkway 4 is being released in 2014.
+[03:03] what else happened in 2014 d3d12 has
+[03:07] been announced
+[03:09] and if we look back at
+[03:11] just 2022 2021 we see that's when Far
+[03:15] Cry 6 came out and that's when D3 top
+[03:18] support was added very first time you
+[03:20] can see in that in that time of seven
+[03:22] years
+[03:23] a number of other clockware games came
+[03:25] out but none of them used dvd12
+[03:27] microwave Primal was released in 2016
+[03:30] bike ride 5 in 2018 [ __ ] my new dawn in
+[03:33] 2019. all of these projects have set the
+[03:36] architectural Foundation that we will be
+[03:38] talking about in this presentation
+[03:40] but all of it really only came together
+[03:42] for Far Cry 6 in 2021 it was our very
+[03:45] first game supporting d312
+[03:49] so the big question is why did it take
+[03:52] so long
+[03:53] um
+[03:54] as you might
+[03:55] be aware there's a huge difference
+[03:57] between what d3d12 expects you to be
+[03:59] able to do and what lots of engines out
+[04:02] there can really really do
+[04:04] Oney architecture was designed
+[04:06] in a way that you need to know very
+[04:08] little ahead of time but d512 on the
+[04:11] other hand needs to know as much as
+[04:12] possible ahead of time so you can see
+[04:15] these are really like two opposite ends
+[04:17] of the Spectrum in all of these years it
+[04:19] was really making sure that these two
+[04:21] extremes can come together
+[04:23] to meet in the middle and take the
+[04:26] battery of both of them and to do this
+[04:28] right you have to think about long-term
+[04:30] strategies how to address these and keep
+[04:33] on doing it while shipping again and
+[04:35] this is what we're going to be talking
+[04:38] so what we need is to update the back
+[04:40] end for upcoming graphic apis while
+[04:43] developing new features for new games
+[04:45] and all this has to be done by keeping
+[04:48] up with the regular title release hidden
+[04:50] set by Ubisoft
+[04:53] well since five part three the engine
+[04:56] has been designed around v311 means
+[04:59] Dynamic State set from the code and
+[05:00] combined just before the draw calls
+[05:02] let's work for the developers but more
+[05:04] on the driver's side
+[05:06] and art has free range of whatever they
+[05:08] want to do so they can apply shaders to
+[05:10] all kind of measures and this is an
+[05:12] issue for the front end there was also
+[05:14] plans to upgrade the system for terrain
+[05:17] water GI and sky
+[05:20] for upcoming titles including an upgrade
+[05:23] to lighting system towards the physical
+[05:25] based one
+[05:28] and this is where we come up with
+[05:30] developing a long-term technical vision
+[05:33] and planning for this
+[05:36] I will break down the d512 challenges
+[05:38] and do three big aspects as a resource
+[05:41] States and barriers there's render State
+[05:43] Management memory management
+[05:45] and all of those three challenges would
+[05:47] happily be like their own tour for an
+[05:49] hour but we only have 50 minutes so we
+[05:52] will be focusing mostly on one domains
+[05:54] which is the Shader State site meaning
+[05:56] render State Management for kiazos
+[06:01] so before we go into the details of this
+[06:03] a quick refresher what is a PSO it's
+[06:06] probably easier to say what a PSO is not
+[06:09] a PSO is not the resource bindings
+[06:11] viewports scissors blend factors
+[06:15] reference vowels and topology
+[06:17] anything else is part of the PSO so you
+[06:20] have to shade a by code you have your
+[06:22] stage descriptors you have all the kinds
+[06:24] of flags you need to set all of that is
+[06:26] how do you appear though
+[06:30] so why do we talk about this today it's
+[06:32] been nearly 10 years
+[06:35] since the d512 announcement in 2014 so
+[06:39] you would have expected us as an
+[06:40] industry to help us to solve these
+[06:42] problems by now but it's clearly not the
+[06:44] case
+[06:45] just a quick overview of the games being
+[06:47] released recently we can see a lot of
+[06:49] issues with Shader compilation stutters
+[06:51] during during a traversal of the game
+[06:54] long compilation times
+[06:57] and even Vulcan has an extension now
+[06:59] where you can just a very you can use
+[07:01] Vulcan without using Pipelines
+[07:04] that's not being if somebody would have
+[07:06] asked me what are going to be there
+[07:08] challenges in 10 years from now in 2014
+[07:10] I wouldn't have guessed that this is
+[07:12] what our games would be looking like so
+[07:14] I think it's a worthwhile topic to
+[07:15] discuss how we addressed it on Far Cry
+[07:18] and maybe others give you ideas on how
+[07:20] you can solve it as well in your project
+[07:23] so before we can go into the details on
+[07:26] how we solve the problems we first have
+[07:27] to look at how did we actually offer our
+[07:30] status
+[07:31] and now we will have a look on how
+[07:34] shaders are organized in Dunya
+[07:38] at the high level shaders are defined by
+[07:40] the concept of Shader families so what
+[07:42] is a family it is basically a group of
+[07:44] shaders that Implement a similar
+[07:46] material responses and we can have a
+[07:49] family for skins for car paints for
+[07:51] vegetations for weapons and much more
+[07:56] each individual Shader and their
+[07:58] variation within family has a unique
+[08:00] identifier named the Shader ID
+[08:02] it is basically an assigned integer of
+[08:05] 32-bit obtained by hashing and bitwise
+[08:07] operation of masks we have masks for
+[08:10] Shader families Shader options Shader
+[08:12] variations and all those masks are
+[08:15] generated by the Shader compiler well
+[08:17] the upside is we will always have a
+[08:19] unique ID for Shader and it's giving
+[08:22] variation however if for example we
+[08:25] introduce a new family we need to
+[08:27] recompile everything
+[08:31] so what is our goal like we set out we
+[08:34] want to set long-term vision and that's
+[08:36] what we did we say okay we have a shade
+[08:38] ID concert in our engine
+[08:40] and we want to map this each Shader ID
+[08:42] to a PSO
+[08:44] why did we want to do it one dvd-12 is
+[08:48] kind of like the expectation that this
+[08:50] can be done and we think it would be
+[08:52] worthwhile to do because the amount of
+[08:55] state or like runtime overweight we have
+[08:57] managing all that render state is not
+[08:59] natural though
+[09:01] um and we want to reduce that
+[09:03] we also want to use the possibilities
+[09:04] for the stakes because we've all made
+[09:06] these mistakes we set around the state
+[09:09] or one draw call and then we forget to
+[09:11] unset it so the next course hold doesn't
+[09:13] work anymore because now the blend stays
+[09:15] wrong
+[09:16] so these things can get out of sync so
+[09:19] with a PSO every state being coupled
+[09:21] into a PSO we want to reduce a chance of
+[09:24] State leaking from one draw call to
+[09:25] another
+[09:27] so these are the really the two goals
+[09:29] that we set out to solve d3d12 requiring
+[09:33] this was the motivation to get started
+[09:35] on that but not really the way why we
+[09:38] want to do it
+[09:39] so bottom one is like how would we
+[09:42] envision it pretty much we just want to
+[09:44] call draw on the command list we give it
+[09:45] a shade ID and all the binding
+[09:47] information and the rest should just
+[09:49] work
+[09:50] not having to manage State no having to
+[09:52] set State reset state so all this should
+[09:54] just work
+[09:57] but obviously as you can imagine there's
+[09:59] lots of challenge ahead of us so
+[10:02] what is it what is the state so that we
+[10:04] start off with we have shaders which
+[10:07] offered in hlsl and we have pipeline
+[10:09] state which is managed in C plus plus
+[10:12] code these two are fully separate
+[10:14] and we need to bring them together
+[10:16] into one place there's also no art
+[10:18] restrictions every model could be used
+[10:21] with any Shader and it was kind of
+[10:23] expected to work
+[10:25] so that means as an engine we couldn't
+[10:28] really assume that an object wouldn't
+[10:29] change because every object in the world
+[10:31] could totally switch to a different
+[10:32] unrelated shade at any point in the game
+[10:35] it could have been a weapon that turned
+[10:37] into a normal object or it could be a
+[10:39] car that turns into a weapon it was up
+[10:41] to the r team to decide what they wanted
+[10:43] to do there were no restrictions so that
+[10:45] made them very hard like very difficult
+[10:49] for us to get now ahead of idea what
+[10:51] shaders are actually going to be used
+[10:55] what is our plan here so we want to
+[10:57] extend our Shader compiler to allow the
+[10:59] state passing this means we want to move
+[11:01] the PSO stays into each shape of family
+[11:05] since we are using something based on
+[11:07] the good old FX framework and our
+[11:09] shaders are offered in hls so we thought
+[11:12] let's just put a technique block at the
+[11:14] bottom at the render State we want to
+[11:17] set and extend this to support all the
+[11:19] d3d12 state this way we will have our
+[11:22] shaders in hlsl or the render state in
+[11:25] hlsl and we will have a pausing step
+[11:27] that will take that information
+[11:29] put it into into a data structure that
+[11:32] we can later use for the psos and then
+[11:34] compile the psos with the correct state
+[11:39] so how do we work with our team
+[11:41] previously it was mentioned that shaders
+[11:43] can just be applied to all kind of
+[11:45] meshes therefore some clear rule for
+[11:47] that has to be said
+[11:49] Shooters will Define supported vertex
+[11:51] format and only model with notching
+[11:53] layout can be used with that Shader
+[11:56] remember the notion of Shader families
+[11:59] so now on only shaders within a family
+[12:01] can be switched on the same model
+[12:03] if a rule is broken Shader will be
+[12:06] replaced by placeholder materials in Dev
+[12:08] build essentially their asset will show
+[12:10] Pink as you can see in this screenshot
+[12:13] below
+[12:14] those clear restrictions early on gave
+[12:16] that our team enough time to adjust
+[12:18] the takeaway here is Art pipeline
+[12:20] etherial development is long and it
+[12:22] needs as much time as possible to adjust
+[12:25] so start adjusting the workflow early on
+[12:31] well we now have a plan for Far Cry 5 to
+[12:33] get us closer to several PSO challenges
+[12:35] but what about Battery Systems this is
+[12:38] also very important for the then
+[12:39] upcoming apis
+[12:41] or even though it's a topic for another
+[12:43] talk we can certainly still give you a
+[12:45] small overview in this one
+[12:49] speaking of battery system this was a
+[12:51] crucial task to get the newest API
+[12:53] working
+[12:54] the implementation is Harsh map based
+[12:56] where resource stages and resource usage
+[12:58] are tracked
+[12:59] the system use an explicit binding model
+[13:01] each time a user requires a new binding
+[13:03] for texture render Target or buffer
+[13:05] annotate the resource with flux
+[13:07] indicating its stage and usage
+[13:10] resource and sub resource dependencies
+[13:12] are resolved just before draw and
+[13:13] dispatches the tracking system was first
+[13:16] shipped on d3d11 Xbox console where
+[13:18] proper cache flushes and syncs are
+[13:20] issued but it can easily be modified to
+[13:23] support newer API barriers at the time
+[13:25] since Dunya rendering is single threaded
+[13:28] in many part this makes the system
+[13:29] lightweight and easy to debug however my
+[13:33] new annotation is time consuming and
+[13:35] might be able prone because of the
+[13:37] design decision and the hashmob
+[13:39] implementation might make the execution
+[13:41] cache gone
+[13:44] a lot of technical Milestone were
+[13:46] accomplished one Far Cry 5 released
+[13:50] here are three major Milestone among
+[13:52] many ones we now have a d3d12 compatible
+[13:55] virus system being placed and used by
+[13:57] Xbox One although it was shipped in d311
+[14:00] this will issue cash flush and GPU syncs
+[14:03] the system itself is of course not yet
+[14:05] used on PC but we do have a resource
+[14:08] State validation system put in place in
+[14:09] Dev build
+[14:11] secondly the data restrictions mentioned
+[14:13] earlier during the presentation is now
+[14:15] being respected by the art team moreover
+[14:18] the Shader system is also being prepared
+[14:20] for the introduction of PSO we have a
+[14:23] data Builder and loading system
+[14:24] completed
+[14:25] we also did a first pass of modifying
+[14:28] Shader files by adding render States in
+[14:30] it
+[14:32] now I will give the microentrick who's
+[14:34] going to talk about the challenges on
+[14:35] Far Cry 6.
+[14:37] so
+[14:38] Far Cry 5 comes to an end and we have to
+[14:41] start work thinking about Far Cry 6. new
+[14:43] production new challenges
+[14:46] and also new studio
+[14:49] so what challenges I had
+[14:51] first of all Barclay used to
+[14:54] historically mostly be a Ubisoft
+[14:56] Montreal LED project but with Far Cry
+[14:59] 6's responsibility changed and Ubisoft
+[15:02] Toronto got the opportunity to be the
+[15:04] lead studio for one of our games in the
+[15:06] franchise
+[15:07] so why don't we have like that is a
+[15:09] challenge new team new leadership
+[15:11] Montreal we are still here and we have
+[15:13] still lots of uh expertise in Montreal
+[15:16] and we work really really closely
+[15:17] together with Toronto to solve the
+[15:19] challenges
+[15:20] but there's also lots of challenges
+[15:21] ahead like what must house do we have we
+[15:24] have to support dvd-12 for PC
+[15:27] we have to support welcome to stadia we
+[15:30] also have to support PS5 and Xbox series
+[15:32] X came out which means we can no longer
+[15:34] use d3d11
+[15:36] on our console targets so those are all
+[15:39] must have that's a huge amount of
+[15:40] must-haves
+[15:42] but we only have a we have a couple of
+[15:44] things available we have definitely left
+[15:46] non-pc in Xbox and we have a PS1
+[15:48] limitation so you can see there's a lots
+[15:50] and lots of work we had we have a plan
+[15:52] we started down this journey to solve
+[15:54] the problems but it's still a lot of
+[15:56] work so how how do we even try to tackle
+[15:59] this challenge
+[16:02] so we came up obviously it was a high
+[16:04] level plan you want to start working on
+[16:06] a PC platform we're going to do eye
+[16:08] level 12.
+[16:10] um to start working on it
+[16:13] it was pretty much arbitrary we could
+[16:15] take one or the other but our PC and
+[16:17] stadia team decide we're going to start
+[16:19] going down the road of Welcome because
+[16:21] they're going to be responsible for
+[16:22] doing stadia and our first external
+[16:24] technical Milestone was walking so that
+[16:26] was a good enough reason to get started
+[16:28] on walking
+[16:29] the new targets like why did we start on
+[16:32] PC and Utah was like bystation 5 and
+[16:35] series acts and stadia I had to follow a
+[16:37] little bit later on why is that it's
+[16:39] pretty much just because it's new
+[16:41] platforms so we had to get the engine
+[16:43] running you have to set up the build
+[16:45] stabs you have to get it actually
+[16:46] compiling and running and get fire
+[16:49] loading work in the packaging all the
+[16:51] realities of actually starting a game on
+[16:53] a new platform and it got me to get
+[16:55] started on doing graphics for these
+[16:58] platforms before the actual game can
+[17:00] boot up
+[17:01] so that's why we start on PC and once
+[17:04] you have the engines running up on all
+[17:06] these platforms we will start bringing
+[17:07] in new targets as well
+[17:09] and there's obviously new platforms so
+[17:11] lots of lots of General porting work
+[17:14] but there were some things that we
+[17:16] already solved like we have a barrier
+[17:18] system for Far Cry 5.
+[17:20] and we have our data annotated so it's a
+[17:22] huge Time Saver for Progress six we
+[17:25] didn't have to implement it
+[17:27] temporary solution for barriers we could
+[17:30] just use the system we already have it
+[17:32] was obviously not perfect it was used on
+[17:34] a system where the only validation
+[17:36] system was our own
+[17:39] 12 validation layout often disagreed
+[17:42] with the rules that we had in our system
+[17:44] but it was already there and it worked
+[17:46] really quite well there was some
+[17:48] mistakes had to be fixed but it was
+[17:49] helping quite a lot
+[17:52] and a huge time server as well all our
+[17:55] systems are written for it programs are
+[17:57] aware of it so all new systems are
+[17:59] already having very information in there
+[18:01] so and then very last step is really
+[18:04] General reporting process once you have
+[18:06] a version that actually works then runs
+[18:08] starting to take advantage of what you
+[18:10] can do now
+[18:13] so how do we get to all these new apis
+[18:15] and platforms like we have three new
+[18:18] apis and the way Barclay was offered we
+[18:21] typically had a separate code
+[18:22] implementation for each platform that
+[18:24] worked okay if we had three because we
+[18:26] had dpd11 on PC d511 on Xbox
+[18:30] and the PS4 implementation so that was
+[18:32] free files but now we would also add
+[18:34] Vulcan for stadia so that would be from
+[18:36] a lot more we have d3d12 for Xbox number
+[18:40] five and we have both d512 for PC number
+[18:43] six and we will also add a number of PS5
+[18:46] so that's number seven so that doesn't
+[18:48] really scale and then we have three new
+[18:50] platforms so how do we approach it
+[18:53] um at the time a new shared Ubisoft
+[18:55] initiative came up it's called Fusion
+[18:57] that we took advantage of and worked
+[18:58] very heavily with the well as our
+[19:00] colleagues on the other game Productions
+[19:03] um it's a low level API that is
+[19:05] abstracting the common apis
+[19:07] so instead of us writing code that
+[19:10] directly interacts with the API has to
+[19:13] go torque to this abstraction layer that
+[19:15] is shared
+[19:16] so our plotting process was really
+[19:19] important from our custom system to
+[19:22] Fusion that would internally call the
+[19:24] apis that are specific for the platform
+[19:27] this way we only had reports once to the
+[19:30] new API
+[19:32] and have a single Target all our code
+[19:35] always talks to the same time a high
+[19:36] level Target as you can see in the
+[19:38] description
+[19:39] we have a shared small layout that
+[19:42] implements whatever we need to do for
+[19:43] abstractions for our engine and our
+[19:45] games on top rely on that abstraction
+[19:47] and then we call it into Fusion Hardware
+[19:49] abstraction layer that is really
+[19:52] doing the heavy lifting of calling these
+[19:55] specific apis
+[19:57] what does is enable there are none of us
+[19:59] to write one code path we have to debug
+[20:01] one code file
+[20:03] and then we can share a lot of the
+[20:05] code work that needs to be done behind
+[20:07] the layer we can share that between
+[20:09] different engines game within Ubisoft
+[20:11] and that's what we did it was a great
+[20:13] time saver and it was a great approach
+[20:15] that worked really we do quite well it
+[20:17] was a challenge to get into the mindset
+[20:19] at first with some team members but we
+[20:21] solved the challenges and solved the
+[20:23] problem and I think it was quite a
+[20:24] success
+[20:29] so let's get into the BSO magic so what
+[20:31] did we do
+[20:33] we have stated sets everywhere in the
+[20:35] runtime side of things
+[20:37] and we have shaders that contain no
+[20:39] State we will start with I think what
+[20:42] everybody starts off with it's on-demand
+[20:44] PSO compilation
+[20:47] so what do I mean with that that means
+[20:49] every time you do a render State we
+[20:51] cache it into a random structure
+[20:54] every time you do that and then each
+[20:56] drawer call we will go into the state
+[20:57] that we have in the cache we will hash
+[21:00] it
+[21:00] we look up to in a dictionary do we have
+[21:03] a PSO that matches it
+[21:06] if we have a match we get the PSO we set
+[21:08] it and we rent it so that that's pretty
+[21:11] much the obvious thing
+[21:13] but one thing we probably definitely
+[21:15] than most other engines is we never
+[21:17] stall if we can't find a PSO
+[21:20] if we don't find a PSO in om look up we
+[21:23] will skip the draw Chrome until it is
+[21:26] lit ready at some later point in the
+[21:27] frame but there might be certain objects
+[21:29] missing for a couple of frames
+[21:32] here's the philosophy of this engine if
+[21:35] dispatch will draw shaders are not ready
+[21:37] do not stop just give the call for
+[21:39] example our dispatch function will
+[21:41] return a Boolean indicating whether the
+[21:43] dispatch was successful or not and on
+[21:45] the high level the system can decide
+[21:46] what to do next if you look at our
+[21:49] shadow system for example in the
+[21:51] pseudocode below one of dispatch files
+[21:53] simply skip the rest of the dispatch in
+[21:55] the chain
+[21:56] similar idea applies for Draw 2 we can
+[21:58] monitor the availability of the Shader
+[22:01] now on a set note ue5 must report a
+[22:03] similar way of doing this since version
+[22:06] 5.2
+[22:10] well this whole concept of skipping draw
+[22:12] call is also very helpful when reporting
+[22:14] to new apis we have our own validation
+[22:16] system with a list of known error which
+[22:18] are safe so if a draw call triggers such
+[22:21] error we can just skip it instead of
+[22:23] potentially hanging the GPU this allows
+[22:25] us to get the game up and running faster
+[22:27] and go back to fix individual errors on
+[22:30] a case-by-case basis
+[22:33] are we really focused on making
+[22:35] iterative improvements like you can see
+[22:38] we did on demand PSO compilation first
+[22:40] we then hooked up a validation system to
+[22:43] keep the game running and we can keep on
+[22:45] working on it
+[22:46] this means like even if there's still
+[22:47] lots and lots of arrows
+[22:50] and lots of lots of non-optimal parts we
+[22:53] already have the game running this means
+[22:55] the QA can test and we can keep on
+[22:57] developing and improving the system from
+[22:59] here on on in parallel while the QA is
+[23:02] already working on a game that works
+[23:03] people can test it and new issues that
+[23:06] will happen with new systems being
+[23:07] developed can be detected quick quite
+[23:09] quickly
+[23:10] and that was really really important for
+[23:12] us and we did something we really
+[23:14] focused on and I really want to stress
+[23:15] it's really really important to keep
+[23:17] making iterative improvements
+[23:20] so how do you can improve our Shader
+[23:23] system for now so we had a goal
+[23:25] we have shade IDs and we have on-demand
+[23:28] PSO combinations so what what a shade is
+[23:30] stuttering typically happens well in our
+[23:32] case
+[23:33] why do objects would be missing from the
+[23:35] world
+[23:36] and it only has to happen if a PSO is
+[23:39] not ready so how can we make it less
+[23:41] likely that psos are not ready
+[23:45] um what do we have in the psos OR in our
+[23:48] Shader families they all have a long
+[23:50] really long list of variations and all
+[23:53] these variations are treated as if
+[23:55] they're the same importance
+[23:57] so we can see like there's vertex
+[23:59] formats output formats can object burn
+[24:02] is it wet is it being influenced by the
+[24:04] wind is it scant
+[24:05] but are they really all of the
+[24:07] importance I don't think so like if you
+[24:10] look at this list for example
+[24:11] we've marked a couple of going green you
+[24:14] look at these burning wetness wind
+[24:16] influence are these really the same
+[24:19] importance as if an object is skin where
+[24:21] the vertex performance has normals or
+[24:23] tensions
+[24:25] I think they're the same importance so
+[24:28] let's split these up
+[24:31] so we end up with two sets we have
+[24:33] essential variations and we have
+[24:35] optional variations
+[24:37] like what is essential Essentials pretty
+[24:39] much everything that if it's wrong you
+[24:41] will get possibly severe artifacts if
+[24:44] you read the one vertex format your
+[24:46] object won't be looking correct if it's
+[24:48] not skinned in the best case it will
+[24:50] just be in the t-pose
+[24:52] and just stand as a hypo's character if
+[24:56] it's and if it's missing outperformance
+[24:58] it probably just goes all over the place
+[25:00] so those are really essential you have
+[25:03] to get them right but there's optional
+[25:04] Concepts as well like an object is
+[25:07] burning it can be wet or it could be
+[25:09] influenced by the wind
+[25:12] so if we look at the burning example for
+[25:14] example
+[25:15] we can see like you set it on fire and
+[25:18] the object will slowly start burning
+[25:19] that means it will slowly stop being
+[25:21] black
+[25:23] so do what we mine if that transition
+[25:26] happens a couple of frames later I don't
+[25:28] think we would like it happens slowly
+[25:30] anyway
+[25:31] so missing a couple of frames won't be
+[25:33] an issue it's way better than not seeing
+[25:35] the object but two friends or in other
+[25:37] cases when you are stalling having your
+[25:40] fan stutter
+[25:41] so I would say this was really a good
+[25:44] breakup this makes it possible that
+[25:45] objects are optionally marked optional
+[25:48] effects are missing for a couple of
+[25:49] friends
+[25:51] um obviously there are cases where this
+[25:53] might be in that might be undesirable
+[25:55] events where camera expected to do for
+[25:58] them like you're very close to an object
+[26:00] and you want to swap it immediately for
+[26:02] some kind of a technical effect artistic
+[26:04] effect
+[26:05] so obviously we will see those and those
+[26:07] happen and QA will plug these you get
+[26:09] jira and we'll fix them that's there's
+[26:11] ways of doing them pre-loading shaders
+[26:13] things like this but it's a great
+[26:15] starting point
+[26:18] so what can we do then
+[26:21] um was this specific one it's kind of
+[26:22] what I mentioned we can fall back to
+[26:25] less specific Piezo
+[26:28] so we can start looking for fallback
+[26:29] drops and if one of them is really not
+[26:31] ready yet
+[26:32] so how does this work we pretty much
+[26:34] take the variation that that the that
+[26:37] the object is requesting we could be an
+[26:39] object that's burning and then we can be
+[26:41] like okay you look in our dictionary you
+[26:43] don't find the PSO so remove the
+[26:45] optional flux one at a time we remove
+[26:48] the burning fly is it there
+[26:51] if you have one object that is the same
+[26:53] Shader but not burned we will just use
+[26:55] that and start it's there we can use it
+[26:57] and we obviously start compiling the PSO
+[26:59] in the background so in some future
+[27:00] frames it will be ready
+[27:03] and if you don't find it we just keep on
+[27:04] searching
+[27:07] and if we really have to go back all the
+[27:09] way we keep on going and there's just no
+[27:11] shaders we are back to skipping oracles
+[27:14] so at this time it's really the game is
+[27:16] running decently it's quite like it's
+[27:18] testable it works quite well but we
+[27:20] really want to do better and this is
+[27:22] really where like
+[27:23] our vision comes in like it's a long
+[27:26] project
+[27:27] but also this task will be really really
+[27:29] long and I want to get closer to it so
+[27:31] we'll just start working on it as much
+[27:33] as we can
+[27:35] we decided to start our traditional
+[27:37] Nextbook series acts why did we do that
+[27:39] on series X it's just the reality of AAA
+[27:42] production
+[27:43] we in Montreal owned the Xbox platform
+[27:46] we'll schedule time for this project in
+[27:49] our talk in our schedule set aside so we
+[27:52] can sort it and we thought it was really
+[27:53] important to solve this problem
+[27:55] but there's also we are very less about
+[27:58] regressions happening in those platforms
+[27:59] because it was our least tested
+[28:01] platforms it was still tested but all
+[28:04] play tests and things like that didn't
+[28:06] happen on series X
+[28:07] so we were less worried about causing
+[28:09] regressions that would cause us losing
+[28:11] Valuable Player information
+[28:15] so how do we get actually starting it
+[28:17] like at the start you have pretty much
+[28:19] two sets of different variate of states
+[28:21] you have the runtime shade on and that's
+[28:24] the one we know is good because that's
+[28:26] how the game is running up to this point
+[28:27] but we also just stayed in the Shader
+[28:30] in the best case those two were going to
+[28:32] mesh exactly
+[28:34] but that's not always guaranteed
+[28:37] um so what do you really need to do this
+[28:38] to solve that these need to be the same
+[28:41] we set up the Shader stage during 5.5
+[28:44] but we all know
+[28:46] things that are not used are really not
+[28:48] correct so what whatever you need is a
+[28:51] validation system that captures these
+[28:53] kind of mismatches
+[28:57] a new validation mechanism has been put
+[28:59] in place to be called by the draw
+[29:01] function to verify States
+[29:02] it is designed with five mode and each
+[29:05] one is an increment of the previous one
+[29:07] first the system can check for the
+[29:09] Shader State against runtime ones and if
+[29:12] a mismatch is found prefer to use the
+[29:14] runtime state
+[29:15] and secondly we can enable warning
+[29:17] unlock them for debugging purposes
+[29:20] thirdly the state specified by the
+[29:22] Shader is preferred over the runtime
+[29:24] State and we can lock mismatches then
+[29:27] there is also the possibility to skip
+[29:29] draw and log warnings in the end the
+[29:33] ideal case to only use States preferred
+[29:35] by the shaders but to get to only use
+[29:38] data State we need to get there
+[29:40] gradually
+[29:44] and although we made tremendous effort
+[29:46] to update our shaders with the proper
+[29:48] State and having our team respect the
+[29:49] constraint we said at the beginning of
+[29:51] the project there was still 90 of the
+[29:53] case falling back random State when the
+[29:55] Shader pipeline was first turned on so
+[29:58] what was the common issue most
+[30:00] mismatches come from the render Target
+[30:01] format or blend mode setting it sounds
+[30:04] bad that we have 90 failure rate but
+[30:06] Most states are just a common state
+[30:08] shared in files included by most shaders
+[30:10] for example in the code below Blended
+[30:13] State FX file contains a big portion of
+[30:15] the shared state
+[30:16] then we started to get those low hanging
+[30:19] fruits fixes continued from the 3D side
+[30:21] until the game can boot without breaking
+[30:24] on warning for a couple of minutes
+[30:29] once we were confident that a big
+[30:31] portion of the state mismatch issue were
+[30:33] fixed were deployed an on-screen warning
+[30:36] features to our local QE Tester the
+[30:38] warning contains information such as
+[30:40] Shader name variation provided State
+[30:42] versus expected state
+[30:43] the 3D team QA started to use this
+[30:46] warning to relay the newly found issues
+[30:47] so programmers can continue to fix them
+[30:50] then we expanded the warning system for
+[30:53] all QB members to use once there are no
+[30:55] more regular warnings remaining
+[30:57] if a warning shows up again QA can just
+[31:01] use this information to log a jira like
+[31:03] any other box
+[31:06] near the end of the closing for Far Cry
+[31:08] 6 most of the State issue or solve your
+[31:10] code changes however there are still
+[31:13] some cases where our team's involvement
+[31:14] is required
+[31:16] we would like to expand our previous
+[31:17] on-screen warning system further the
+[31:19] goal is to give technical directors
+[31:21] enough information to track down the
+[31:23] causes and assign the issue to the right
+[31:25] person on the outside without
+[31:26] programmer's involvement
+[31:30] that is finally led us to use an
+[31:32] in-house API to generate jira directly
+[31:34] at runtime to not further divert keyword
+[31:36] resource away from area requiring more
+[31:38] testing as we approached the final
+[31:40] deadline to ship the game
+[31:42] we validate the geometry layout and
+[31:44] additional information against what the
+[31:46] Shader expects
+[31:48] all the information validated include
+[31:50] name
+[31:51] this is stream type format for example
+[31:54] byte or float offsets the data
+[31:56] classification in other words if it is a
+[31:58] vertex data were not render instance
+[32:01] step rates
+[32:02] the diagram below shows a summary of the
+[32:04] element that are compared to during
+[32:06] validation
+[32:09] one jira for each geometry and Shader
+[32:11] combination is automatically created
+[32:13] while mismatch is detected this gets
+[32:16] automatically assigned to directors so
+[32:18] they can redistribute the task to the
+[32:20] proper stakeholder
+[32:25] now let's have a look at the testing and
+[32:27] validation in more detail
+[32:32] starting with the test coverage the word
+[32:34] in Far Cry 6 is rich in detail therefore
+[32:36] there are many environment searching to
+[32:38] test
+[32:39] each of them contains different type of
+[32:41] assets which means different families of
+[32:42] shaders hit for example in the city we
+[32:45] have a higher chance of encountering
+[32:47] vehicles which provide coverage for
+[32:49] vehicle families of Shader same idea for
+[32:51] the dense forest and ocean which
+[32:53] provides coverage for vegetation shaders
+[32:55] and water system coverage respectively
+[33:00] moreover there are also the possibility
+[33:02] to change weather settings
+[33:04] this can trigger different response such
+[33:06] as wetness effect lightning ring
+[33:08] particles and much more
+[33:10] all this combined with different
+[33:12] gameplay settings such as navigating the
+[33:14] game menu driving Vehicles Mission
+[33:16] campaign General creates a large
+[33:19] permutation of test case with many
+[33:21] assets loaded on screen hence many
+[33:23] Shader tested
+[33:27] testing is done with a combination of
+[33:29] manual testing by our QA team and or
+[33:31] automatic testing by Bots and scripts
+[33:33] for completeness the map is divided into
+[33:35] well-defined sectors the first part of
+[33:38] the automatic testing is deterministic
+[33:39] we spawn at fixed locations across all
+[33:42] sectors and set weather and time with
+[33:45] known settings
+[33:46] a script can then collect screenshot and
+[33:48] profiler captures by doing so
+[33:50] consistently across different build
+[33:52] allows us to spot performance and memory
+[33:54] regression
+[33:56] the second part is done by using a path
+[33:58] feature from our Ai and Game web team a
+[34:01] player bot can spawn randomly in any
+[34:03] sectors and start to play the game on
+[34:05] its own the Pod will shoot guns at enemy
+[34:07] steal vehicles and drive them for
+[34:09] example this sort of testing triggers
+[34:12] additional effects otherwise unavailable
+[34:14] by simply spawning into the game
+[34:16] in the end it greatly helped us to
+[34:18] detect any rare Shader blocks which
+[34:21] security might not have found
+[34:25] of course we do still have a Q team
+[34:27] which is crucial for testing features
+[34:28] like game menu item inventory cutscenes
+[34:32] story flow gameplay mechanics and any
+[34:34] other element that automatic tests
+[34:36] cannot cover
+[34:37] by using the iterative method combining
+[34:39] QA pass and auto test pass to Shader
+[34:42] State mismatch detection and to fix and
+[34:44] validations we managed to ship our
+[34:46] Shader pipeline system in a very stable
+[34:48] and Polished State and now I'm gonna end
+[34:51] the mic back to the entry who's going to
+[34:52] talk to you about some Edge case and
+[34:54] fine-tuning the experience overall
+[34:57] but there's also a couple of interesting
+[34:59] Educators that we found out at the end
+[35:01] of production so for example one would
+[35:03] be like if you aim at an enemy we would
+[35:05] always get an assert with the mismatch
+[35:07] but what what's going on why why is it
+[35:10] we couldn't see any difference then that
+[35:12] was actually the main problem there was
+[35:14] no issue there was
+[35:16] we couldn't see a difference and that
+[35:17] was the issue there should have been an
+[35:18] outline on every object if you aim at it
+[35:20] should be marked but it was just missing
+[35:23] so what was this all about why did this
+[35:26] not work and how did we not capture
+[35:28] before it's actually
+[35:30] it's because the system is implemented
+[35:32] using a different system like we we
+[35:34] validated Shader overrides but the
+[35:36] outline used a different code path and I
+[35:38] just expected
+[35:40] that would bypass all this
+[35:42] and it needed
+[35:44] to apply an outline to pretty much any
+[35:46] object in the world and it used to
+[35:47] adjust the different systems so we
+[35:49] didn't see it
+[35:50] and this challenge with this is we need
+[35:53] it for every single object so and all
+[35:55] different have different model
+[35:56] performance and vertex formats
+[35:58] especially so what do we do we're just
+[36:00] going to add a variation for each vertex
+[36:02] format that could be a lot if there's a
+[36:04] lot of complexity in your Shadow but now
+[36:06] there are different ways
+[36:09] so one thing that we assume to do
+[36:11] um we actually ended up doing is to rely
+[36:14] on the custom vertex match is something
+[36:15] we haven't used on Far Cry lots of other
+[36:18] engines do but Fargo hasn't used it so
+[36:20] the idea is pretty much
+[36:22] to decouple the vertex format from the
+[36:26] model from the vertex form as expected
+[36:28] by the Shader so instead of using ND
+[36:30] Hardware
+[36:31] pipeline to assemble these things into a
+[36:34] complete view of the vertex on a Vertex
+[36:36] before the vertex error runs we will do
+[36:39] that custom in the Shader itself so this
+[36:42] is called programmable vertex pooling
+[36:43] okay if you look for it you will find
+[36:46] some openglboxes in a lot more detail so
+[36:49] for this outline Shader we only know
+[36:51] tubing we only need to know a few things
+[36:53] we need to know the position at the
+[36:54] normal why do we need the normal because
+[36:56] we expand the objective foreign outline
+[37:00] so we don't really care if there's two
+[37:02] sets of normals if there's a tangent
+[37:04] space and we don't really care we just
+[37:06] need to know normal position so how do
+[37:07] we solve that pretty much each model on
+[37:10] the C plus plus side exposes threshold
+[37:12] buffer View onto the data streams it has
+[37:15] and then the C plus plus logic and query
+[37:17] this and bind these to the outline
+[37:19] shaders
+[37:21] um what happens if the object for some
+[37:23] reason doesn't have it we will just find
+[37:25] a like a dummy string whereas where you
+[37:28] with d512 defining on how you do this in
+[37:31] the boundary cases on edge out of bonds
+[37:34] this work really well they work really
+[37:36] really well
+[37:37] the system was designed to reduce data
+[37:40] variation but it's very flexible so it's
+[37:42] great side effect from doing this which
+[37:44] shows off the Shader variation problem
+[37:46] so we created a very flexible
+[37:48] architecture that you would have used
+[37:49] probably a lot more on future projects
+[37:53] we really did it at the end each shade
+[37:55] ID in our engine maps to appears oh it
+[37:58] was a huge amount of work but you're
+[38:01] really grateful that we broke this down
+[38:02] into steps over multiple games now our
+[38:05] runtime code can be super simple like
+[38:07] most cases never really need to deal
+[38:09] with render State at all it's all
+[38:11] centrally managed in common header files
+[38:13] where we can change them
+[38:15] the shade is on the whole state in a
+[38:17] single place as well so if you need
+[38:19] something jumping or look something up
+[38:20] we know where to look we don't have to
+[38:22] search the C plus plus to see where the
+[38:23] stay gets at we can look in the Shader
+[38:25] no mistake leaking because of it it's
+[38:27] all controlled
+[38:28] and I think it really worth the advert
+[38:30] and it makes for you a better engine
+[38:32] architecture if you designed for it and
+[38:36] I think
+[38:36] it really shows
+[38:38] it can be done on AAA games that were
+[38:41] never designed to solve this from the
+[38:43] day it's doable it takes a huge amount
+[38:45] of work and dedication but we showed
+[38:47] it's doable
+[38:49] but this is obviously not everything so
+[38:52] we can do more
+[38:53] so what do we have
+[38:56] um the runtime as they are
+[38:58] but the very first problem of most games
+[39:00] is the very first time you play the game
+[39:02] is when the Shader cache is not ready
+[39:03] and you won't have the information that
+[39:05] you need so we have a couple of
+[39:07] techniques here to solve the problems
+[39:08] one as we collect the runtime PSU usage
+[39:11] this happens and then we compilation on
+[39:14] the very first load
+[39:16] so what how do you collect the PSO usage
+[39:19] um there's a huge amount of variations
+[39:21] of Shader variation that we can use in
+[39:23] Far Cry and most of them are not used
+[39:26] so what do we do every single play test
+[39:29] session is nqa test session as well is
+[39:32] talking to a database
+[39:34] it tracks what kind of shaders we use
+[39:36] and it consolidates all the sets in a
+[39:39] single place
+[39:41] um
+[39:42] so we have a single list of PSO and then
+[39:45] we can sort it by what is most used we
+[39:47] use this list to get roughly the most
+[39:50] 10K most used psos
+[39:52] with some manual control about like we
+[39:55] have to be loads and copy shares and
+[39:56] clear shaders things that get used like
+[39:58] one so super important
+[40:00] things that will render the main menu
+[40:02] for example are important because you
+[40:04] want to have the menu working while
+[40:06] you're waiting for the shaders to do
+[40:09] and all these shaders are compiled on
+[40:11] boot of the game and by the time the
+[40:13] menu loads we are sure that these
+[40:15] shaders work and we can run the game
+[40:18] safely with a good preloaded set of psrs
+[40:21] where's the mistakes we added was
+[40:23] falling back to less specific because
+[40:24] all this makes for a great base list
+[40:28] but we have another Stout that white
+[40:31] people does introduced in Far Cry 5 it's
+[40:33] a priming during the loading screens so
+[40:36] if you took away our loading screens in
+[40:38] Far Cry 5 and Far Cry 6 for the meta you
+[40:41] would actually see at the end of the
+[40:42] loading screen the loading would finish
+[40:44] from disk but the loading screen
+[40:45] wouldn't go away
+[40:47] what actually happens is once we're done
+[40:49] loading everything
+[40:50] we spawn the player into the world we
+[40:52] pause the world around it and we start
+[40:54] rendering we will spin the character
+[40:57] around its axis looking at all erection
+[40:59] all around him
+[41:01] and the spinning and rendering happens
+[41:02] while the more loading screen is up why
+[41:05] do we do this there's two reasons for
+[41:07] this one is we need to Prime our virtual
+[41:09] textures on the terrain
+[41:12] um while we're spinning we will track
+[41:13] how many potential virtual texture pages
+[41:16] are not initialized yet and if there's
+[41:18] any we don't remove the loading screen
+[41:20] and we extended this to also load the
+[41:22] shaders so if we have any shaders that
+[41:24] are not ready we will not remove the
+[41:25] shading loading screen
+[41:27] this way we can be certain that when the
+[41:30] loading screen goes away we don't see
+[41:32] low resolution textures from the virtual
+[41:34] textures
+[41:35] and we don't have shaders that are
+[41:37] missing
+[41:39] sorry these at each teleport we can be
+[41:41] sure we will be done with a new location
+[41:43] before we even get to it so the player
+[41:46] will never see us having an initial
+[41:49] and with this we are already coming to
+[41:51] the end of our presentation
+[41:53] we are now going to take a couple of
+[41:54] minutes to look back at what we just
+[41:56] covered
+[41:58] during the last 45 minutes or so we've
+[42:01] been discussing in detail the
+[42:03] requirements and solutions that we
+[42:05] developed for the junior Graphics
+[42:07] pipeline
+[42:08] but there's more to it than just Shader
+[42:11] Solutions I think there's five main
+[42:13] technical lessons learned that can be
+[42:15] applied to provide variety of problems
+[42:18] in game development and software in
+[42:20] general
+[42:21] first of all when there is a major
+[42:23] technology change upcoming really take
+[42:26] the time to identify and technique and
+[42:28] tackle the architectural changes
+[42:30] required first
+[42:33] look at how can we make our product
+[42:36] better with new requirements and then we
+[42:39] start setting up these supporting
+[42:40] systems earlier most problems can have a
+[42:43] systems that need to support them and
+[42:45] those can take a long time to implement
+[42:47] start on that early
+[42:49] and then really take the opportunity to
+[42:51] see new restrictions as an opportunity
+[42:54] to look back to look for better design
+[42:56] Solutions not just look at the
+[42:58] annoyances that you need to solve
+[43:01] and really use an iterative design
+[43:03] process
+[43:05] each step
+[43:06] should get you closer to a shippable
+[43:08] solution and a solution that you're
+[43:10] happy with
+[43:11] and we think long term do not limit
+[43:14] yourself to the current project time
+[43:16] frame always think longer this puts you
+[43:18] into the right mindset to solve problems
+[43:20] in the best possible way
+[43:23] and then break it down into the time
+[43:25] frame of your project what can you do in
+[43:27] this project that will give you the best
+[43:30] solution
+[43:31] and if you combine this with an
+[43:33] iterative design process
+[43:35] you will always have a shippable
+[43:37] solution it doesn't matter when the game
+[43:39] comes out you will always have a
+[43:42] relative ahead of you or steps to do
+[43:44] games get delayed and you will already
+[43:46] know what you can improve
+[43:49] and that's pretty much the end of our
+[43:51] talk I really want to acknowledge all
+[43:53] the many people who have worked I had
+[43:55] the pleasure of working with during Park
+[43:57] website for aqua Productions from Far
+[44:00] Cry Primal to Far Cry 6 there were so
+[44:02] many people who made in the Far Cry
+[44:04] games possible not just on the rendering
+[44:07] side but especially the rendering side
+[44:09] the engine the artist it was a great
+[44:11] experience I really acknowledged that
+[44:12] the work done presented here immediate
+[44:15] product of the team and none of this
+[44:17] could have been done with the amazing
+[44:18] team so thanks for everybody who who
+[44:20] worked on these projects likewise I
+[44:23] welcome a huge thanks for everyone who
+[44:24] was on Far Cry 6 and to everyone who
+[44:26] made the previous far cry again possible
+[44:28] it was a fantastic team and a fantastic
+[44:30] learning experience thank you again
+[44:34] now to our viewers a big thank you for
+[44:36] your time and for listening to our
+[44:38] stories today now we are open to answer
+[44:40] your questions
+[44:45] thanks so much Ian Jack and Kong very
+[44:48] much appreciate the presentation I'm
+[44:50] going to go to our questions now which
+[44:52] the the team has been putting together
+[44:56] asks when doing resource State tracking
+[44:58] did you have to defer actual command
+[45:00] buffer recording so that the research
+[45:01] transitions could be inserted at the
+[45:03] appropriate time
+[45:05] um no we did not the engine's a bit like
+[45:07] a four joint so we have about 13 with
+[45:10] impossible not across them so the stage
+[45:12] already when we're in the past approach
+[45:14] great thank you
+[45:16] Sebastian Alton asked did you
+[45:18] investigate using Dynamic branching an
+[45:20] Uber Shader approach before the
+[45:21] optimized variant to the Shader PSO was
+[45:23] compiled
+[45:25] um for instance falling back to a slower
+[45:26] version instead of skipping the draw
+[45:28] like we did not end the overall like one
+[45:31] of the aspects that's specific for us
+[45:33] like all our shadows are handwritten so
+[45:36] we would have need to go in and change
+[45:37] all of them to actually support Dynamic
+[45:39] branching so in this case we didn't and
+[45:42] maybe we'll probably asked earlier in
+[45:44] the in the talk and it becomes a bit
+[45:46] more clear afterwards that we had other
+[45:48] ways of dealing with the problem that
+[45:50] made it less of a problem for us so we
+[45:52] didn't have to investigate that solution
+[45:58] um
+[45:59] Alexander Joubert asks how did you
+[46:01] manage PSO permutation explosion with
+[46:04] all the states Shader presentations on a
+[46:05] similar Shader system or different
+[46:07] engine we hit this issue it was easy to
+[46:08] have hundreds of thousands of psos we
+[46:10] had to go through the permutations
+[46:11] manually to remove the ones that were
+[46:12] not really used in the game
+[46:14] um I'll add I think on um
+[46:16] Advanced Warfare we peaked at around 450
+[46:20] 000 unique loaded shaders uh like for a
+[46:24] level I don't know what our we didn't
+[46:25] have psos back then but I'm very
+[46:26] sensitive to this problem as well
+[46:29] yeah that's probably like most of us we
+[46:31] probably also ended up with some with
+[46:33] that number I don't know off the top of
+[46:34] my head anymore what number we had yeah
+[46:36] but yeah it's definitely a thing we've
+[46:37] been looking into like we've always been
+[46:39] trying to remove them when we had the
+[46:40] opportunity we would remove them
+[46:42] um we didn't do like it was definitely
+[46:44] more with the piezos so it was more of a
+[46:46] task to actually remove them
+[46:48] but it was because of the way we
+[46:50] pre-load only the ones we actually used
+[46:52] it wasn't too much of an issue in the
+[46:53] end like we would just have that way of
+[46:56] falling back
+[46:58] um to the ones that we actually use so
+[47:00] it never was much of an issue it was
+[47:01] more of an issue on the build side of
+[47:03] things because you had to actually go in
+[47:04] and compile and pass all of that that
+[47:06] was an issue
+[47:08] um but yeah it was just like we would
+[47:10] reduce it when we have the chance but it
+[47:12] was never like a major problem
+[47:14] yeah it's interesting reflecting on Call
+[47:16] of Duty I mean we um we I think are
+[47:18] maybe one of the few
+[47:20] uh teams that does exhaustive like
+[47:23] pre-compilation of every single PSO but
+[47:26] kind of harking back to Sebastian's
+[47:28] earlier question we also spent a
+[47:30] significant amount of time on
+[47:31] scalarization techniques to allow us to
+[47:34] do efficient versions of you know
+[47:36] quote-unquote Uber shaders
+[47:38] um on Console to try and reduce and
+[47:39] manage rpso Cal so and both of these
+[47:43] both of these questions are close to my
+[47:44] heart
+[47:46] um Omid
+[47:47] Umali apologies if I mangled that since
+[47:50] you already decided in Vulcan for stadia
+[47:52] why not just go for Vulcan on PC as well
+[47:54] instead of dx12 and this spawn a long
+[47:56] API discussion in Discord as well well I
+[47:59] think it was less of an API discussion
+[48:01] it was pretty much a business decision
+[48:02] like six was a business deal with Nvidia
+[48:06] to add so we had to do ray tracing as
+[48:09] well so we had to do ray tracing and I
+[48:10] think at the time there was no Ray
+[48:11] tracing on Vulcan uh did not make the
+[48:14] decision yeah um the Nvidia and AMD gpus
+[48:19] that was the issue
+[48:23] both sides
+[48:26] uh juicy Nutella asked Did You observe
+[48:29] any GPU performance impact positive or
+[48:31] negative after switching to programmable
+[48:32] vertex pull
+[48:34] uh I think we don't we only have like
+[48:37] one this specific effects and we don't
+[48:39] have many character for outlining on
+[48:41] screens or I guess the use case is very
+[48:43] limited I don't think we have any big
+[48:46] performance issues here
+[48:49] understood
+[48:52] why not use the latest bound pipeline
+[48:54] instead of skipping the draw call on a
+[48:56] homogeneous Scene It can yield some okay
+[48:57] results that sounds exciting
+[49:00] go on
+[49:02] there'll probably be an option like the
+[49:04] latest bound one like whatever happens
+[49:05] to be bound
+[49:07] yeah that's the spicy decision in my
+[49:09] opinion
+[49:12] I guess it's an option to try but I
+[49:14] think I'm probably going to run into
+[49:15] issues mostly with corruption when
+[49:17] things are not actually using the exact
+[49:19] same vertex layout and then you get
+[49:21] triangles everywhere and very in
+[49:23] determine undeterministic results so
+[49:26] probably not something I would try but
+[49:28] it could be a fun experiment yeah if you
+[49:31] were worried about not getting enough
+[49:32] um jira's from your automated system
+[49:35] this would impossibly take care of it we
+[49:38] do do a variant of this ourselves in
+[49:40] some of our graphic analysis tools like
+[49:42] when we're mucking around with the frame
+[49:44] but that's all for like offline the bug
+[49:46] stuff
+[49:48] since you gather used psos from internal
+[49:51] play sessions you already script draw
+[49:52] calls that don't have a PSO how do you
+[49:53] track missing psos on the live game is
+[49:56] the missing stuff simply silently
+[49:57] skipped
+[49:59] I think we just don't skip it we don't
+[50:02] track any information like on this level
+[50:03] from a live game we ship a offline
+[50:06] version of which psos to load when the
+[50:09] game installs you have that version of
+[50:10] what it's going to load so if anything
+[50:12] gets added later on in like for example
+[50:14] for like patch we would need to patch
+[50:16] that file as well if new shaders get
+[50:17] added that are important to be
+[50:18] pre-loaded
+[50:20] um most of the time not the biggest
+[50:22] problem for us at least in practice it
+[50:24] wasn't too much of a problem it was
+[50:26] mostly be an issue when we change any of
+[50:28] the global shaders and they have a new
+[50:30] ID and then we need to make sure that we
+[50:32] touch them in but for individual object
+[50:34] it tends to not be an issue because if
+[50:36] we go to a new world that didn't exist
+[50:38] in the previous original version of the
+[50:40] game there would probably be a loading
+[50:42] screen so we would take care of that
+[50:44] during that process but it's definitely
+[50:46] something to look out for like you need
+[50:47] to patch that file as well yeah
+[50:50] uh mapatino asks for the PC build of the
+[50:52] game did you also have to account for
+[50:54] different Shader PSO variations based on
+[50:55] user Graphics settings
+[50:58] we we should yes we should Bobby Don at
+[51:01] this point but yeah you would definitely
+[51:03] get different ones so we had a couple of
+[51:04] issues so one of them would be like most
+[51:07] of all the testes would be happening on
+[51:09] like latest graphics card so they tend
+[51:11] to have the ray tracing enabled so if
+[51:13] you try to preload all those shaders on
+[51:15] something that doesn't have a ray
+[51:16] tracing it wouldn't work so we need to
+[51:18] filter on that level also we mostly
+[51:19] filter on feature levels so things that
+[51:21] are optional for Hardware we feature out
+[51:23] but anything else we just we didn't in
+[51:25] this boy so it might be a good thing to
+[51:27] investigate for the next version of this
+[51:30] that reminds me of a related question
+[51:32] which is did you um did you hard stop on
+[51:35] players outside of minspec
+[51:38] um for the title and did you possibly
+[51:40] have issues for players like going
+[51:42] really far down the Min spec chain as
+[51:44] well
+[51:45] I must say I'm not actually sure I don't
+[51:47] know if you know I think we had a check
+[51:49] that would check the driver version and
+[51:50] things like that so we definitely hit
+[51:52] that but I don't know if we will return
+[51:54] if we let them play with if they didn't
+[51:56] match the requirements yeah that's a
+[51:57] piece it didn't even care if that no
+[51:58] sense we can come back to this yeah
+[52:01] attending uh so it sounded like you
+[52:03] worked really closely with your QA team
+[52:05] can you describe what that collaboration
+[52:06] Loop was like was it mostly online
+[52:08] meetings async Communications such as
+[52:10] slack or emails or in person
+[52:13] now we have our uh some like the there's
+[52:16] a big query team and we have some
+[52:18] computer embedded in our team so we
+[52:20] first work in close Cloud version with
+[52:22] those people first and then uh once the
+[52:25] the build like from uh what our system
+[52:27] perspective is stable enough then we can
+[52:29] enable broader loggings and uh you know
+[52:34] validation systems for them to actual
+[52:37] trial yeah and yeah it's mostly done in
+[52:41] an online meeting and we have things
+[52:43] between two Elites of our team and the
+[52:46] uh the actual community that tested
+[52:50] again
+[52:51] yeah I think this is one of the most
+[52:53] interesting Parts actually uh you know
+[52:55] we talked about this this whole
+[52:56] conference
+[52:58] um as trying to talk about you know a
+[52:59] piece of rendering uh programming that
+[53:02] we don't really discuss it you know Sig
+[53:04] graph per se or or other conferences um
+[53:07] and I feel like this is also one of like
+[53:09] the really interesting hidden you know
+[53:11] uh sort of techniques of how we do you
+[53:14] know professional development is
+[53:15] understanding how to how to leverage the
+[53:18] rest of the team to achieve really
+[53:19] interesting things around you know API
+[53:21] Transitions and stuff like that so I
+[53:23] really appreciate you guys speaking to
+[53:24] that
+[53:25] challenge like especially if you look at
+[53:27] the timeout we started in person and
+[53:29] then covet happened so a lot of more
+[53:31] remote but it Ubisoft is generally
+[53:32] remote anyway for lots of places because
+[53:34] just of the different locations where
+[53:36] people work yeah massively distributed
+[53:39] development for your teams yeah
+[53:40] different times on different locations
+[53:43] Jacob Lang I think your question was
+[53:45] answered by Matt petinios I'm going to
+[53:47] skip that one for now but let us know in
+[53:48] chat if there was a Nuance there was
+[53:50] missed there
+[53:51] um uh Robin uh
+[53:54] thanks very much for the talk uh were
+[53:56] there any pitfalls in the Deferred
+[53:57] pipeline creation and draw command skips
+[54:05] I can just do a little bit of talking
+[54:07] about it and maybe it will answer these
+[54:09] specifics so definitely will like a
+[54:11] challenge like but it's been something
+[54:13] that we quite extensively test as well
+[54:16] internally like it's quite common for
+[54:17] shaders to be skipped and they're not
+[54:19] ready and the way we do like our Shader
+[54:21] reloading so if a Shader gets reloaded
+[54:24] we would Mark the old versions that are
+[54:25] not valid so it's quite common to test
+[54:27] jade as not being ready so for
+[54:29] especially for 3D programmers to iterate
+[54:31] on shaders that would be a quite common
+[54:32] thing to test
+[54:34] um yeah the most common pitfalls we
+[54:36] really like passes that depend on each
+[54:38] other like the second pass is not welded
+[54:41] without the results from the first like
+[54:43] draw indirect is probably the worst
+[54:44] because you will probably get a GPU hang
+[54:46] if you didn't initialize it at all and
+[54:48] you try to kick off like too much work
+[54:50] for your GPU to handle that was probably
+[54:52] the most common one but otherwise there
+[54:54] would also be like issues with like if
+[54:56] something is not initialized at all then
+[54:58] you have nands that stick around for a
+[54:59] while so it's definitely it was not a
+[55:01] terrible amount of work to get that
+[55:03] working
+[55:04] but it's like if you have it in your
+[55:06] general workflow it's not too uncommon
+[55:08] to encounter these cases so get caught
+[55:10] quite easily
+[55:15] thanks uh yes Rebecca so it would seem
+[55:17] returning a Boolean from dispatch for
+[55:18] skipping is quite error-prone did you
+[55:20] investigate using the C plus type system
+[55:23] um or types to solve this problem or was
+[55:25] it not an issue for you at all
+[55:27] I would say it was just not something
+[55:29] that we needed I'm not really sure what
+[55:30] the type system would help you with well
+[55:32] that case I guess just to make sure that
+[55:34] you check the Boolean case
+[55:36] um but yeah yeah I mean I definitely you
+[55:39] know Call of Duty has I spoke about this
+[55:41] at the first course you know we have a
+[55:42] allocation system for resources and the
+[55:45] draw calls that requires a little bit of
+[55:47] careful management for us to do
+[55:48] appropriate you know error checking and
+[55:51] handling and I can maybe imagine
+[55:53] something like that but hopefully the
+[55:55] hopefully your call sites are not so
+[55:56] frequent that uh it's a complicated
+[55:59] problem for you on that regard
+[56:01] it was never like median issue like you
+[56:03] could forget it but most of the cases
+[56:05] also didn't need to handle the case like
+[56:07] it's only the pending calls so it wasn't
+[56:08] never really too much of an issue but I
+[56:10] can see it being poor it could be
+[56:12] helpful to maybe
+[56:13] make you think about it when you write a
+[56:16] dispatch like remember this could fail
+[56:18] like it would be it could be interesting
+[56:20] yeah yeah
+[56:25] uh asks uh you mentioned spinning the
+[56:27] camera on level load to preload pipeline
+[56:29] did you need to do a similar preloading
+[56:30] before entering through chokes and
+[56:32] levels like doorways or was it planted
+[56:34] so this is a you know like an occlusion
+[56:36] you know of states
+[56:38] uh question uh yeah we don't do that
+[56:41] mostly because of the way Far Cry Works
+[56:43] Far Cry doesn't really have many choke
+[56:44] points in his level design it's all open
+[56:46] world and we just don't have any choke
+[56:48] points so generally it works quite well
+[56:51] because objects tend to come into view
+[56:53] from far distance first
+[56:56] um so that tends to deal with it and
+[56:58] then we have like we can fall back like
+[57:00] I mentioned at the end to what is not
+[57:02] ready yet and then as you get closer you
+[57:04] get those shaders so generally not be an
+[57:06] issue is your worst case like a safe
+[57:09] state or something similar that's like
+[57:11] at an interior exterior boundary
+[57:13] transition to the material swap heavily
+[57:14] between interior and exterior materials
+[57:16] yeah those could be like the hottest
+[57:18] parts to deal with but then they tend to
+[57:21] help
+[57:22] like the pixel shaders would be the
+[57:24] issue mainly like the vertex Shader
+[57:26] would be ready because you have probably
+[57:27] Shadows that get calculated from the
+[57:29] outside so those objects are partially
+[57:31] visible to the system at least it has
+[57:33] changed mostly in the teleport and
+[57:35] voting on in-game yeah and just one
+[57:38] thing I wanted to mention um regarding
+[57:40] previously the question asked why we
+[57:42] should uh tptd12 on PC it was a
+[57:44] partnership with AMD actually yeah okay
+[57:46] just Precision
+[57:49] yeah if you've got a program manager
+[57:51] you're seriously texting you right now
+[57:53] to get those corrected
+[57:57] um I think we're at the end of our
+[57:58] questions then I'm just going to take a
+[58:00] quick look at Discord to see if there's
+[58:01] anything else
+[58:03] um percolating in but uh otherwise I'd
+[58:06] like to again thank our presenters
+[58:08] [Music]
+[58:09] and uh please everyone give them a hand
+[58:11] in Discord and we're going to take a
+[58:13] short break and we'll come back for the
+[58:15] next Talk of the day thanks everyone
+[58:17] thank you thank you
+[58:19] foreign

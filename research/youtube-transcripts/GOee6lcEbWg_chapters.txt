@@ -1,0 +1,32 @@
+# Real-Time Samurai Cinema: Lighting, Atmosphere, and Tonemapping in Ghost of Tsushima
+Channel: SIGGRAPH Advances in Real-Time Rendering
+Duration: 59:28
+URL: https://www.youtube.com/watch?v=GOee6lcEbWg
+
+## Chapters
+- [00:00] Intro
+- [01:35] Introduction Goals
+- [02:13] Introduction Lighting
+- [03:50] Introduction Overview
+- [06:22] Indirect Lighting Diffuse
+- [15:53] Indirect Lighting Specular
+- [30:10] Atmospheric Lighting Clouds
+- [35:34] Atmospheric Lighting Volumetric Haze AA GHOST
+- [38:16] Atmospheric Lighting Partide Lighting
+- [43:50] Tonemapping Bilateral Grid
+- [49:02] Tonemapping Color Space
+- [50:44] Tonemapping White Balance
+- [55:54] Tonemapping Purkinje Shift
+
+## Description
+In this talk, we describe some of the graphics techniques used in the production of Ghost of Tsushima. Part of the SIGGRAPH 2021 Advances in Real-Time Rendering in Games course (http://advances.realtimerendering.com/). 
+
+Set in 13th century Japan, Ghost of Tsushima pays homage to classic samurai cinema with dramatic lighting, wind, clouds, haze, and fog, and features a beautiful open-world version of the island of Tsushima during the first Mongol invasion. In this talk, we will cover the diffuse and specular indirect lighting techniques used in the game including methods of computing SH irradiance probes from sky visibility data, including plausible sky and sun/moon bounce light. Next, we present our atmospheric lighting and rendering techniques, including how we lit our haze, clouds, and particles with multiple scattering. We show how to improve the accuracy of Rayleigh scattering to approach that of spectral rendering by using a custom color space for atmospheric lighting calculations. Finally, we discuss some of the tone mapping techniques we used to recreate the samurai cinema experience in-game.
+
+Bio:
+
+Jasmin Patry is a Lead Rendering Engineer at Sucker Punch Productions, where he has worked on Infamous 2, Infamous Second Son, Infamous First Light, and Ghost of Tsushima. Prior to that, he was at Radical Entertainment and contributed to their Hulk, Scarface, and Prototype titles. As a graduate student in the Computer Graphics Lab at the University of Waterloo, he created the popular Linux game Tux Racer, which was named “Best Free Software” by PC Magazine and has downloads numbering in the millions. His interests include physically based rendering, scientific computing, and performance optimization — and anything that makes games look better and run faster.
+
+## Subtitles
+Manual: No
+Auto-generated: Yes

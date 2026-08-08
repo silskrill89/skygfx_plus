@@ -1,0 +1,100 @@
+# Transcript: pPStdjuYzSI
+# Fetched: 2026-08-07T06:22:59.856211
+# Entries: 95
+# Duration: 386s
+
+[00:00] Cuda a parallel Computing platform that
+[00:02] allows you to use your GPU for more than
+[00:05] just playing video games compute unified
+[00:07] device architecture was developed by
+[00:09] Nvidia in 2007 based on the prior work
+[00:11] of Ian buck and John Nichols since then
+[00:14] Cuda has revolutionized the World by
+[00:16] allowing humans to compute large blocks
+[00:17] of data in parallel which is unlock the
+[00:19] true potential of the deep neural
+[00:21] networks behind artificial intelligence
+[00:23] the graphics Processing Unit or GPU is
+[00:25] historically used for what the name
+[00:27] implies to compute Graphics when you
+[00:29] play a game in 1080p at 60 FPS you've
+[00:31] got over 2 million pixels on the screen
+[00:33] that may need to be recalculated after
+[00:35] every frame which requires Hardware that
+[00:37] can do a lot of matrix multiplication
+[00:39] and Vector transformations in parallel
+[00:41] and I mean a lot modern gpus are
+[00:43] measured in teraflops or how many
+[00:45] trillions of floating Point operations
+[00:46] can it handle per second unlike modern
+[00:48] CPUs like the Intel I9 which has 24
+[00:51] cores a modern GPU like the RTX 490 has
+[00:54] over 16,000 cores a CPU is designed to
+[00:57] be versatile while a GPU is designed to
+[01:00] go really fast in parallel Cuda allows
+[01:02] developers to tap into the gpu's power
+[01:04] and data scientists all around the world
+[01:06] are using at this very moment trying to
+[01:07] train the most powerful machine learning
+[01:09] models it works like this you write a
+[01:11] function called a Cuda kernel that runs
+[01:13] on the GPU you then copy some data from
+[01:15] your main Ram over to the gpu's memory
+[01:18] then the CPU will tell the GPU to
+[01:20] execute that function or kernel in
+[01:22] parallel the code is executed in a block
+[01:24] which itself organizes threads into a
+[01:26] multi-dimensional grid then the final
+[01:27] result from the GPU is copied back to
+[01:30] the main memory a piece of cake let's go
+[01:31] ahead and build a Cuda application right
+[01:33] now first you'll need an Nvidia GPU then
+[01:36] install the Cuda toolkit Cuda includes
+[01:38] device drivers a runtime compilers and
+[01:40] Dev tools but the actual code is most
+[01:42] often written in C++ as I'm doing here
+[01:44] in Visual Studio first we use the global
+[01:47] specifier to define a function or Cuda
+[01:49] kernel that runs on the actual GPU this
+[01:51] function adds two vectors or arrays
+[01:54] together it takes pointer arguments A
+[01:55] and B which are the two vectors to be
+[01:57] added together and pointer C for the
+[01:59] result C equals a plus b but because
+[02:02] hypothetically we're doing billions of
+[02:03] operations in parallel we need to
+[02:05] calculate the global index of the thread
+[02:07] in the block that we're working on from
+[02:08] there we can use managed which tells
+[02:10] Cuda this data can be accessed from both
+[02:12] the host CPU and the device GPU without
+[02:15] the need to manually copy data between
+[02:17] them and now we can write a main
+[02:18] function for the CPU that runs the Cuda
+[02:20] kernel we use a for Loop to initialize
+[02:22] our arrays with data then from there we
+[02:24] pass this data to the ad function to run
+[02:27] it on the GPU but you might be wondering
+[02:29] what these weird triple brackets are
+[02:30] they allow us to configure the Cuda
+[02:32] kernel launch to control how many blocks
+[02:34] and how many threads per block are used
+[02:36] to run this code in parallel and that's
+[02:37] crucial for optimizing multi-dimensional
+[02:39] data structures like tensors used in
+[02:41] deep learning from there Cuda device
+[02:43] synchronize will pause the execution of
+[02:45] this code and wait for it to complete on
+[02:47] the GPU when it finishes and copies the
+[02:49] data back to the host machine we can
+[02:51] then use the result and print it to the
+[02:52] standard output now let's execute this
+[02:54] code with Auda compiler by clicking the
+[02:56] play button congratulations you just ran
+[02:58] 256 threads in parallel on your GPU but
+[03:01] if you want to go beyond nvidia's GTC
+[03:03] conference is coming up in a few weeks
+[03:05] it's free to attend virtually featuring
+[03:07] talks about building massive parallel
+[03:08] systems with Cuda thanks for watching
+[03:10] and I will see you in the next one

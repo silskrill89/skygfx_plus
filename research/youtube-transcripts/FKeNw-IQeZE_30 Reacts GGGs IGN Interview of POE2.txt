@@ -1,0 +1,1981 @@
+# Transcript: FKeNw-IQeZE
+# Fetched: 2026-08-07T06:22:58.601927
+# Entries: 1976
+# Duration: 7859s
+
+[00:00] [Music]
+[00:05] gotten a few opportunities to play it
+[00:07] over the last year I've played the witch
+[00:09] I've played the ranger I have played the
+[00:11] mercenary I've played the monk I if you
+[00:14] guys like what we do we're just talk
+[00:16] about gaming news have conversations
+[00:18] about topics react to videos hit that
+[00:20] like button hit that subscribe button if
+[00:21] you'd like to go above and beyond that
+[00:23] uh become a member as little as $5 can't
+[00:25] wait to dive in and play the beta that
+[00:28] said at all of the preview opportunities
+[00:30] I had the chance to sit down with
+[00:32] Jonathan Rogers the game director and
+[00:34] ask him a few questions now I've never
+[00:36] released these interviews before but I
+[00:38] thought I would do so right now to get
+[00:40] some thoughts from him about Path of
+[00:42] Exile about the games industry and what
+[00:45] he thinks what are you doing over there
+[00:47] that's keeping people into path for for
+[00:50] 10 over 10 years and excited about path
+[00:52] 2 are you focus on to keep that going I
+[00:55] really think that it's being unafraid of
+[00:57] innovation um like I think a lot of game
+[01:00] companies and especially as they get
+[01:02] larger they get they start to get very
+[01:04] sort of dried in the wool and it even
+[01:06] can I just
+[01:08] say obviously I wasn't a big fan and I'm
+[01:11] not a huge fan because I'm not really a
+[01:13] fan yet uh I'm a fan of studios and and
+[01:17] and whatnot but I'm not a fan of GGG
+[01:19] because I I don't know much about them
+[01:21] but for the couple of interviews that we
+[01:22] watched I feel like GGG right now is
+[01:26] where BioWare was with like the mass
+[01:29] effect series with Mass Effect 2 I feel
+[01:31] like GGG is right where from soft is at
+[01:36] that point or where laran studio is
+[01:38] right now right they're at that that
+[01:40] moment where they're still passionate
+[01:42] about the games right and when I when I
+[01:44] bring up Lan Studios when I bring up uh
+[01:46] from soft when I bring up uh those types
+[01:49] of companies it is like the Activision
+[01:52] it is like the BioWare it is like the
+[01:54] Rock Steady um Studios back in the day
+[01:58] right they're at this point where these
+[02:00] Studios have so much passion and they're
+[02:03] like the Oddball out not the norm okay
+[02:07] and I feel like that's where they are
+[02:09] and the next Path of Exile could be just
+[02:13] as good down the road 10 years from now
+[02:15] or it could fall off like a BioWare like
+[02:17] a rock
+[02:19] steady but right now I think they're
+[02:21] they're at their they they're they're
+[02:23] shooting at all cylinders right now
+[02:26] happens within the studio like quite
+[02:28] frequently um I to change and I get a
+[02:31] lot of push back from people because oh
+[02:32] this is the way we've always done it you
+[02:33] know that kind of thing and just even
+[02:35] from that like I don't think it's even
+[02:36] necessary you know cuz people talk all
+[02:38] the time about how oh you know budgets
+[02:40] get large and people get it risk averse
+[02:41] I don't even think that's necessarily
+[02:42] even the largest pressure I think that
+[02:44] what it is is that even inter internal
+[02:46] to the studio um you know a lot of
+[02:48] people get used to how things are they
+[02:49] want things to stay the same like many
+[02:51] people who work for a game company are
+[02:52] fans of the game and so you get that
+[02:54] same pressure of like oh you know we
+[02:55] can't change our flasks work we can't
+[02:57] change this we can't change that you
+[02:58] know what I mean um and so so we just
+[03:00] have to really try to push through that
+[03:01] and so a lot of it sounds like he's at
+[03:03] like a 1.2 1.5 speed but he's not time
+[03:06] in the studio what I'm doing is I'm
+[03:08] saying to people um you know what like
+[03:10] even if you don't like this we're going
+[03:11] to try it and if it's bad then it's bad
+[03:13] and we'll just do something else but if
+[03:14] you know it's worth trying to make do
+[03:16] different things ah trying things right
+[03:19] putting putting yourself out there
+[03:21] making a game and selling a game and um
+[03:25] I think that served us well and every
+[03:26] time we've uh taken risks it's paid off
+[03:29] right and every time time that we've
+[03:30] been risk averse I think it's uh it
+[03:32] hasn't gone as well for us why do you
+[03:34] sort of stand out right now in the
+[03:35] industry I think about how you handled a
+[03:37] recent difficult decision I have to
+[03:39] imagine to delay the beta from November
+[03:41] to December what well let me let me
+[03:45] rephrase the question
+[03:47] here how did you decide to handle the
+[03:50] delay in that manner well first of all
+[03:53] delaying a game is very very difficult
+[03:56] because there are so many people who
+[03:57] want to tell you that it can't be done
+[03:59] and the reason they want to say that is
+[04:00] cuz they're like oh you know we're going
+[04:01] to have to lose this deposit on this
+[04:02] marketing thing and we're going to have
+[04:03] these server costs and we're going to
+[04:04] have this that right so it ends up
+[04:05] costing a lot of money so I like what he
+[04:07] just said there right this is exactly
+[04:11] why we tell people to don't announce it
+[04:14] until you know when it's done now here's
+[04:17] here here's what I'm getting from what
+[04:18] he just said there there's a difference
+[04:20] between the upper management and the
+[04:22] people in you know in the the
+[04:25] Battleground like they're on the front
+[04:26] lines the developers are the front line
+[04:29] the upper management is the people
+[04:31] sitting back calling the shots but they
+[04:33] don't actually understand what's going
+[04:35] on so the big wigs are telling them you
+[04:37] got to put it out you got to put it out
+[04:39] we have this marketing going on we have
+[04:40] this push going on we have all these
+[04:41] things you can't do it it's impossible
+[04:43] do not delay this is when you don't make
+[04:46] an actual hard date of hey it's coming
+[04:48] out this day and then you push it back
+[04:50] right he's saying that well if it's not
+[04:53] going to work then you got to delay the
+[04:55] game which they did for 3 weeks it's a
+[04:58] very difficult decision to make and plus
+[04:59] is also just disappointing the players
+[05:01] and everyone's afraid of that and that
+[05:02] that's really I would rather disappoint
+[05:03] the players of a delay than disappoint
+[05:05] the players when the game comes out and
+[05:06] it's not working hard um but at the same
+[05:08] time we just kind of got to the point
+[05:09] where it was untenable not to delay
+[05:11] because the risks were starting to get
+[05:12] too high but I think the really most
+[05:14] important thing is just being honest
+[05:15] with people not appearing you know like
+[05:18] for lack of a bit word like a corporate
+[05:19] drone right like you want to actually
+[05:21] just be honest and tell people exactly
+[05:23] you know why did we come to this
+[05:24] decision
+[05:25] what imagine imagine just talking to
+[05:28] your audience going hey we want to
+[05:31] release the game but we can't right now
+[05:33] because we have issues and we don't want
+[05:35] to release a bad product cyberp Punk
+[05:37] almost pulled this off almost pulled
+[05:40] this off because when everyone else was
+[05:41] [ __ ] in the industry right making
+[05:43] fuckups and whatnot cyber Punk or CD
+[05:46] project red came out and said we're not
+[05:48] going to do what those people did and
+[05:49] they did exactly what those people did
+[05:52] actually happened there and um I think
+[05:54] that um you know like every time we've
+[05:55] ever been honest with the players I
+[05:57] think that's been something that's been
+[05:58] really good so you you know that that's
+[06:00] where it comes from really like we just
+[06:01] told people exactly why it was we didn't
+[06:02] kind of mince words or kind of you know
+[06:04] like trying to be vague like you know
+[06:05] here is the exact thing that caused us
+[06:07] to delay the game uh we'll tell the
+[06:08] players that and and they'll hopefully
+[06:09] be understanding of that here's the
+[06:11] thing that's broke this is why we're you
+[06:13] know we're not releasing it and yeah
+[06:15] that's it and they're like all right
+[06:16] cool yeah that sounds good all right we
+[06:19] talked about this three weeks ago when
+[06:20] he delayed I said I don't think it's a
+[06:21] big deal I don't think it's a big deal
+[06:22] yeah you're disappointed but they're
+[06:24] telling you that the game is ready just
+[06:26] the backend stuff because everything's
+[06:28] merging we have problems on the back and
+[06:29] we got to make sure those are working
+[06:31] before we we release the
+[06:33] game yeah totally it and I think it's
+[06:36] received really well I I watched um a
+[06:38] different announcement from a different
+[06:40] company and it was all over the place
+[06:42] and then I watched yours very succinct
+[06:43] you take responsibility you apologize
+[06:45] and then you put it out there and I I as
+[06:47] a player really appreciated that because
+[06:48] I am looking forward to the we all
+[06:50] appreciate that we we hate no one likes
+[06:53] to be lied to no one likes to be told a
+[06:56] dishonest thing okay we all appreciate
+[06:59] that we all respect that we all just
+[07:01] want a good game right at the end of the
+[07:02] day regardless of what the way you
+[07:04] politically think or all this other [ __ ]
+[07:06] at the end of the day we just want a
+[07:07] game and we just want to play the game
+[07:09] right and we don't want to be Li
+[07:12] to November date um what's the biggest
+[07:16] issue facing the overall industry right
+[07:18] now in your opinion Artemis says uh in
+[07:20] my experience in communication between
+[07:22] the devs and the management on where
+[07:24] they honestly are in the development
+[07:26] cycle you writing more than that a trick
+[07:29] I mean it's it's it's interesting
+[07:31] because I think AAA gaming is in kind of
+[07:33] in a weird place right now um like we're
+[07:36] kind of in this weird like uh like maybe
+[07:40] this is not the right sort of double a
+[07:41] territory where it's like we're in this
+[07:43] kind of position where like we're not
+[07:44] like one of the giant mega Studios so
+[07:46] that we kind of haven't inflated to the
+[07:47] point where it becomes difficult to even
+[07:48] make anything um
+[07:50] but and this is what I'm saying right
+[07:53] this is where GGG is right now right
+[07:56] they're on that precipice of where those
+[08:00] people that love Poe they already think
+[08:01] these guys are like rock stars and up
+[08:03] but in the way he like he just said
+[08:05] they're like in the double a area right
+[08:07] they don't feel like they're AAA because
+[08:08] they're not at that BioWare level yet
+[08:10] they're not at that rock steady level
+[08:12] yet they're not at that rockar level yet
+[08:14] they're not at that level yet but now
+[08:16] this is their this is that moment for
+[08:17] them and the studio but we're also
+[08:20] definitely not in the classification of
+[08:22] what you would call an indie game either
+[08:24] um so I think that's kind of interesting
+[08:25] they's just not a lot of huge things in
+[08:26] that area and really I mean that stuff
+[08:28] we talked about about the
+[08:58] osificante that sort of stuff but we
+[09:00] also get to still be Innovative and like
+[09:02] do interesting things that right right
+[09:05] and and here's a here's the beautiful
+[09:06] thing uh water bear says it in chat GGG
+[09:09] is laran Studios and what laran Studios
+[09:12] did is basically they're like a doublea
+[09:15] studio but they punched up their weight
+[09:18] class right and they made this amazing
+[09:21] Boulders Gate 3 game and they Shine the
+[09:24] Light on what AAA game is doing now you
+[09:27] have you know GGG coming in and they're
+[09:30] doing exactly okay these guys are doing
+[09:33] exactly what laran studio is doing where
+[09:35] they're punching up a weight class and
+[09:37] now they're making the game to shine the
+[09:39] light on AAA gaming where they're not
+[09:40] taking risks they're not innovating
+[09:42] they're not doing the stuff they're in
+[09:43] that little comfy cushy area where
+[09:46] doesn't matter what they put out we're
+[09:48] AAA studio and we're going to make money
+[09:50] off of it not anymore right now people
+[09:52] are looking at at at the lower tier
+[09:56] we're doing what we did in the 80s and
+[09:57] early 90s we're taking companies and
+[09:59] raising them up that make good games
+[10:01] right we always go back to this make a
+[10:03] game sell a
+[10:04] game arus says because I have to uh be a
+[10:07] middleman project manager I uh I'm in
+[10:09] meetings with the management and saying
+[10:11] we are in the meeting uh deadline until
+[10:12] it comes to the deadline and then
+[10:14] developers come back to say uh to me
+[10:17] saying uh we yeah I like how there's a I
+[10:21] know what you're doing you're typing but
+[10:22] there's like a limit to what you can
+[10:23] type so you have to you have to keep
+[10:24] doing it uh need more time uh no one
+[10:27] wants to look back of course right but
+[10:29] upper management wants to make that
+[10:31] money as fast as possible or the
+[10:32] developers are telling you no we need
+[10:34] more time they're like well you don't
+[10:35] have any more time because this is what
+[10:37] we have the marketing budget for and
+[10:38] that's what he said in the earlier right
+[10:40] other companies aren't doing um so um I
+[10:43] really don't know how to sort of reclaim
+[10:44] that middle again instead of have the
+[10:45] game industry um have that that kind of
+[10:48] stuff um again and I think that really
+[10:50] is challenging for the industry like it
+[10:51] used to be that there were a lot of what
+[10:53] you might call Double A games and I kind
+[10:55] of don't know where it all went like why
+[10:56] do we now in this position where you've
+[10:58] got the like Ultra trip stuff which is
+[11:00] kind of very stolid and kind of not
+[11:01] really going anywhere and then on the
+[11:03] other end of the side side of things
+[11:04] you've got like the Indies where you
+[11:05] know it can be hard to get the broader
+[11:07] audiences and um you know like I just
+[11:09] don't know how you get that middle back
+[11:11] uh do you feel like there's been an over
+[11:13] prioriti I think you get that middle
+[11:14] back by what what Lan's doing what what
+[11:18] these guys are doing there's another
+[11:21] um what's there's another there's
+[11:23] another Studio that's like like these
+[11:25] guys they're like mid- tier they're not
+[11:27] they're not that triple A right they're
+[11:28] still in the and this is not a this is
+[11:30] not a knock on GGG or laran Studios
+[11:33] right they're not major league yet they
+[11:36] are now right but they're in the miners
+[11:39] they're in that doublea space they're
+[11:41] trying to get in that space But as he
+[11:44] said how do you get that back because it
+[11:45] is it's just black and white it's indie
+[11:47] game or Triple A ization put on Graphics
+[11:52] uh well you know that's an interesting
+[11:53] one I think graphics are important they
+[11:55] actually set like there is definitely
+[11:57] evidence that people appreciate a game
+[11:59] more when Graphics are a thing but at
+[12:01] the same time do they do people
+[12:04] appreciate a game when Graphics are
+[12:06] better I don't know I don't know if
+[12:09] that's true I think graphics have a big
+[12:11] a big portion of that but I don't know
+[12:14] if that's what people base it on because
+[12:15] you could have the most beautiful
+[12:17] game but if the game play sucks or is
+[12:20] just mediocre then it just gets pushed
+[12:22] to the side they don't really care what
+[12:23] it looks like like you can do that stuff
+[12:26] more efficiently if you're clever and I
+[12:28] understand it sort of may look like know
+[12:29] the part of the reason why AAA budgets
+[12:31] have inflated so much is because you
+[12:32] know of of what they're doing with
+[12:33] Graphics but at the same time I do think
+[12:35] that a lot of what they're doing um like
+[12:39] like you can do goodlook Graphics um by
+[12:42] taking advantage of Modern Hardware
+[12:44] without tying yourself into a process
+[12:46] that leads to um like a very expensive
+[12:48] development process that I think some
+[12:49] Studios have like we're able to produce
+[12:51] a game with 100 bosses and like 800
+[12:53] Monsters uh without having to you know
+[12:56] fall into the Trap of having to have a
+[12:57] team that's like absolutely thousands
+[12:58] and thousands and size like it can be
+[13:00] done it's just a question of uh you know
+[13:02] correct prioritization on the way that
+[13:03] you do it what I hear there is good
+[13:07] management good
+[13:09] management right water bear says that's
+[13:11] as crazy uh what's crazy is they gave
+[13:13] praise to Diablo I but made the graphics
+[13:16] 10 times better than Diablo I it looks
+[13:18] so fluid along with the gameplay and the
+[13:20] bosses are insane
+[13:22] looking so I think it can be done um and
+[13:25] as I said players do value Graphics like
+[13:27] it's important like when people are
+[13:28] looking at impressive boss fights it's
+[13:29] part of what they're looking at is the
+[13:30] good animation and all the sort of work
+[13:32] that we put into that it's part of the
+[13:33] spectacle and the charm so um you know
+[13:35] like a lot of people do say Graphics
+[13:36] aren't important I actually don't agree
+[13:38] I think they are important but then at
+[13:39] the same time you have to be very
+[13:40] careful not to waste time doing things
+[13:43] you know yes yes it's a I I like the way
+[13:47] this guy speaks I man I feel
+[13:50] I I I feel when I listen to all the
+[13:54] interviews that we listened to the last
+[13:55] couple weeks
+[13:57] right I I I feel like there's hope in
+[13:59] the in the video game Space right
+[14:01] there's still people like him working in
+[14:03] the industry that that see it right
+[14:06] speaks like one of the gamers not like a
+[14:09] corporate shill that doesn't know
+[14:10] anything about gaming but just wants to
+[14:12] make money right the money will come if
+[14:14] you just make the game you know like
+[14:16] sanding under the drawers is what they
+[14:18] would Pixar I think used to say uh you
+[14:20] know when you don't need to be doing
+[14:21] that uh you know when you can be
+[14:22] concentrating on stuff that's actually
+[14:23] you know put the budget on the screen as
+[14:25] it were as opposed to wasting a lot of
+[14:26] time with things that people just don't
+[14:27] really notice uh do you think P like
+[14:30] [ __ ] get off the pot basically you
+[14:31] know what I'm saying like Everyone likes
+[14:34] Star Citizen but it's been in Early
+[14:36] Access for 10 years [ __ ] or get off the
+[14:40] potle 2 is going to be able to Dethrone
+[14:43] a banana game on Steam
+[14:47] charts yeah those of you that don't know
+[14:49] the banana game we talked about it a
+[14:50] couple months ago it's that [ __ ]
+[14:52] click button game where you're just
+[14:53] clicking a banana a tricky question I
+[14:55] think that when we go into full release
+[14:57] I think that there's a very good chance
+[14:58] that we could end up topping the charts
+[15:00] but um you know uh for Early Access I'm
+[15:02] not so sure I guess we're going to see I
+[15:04] I think I think he's underestimating we
+[15:07] talked about it last night when we were
+[15:08] playing uh brighter Shores I do think
+[15:11] that they're going to have 800,000
+[15:13] people concurrent this weekend like when
+[15:16] it comes out okay it it might be more
+[15:19] than that but that's my number that I
+[15:21] think right someone said earlier they're
+[15:23] expecting a million people right is that
+[15:25] a million people across all platforms
+[15:27] I'm saying 800,000 just on steam I'm
+[15:29] thinking it's going to just explode and
+[15:32] as people and if they have no issues and
+[15:35] people can actually get in and play the
+[15:36] game on launch day the snowball is just
+[15:39] going to get bigger and bigger and
+[15:41] faster and faster I really have no idea
+[15:43] what kind of concurrency we're going to
+[15:44] get for Early Access like on the one
+[15:46] hand um you know like it is a big uh I
+[15:48] think it's going to be a big uh you know
+[15:51] tent pole release on the other hand you
+[15:52] know it is early access right like a lot
+[15:54] of people might be afraid to jump in for
+[15:55] that reasons Absolut but I guess the
+[15:57] message to those people I said that last
+[15:58] night as well I said if they're on
+[16:01] Console okay like hardcore Path of Exile
+[16:04] guys are on on PC they're going to get
+[16:06] Early Access $30 more people on PC than
+[16:08] than console console I don't know people
+[16:11] know how the control scheme is going to
+[16:12] work I said they should give out like a
+[16:13] little demo or something obviously it's
+[16:15] a freeto playay game when it comes out
+[16:16] but the but the Early Access is not so I
+[16:19] think a lot of people on conso are going
+[16:20] to hold off until the full release to
+[16:23] give it a shot would be that you know we
+[16:25] we are a game that has the content of
+[16:27] what a full AAA game would have these
+[16:29] days and uh we're also uh a much lower
+[16:32] price point than what those games would
+[16:33] be um so even though uh you know it's
+[16:35] early access I think that the value
+[16:37] proposition is Extreme incredibly there
+[16:40] and um I'm I think we should be able to
+[16:41] see some pretty big numbers on launch of
+[16:43] Early Access as well but uh certainly
+[16:44] when we get to full release I'm sure
+[16:46] we're going to be topping the chats yeah
+[16:48] and I agree with that I think I think at
+[16:50] full
+[16:52] release if it's six months from now
+[16:54] because they said they said minimum six
+[16:56] months to a year for full release right
+[17:00] so if it's 6 months it comes out in the
+[17:02] summertime and everyone just loves what
+[17:04] it has and what they've added and what
+[17:06] they're doing for Early Access I think
+[17:08] when the launch comes it's just going to
+[17:09] explode at that point because it's just
+[17:10] going to be good word of mouth on top of
+[17:13] good word of mouth and it's just going
+[17:14] to keep exploding as long as it works
+[17:16] right right now Early Access you're
+[17:18] going to have that massive success over
+[17:20] on PC console's not going to have it but
+[17:22] then when it comes out I think it's
+[17:23] going to be a huge success across the
+[17:25] board and as he's saying it as well um I
+[17:27] see no reason why we wouldn't be
+[17:28] confident huh absolutely yeah cool that
+[17:31] I like it I like the confidence okay I
+[17:33] like the confidence because it knows
+[17:35] that he's got the passion inside of his
+[17:37] game uh kylo said I saw somewhere uh or
+[17:40] right no uh considering all the
+[17:41] interviews considering all the
+[17:43] interviews he has had with the people
+[17:45] within the past week you can tell he's
+[17:46] proud of his work I don't think uh I've
+[17:48] ever seen a studio head interview this
+[17:50] much before a game launch well that's
+[17:53] not true we saw Shawn
+[17:54] Murray we saw Shawn Murray go on a world
+[17:58] tour inter uh doing interviews left and
+[18:00] right Tonight Show and all the stuff
+[18:01] from for No Man's sky and then well we
+[18:03] know where that is right we know where
+[18:06] that were that where that uh ended up oh
+[18:09] well we're certainly going to buy enough
+[18:10] servers for that oo buy enough servers
+[18:14] for that hopefully hopefully it doesn't
+[18:16] crash right when you're making a game
+[18:19] what's the most important consideration
+[18:20] a developer needs to have when crafting
+[18:22] The Experience what needs to be top of
+[18:25] the priority list it's honestly a very
+[18:27] difficult question because of the fact
+[18:28] fact that a game a good game is the
+[18:30] culmination of getting every little tiny
+[18:32] detail right and it really is that
+[18:34] defeat in detail I think that makes
+[18:36] games feel bad and the amount of effort
+[18:39] it honestly takes a lot of experience to
+[18:41] get to the point where people even know
+[18:42] what good looks like um I think once
+[18:45] again a lot of AAA games these days are
+[18:46] getting defeated in detail right like
+[18:48] it's all of the little things that add
+[18:49] together to an experience that um that
+[18:51] that isn't good rather than it being
+[18:53] just like one big issue and I guess a
+[18:55] lot of people when they're analyzing
+[18:56] games and why they're not doing well
+[18:58] they want to f on oh was because of this
+[18:59] thing this big issue this is my analogy
+[19:02] I I I talk about all the time you look
+[19:04] at your lawn and your lawn looks
+[19:06] pristine but if you get down on your
+[19:08] knees hands and knees and start looking
+[19:09] in you're going to see you're going to
+[19:11] see problems with your lawn you're going
+[19:12] to see bugs and and and divots and all
+[19:15] these other things if you're looking for
+[19:16] it right that's exactly what he's saying
+[19:18] right if you if you start to hone in
+[19:21] okay if you start to hone in on stuff
+[19:22] you're going to but when everything is
+[19:25] just good and this is what I say make a
+[19:27] game just make a game put all your
+[19:28] passion into the game and make that game
+[19:31] it'll work that big issue but I really
+[19:33] think the gameplay comes down to getting
+[19:35] a thousand small details right and if
+[19:37] you do that then the experience will be
+[19:39] good yes and it's honestly like I think
+[19:40] even we underestimated what it would
+[19:42] take to ship path of XL2 because like
+[19:45] just getting all those details right and
+[19:46] you know getting all things like it's
+[19:47] it's very it was very easy to be
+[19:49] overconfident especially at first when
+[19:51] we were marketing the game um because
+[19:53] making a fresh game means getting all
+[19:55] those details right again and um you
+[19:57] know getting all the like we were really
+[19:58] overconfident about itemization like it
+[20:00] took a lot of iteration to get to the
+[20:01] point where that was working like we
+[20:02] thought oh yeah you know we'll just take
+[20:03] poe1 make a few changes and then we're
+[20:04] good no like it required like a huge
+[20:06] amount of extra work yeah triaa Studio
+[20:09] would have de what he just said let me
+[20:10] rewind what he just said right oh yeah
+[20:12] you know we'll just take pe1 make a few
+[20:13] changes and then we're good that's AAA
+[20:15] gaming right there triaa gaming would be
+[20:18] like oh let's just take this and let's
+[20:20] just do that
+[20:21] again they made a completely brand new
+[20:24] game right AAA game Studio would have
+[20:27] just as we call it lazy just throw it in
+[20:30] call it in whatever you want to call it
+[20:32] okay and these guys said no no let's and
+[20:34] we watched the other video where he said
+[20:36] no we were doing all this and we decided
+[20:38] why not just make a whole new thing no
+[20:40] like it required like a huge amount of
+[20:41] extra work um you know like all those
+[20:44] things and like you get one thing wrong
+[20:45] and immediately someone will have a bad
+[20:47] experience and they'll say that your
+[20:48] game is bad so it really is all those
+[20:50] details that um are required to get it
+[20:51] done so yeah I honestly couldn't point
+[20:53] to one thing it's just like a thousand
+[20:55] things but correct if an engine's
+[20:57] working properly
+[20:59] there's thousands of Parts moving and
+[21:01] working if one of those things is a
+[21:04] problem the engine doesn't work
+[21:06] correctly right that's exactly what
+[21:08] about the video game people will look at
+[21:10] your game if it's working smoothly with
+[21:12] all the Thousand Parts moving and all
+[21:13] the things working and it works it's
+[21:15] good if there's something problem like
+[21:17] ah something feels wrong about this and
+[21:19] uh knowing what those are yeah I I
+[21:22] remember the old philosophy I think it
+[21:23] was Bungie who said it like the 3
+[21:25] seconds of fun or something like that is
+[21:27] that still one of the main things that
+[21:29] you I mean sure it's absolutely relevant
+[21:31] right like you need to make sure that at
+[21:32] every moment you are enjoying the
+[21:34] experience that you're having and um you
+[21:36] know as I said any one thing can can
+[21:38] destroy that um so you need to be very
+[21:40] careful that's right okay cool I mean in
+[21:42] some ways you could say that game
+[21:43] development is more about not getting
+[21:45] things wrong that is about getting
+[21:46] things right like if you that's you know
+[21:49] what what a what a breath of fresh air
+[21:53] listening to him speak candidly about
+[21:56] this you can if you can polish
+[21:57] absolutely every little that a player
+[21:59] might have out of an experience you can
+[22:00] give them a good time even though you
+[22:02] know like like obviously you need
+[22:03] Innovation as well but like it really is
+[22:05] important just to not get any of that
+[22:06] stuff wrong uh what makes you so
+[22:08] confident that path and back stle 2 has
+[22:10] all those right things um I guess we've
+[22:12] done a lot of testing recently and um it
+[22:14] was something
+[22:15] that key word
+[22:18] there on
+[22:20] YouTube we we we'll get it we'll let
+[22:22] we'll let it catch up for a
+[22:24] second we'll let it catch up for a
+[22:26] second because there's something I don't
+[22:28] know what's
+[22:31] happening YouTube says excellent
+[22:33] condition but for some reason we we had
+[22:34] a
+[22:36] hiccup so I I pause it we're going to
+[22:39] rewind okay we're going to rewind a
+[22:41] couple seconds here just in case you
+[22:43] guys uh missed it because of the hiccup
+[22:46] inside of YouTube a lot we've done a lot
+[22:48] of these events like that we've got a
+[22:49] lot of feedback um you know it's uh it's
+[22:52] helped a lot to get a lot more
+[22:53] confidence and I guess one of the things
+[22:55] that also was um you know a bit
+[22:57] concerning when we first were doing all
+[22:58] that testing is that um we were finding
+[23:00] that uh path of XR one players were not
+[23:02] liking the game as much as uh new
+[23:03] players were so um by having you know by
+[23:07] iterating more by making it so those
+[23:08] numbers um became similar um it makes me
+[23:10] actually a lot more confident because I
+[23:12] know that someone who knows path of XL
+[23:13] who knows how all the mechanics should
+[23:14] work um is liking the game and I also
+[23:16] know that a new player who takes some on
+[23:17] face value is um who also doesn't have
+[23:20] any experience with um you know like who
+[23:21] doesn't appreciate the game on the level
+[23:23] of just like knowing about all the stats
+[23:24] and everything can also enjoy the game
+[23:26] as well and that makes me feel we've got
+[23:27] both the kind of a mediate like you know
+[23:29] the the the the the the the few seconds
+[23:31] of playing is just enjoyable sort of
+[23:33] going well and we've also got the kind
+[23:34] of longer term I'm caring about stats
+[23:36] and how to build my character stuff
+[23:37] right as well and if we can get both of
+[23:38] those things some somebody came into my
+[23:41] stream uh in the chat the other day I
+[23:43] don't know who who it was or whatever
+[23:45] and they said if you think that they're
+[23:47] going for the Casual player you're
+[23:50] mistaken and apparently I'm
+[23:53] not right apparently the person that
+[23:54] made that comment is mistaken because he
+[23:56] literally just said for new players they
+[23:58] want a more broader audience to come to
+[24:00] their game where they're not being
+[24:02] apologetic to make it easy for new
+[24:04] players but they're trying to make the
+[24:06] onboarding process to come into their
+[24:08] game where more people could try it out
+[24:10] and give it a shot where they might get
+[24:12] hooked on to it okay and that that is
+[24:16] the basis of what he's saying not what
+[24:19] I'm saying right they're trying to make
+[24:21] it where new players can come in and go
+[24:24] this is not super you know uh over
+[24:28] convol Ed or you know it's it's pushing
+[24:30] me away they're looking at it going well
+[24:33] we want new people to come in play the
+[24:35] game but we also have that those moments
+[24:37] for those people that want the stats and
+[24:39] want the convoluted stuff uh and the
+[24:41] difficulty is there for those people
+[24:44] right then I think we'll have a good
+[24:45] game in our hands yeah I mean I I
+[24:47] already told you during summer games
+[24:48] Fest that I was really enjoying it so
+[24:50] best of luck as we go towards December
+[24:52] I'm excited yeah thank you very much you
+[24:54] know past two is coming up what are some
+[24:56] of the pitfalls that you want to avoid
+[24:58] with Path of Exile too and at the same
+[25:00] time what were some of your must haves
+[25:02] When developing a sequel to an already
+[25:04] hit game yeah so I mean the tricky part
+[25:07] is is that um when you make a game a
+[25:10] sequel to a um very popular game that
+[25:12] has a very hardcore Community every
+[25:14] single thing you change about it is like
+[25:16] a potential uh point of friction for a
+[25:19] community that's going to be like can
+[25:20] can be you know incredibly um you know
+[25:23] uh I mean look they've got a lot of
+[25:24] opinions right um and so uh the pitfall
+[25:27] that I worry about is you know like on
+[25:29] day one you get a bunch of PA like even
+[25:31] though um uh you know like new he he's
+[25:35] trying to watch his words cuz he doesn't
+[25:36] want to offend the the longtime fans
+[25:39] here players may play it and and and and
+[25:41] enjoy it you might you might have a
+[25:42] situation where like po1 players are
+[25:44] kind of like um oh you know I don't like
+[25:46] this it doesn't fit to whatever I I want
+[25:48] and so that is a really big problem we
+[25:50] were actually very concerned about this
+[25:51] because when we first did our uh uh user
+[25:54] testing uh close betas we actually found
+[25:56] that path of excile one players rated
+[25:58] the game worse than what path of XL 2
+[26:00] players so what new players
+[26:02] did ah isn't that convenient right or
+[26:06] ironic right
+[26:08] so new players like Path of Exile 2 but
+[26:12] Path of Exile one players didn't like it
+[26:15] because it was too much of a change okay
+[26:18] but there's that balance that they're
+[26:19] trying to hit and they seem very
+[26:21] confident with it and that was a huge
+[26:23] concern right cuz it's like well we
+[26:24] can't really launch like this this would
+[26:26] be a big issue um and so it took us a
+[26:28] while to kind of get the game to a point
+[26:30] where both pee1 and new players both
+[26:32] liked it but yeah we started from a
+[26:33] point where new players liked it more
+[26:35] than old players and in fact it was very
+[26:37] interesting because um path of XL one
+[26:38] players actually rated the difficulty of
+[26:41] the game harder than what uh new players
+[26:45] did
+[26:47] interesting path of one players
+[26:51] complained it was harder than the people
+[26:52] that came in brand new to it interesting
+[26:56] players rated the game as I actually not
+[26:57] that difficult and pe1 players like man
+[26:59] this game is so impossible um and it's
+[27:01] just because they're trying to apply all
+[27:03] the knowledge that they had from playing
+[27:04] a game for 10 years um to a game that
+[27:06] has different mechanics and different
+[27:07] stuff going on so as I said I think
+[27:09] that's the biggest Pitfall and the
+[27:10] biggest potential source of um Strife
+[27:12] that we might get at launch is just you
+[27:13] know a bunch of pe1 players having
+[27:15] issues but as said I think we've managed
+[27:16] to solve those problems um there was
+[27:17] just a lot of things around itemization
+[27:19] and like the way the tree was just a lot
+[27:21] of things like that that we had to um um
+[27:23] to deal with and so in terms of stuff
+[27:25] that I think that was just really
+[27:26] important to get I'm going from the
+[27:27] start yeah I mean endgame stuff um I
+[27:29] think that that was something that we
+[27:31] realized um relatively late that we
+[27:33] really have to make sure like you know
+[27:34] if we don't have a good endgame going
+[27:36] into um uh into Early Access then path
+[27:39] of XL1 players are just going to say hey
+[27:40] this is just a worst game um you know
+[27:42] like we need that stuff to be able to to
+[27:44] actually make a PE we one player feel
+[27:46] like oh yeah you know what this is a
+[27:47] true sequel right you want the you want
+[27:50] the old players to come in and go well
+[27:52] if if after 10 years of Path of Exile
+[27:55] one and they have all of this stuff
+[27:57] playing in the end game but now Path of
+[28:00] Exile 2 comes in and their end game is
+[28:02] like this there's going to be a massive
+[28:05] problem right for returning players so
+[28:08] in the other interview that we watched
+[28:10] last week right he was talking about how
+[28:13] they have so much endgame stuff and like
+[28:16] stop working on the game work on the
+[28:18] endgame stuff because if the endgame
+[28:20] stuff is there then people will come and
+[28:22] play it and they'll they'll retain the
+[28:24] old players and then the new players
+[28:26] they have the act one two three and then
+[28:28] they'll work on four five six later for
+[28:30] the for the axe right I think it was a
+[28:32] smart business move on on his part and W
+[28:35] because um for a lot of players in pee1
+[28:39] the campaign is not even a thing for
+[28:41] them anymore they complete it in hours
+[28:42] because they've done it so many times um
+[28:44] like it like for them it's like just a
+[28:46] tiny blip in the progress of of a
+[28:48] character right cuz like they spend 99%
+[28:51] of their time in ingame so if we didn't
+[28:53] have that then I think it would have
+[28:54] been a disaster um so thankfully now
+[28:56] that we've addressed that concern we've
+[28:57] got stuff we believe we have enough of
+[28:59] an endgame to uh make those people happy
+[29:01] um hold my beer some of some of the
+[29:04] players are saying they're like you
+[29:05] think you have enough end game we'll let
+[29:06] you know give us give us two weeks I
+[29:09] think that that that put for thankfully
+[29:11] which you'll never you you'll never um
+[29:13] suffice right you'll never you'll never
+[29:14] feel that that uh that endgame player
+[29:17] they'll always go through as as much of
+[29:20] it as fast as possible and give me more
+[29:22] give me more give me more be avoided but
+[29:25] as I said it was only a thing that we
+[29:26] realized um relatively recently what was
+[29:28] the hardest thing
+[29:30] to get with CCH Kat because that's not
+[29:32] something a lot of games do these days
+[29:33] for sure so I mean there's a few things
+[29:35] one of them is that um and this is
+[29:36] probably the most obvious one of people
+[29:37] is that having to just build the UI
+[29:39] again um so uh we have to make three
+[29:42] versions of the UI now we've got the PC
+[29:43] version we've got the console version
+[29:44] then we've got the couch Co-op version
+[29:46] but it end up being really important
+[29:47] because wait there's couch Co-op as
+[29:50] well oh wow I didn't know that so
+[29:52] there's crossplay cross
+[29:55] progression couch Co-op um we found that
+[29:59] um it really just sucks to have to wait
+[30:00] for the other player to do things like
+[30:02] when we first did it um it was just you
+[30:03] know you could you could open a full
+[30:04] screen menu and the other person just
+[30:06] had to wait basically um and so then we
+[30:08] were like okay this isn't really good
+[30:09] enough let's add at least at least
+[30:10] inventory will make it so that part will
+[30:12] work and then as soon as we had that
+[30:13] we're like a but you know people want to
+[30:14] be able to allocate passives separately
+[30:16] people want to be able to do this and
+[30:17] that and pretty soon we're rebuilding
+[30:18] every single UI screen and even we
+[30:20] haven't even finished that yet like
+[30:21] right now if you got two players um you
+[30:23] can't both shop at the same time we're
+[30:24] still getting complaints about that so
+[30:26] now we're like okay now if we make the
+[30:27] shop interface as well C that's back in
+[30:28] June so and um we're pretty much ending
+[30:31] up as I said rebuilding everything three
+[30:33] times now so um that's certainly so
+[30:35] certainly something but um I think it is
+[30:37] worth it because um people are so
+[30:39] excited for couch C like even just
+[30:40] around the office um you know like once
+[30:42] our developers knew were making couch C
+[30:44] everyone was like oh man yeah that's
+[30:46] another thing right because you got to
+[30:48] think about from a business sense they
+[30:51] probably wouldn't have put and again I'm
+[30:53] speculating because of the business the
+[30:55] industry right if it was a AAA game they
+[30:58] wouldn't add couch Co-op nowadays
+[31:00] because they would want to sell two
+[31:01] copies right they they would want to
+[31:03] sell two copies of that
+[31:05] game but because GGG made a free-to-play
+[31:08] game they're like it doesn't matter if
+[31:11] they downloaded on two consoles or they
+[31:13] own two consoles we want as many people
+[31:14] to play the game as possible so let's
+[31:16] put couch co-op in there and that right
+[31:19] there you could say it's from a business
+[31:21] aspect and say well they want as many
+[31:23] people to play the game and but you're
+[31:25] not buying the game it's a freet to-play
+[31:26] game but they want as many people do
+[31:28] enjoy the game as possible so what a
+[31:29] smart move another another smart move
+[31:33] from GGG man I really want to play this
+[31:35] with my partner like it was just a
+[31:37] really exciting thing um so um yeah and
+[31:40] people have responded really well to it
+[31:41] like you know ever since the
+[31:42] announcement people just been really
+[31:44] buzzing about it so um yeah I'm I think
+[31:46] it's worth it yeah it's really cool uh
+[31:48] like now I have a question does anybody
+[31:50] know if the couch Co-op is it top and
+[31:53] bottom or does the screen split like it
+[31:56] does in Legos or you have to stay on the
+[31:58] same
+[31:59] screen like it's just it's just a
+[32:02] feature you don't see a lot these days
+[32:04] the fact that it's being included it
+[32:06] kind of like just reminds you that uh
+[32:07] you're putting a lot of care into path
+[32:08] two path 2 is going to have PVP right uh
+[32:11] it will but it's not really the focus to
+[32:13] be honest so every time we ever tried to
+[32:15] make PVP like a big Focus thing people
+[32:17] have kind of found like they enjoy PVE
+[32:20] better so like we'll that's
+[32:22] amazing he just he just earned my
+[32:25] respect even
+[32:26] more he just earn my respect
+[32:29] more okay when he said that it's not the
+[32:33] focus of PVP and when people uh they say
+[32:36] they like the PVP or PVE content
+[32:40] better have
+[32:42] PVE well you know what I'm talking about
+[32:44] water right I I understand what you're
+[32:46] saying one screen but you know how Lego
+[32:48] did it where you're on the same screen
+[32:49] but if you get too far apart the screen
+[32:51] like separates it's a it's a pretty cool
+[32:53] technology they they
+[32:55] did it's like the ablo one screen okay
+[32:57] um it's more of a kind of fun thing you
+[32:59] might want to do with your friends
+[33:00] rather than some big serious competitive
+[33:01] thing like you know we're not we're not
+[33:02] an ort you know uh that that is not our
+[33:05] in intention so uh yeah that's kind of
+[33:08] do do you have any concerns about
+[33:09] balancing going in uh for for PVP for
+[33:12] PVE oh for PVE um oh absolutely right I
+[33:14] mean the path of excel is an atrocious
+[33:16] game to balance um it's especially hard
+[33:18] now because um the uh the amount of
+[33:20] cross-class synergy that can happen um
+[33:23] because you know we're doing a lot more
+[33:24] of the sort of combo type gameplay and
+[33:26] uh when we do that we try to keep word
+[33:28] things so that they would work across
+[33:29] classes um so for example you've got
+[33:32] something like a power charge which is
+[33:34] something that you can use to improve um
+[33:35] your abilities and we try to he's
+[33:37] closing his eyes because he's he's going
+[33:39] through this roller decks of all the
+[33:40] information that's in the game have
+[33:42] power charge mechanics on quite a lot of
+[33:43] different classes and what that means is
+[33:45] is that we've got to be very careful
+[33:47] about um what skills because you know
+[33:48] you can use skills from other classes
+[33:50] you got to be very careful about um how
+[33:52] those things can happen CU like you may
+[33:53] when you're balancing something you're
+[33:54] looking at it you may just be only
+[33:55] thinking okay what can this do with the
+[33:57] skill that I've brought in this class
+[33:59] but given that you can use things from
+[34:00] any class um you know we also have to be
+[34:01] worried about all these other stuff and
+[34:02] it can kind of the the explosion of
+[34:04] different possibilities kind of wat says
+[34:07] his brain is an Excel spreadsheet yeah
+[34:10] like he's he's going through it he's
+[34:11] like wait a minute he asked a question
+[34:12] let me go back into that like he he's he
+[34:15] knows his [ __ ] control and obviously
+[34:17] he's the director of the studio but it's
+[34:18] just funny because he's like he's like
+[34:20] okay the question is okay there's a lot
+[34:21] of stuff going on there already that
+[34:23] there's just like Ultra broken stuff um
+[34:25] that you can do um like if you use that
+[34:26] Bell um uh with uh with a sork um using
+[34:29] spark it is broken as hell you can just
+[34:32] chew through any boss right now so we
+[34:33] need to do something about that um but
+[34:35] that kind of thing is certainly tough to
+[34:37] uh to deal with but we kind of like that
+[34:38] stuff um because um you know that's oh I
+[34:40] like what he said in another interview
+[34:42] where he was talking about we made boss
+[34:44] fights hard they're going to be hard uh
+[34:47] because why would we make them easy so
+[34:49] you just blow through and never go back
+[34:50] to them again right and I I love that he
+[34:53] said that makes it interesting in the
+[34:55] long time he like why waste the time
+[34:56] developing something if people are just
+[34:57] going to go blow blow through it anyway
+[34:59] right what's your philosophy in that
+[35:01] like you know you get I've heard it
+[35:02] referred to as like nails on a board you
+[35:04] see one pop up a little too high do you
+[35:06] just want to do you like just let it
+[35:08] linger for a while before you tap it
+[35:10] down to be so um generally speaking we
+[35:13] don't do uh Nerfs within a league like
+[35:15] whatever the balance is when a season
+[35:17] starts we want to keep that so that
+[35:18] people don't feel like they invest time
+[35:20] into their
+[35:21] character yes I hate when they do that I
+[35:24] hate when [ __ ] Destiny does this all
+[35:27] the time and these other people do all
+[35:28] the time where someone's using it and
+[35:30] when a certain percentage of people
+[35:31] start to get that weapon or piece of
+[35:33] gear then they [ __ ] Nerf it during
+[35:35] that time so it's like they disrespect
+[35:37] your time that you put into the in the
+[35:39] in the content where
+[35:41] other uh design styles are they'll
+[35:44] change it afterwards like hey it is what
+[35:45] it is keep it is for the season and then
+[35:47] after the season we'll we'll Nerf it or
+[35:49] fix it down the road and then for the
+[35:51] developers to come along and and Destroy
+[35:52] what they were doing um so I always try
+[35:54] to avoid that but each season it is okay
+[35:56] to be able to do some balanced stuff
+[35:58] um I don't want to just like like
+[36:01] whenever we're doing stuff like that I
+[36:02] try to find something that isn't what
+[36:03] the players expect as for how we're
+[36:05] going to change something like I don't
+[36:06] want to just like Nerf the damage value
+[36:07] right I mean sure you can do that but
+[36:09] it's cooler I think to kind of come up
+[36:10] with something else to kind of um
+[36:12] subvert something that's going on and
+[36:13] sort of make it more interesting um I
+[36:15] guess the the funny part about that is
+[36:17] and I think the reason why a lot of
+[36:18] developers just kind of turn into Nerf
+[36:20] fests with their patches is because it's
+[36:22] way easier to see the thing that's
+[36:23] broken and Nerf it than it is to see the
+[36:25] thing that's underpowered and buff it
+[36:27] it's just like you don't really you know
+[36:29] like but again it's
+[36:31] hard in a PVP game you have to buff 10
+[36:34] things to make that one thing nerfed
+[36:36] right if you're never like we just
+[36:37] talked about with Marvel Rivals right
+[36:38] Marvel Rivals if this is overpowered
+[36:41] you're not going to buff all these
+[36:44] things to make this not you're just
+[36:46] going to Nerf the thing with this though
+[36:49] it's a PVE Focus type of thing so you
+[36:52] can uplift the other things like
+[36:55] inherently the things that are not as
+[36:57] powerful get less attention because
+[36:58] players aren't playing with them it's
+[36:59] not on your mind um and so yeah the the
+[37:02] ability to sort of notice that stuff and
+[37:04] buffer is actually quite hard to sort of
+[37:06] get into the mindset of doing but this
+[37:08] is what you should be doing yeah you
+[37:09] know and there's this sort of dance with
+[37:12] with players where you want them to feel
+[37:14] that power fantasy leveling but then you
+[37:17] also got to keep it fresh like with with
+[37:19] each season of the game uh how do you
+[37:23] approach that like are you like okay
+[37:25] this time we're going to really go with
+[37:26] all in on Drew and then next season
+[37:29] it'll be witch it does kind of end up
+[37:30] going like that like um with each path
+[37:32] of Exel season we definitely pick a few
+[37:34] things to address but you've always got
+[37:35] to make sure that there's a stuff around
+[37:37] the whole game and so ideally with the
+[37:38] way we do game design um whenever you uh
+[37:41] whenever we add something new to the
+[37:42] system because uh everything has so much
+[37:44] cross-pollination uh it means that it
+[37:46] generally will affect the builds of kind
+[37:48] of all different classes um like you
+[37:49] know when we add a league and so on so
+[37:51] um that does keep the gameplay fresh I
+[37:54] think more so than most games we have
+[37:55] this kind of like thing where you know
+[37:57] almost any system can interact with
+[37:59] another system and that is what leads to
+[38:00] the complexity that like path ofix is
+[38:01] kind of a bit notorious for but it does
+[38:04] mean that um you know it does keep the
+[38:05] game fresh every time people keep coming
+[38:07] back so uh ideally we can kind of tame
+[38:09] the complexity while still keeping that
+[38:10] uh element but it is it is pretty
+[38:12] challenging what's something that you're
+[38:13] really proud of with necropolis and
+[38:14] something that you feel like you could
+[38:15] have been better the feedback has been
+[38:17] somewhat mixed for so it isn't it isn't
+[38:19] really my thing like I'm not working on
+[38:21] path of EXL one so I'm kind of aware of
+[38:22] it just from being in the studio but
+[38:24] um probably the main issue that we had
+[38:27] with necropolis I think was that um we
+[38:30] had a lot of what is what is the uh
+[38:33] Acropolis is that is that like
+[38:36] a a DLC that came out or a season that
+[38:40] came out like years ago of um uh like
+[38:44] Brokenness in the economy specifically
+[38:47] um like there were things that certain
+[38:48] players were able to do to get like
+[38:49] ridiculous amounts of wealth really
+[38:51] easily and that kind of broke the
+[38:52] economy a little bit and that League
+[38:53] more so than others um the funny thing
+[38:56] about it was that at the start people
+[38:58] thought that we' nerfed everything into
+[38:59] the ground of the port there would be no
+[39:01] like like oh you've nerfed all these
+[39:02] things there's no way to get like good
+[39:03] items anymore and then pretty soon we
+[39:05] started getting all these different
+[39:06] economic exploits popping up that led to
+[39:07] some pretty crazy stuff I think that led
+[39:09] to some sort of issues I mean there
+[39:11] that's kind of the main one from my
+[39:12] perspective because it's kind of what
+[39:13] being dealing with as a studio um there
+[39:15] were just a lot of these kinds of
+[39:16] exploits early on in the league um more
+[39:18] so than usual and um so that's been kind
+[39:20] of a bit uh a bit annoying and so yeah
+[39:23] it is really hard and I think one of the
+[39:24] things we sort of learned about that is
+[39:26] that um we really need to be doing
+[39:27] more extreme so did they have a did they
+[39:30] have a Diablo 2 moment or Diablo Diablo
+[39:33] 3 moment where they the economy got that
+[39:36] botched testing so like with each
+[39:39] mechanic really thinking like okayy what
+[39:40] is the most broken possible thing you
+[39:42] could do with this and really
+[39:43] concentrating on that um because
+[39:45] otherwise it can lead to these kinds of
+[39:47] problems and I think our our QA just
+[39:49] kind of weren't really thinking about it
+[39:50] in that way as much like they tended to
+[39:52] look at things and um be like okay does
+[39:54] this feel balanced in the context of
+[39:56] like the other stuff you're using with
+[39:57] without really thinking as much about
+[39:59] like what is the worst possible case for
+[40:01] this and really zeroing in on that um so
+[40:03] yeah we had a lot of issues around that
+[40:04] and I think that's part of what sort of
+[40:05] happened with necropolis with path two
+[40:08] what's what's like your favorite quality
+[40:11] of life thing that you're you're
+[40:12] introducing with like you you've
+[40:13] announced couch Co-op cross pression is
+[40:15] huge in my mind but um what's something
+[40:17] that you're really happy with to me the
+[40:18] best Q stuff is just the way the new
+[40:20] skill Doom system works it's just so
+[40:22] much easier and also now I mean this is
+[40:24] just what we're doing at the moment but
+[40:25] like now that we've got the support gy
+[40:26] system working out us it's it's just so
+[40:28] much easier to deal with and like you
+[40:29] know makes it way more obvious we've got
+[40:31] um I don't know if the build that you've
+[40:33] got has all of the stuff here but like
+[40:34] seeing the changes that happen to your
+[40:36] character as you add each thing like
+[40:37] that stuff is is really nice it just
+[40:38] makes building so much easier um so I
+[40:40] mean you know there's like a million
+[40:41] things I could say but like that's kind
+[40:42] of what I'm thinking about at the moment
+[40:44] is just all that stuff with uh skills
+[40:45] and supports and how much easier that
+[40:46] makes the game story-wise for for a path
+[40:48] too have you put a more focus into it
+[40:51] knowing that like you're going to have
+[40:52] uh more people playing together for sure
+[40:55] um I don't know if you noticed the
+[40:57] changes they even made in the build you
+[40:59] probably didn't yeah how's that going to
+[41:01] work how's that going to work with the
+[41:03] with the story elements if you want to
+[41:05] play with your buddy right maybe he'll
+[41:07] answer it in the in the video um but
+[41:09] like if me and water are playing water
+[41:11] is like a level 30 and he's already
+[41:14] passed that story but now he's in my
+[41:16] game do you see my stuff uh or do you
+[41:19] get to choose to not play it or you you
+[41:23] know what I'm saying can you choose to
+[41:25] skip it if you already did it like if I
+[41:26] if I play your game and we went through
+[41:28] like uh act one but then I go back to my
+[41:31] game does act one complete or do I have
+[41:33] to complete act one again I know it
+[41:35] doesn't sound like a big thing but it
+[41:38] hopefully it if I beat it in your game
+[41:40] it beats it in my game as well play
+[41:42] quite far enough to really understand
+[41:43] that but um we've we're doing a lot more
+[41:45] with that stuff I think we're doing a
+[41:47] lot better job than poe1 did and I do
+[41:49] hope that by the time people get through
+[41:50] path of XL 2 they at least know what the
+[41:52] story was which was not the case for a
+[41:54] lot of path of XL one players um so um
+[41:56] yeah we can definitely um do better
+[41:58] there there's also even other things
+[42:00] like um we've changed the dialog system
+[42:02] quite a bit from how it was in pe1
+[42:03] there's still more changes coming even
+[42:05] for that um like uh yeah it is it is
+[42:07] something that I want people to be able
+[42:09] to um consider good um in the game um
+[42:11] which I think that pee W I think had
+[42:13] pretty good sort of environmental stuff
+[42:15] going on but I wouldn't say that like
+[42:16] the overall narrative was like was like
+[42:18] a lot of people skipped it they weren't
+[42:19] really interested and I think that um
+[42:21] yeah we we can definitely do better
+[42:22] there what's the greatest lesson you
+[42:24] learned from playing other people's
+[42:25] games
+[42:27] hm I guess it's very different yeah uh
+[42:30] don't make a broken buggy [ __ ]
+[42:33] game I'm AB living there I'm abing
+[42:35] depending on the type of game but I
+[42:36] guess one of the things that I mostly
+[42:38] focus on is the fact that like whenever
+[42:40] new games come out you really need to be
+[42:42] cognizant of the new minimum bar that
+[42:44] they're setting like even if you're not
+[42:45] necessarily going to uh you don't want
+[42:47] to copy what they're doing necessarily
+[42:49] but I think you've got to look at it as
+[42:50] like what is the thing that um you know
+[42:52] what what new standard has this game set
+[42:55] which I always talk about right I always
+[42:57] about like here's the here's the bar and
+[42:59] then you just you don't have to like
+[43:01] surpass it but you got to you got to hit
+[43:03] that bar at least and then just move it
+[43:05] up a little bit you know we now have to
+[43:07] meet this you know so like for something
+[43:09] like if like so we've got a Dodge roll
+[43:11] obviously and animation cancelling that
+[43:12] is not a thing that you could get away
+[43:14] without I think launching an action RPG
+[43:16] today I think it just wouldn't work it
+[43:18] is set there is a minimum standard there
+[43:19] for that kind of level of
+[43:20] controllability you need to meet it and
+[43:22] the same is true of many other systems
+[43:23] like trade and you know the way item
+[43:25] system work and a bunch of other things
+[43:26] like that like you have to make make
+[43:27] sure you're learning that from other
+[43:28] games so um yeah it's just it's just
+[43:30] about making sure you're meeting that
+[43:31] new minimum cuz the minimum is Raising
+[43:32] all the time right every game that comes
+[43:34] out there's something new that players
+[43:35] will expect uh and uh and they right to
+[43:37] do so right just more generally what's
+[43:39] your favorite game of all time and why
+[43:40] oh jeez I mean that's always a hard one
+[43:43] um I mean if I really his favorite game
+[43:45] is Path of Exile
+[43:46] one had to if you're putting me on the
+[43:49] spot this the first thing that comes to
+[43:50] mind is halflife because like you know I
+[43:52] mean it's the stuff you play when you're
+[43:54] a kid right that it's like this is the
+[43:55] greatest game ever you know what I mean
+[43:56] like
+[43:58] when I was a kid it was you know my
+[43:59] favorite games were Final Fantasy 7 and
+[44:02] halflife and Starcraft right like these
+[44:03] are my these are like the three sort of
+[44:05] pillars of my uh of my my youth of
+[44:08] gaming right and so it's very hard to
+[44:09] look past that when you know nothing
+[44:11] else compares to that first experience
+[44:12] you have with those kinds of things um
+[44:14] but um yeah halflife might be one of the
+[44:17] one of the more probably slightly up
+[44:20] there above the other ones um you might
+[44:22] expect me to say diablo which obviously
+[44:24] was a big deal but uh but you know like
+[44:26] honestly when I was when I was when I
+[44:27] was a kid it was it was those other ones
+[44:30] yeah when I was a kid and I know we're
+[44:31] wrapping up here but I got uh The Brood
+[44:33] War chest and that was like my first
+[44:35] experience with gaming it was great nice
+[44:38] okay just real quick on this last
+[44:39] interview this was one of the earliest
+[44:41] interviews I did and my microphone was
+[44:43] not working during it so I did audio
+[44:45] pickups which may sound a little bit
+[44:46] disjointed but I'm basically repeating
+[44:48] what I asked at the time here you go
+[44:51] what's the most important thing for an
+[44:52] arpg to get right I don't know that I
+[44:55] can answer just one thing because really
+[44:57] I'd say there's five major things so the
+[45:00] number Robert Jones says two of his
+[45:02] pillars are objectively correct one to
+[45:05] me is action combat right like you can't
+[45:08] have like an MMO style combat it needs
+[45:09] to be action focused another one is
+[45:12] random item generat let me guess the two
+[45:14] Jones was it Starcraft Starcraft and
+[45:18] um halflife is that the two the random
+[45:22] items are super important you need to
+[45:23] get that right very few games actually
+[45:25] do the next one is random s Ultra
+[45:28] important because um if you want a game
+[45:30] to last for a long period of time you
+[45:32] have to have level randomization once
+[45:34] again a lot of thing something that a
+[45:35] lot of modern games aren't really doing
+[45:37] these days another one is secure online
+[45:40] economy so effectively you have to have
+[45:42] a secure item system if you don't have
+[45:44] the ability to trade items between
+[45:46] players then people just won't value
+[45:48] them the same way as if right and this
+[45:50] is why we always ask why can't you trade
+[45:52] like Bungie would never let us trade
+[45:54] right why why because they were afraid
+[45:57] they find them themselves and then oh
+[45:59] Starcraft Final Fantasy 7 last one what
+[46:01] is my what was my fifth pillar what have
+[46:03] I forgotten here uh oh yeah that's right
+[46:05] character character customization you
+[46:07] have to have the ability to have a large
+[46:08] amount of character customization so
+[46:10] that if you're playing the game over and
+[46:11] over again you're going to have a lot of
+[46:13] different ways to play it's going to be
+[46:14] a different experience every time so to
+[46:15] me those are the five that's how you
+[46:17] make an action RPG right there we've
+[46:19] said this at GDC talks before and it's
+[46:21] still action IES come out and they don't
+[46:22] have one of those and I'm kind of like
+[46:23] we giv you the secret Source gu right
+[46:26] it's like how do you not do this right
+[46:28] how do you not have these things right
+[46:30] we're talking about the bar he's saying
+[46:33] that these people these are the five
+[46:35] things you need to hit the bar they
+[46:36] don't even have one of those things to
+[46:38] hit the bar right they have zero of
+[46:40] those things guys like that's how you do
+[46:43] it um so yeah to me that that's that's
+[46:45] an action RPG right there is it
+[46:47] inspiring to see so many successful args
+[46:49] on the market right now I think it is
+[46:51] good because um a rising tide lifts all
+[46:53] boats and especially with the kind of
+[46:54] seasonal model that action RPGs do well
+[46:56] do best with um people there's there's
+[46:59] room for people to play more more than
+[47:01] one action Avery at a time but um the
+[47:04] big thing to me that I that I found is
+[47:06] that
+[47:08] um when new games come out like that
+[47:10] they kind of set a new minimum standard
+[47:11] and we have to make sure we're meeting
+[47:12] that standard like if they have features
+[47:14] that players now expect that means that
+[47:16] we have to make sure we're adapting to
+[47:17] what that new minimum is y so um that
+[47:19] makes it challenging right like there
+[47:20] are things we could have gotten away
+[47:21] with before last OT comes out and then
+[47:23] last OT comes out they have a few things
+[47:24] going on that um are like once again
+[47:27] raised a minimum standard we now have to
+[47:28] meet that standard as well we have to
+[47:30] care about that um so that kind of thing
+[47:32] um yeah that's called competition right
+[47:36] this is exactly what we're talking about
+[47:38] with like games like Madden or the FIFA
+[47:41] when there's no competition then the bar
+[47:43] is here and the only people that have to
+[47:45] hit this bar is themselves and they can
+[47:47] go below that bar and set the next
+[47:49] standard which is below the last
+[47:51] standard they gave right so when you
+[47:53] have larryan Studios come out with
+[47:54] Boulders Gate 3 with RPG like that
+[47:57] they've set the standard and all these
+[47:59] other people now have to bring their
+[48:01] standards up to at least the bar of
+[48:03] these standards so as he just said right
+[48:07] like because of all these other arpg out
+[48:09] there they might do one of these things
+[48:13] okay but you should do all these things
+[48:15] to hit the bar of what it's set okay
+[48:18] that should be the bare minimum it
+[48:20] matters a lot you know as I said we have
+[48:22] to pay attention can you give me an
+[48:23] example of something someone else is
+[48:25] doing that you really like right so a
+[48:27] really good example of this is um uh the
+[48:30] trade stuff they have in last Epoch
+[48:31] where that doesn't to say that we want
+[48:33] to copy what they're doing with trade
+[48:34] but the key thing is is that there was
+[48:36] clearly a community demand to make trade
+[48:38] easier than what it is in pee1 and when
+[48:41] there isn't another game that's meeting
+[48:43] that demand we can honestly get away
+[48:46] with the worst experience but when there
+[48:47] is it's like well we have to do
+[48:48] something about this right we have to
+[48:50] make sure that we have a trade system
+[48:51] that's going to you know allow that to
+[48:53] um you know to to meet the new minimum
+[48:55] standard otherwise people just going to
+[48:57] be complaining about it and they're
+[48:57] right to right because ABS other games
+[49:00] in the genre have God this
+[49:02] guy like I would love to interview him I
+[49:04] would love to interview him not because
+[49:05] of Path of Exile 2 just to just to pick
+[49:09] his brain about where the industry is
+[49:11] and whatnot and what it's doing love to
+[49:12] the standard you know that that that's
+[49:14] on us to improve when watching streams
+[49:16] do you ever see things you want to
+[49:18] address or fix absolutely I mean um the
+[49:22] only way that we're going to improve is
+[49:23] is doing that stuff and um it's honestly
+[49:25] just watching the people who are playing
+[49:26] here
+[49:27] um the number of issues they ran into
+[49:28] and like ah godamn it you know like we
+[49:30] really should have done something about
+[49:31] that um it's uh you know it's it's it's
+[49:34] it's painful but you have to do it like
+[49:36] the user testing seeing what people
+[49:37] actually do is super important does path
+[49:40] of xile 2 feel vastly different from
+[49:42] Path of Exile well I would definitely
+[49:44] say so to me just the the way combat
+[49:46] feels is just vastly different than
+[49:48] before um and like that's kind of what
+[49:49] I'm I guess I just C can I just say from
+[49:53] a from a person that works on cameras
+[49:56] for almost 20 well 20 years
+[49:59] okay why is the person and I don't know
+[50:01] if it's Dustin or or Dustin uh or if
+[50:05] it's someone at IGN but why isn't the
+[50:09] camera on sticks and sticks is like a
+[50:11] tripod okay why is it being held like a
+[50:15] handheld you can see it like moving I
+[50:16] don't know why really wants that nobody
+[50:19] like if you go to forums about like like
+[50:21] when we release A New Path of XL1
+[50:23] expansion one of the top comments
+[50:25] outside of our community is always oh
+[50:27] you know that's that I tried that game
+[50:28] but I just thought it felt really bad or
+[50:29] really old or something like that I just
+[50:31] want to make sure that no one ever again
+[50:33] says that our combat isn't Best in Class
+[50:35] like I want to make sure that that is
+[50:36] the that we don't have that criticism
+[50:37] anymore I just don't want to see it
+[50:39] again and so uh you know that's why I'm
+[50:41] really motivated to make sure it's an
+[50:43] interview like you could just put the
+[50:44] put the camera on sticks that we're
+[50:46] fixing that those problems and I think
+[50:47] we can still even do more than what
+[50:48] we've even done now can you tell us more
+[50:50] about why you delayed the beta yeah so
+[50:52] ultimately it just comes down to the and
+[50:53] then they're punching in here and it's
+[50:55] like up close and any any slight
+[50:58] maneuver makes it like giant moving fact
+[51:01] that we under we didn't appreciate the
+[51:04] degree to which
+[51:06] uh really
+[51:09] nailing like the amount of Polish you
+[51:11] need to do on something to really make
+[51:12] it perfect um we're still going to get
+[51:15] all the content that we said we were
+[51:16] gonna and it's not in Focus just saying
+[51:19] like the content we said we're going to
+[51:21] have like that will be ready there'll be
+[51:22] a whole game there it's just that like
+[51:24] the level of Polish so when we actually
+[51:25] when we're like okay we preparing for
+[51:27] this demo here and we're going to get
+[51:28] act one and two Flawless we're going to
+[51:30] get it perfect the amount of work that
+[51:32] that took to get it to the point where
+[51:35] even we still have bugs now but I mean
+[51:37] you know to get to the point where we
+[51:38] were like yeah we've got something here
+[51:39] um just took longer than we expected
+[51:41] like uh the level of
+[51:43] polish that we I guess demand of
+[51:45] ourselves at this point is just higher
+[51:47] than it is in P1 like a po1 boss does
+[51:50] not get I guess the does not need this
+[51:53] level of attention it's kind of shocking
+[51:55] honestly uh how much more work it is to
+[51:58] get a boss from feeling like okay it's
+[51:59] got all its skills to getting to the
+[52:01] point where it's like okay now it's
+[52:02] actually really solid and fun to play
+[52:03] and like it's just like so many subtle
+[52:06] details of a how AI works and so on all
+[52:08] sort of stuff and then the other side of
+[52:09] that is player skills um where once
+[52:11] again getting them to actually feel
+[52:12] really really good is just a longer
+[52:14] experience than we thought and then in
+[52:16] addition to that we have what I was
+[52:17] talking about in the before which is
+[52:18] that um just let you like know his shirt
+[52:23] down here is more in Focus than his face
+[52:26] when
+[52:27] in and why is he moving right now I'm
+[52:29] critiquing the camera camera guy right
+[52:31] now not the interview when we go and
+[52:34] change player skills
+[52:36] sometimes the result of that is like we
+[52:38] have to go through every monster and
+[52:39] boss again and change the AI and
+[52:41] abilities and all that sort of stuff now
+[52:43] to take into account for that so when we
+[52:44] added active Block it's like well
+[52:46] suddenly you need to have a way to know
+[52:48] that that a skill is going to be not
+[52:50] active blockable so that means we have
+[52:51] to think okay we have to make not only
+[52:53] do we have to rethink like every skill
+[52:54] of like okay does this fight have enough
+[52:56] ability that um you know that a person
+[52:58] who's active blocking is able to um to
+[53:00] worry about like is the mix of that
+[53:01] correct for this character class um you
+[53:04] know do we have the indicators we need
+[53:05] do we have the wind ups and all that
+[53:06] stuff suddenly comes in so it's like you
+[53:08] change a core feature like that on the
+[53:09] player class and all the content needs
+[53:11] to change again and um yeah that once
+[53:13] again that's sort of rippled out a huge
+[53:14] amount so I'm hoping there's not going
+[53:15] to be too much more of that well they're
+[53:17] not even using lights Argus the lights
+[53:20] are the the lights inside the bankrupt
+[53:22] room that they're in right now I'm
+[53:24] hoping we've got to the point now where
+[53:25] it's like you know we don't suddenly
+[53:27] need to feel like we need to change the
+[53:28] entire game again just for another
+[53:29] character ability um but on the other
+[53:30] hand we just showed you a mount the
+[53:32] overhead lights explored results of that
+[53:34] one either yet so we'll see I'm sure
+[53:36] it'll break some yes probably probably
+[53:39] what do people buy most in the store so
+[53:41] armor sets are big you know like
+[53:43] something just to just to look cool that
+[53:45] way but recently we've been trying a lot
+[53:47] more I mean stash tabs is a thing which
+[53:48] is one of those things that's kind of on
+[53:49] the borderline um but um is is is you
+[53:52] know a reasonable amount um but then um
+[53:55] the other one recently we've been doing
+[53:57] a lot more things roic says uh D4 picked
+[53:59] the absolute worst time to do their
+[54:01] weekl long PTR uh only have a couple of
+[54:04] days uh then Path of Exile 2 Early
+[54:07] Access releases I I I think they did it
+[54:09] strategically because they're they're
+[54:11] trying to brace for impact they're
+[54:14] trying to stop people from leaving their
+[54:17] game to go to the other game so this is
+[54:19] why they're doing what they're doing
+[54:20] because competition breeds competition
+[54:23] right this is this is the best thing for
+[54:25] customers ever right where you have
+[54:28] something that was out 18 months before
+[54:30] this this thing actually two years by
+[54:32] the time it comes out minimum two years
+[54:34] and this game is going to overshadow D4
+[54:37] they had their time and they they wasted
+[54:39] it involve like they maybe now they'll
+[54:42] have competition and maybe now they'll
+[54:44] they'll do better with D4 I got off
+[54:46] gameplay but they don't actually change
+[54:48] the gameplay in any way um so what's a
+[54:51] random example of that uh just a random
+[54:54] thing like okay when you do a Critical
+[54:56] Strike you get like the six effect when
+[54:57] you kill a rare you get like a big hand
+[54:59] that comes down from the from from from
+[55:02] the heavens and slams down and this kind
+[55:03] of stuff like stuff that kind of like
+[55:04] interacts with gameplay and I think that
+[55:06] for a long time our microtransactions
+[55:07] were entirely Visual and they didn't
+[55:09] really have those interesting kind of
+[55:11] interaction with the gameplay which was
+[55:12] a mistake and the big change we made was
+[55:14] we started getting our game designers to
+[55:16] make the microtransactions rather than
+[55:18] having a separate team to make
+[55:19] microtransactions we're like no the
+[55:21] microtransactions actually need game
+[55:22] designers to work on them um and that
+[55:24] made them a significant like
+[55:25] significantly better
+[55:26] um so that kind of stuff has has helped
+[55:28] a lot and so that sort of broaden into
+[55:29] quite a bit the horizons of what what is
+[55:30] interesting so anything that's kind of
+[55:32] cool that just happens during gameplay I
+[55:34] think that players really like that
+[55:36] what's your philosophy on
+[55:37] microtransactions have you seen them
+[55:39] handled poorly I mean the main thing
+[55:42] really as you said is the pay to win
+[55:43] stuff and like it you it may seem
+[55:45] obvious but the ultimate downside of
+[55:48] anything that you sell is that you are
+[55:51] incentivized as a developer to not give
+[55:55] to not make thing good for free
+[55:58] if exactly
+[56:00] right I want to hug this man I want I
+[56:03] want to I want to shake this man's hand
+[56:04] in real life and give him a hug right
+[56:06] because that's exactly right this is
+[56:09] exactly what I've always said about if
+[56:11] you're making microtransactions you're
+[56:12] not going to put you're not incentivized
+[56:14] to put the stuff in the actual game
+[56:16] you're going to make the shitty stuff to
+[56:17] put in the game and then incentivize
+[56:20] people to purchase the game if you know
+[56:22] what I mean and so you could argue that
+[56:24] by selling Cosmetics they were not
+[56:25] incentivized to make our non-cosmetic
+[56:27] items look as cool that's right that's
+[56:29] right that's exactly what these aleaa
+[56:32] Studios do um but I mean I think that
+[56:35] that's the like I mean we do try any way
+[56:36] of course but at the same time like
+[56:38] that's a thing that you have to worry
+[56:39] about and um I think a lot of games yet
+[56:42] like they may go into things with the
+[56:44] philosophy is oh we can sell this thing
+[56:46] and um it's not going to be a problem
+[56:48] but then there's this just sort of
+[56:49] subtle effect that it has on all your
+[56:51] game design where it just infects things
+[56:53] and kind of just like influences how how
+[56:55] the game is to play the the moment that
+[56:56] the moment that monetization touches it
+[56:58] it's kind of like it gets a bit
+[56:59] corrupted by it so um yeah that that's
+[57:02] really I don't know if I have any like
+[57:03] exact specifics on on a specific game to
+[57:05] really call out and shame here but um
+[57:08] that's kind of the main thing so like
+[57:09] even when you look at um like to because
+[57:12] I guess I'm like this I'll just talk
+[57:13] about Poe and the fact that we sell
+[57:15] stash dad so the original reason why we
+[57:17] were like that's fine is because if you
+[57:19] if we didn't sell stash shabs what
+[57:20] people would do is create more free
+[57:22] accounts because you can just create as
+[57:23] many accounts as you want in a
+[57:23] free-to-play game you could just
+[57:25] effectively create more counts and have
+[57:26] more stash anyway in a more inconvenient
+[57:28] manner um right you can just make 10
+[57:30] characters and make a mules so then
+[57:33] we're like okay well like people are
+[57:34] going to do this anyway so therefore the
+[57:36] the selling of that isn't going to be an
+[57:37] issue and it isn't for the most part an
+[57:39] issue I think but at the same time
+[57:43] you'll see a game designer and they'll
+[57:44] say something like oh um like it's fine
+[57:46] if the player this thing doesn't stack
+[57:48] too bad it'll just you know they'll
+[57:49] they'll they'll just put it in the stash
+[57:51] and that will sell more stash tabs and
+[57:52] I'm like no we need to really like even
+[57:54] just that is immediately making a thing
+[57:56] like someone is saying this because of
+[57:59] the business model they should never be
+[58:00] doing that like we want to keep the game
+[58:01] designers away from that thinking as
+[58:04] much as possible and so anytime I see
+[58:06] that I'm kind of like no we really have
+[58:07] to not fall down into that hole but even
+[58:10] just for something as simple as what we
+[58:11] do have that's already like you know
+[58:13] I've heard people say something like
+[58:15] that and I'm like no you know we can't
+[58:17] do this um we have to make sure that
+[58:18] we're not so yeah as I said it's a very
+[58:20] easy hole to fall into um and uh we try
+[58:22] as much as possible never to fall into
+[58:24] that and the best way we can do that is
+[58:25] by not introducing um any any pay to win
+[58:27] elements as much as we can why is Path
+[58:29] of Exile stood the test of time it's
+[58:31] more it that was a great
+[58:34] answer that was a great answer there's
+[58:36] there's the round of applause Jones for
+[58:39] [Applause]
+[58:43] him
+[58:44] [Applause]
+[58:46] okay more popular than ever right
+[58:49] now what was that what was the question
+[58:51] this Path of Exile stood the test of
+[58:53] time it's more popular than ever right
+[58:54] now we've been pretty much consistently
+[58:57] increasing in player base um since the
+[58:59] since since we did our league model sort
+[59:02] of three month cycle and so on but I
+[59:04] think ultimately the important reason is
+[59:06] because we do those five things and very
+[59:07] few games do I like I can name on very
+[59:11] few titles that actually do all of that
+[59:12] right and then actually follow up by
+[59:14] having the the seasonal releases um so
+[59:17] um other games that don't like for
+[59:20] example so last Epoch doesn't have um
+[59:23] random areas at least not like in the
+[59:25] way that Vel does and um I think that if
+[59:29] they don't do something about that um
+[59:31] that could be something that is going to
+[59:32] hurt them because I think that kind of
+[59:34] thing will be to their detriment in the
+[59:35] long run and like once again it's just
+[59:36] one of those things that like when we
+[59:38] when we were looking at like these
+[59:39] pillars actually go right back to the
+[59:40] very founding of our studio like we when
+[59:42] we founded us like these are the five
+[59:44] things you need to have to have a
+[59:45] long-lasting game and if you look at
+[59:46] Diablo I which also had all of these
+[59:48] things um and they've never had it in
+[59:51] those games ever since 2 which of course
+[59:55] we you you know were very highly
+[59:56] influenced by when we started our studio
+[59:58] um is also one of the longest lasting
+[60:00] games like that game was being
+[60:02] sold in stores obviously this is back
+[60:04] when you know people actually went into
+[60:05] stores and bought games this was still
+[60:07] being sold in stores like 10 years after
+[60:09] it came out and there was like no other
+[60:11] game I can think of that has that kind
+[60:12] of long-term run in retail uh it's it's
+[60:15] absolutely crazy so um like it really
+[60:18] shows you that that those five pillars
+[60:20] really do get you a longlasting a
+[60:22] longlasting game how much Path of Exile
+[60:24] versus Path of Exile 2 have you been
+[60:26] playing so at this point I have to admit
+[60:28] I don't play much path of XL1 I actually
+[60:31] find it very hard to go back to because
+[60:32] the combat is just so much worse than
+[60:34] pee2 from my experience that like I just
+[60:37] can't really do it anymore but pee2 I
+[60:40] play I love that he said that he's the
+[60:42] creator of Path of Exile one and he says
+[60:46] I can't go back and play it because the
+[60:48] combat is so bad compared to Path of
+[60:51] Exile 2 every night um you have to right
+[60:54] like every night I'm I spend my evening
+[60:57] playing the game uh my son thankfully
+[60:59] really enjoys Watching Me Do It um so
+[61:02] and it's just because like I need to see
+[61:04] the kind of changes and because every
+[61:06] time you play a boss every time you play
+[61:08] the thing you just learn a little bit
+[61:09] more and a little bit more and you just
+[61:10] have to keep on iterating on it um so
+[61:12] yeah I have I pretty much have to play
+[61:13] constantly um but I mean I enjoy it
+[61:15] right like it is it is fun to do and um
+[61:17] it's especially great seeing all of the
+[61:19] art and everything that gets added and
+[61:21] like all the new things that come in
+[61:22] like is actually great like every time I
+[61:23] see a new thing oh yeah that's so cool
+[61:25] like you know those little El so that's
+[61:26] really fun but I have to admit I don't
+[61:28] play poe1 anymore and the
+[61:30] person think about that for a second
+[61:33] this is the game director of the studio
+[61:35] of GGG and he's telling you straight up
+[61:38] now I don't I don't play path of xile
+[61:39] one anymore because it's vastly under
+[61:44] like like poe2 is so Superior to Path of
+[61:48] Exile one I just can't go
+[61:50] backwards that is that is such a as as
+[61:54] Kraken says giga move right he's like
+[61:57] yeah yeah no I I just can't go back to
+[62:00] to Path of Exile one because it's leaps
+[62:01] and it's so far behind what we've done
+[62:04] with Path of Exile 2 I just can't do it
+[62:06] my brain can't handle it person who does
+[62:08] is Mark and he is therefore much more
+[62:10] involved in Path of Exile one but um at
+[62:12] this point as I said it's hard to go
+[62:14] back to what's a non arpg that you've
+[62:16] played and really liked mean other than
+[62:20] batro um okay what was the most recent
+[62:23] thing so the most recent one I was
+[62:24] playing was um Prince of pers that
+[62:25] Prince of Persia game that came out um
+[62:27] kind of remember the the subtitle of it
+[62:29] um the other lost Crown yeah so um I
+[62:31] that that one's pretty interesting to me
+[62:32] um I think that there's a lot of really
+[62:34] interesting combat design in that game
+[62:36] and I was paying attention to it quite a
+[62:37] lot um even though as I said totally
+[62:39] different genre but I think that there's
+[62:41] a lot to learn from these kinds of
+[62:43] action games and looking at some of the
+[62:44] sequences and some of the ways things
+[62:45] combin and so on that game's obviously
+[62:47] got a lot of um like aerial type uh
+[62:49] hitting stuff which is not applicable to
+[62:51] us at all but it's very interesting to
+[62:52] look at something like that and also
+[62:53] when you look at the bosses in a game
+[62:55] like that sort of just there's just sort
+[62:56] of interesting inspiration you can take
+[62:58] um so that's probably the most recent
+[63:00] one that I played that I was really kind
+[63:02] of like thought was really good um but
+[63:04] it is honestly hard to find uh AAA games
+[63:06] these days that have the the kind of
+[63:08] good qualities that I'm looking for and
+[63:10] again you mean complete go ahead you can
+[63:12] say it go ahead and say it it's really
+[63:15] hard in the AAA space to find a game
+[63:17] that's complete so you know that one was
+[63:19] that was a nice one a huge thank you to
+[63:22] Jonathan Rogers and everybody at
+[63:23] grinding gear games for letting us play
+[63:25] the game letting me get a chance to sit
+[63:27] down with Jonathan to talk a little bit
+[63:29] about grinding gear games and Path of
+[63:32] Exile too if you want to play Path of
+[63:34] Exile you can get access this is a good
+[63:36] this is a good video December 6th if you
+[63:38] are a supporter if you spent over I
+[63:40] believe it was
+[63:41] $48 in the original Path of Exile you
+[63:44] get instant access and if you pay $30
+[63:47] you can just get into Early Access
+[63:49] otherwise when the game fully launches
+[63:51] it's completely free so check it out let
+[63:53] me know what you think thanks for
+[63:55] watching everybody for more on pth back
+[63:57] style check out my most recent preview
+[63:59] about so go go over down below in the
+[64:01] description you can go to that channel
+[64:04] uh give it a like uh that was a good
+[64:05] video that was a good video good
+[64:07] interview uh asking questions and what a
+[64:09] what a great what a great interview from
+[64:13] a a person in the game development space
+[64:15] making a game right now H and talking
+[64:17] the way he talked right what a what a
+[64:19] great one um what was the was it Indiana
+[64:23] Jones Indiana Jones was the next one
+[64:24] right that we were talking
+[64:27] about right like what a what a breath of
+[64:29] fresh air listening to Jonathan Speak
+[64:32] the way he did candidly about right
+[64:35] talking about the industry talking about
+[64:37] Path of Exile uh that alone think about
+[64:40] what we just heard from there and if you
+[64:42] didn't even have any kind of um any
+[64:46] interest in Path of Exile 2 you kind of
+[64:49] woke up a little bit and was like you
+[64:50] know what I might give the game a shot
+[64:52] because this developer seems like human
+[64:56] right he seems down to earth they seem
+[64:58] like they're making a game because they
+[64:59] love the game not because uh some stat
+[65:02] chart told them to okay so awesome
+[65:05] Jonathan uh I've watched a lot of
+[65:07] interviews with him so far uh the last
+[65:09] like 10 days and I have to say uh big
+[65:13] fan big fan of him uh and I'm becoming a
+[65:16] big fan of the studio and I I I'm not a
+[65:18] Path of Exile fan I didn't I I played
+[65:21] maybe after the last couple days maybe I
+[65:23] put in 20 hours of Path of Exile over 10
+[65:27] years right I didn't not a fan of the of
+[65:31] that of that game but now Path of Exile
+[65:33] to is much more in my in my wheelhouse
+[65:36] of stuff so we'll see what happens when
+[65:38] it comes out all right uh make sure you
+[65:40] hit that like button hit that subscribe
+[65:41] button
+[65:42] [Music]

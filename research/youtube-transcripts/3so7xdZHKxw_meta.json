@@ -1,0 +1,36 @@
+{
+  "video_id": "3so7xdZHKxw",
+  "title": "Exploring a New Approach to Realistic Lighting: Radiance Cascades",
+  "channel": "SimonDev",
+  "channel_id": "UCEwhtpXrg5MmwlH04ANpL8A",
+  "upload_date": "20240702",
+  "duration": 896,
+  "view_count": 375043,
+  "like_count": 18522,
+  "tags": [
+    "simondev",
+    "game development",
+    "programming tutorial"
+  ],
+  "categories": [
+    "Science & Technology"
+  ],
+  "chapters": [],
+  "has_manual_subs": false,
+  "has_auto_subs": true,
+  "subtitles_available": [],
+  "auto_subtitles_available": [
+    "ab",
+    "aa",
+    "af",
+    "ak",
+    "sq",
+    "am",
+    "ar",
+    "hy",
+    "as",
+    "ay"
+  ],
+  "desc_timestamps": [],
+  "description_preview": "Radiance Cascades are an innovative solution to global illumination from the devs of Path of Exile 2. Let's explore and implement their approach.\n\nGamedev Courses: https://simondev.io\nSupport me on Patreon: https://www.patreon.com/simondevyt\n\nFollow me on:\nInstagram: https://www.instagram.com/beer_and_code/\nTwitter: https://twitter.com/iced_coffee_dev\n\nIn this video, we look through the recent Radiance Cascades paper from the devs of Path of Exile 2, explore the ideas behind their approach, and "
+}

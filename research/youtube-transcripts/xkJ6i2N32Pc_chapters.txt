@@ -1,0 +1,11 @@
+# Radiance Cascades Rendered Directly
+Channel: Alexander Sannikov
+Duration: 05:24
+URL: https://www.youtube.com/watch?v=xkJ6i2N32Pc
+
+## Description
+In this video we explore data stored in radiance cascades by observing it directly. This is equivalent to precalculating a scene, storing a cross-section of its radiance field and then rendering it from any viewpoint and any angle in O(1).
+
+## Subtitles
+Manual: No
+Auto-generated: Yes

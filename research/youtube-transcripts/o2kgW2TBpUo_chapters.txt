@@ -1,0 +1,18 @@
+# 2d Full Global Illumination #2 (working principle and perf tests)
+Channel: Alexander Sannikov
+Duration: 02:34
+URL: https://www.youtube.com/watch?v=o2kgW2TBpUo
+
+## Description
+In this video I'm showcasing my sampling strategy that's based on cascades. Cascades that are farther away, contain more information about ray directions, but less information about ray origins -- because of this, each cascade actually takes up exactly the same amount of memory.
+
+In other words, cascades encode information in light probes. Cascade n+1 contains 4x less light probes than cascade n, but each probe is 4x higher resolution.
+
+Note that performance of the algorithm is constant and does not depend on how many light sources there are : each pixel is assumed to have its own luminance and opacity values, GI is calculated in 1920x1080 full res. Also no information is cached : each frame lighting is calculated entirely from scratch, it converges fast enough so that no denoising is needed.
+
+PS this is not unity and not UE, this is my custom vulkan-based framegraph rendering engine, called LegitEngine. The engine itself is open source with a bunch of demos, but this demo is not in the repo (yet?): https://github.com/Raikiri/LegitEngine
+The profiler ImGui component that you see in the lower left corner can be used as a standalone: https://github.com/Raikiri/LegitProfiler (you still need to provide it your own time stamps and you need to have a working ImGui setup to use it).
+
+## Subtitles
+Manual: No
+Auto-generated: Yes

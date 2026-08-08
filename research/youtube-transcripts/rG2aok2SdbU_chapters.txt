@@ -1,0 +1,17 @@
+# Sparse Radiance Cascades: goodbye screenspace
+Channel: Alexander Sannikov
+Duration: 01:31
+URL: https://www.youtube.com/watch?v=rG2aok2SdbU
+
+## Description
+My previous sparse RC demo was running with a screenspace raymarcher because it was easy to implement at the time. But now that the RC part has proven to be working well, I focused on improving the raymarching part and replaced the screenspace raymarcher with hardware accelerated raytracer: not only it it allows me finally achieve offscreen lights, it's also faster.
+
+It easily runs at 60fps, it's completely stable to small camera movement, all lighting that you see in the demo is calculated from GI from scratch every frame without a denoiser.
+
+You now see a nasty seam between cascades, and this implementation is far from optimized, so I have plenty of work to do to make it better.
+
+The demo runs on a 4090 laptop gpu. CPU is irrelevant because the technique doesn't really rely on the CPU to do much of anything, the only reason why the CPU is slow in the video is because I forgot to turn off validation layers and filmed in debug configuration.
+
+## Subtitles
+Manual: No
+Auto-generated: No

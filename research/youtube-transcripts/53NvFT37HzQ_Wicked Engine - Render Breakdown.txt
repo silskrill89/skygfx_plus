@@ -1,0 +1,715 @@
+# Transcript: 53NvFT37HzQ
+# Fetched: 2026-08-07T06:23:13.951412
+# Entries: 710
+# Duration: 3206s
+
+[00:00] hello welcome to this video about a
+[00:02] rendering breakdown of the wicked engine
+[00:04] editor
+[00:05] this video i will use the render dock
+[00:07] graphics debugger which i frequently use
+[00:09] to
+[00:10] just debug any graphics issues that i
+[00:13] have
+[00:13] by developing it is also useful to just
+[00:17] use it with any graphics application to
+[00:19] create a frame capture of it and
+[00:21] just go through draw calls and such
+[00:24] and just visualize basically what that's
+[00:26] happening
+[00:28] so if you open this application the
+[00:30] texture viewer is displayed well
+[00:32] first you want to actually launch an
+[00:34] application so go to launch application
+[00:36] tab
+[00:38] i already have the settings loaded that
+[00:41] i
+[00:41] usually use so the editor's max
+[00:44] is specified in the executable path and
+[00:47] the editor directory
+[00:49] for the working directory
+[00:52] let's just launch the application right
+[00:54] now
+[00:56] i launched it in the dx11 rendering mode
+[00:58] because
+[01:00] this is the simplest one the dx drive
+[01:02] and valken are also
+[01:03] interesting but those are kind of
+[01:07] a lot harder to debug and also slower
+[01:09] because of the their bind less
+[01:10] resource management api that i won't go
+[01:14] into
+[01:14] now let's for now just load the model
+[01:17] i will load the sponsor model that's
+[01:20] provided by default for you
+[01:24] okay let's find a camera angle that is
+[01:26] kind of
+[01:27] interesting i also
+[01:30] let's say enable screen space ambient
+[01:33] occlusion post process just for the sake
+[01:35] of it
+[01:37] and okay let's say that we want to
+[01:40] capture this
+[01:42] i just press the f2 valve button and the
+[01:45] application will freeze for a bit
+[01:47] by its creating the capture if you go
+[01:49] back to render dock then you will
+[01:51] see that the capture is created you can
+[01:54] create several different captures but
+[01:56] for now let's just work with one
+[01:59] i close the application and the capture
+[02:02] will be opened
+[02:06] it goes back to the texture viewer and
+[02:07] you can see the final
+[02:09] rendering result the top of the screen
+[02:12] there is a timeline
+[02:14] of the most important events
+[02:17] but i usually use this kind of event
+[02:20] browser on the left hand side too
+[02:22] to navigate through them i found it's
+[02:25] more it find that it makes more sense
+[02:28] for me
+[02:28] but you can also step into events here
+[02:31] by clicking on them
+[02:32] and whatnot
+[02:36] so let's just go back to the beginning
+[02:38] of the frame
+[02:40] uh first the skinning and you can see
+[02:43] that the
+[02:44] the timeline also jumped back to the
+[02:46] beginning
+[02:48] these two correspond to each other
+[02:52] so first the skinning bits no commands
+[02:56] are generated because there is no
+[02:59] objects that
+[03:00] that will be skinned here or animated
+[03:03] then the emitted particles are updated
+[03:06] since there are emitted particles in the
+[03:07] scene then
+[03:09] we can see that some dispatch compute
+[03:11] shaders are running
+[03:14] but these are not really interesting
+[03:17] right now
+[03:18] we want to see some rendering at first
+[03:20] so let's go to the opaque z bra pass
+[03:22] which
+[03:23] is the first rendering pass
+[03:26] this is generating a depth buffer of the
+[03:28] scene
+[03:29] that you can see in black at first
+[03:34] even if you go to the depth buffer main
+[03:37] so depth buffer and the velocity buffer
+[03:38] is generated for this rendering pass but
+[03:40] you can't see them because they are not
+[03:42] normalized
+[03:44] you can normalize the dab the buffer by
+[03:46] going through this
+[03:47] little vent icon pressing on it and then
+[03:50] you will see some rendered
+[03:51] results some 3d objects on the screen
+[03:54] if i go downward to the
+[03:57] to this event hierarchy the opaque z
+[04:00] pre-pass calls the draw scene and the
+[04:02] true scene calls the render meshes
+[04:04] and the render meshes contains the basic
+[04:07] rendering
+[04:07] draw commands and if you if i go to the
+[04:11] first one then
+[04:11] you can see at first the depth buffer
+[04:13] not doesn't contain i think only the
+[04:15] this object does that was rendered to
+[04:17] the screen first
+[04:19] if i go down to
+[04:23] to those other render codes with the
+[04:25] pressing the down button then
+[04:27] you can see incrementally how the depth
+[04:29] buffer is being generated
+[04:32] usually it is the case that objects
+[04:34] closer to the camera
+[04:36] are rendered first and objects farther
+[04:38] to the camera where outlander rendered
+[04:40] at last
+[04:41] however that can't be always
+[04:44] enforced because objects are different
+[04:47] size
+[04:50] so the depth buffer is generated here
+[04:53] like incrementally the velocity buffer
+[04:57] will will not contain really anything
+[05:00] really interesting because the camera is
+[05:02] not moving and not
+[05:03] many objects are moving on the screen
+[05:05] but if i normalize it
+[05:07] you can see something is at least moving
+[05:10] if i go back to the depth buffer i can
+[05:12] see that that's actually the
+[05:14] curtain that is animating
+[05:18] this velocity buffer will be used for
+[05:22] different post process effects and like
+[05:24] temporal and 3ds
+[05:26] and motion blur
+[05:30] if i go to the go outside of this render
+[05:34] meshes
+[05:35] and the draw scene then the true sky
+[05:37] velocity will be rendered
+[05:39] well this just doesn't render anything
+[05:43] right now really because
+[05:44] the camera is not moving if the camera
+[05:46] would be moving then the sky
+[05:47] pixels would be rendering the camera
+[05:50] movement factors
+[05:53] after the z prepass then occlusion
+[05:56] cooling
+[05:57] the occlusion culling rendering render
+[05:59] pass will be running
+[06:01] and it's
+[06:04] not rendering anything seemingly but you
+[06:07] can actually enable some render overlays
+[06:09] such as the wi-frame mesh
+[06:11] and with that you can see that this
+[06:14] simple box
+[06:14] boxes are rendered this will actually
+[06:18] not be visible at
+[06:19] all these are proxy geometries from
+[06:22] for these meshes and we check that
+[06:27] whether any pixels are rendered for
+[06:28] these boxes and if yes
+[06:30] then that means the objects should be
+[06:31] rendered in next frames
+[06:33] as well it can be checked also by the
+[06:36] depth test
+[06:37] overlay visualizer if you enable this
+[06:40] then
+[06:41] you can essentially see for these boxes
+[06:43] which pixels filled
+[06:45] or passed the depth testing red pixels
+[06:48] here means
+[06:49] those pixels failed the depth tests and
+[06:51] greens
+[06:52] past those i can also just go back to
+[06:56] the
+[06:57] drew scene or pixy prepass file we
+[06:59] render actually
+[07:01] the meshes you can see that
+[07:05] these meshes also have the depth that
+[07:08] that testing enabled
+[07:09] which is pretty important to achieve a
+[07:12] correct performance and
+[07:13] visual effect
+[07:20] after the opaque z pre-pass and the
+[07:22] occlusion cutting rendering
+[07:24] the scenes depth buffer will be just
+[07:26] copied
+[07:27] to a texture that is only readable
+[07:31] and then also the depth buffer is going
+[07:34] to be linearized into the linear depth
+[07:36] buffer
+[07:37] you can also normalize these textures by
+[07:39] hand by this slider
+[07:42] the linear wf buffer is used for
+[07:46] postprocessive effects to get values
+[07:49] with a linear
+[07:51] depth distribution and not only the
+[07:54] linear depth is rendered for
+[07:56] every pixel but it is also down sampled
+[07:59] downscaled into these
+[08:01] mip levels you can see the mip levels
+[08:03] here
+[08:04] if you in this com in this combo box
+[08:09] so in mid levels downwards you can see
+[08:12] that
+[08:13] the mip level loses the linear that
+[08:16] buffer
+[08:16] loses its details but can be used to
+[08:19] efficiently sample
+[08:21] that linear depth for lower resolution
+[08:24] post processes
+[08:25] or even do some basic occlusion calling
+[08:32] and then once the linear that is
+[08:34] complete then the
+[08:36] ssa or post process can use that
+[08:39] to render the sso screen space ambient
+[08:42] occlusion
+[08:43] as you can see it's um well you can open
+[08:46] the inputs here
+[08:48] and then you can see its input the
+[08:50] texture linear depth and also the
+[08:52] texture depth
+[08:55] and the output is this this is a pretty
+[08:58] noisy result of the screen space ambient
+[09:00] occlusion technique
+[09:02] which will be refined in later passes
+[09:06] the next pass is actually which is a
+[09:08] bilateral blur
+[09:10] which this will just blur out those
+[09:13] those uh
+[09:14] that noise with a blur that's
+[09:18] that's also edge ever so it won't blur
+[09:20] over the geometry edges
+[09:25] so this is the final result of that that
+[09:27] simple screen space ambient occlusion
+[09:29] post process and then
+[09:36] after this post process the type
+[09:38] frustums and the entity calling is
+[09:40] generated
+[09:42] these don't generate any textures so
+[09:44] they are not as easily visualized
+[09:47] but you can still visualize its results
+[09:50] by
+[09:50] by looking at buffer contents you can go
+[09:53] to the pipeline state for this
+[09:55] go to the cs since these are as you can
+[09:58] see dispatch commands
+[09:59] that means that the compute shader stage
+[10:02] is running
+[10:04] and the resources of the compute stage
+[10:07] are displayed here these are the
+[10:08] resources that are read and the uavs are
+[10:11] the resources that i've written
+[10:14] so you can open these resources by going
+[10:17] to this
+[10:18] green arrow here so this entity ties
+[10:21] opaque is a structured buffer
+[10:24] and buffers will be visualized with
+[10:27] their
+[10:27] root data like this
+[10:32] maybe not let's not go into these
+[10:36] these details right now and just close
+[10:38] this
+[10:39] go back to the texture viewer
+[10:42] and then the draw shadow maps will be
+[10:45] the
+[10:46] most the draw shadow maps will be the
+[10:49] next
+[10:50] kind of interesting rendering pass
+[10:53] this caused the rendering meshes several
+[10:55] different times
+[10:58] because the render meshes actually five
+[11:01] times so three times it's called for
+[11:04] the sun which renders free shadow
+[11:07] cascades
+[11:08] farther away from the camera the shadow
+[11:10] cascades will contain
+[11:11] less detailed shadows but for a larger
+[11:14] area
+[11:16] and then those last two render meshes
+[11:18] will render
+[11:19] those point light
+[11:23] point lights that are placed into the
+[11:24] corners of the sponsor scene
+[11:28] let's for example open the first render
+[11:30] meshes which is the directional light
+[11:32] we can go to the depth buffer just
+[11:34] disable the
+[11:36] overlay for now let's go through some
+[11:39] rendering
+[11:40] commands and as you can see the depth
+[11:43] buffer for the shadow map gets rendered
+[11:45] like this if you see this
+[11:48] this kind of not really visible then you
+[11:51] can
+[11:51] just click on the magic vent again to
+[11:53] normalize the depth buffer
+[11:56] to make more sense
+[12:00] so the shadow map that buffers look like
+[12:02] this it's just a
+[12:04] depth buffer from the point of view of
+[12:05] the of the light
+[12:08] which in the case of the sun is just a
+[12:11] top-down
+[12:11] view okay i close this
+[12:15] and go to the last render meshes which
+[12:19] well i happen to know it will be a
+[12:21] shadow buffer for a point light
+[12:24] which is interesting because it's
+[12:28] let's go into a couple of render
+[12:30] commands later into this
+[12:32] and i normalize the shadow buffer and
+[12:34] you can see this
+[12:35] it's a even smaller resolution texture
+[12:38] 256 by 256
+[12:41] and this this view is just a single face
+[12:45] of one cube map as you can see
+[12:49] is the positive x face you can
+[12:52] select a different face with this slice
+[12:54] face combo box
+[12:56] and you can just see what's rendered
+[13:00] into
+[13:00] each face of the cube map this is
+[13:03] this will be used to render the only
+[13:05] directional shadows
+[13:06] of the point lights even though one
+[13:10] point light renders into
+[13:11] six cuba faces at maximum there are
+[13:14] several optimizations too
+[13:16] to not render the scene or every object
+[13:18] six times but
+[13:20] actually we select which which faces of
+[13:23] the cube up will be visible from the
+[13:25] camera
+[13:27] so some some faces can already be
+[13:29] skipped rendering
+[13:31] like that and then each object can
+[13:34] also render itself into several multiple
+[13:36] faces
+[13:38] in one rendering draw call
+[13:41] after the shadow maps are rendered the
+[13:43] environment probes are refreshed
+[13:46] since right now there are no environment
+[13:48] probes in the scene
+[13:49] the default sky environment probe will
+[13:52] be rendered only
+[13:53] so with a single draw command the
+[13:57] sky is rendered and as you can see it is
+[13:59] also rendered into a cube map
+[14:01] with several faces that are visible like
+[14:04] this
+[14:06] since the sky is dynamic it will be
+[14:08] rendered into this cube up every frame
+[14:10] if you would place an environment probe
+[14:12] into the scene then
+[14:14] it would also contain the scene
+[14:17] rendered from the point of view of that
+[14:19] cube map in every direction
+[14:23] since this cube map will be used as as a
+[14:26] light
+[14:27] cache lighting cache for the environment
+[14:30] light
+[14:31] we also downsample it first with a
+[14:33] linear filter
+[14:34] which is not a very high quality into
+[14:38] its mip chain that you can visualize
+[14:40] here
+[14:41] it's not a not a high quality dow sample
+[14:45] but this will be used later to filter
+[14:47] the envelope
+[14:48] properly and it will be filtered into a
+[14:52] better detailed
+[14:53] cube map which will be properly
+[14:55] sampleable for environmental light
+[15:00] let's close the environment probe
+[15:01] refresh event
+[15:04] and then probably the most important
+[15:07] part of the scene is render the opaque
+[15:09] scene
+[15:10] if you open this then you can see the
+[15:12] draw scene and draw sky are called
+[15:15] inside the draw scene the render meshes
+[15:17] will be performed
+[15:20] with with several draw codes
+[15:23] these draw codes are rendering into
+[15:25] several textures
+[15:27] one color texture
+[15:30] it contains the final scene colors
+[15:34] in hdr lighting space and lighting
+[15:37] applied on top of these
+[15:41] the second texture contains the normals
+[15:43] of the
+[15:44] of the scene which both processes can
+[15:46] use
+[15:48] and then there is also the depth buffer
+[15:50] which is only
+[15:52] used as a depth testing it is not not
+[15:55] written
+[15:55] anymore in this case as you can see with
+[15:59] these draw codes if you enable the
+[16:01] wireframe mesh overlay the meshes are
+[16:04] essentially
+[16:04] rendered again to the screen
+[16:09] but since they are not using any depth
+[16:11] rights only depth tests
+[16:13] this can be quite efficient as all the
+[16:16] complex lighting calculations performed
+[16:18] here will be only done
+[16:19] once per pixel this render pass also
+[16:22] uses that
+[16:26] that's a previous entity calling result
+[16:28] to efficiently retrieve per pixel a
+[16:30] smaller
+[16:31] list of entities affecting each pixel
+[16:34] these entities can be for example
+[16:36] lights dakaz and environment probes and
+[16:39] some other things
+[16:43] that means that when objects are
+[16:45] rendered in this forward renderer
+[16:47] then lights are light stickers and the
+[16:50] environment probes are
+[16:52] are rendered immediately within the same
+[16:54] shaders
+[16:59] after the opex scene when the opex scene
+[17:02] is not
+[17:03] clearing the color buffer so you can see
+[17:06] also the first draw call you can see the
+[17:08] results of the previous
+[17:11] previous rendering which is just an
+[17:13] optimization to avoid clearing this full
+[17:15] full texture
+[17:21] close the draw scene and the true sky
+[17:23] will be performed as you can see this is
+[17:25] just a full screen pass
+[17:27] since the vive frame mode is not it's
+[17:29] just only displaying the
+[17:31] the bottom line essentially
+[17:34] if i go to the depth test
+[17:37] then you can see that sky is only
+[17:39] rendered and at those
+[17:41] those green pixels the red pixels are
+[17:43] just trivially discarded by the depth
+[17:46] test
+[17:47] before the shader even runs that's
+[17:49] pretty important because
+[17:51] the sky shader is can be pretty
+[17:54] expensive and
+[17:55] it's important to just not render it
+[17:58] wherever we can avoid
+[17:59] rendering the sky
+[18:09] rendering the sky is also useful to
+[18:11] clear those parts of the
+[18:12] screen which which could not be cleared
+[18:15] by rendering
+[18:16] real geometry on top of them
+[18:19] so that means that we can just avoid
+[18:21] clearing the render target with a with a
+[18:24] clear render target command
+[18:26] and it's it is we just ensured that
+[18:29] since the sky is always rendered
+[18:31] it will be cleared then the renderer
+[18:33] cmip chain
+[18:34] will downsample this this scene into a
+[18:37] lower resolution target
+[18:40] first let's copy it to a temporary
+[18:43] temporary render target and that's
+[18:45] later used to run a post process
+[18:48] blur gaussian on top of it
+[18:52] several passes are run for four
+[18:54] different lip levels
+[18:56] if you go to the last one you can see
+[18:59] the end result in the last mip level and
+[19:02] you can go
+[19:04] to different hip levels to see the
+[19:06] gradual down sampling of the scene
+[19:09] this will be used by transparent objects
+[19:11] that are using a high roughness to
+[19:14] to achieve sort of a nice nice rough
+[19:18] translucency effect
+[19:23] after that the transparency is rendered
+[19:26] but since the sponsor scene
+[19:28] doesn't contain any transparent objects
+[19:30] right now it's
+[19:31] just doesn't contain any any rendering
+[19:33] commands or api calls
+[19:36] the transparent scene also contains some
+[19:38] other renderings such as light
+[19:39] visualizer
+[19:40] emitted particle well emitted particles
+[19:43] we have here so i just
+[19:44] open that and you can see that
+[19:49] if i if i enable the the wireframe mesh
+[19:52] then
+[19:53] here you can see the emitted particles
+[19:56] being rendered
+[19:57] these particles are textured quads
+[20:01] as you can see
+[20:08] then some other effects will be rendered
+[20:10] in the transparent scene like
+[20:11] lens flares and debug visualizer that
+[20:14] we can't see right now and then the post
+[20:17] process bloom
+[20:19] i set up the camera for for this
+[20:22] position
+[20:22] to see the sky and this bright emissive
+[20:26] object as well
+[20:26] because this object will be interesting
+[20:28] if we look at how the bloom is performed
+[20:31] so i opened the post process bloom event
+[20:34] and within you can see three different
+[20:36] events
+[20:37] first the bloom separate it will
+[20:40] separate these
+[20:41] bright parts of the screen inside there
+[20:44] inside the like a separate texture and
+[20:47] then this texture will be down sampled
+[20:49] by a gaussian mix chain generator
+[20:54] to this and all of these map chains
+[20:58] you can see will be also used to
+[21:01] kind of compose it as bloom on top of
+[21:04] the
+[21:04] scene render result with the bloom
+[21:07] combined that
+[21:08] is exactly what is what is done so that
+[21:12] if you open that kind of mip and
+[21:17] the scene color g buffer is just
+[21:20] combined together
+[21:22] to this
+[21:28] the post process stone map following it
+[21:31] is
+[21:33] is the is the place where the hdr
+[21:35] rendering pipeline ends
+[21:37] and the sdr pipeline begins it just
+[21:40] converts the
+[21:41] hdr colors to the sdr space where the
+[21:43] tone map operates or
+[21:45] as you can see this will be the sdr
+[21:48] scene result
+[21:52] to the elements of the screen such as
+[21:53] the gui and sprites
+[21:55] will be composed on top of this
+[22:00] since the editor uses uh it's
+[22:03] it's different kind of a different kind
+[22:05] of approach to
+[22:06] render paths since the render paths can
+[22:09] be switched
+[22:11] it doesn't render the gui inside the 3d
+[22:13] render path
+[22:14] but it uses its separate 2d render path
+[22:17] to render the gui exclusively
+[22:20] so that just means that this
+[22:23] gui is not is
+[22:26] not gonna contain any rendering commands
+[22:28] but like we're rendering afterwards will
+[22:30] contain all of it all of those
+[22:34] the gui is rendered here on top of a
+[22:37] black
+[22:38] texture and
+[22:41] that will be combined later with the 3d
+[22:44] scene rendering result
+[22:46] as you can see the gui also contains
+[22:48] this kind of
+[22:49] blurred down sample same texture that
+[22:52] was rendered after the tone i
+[22:53] post-processed with the gui
+[22:55] background blur and it is just the same
+[22:58] kind of
+[23:00] downsampling the scene with the gaussian
+[23:02] blur
+[23:03] but it's actually down something the sdr
+[23:05] version of the scene
+[23:09] the gui is rendered with a multitude of
+[23:12] font and image rendering commands
+[23:17] and the final gui result you can see
+[23:19] here
+[23:21] this is what that's going to be combined
+[23:23] in the
+[23:24] render paths compose function
+[23:28] if you go down the composition you can
+[23:31] find that
+[23:32] an image is being rendered this is a
+[23:34] full screen image just
+[23:36] rendering the the result of the render
+[23:38] path 3ds
+[23:39] rendering onto the screen and then some
+[23:43] images of the editor
+[23:44] such as editor icons will be rendered on
+[23:46] top
+[23:48] and then finally the gui will be
+[23:49] composed on top of it
+[23:53] the last rendering command is this font
+[23:56] the information display
+[23:58] on the top left corner of the screen
+[24:01] if i zoom into it you can see the font
+[24:03] is rendered
+[24:04] with a single draw called as textured
+[24:07] quads
+[24:08] or actually two draw codes since one of
+[24:09] the draw calls render the
+[24:11] font shadow and the next one renders the
+[24:13] font
+[24:14] like colors the font if you
+[24:18] check the inputs is contained in a
+[24:20] texture atlas
+[24:21] all the all the different characters
+[24:23] that were ever used by the engine
+[24:26] were rendered to this texture atlas and
+[24:29] then
+[24:30] they were used in these textured quads
+[24:38] if you are interested in developing
+[24:40] deeper into
+[24:41] how the wicked ng rendering works then
+[24:43] the good news is that
+[24:45] these texts text events you can always
+[24:48] search for
+[24:49] in the engine code base for example
+[24:52] let's say that
+[24:53] you're interested in the opaque z
+[24:54] prepass and draw scene and
+[24:56] the render meshes then you can just
+[24:59] search for this render meshes within the
+[25:01] engine
+[25:02] and we will probably arrive sooner or
+[25:05] later at the render meshes function
+[25:07] within the wi renderer let's check that
+[25:10] out right now i just open the engine
+[25:14] again
+[25:15] press ctrl f and search for render
+[25:18] meshes
+[25:20] inside the whole solution
+[25:26] okay these are the results of it and
+[25:29] while the first results that points to
+[25:32] some code
+[25:32] is actually here in the wi renderer.cpp
+[25:37] the render meshes is kind of a very core
+[25:40] function
+[25:40] to just render the whole scene all the
+[25:44] meshes of the scene
+[25:48] if you are interested in how where this
+[25:51] wi renderer is located
+[25:53] it is the core like rendering interface
+[25:56] that also contains a lot of rendering
+[25:58] effects like post process
+[25:59] implementations which are
+[26:03] kind of at the bottom you can just
+[26:07] you can just find any post process here
+[26:09] fit implemented within a single function
+[26:12] for
+[26:12] for convenience you can find this
+[26:16] wri renderer if you go down to the
+[26:18] engine source
+[26:20] project and then to the engine
+[26:23] and then the graphics and then there is
+[26:26] the
+[26:26] wi renderer header and cpp files
+[26:32] if you want to check out how the
+[26:35] opaque z pre pass is where this render
+[26:39] meshes is called
+[26:40] the opaque z pure pass for example that
+[26:42] will be
+[26:43] located in the render path 3d which is
+[26:46] at the
+[26:46] part of the high level interface you can
+[26:49] find the high level interface classes
+[26:52] here
+[26:54] here's the render path 3d
+[26:57] it has different kind of interesting
+[27:00] functions for example the render
+[27:02] function
+[27:03] it's used to start rendering threads on
+[27:06] the cpu
+[27:06] start rendering passes and
+[27:10] and render into off-screen render
+[27:12] targets
+[27:14] those off-screen render targets which
+[27:16] are dependent on the screen resolution
+[27:18] are always created in the render paths
+[27:20] resize buffers function
+[27:25] the render paths update function you
+[27:27] could be all
+[27:28] already familiar with this this is
+[27:31] useful to just
+[27:32] update the scene and and everything and
+[27:34] you can override this and implement your
+[27:36] own
+[27:37] kind of updating functionality for your
+[27:40] own application
+[27:43] and then the compose function is also
+[27:46] pretty useful because this is the the
+[27:48] part where
+[27:50] the 2d elements will be drawn on top of
+[27:52] the screen
+[27:54] for example the w image and
+[27:57] wi fonts renderers can be easily used
+[28:00] here to just draw simple textures
+[28:04] in the in the screen space okay that's
+[28:07] it for today i
+[28:08] hope you learned something new feel free
+[28:10] to drop a comment under the video or
+[28:12] discord and catch you later in the next
+[28:14] video

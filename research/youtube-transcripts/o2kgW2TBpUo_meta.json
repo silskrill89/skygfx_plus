@@ -1,0 +1,32 @@
+{
+  "video_id": "o2kgW2TBpUo",
+  "title": "2d Full Global Illumination #2 (working principle and perf tests)",
+  "channel": "Alexander Sannikov",
+  "channel_id": "UCly0QRJAaJ2UGSGycOQoOdA",
+  "upload_date": "20220828",
+  "duration": 154,
+  "view_count": 23659,
+  "like_count": 839,
+  "tags": [],
+  "categories": [
+    "Science & Technology"
+  ],
+  "chapters": [],
+  "has_manual_subs": false,
+  "has_auto_subs": true,
+  "subtitles_available": [],
+  "auto_subtitles_available": [
+    "ab",
+    "aa",
+    "af",
+    "ak",
+    "sq",
+    "am",
+    "ar",
+    "hy",
+    "as",
+    "ay"
+  ],
+  "desc_timestamps": [],
+  "description_preview": "In this video I'm showcasing my sampling strategy that's based on cascades. Cascades that are farther away, contain more information about ray directions, but less information about ray origins -- because of this, each cascade actually takes up exactly the same amount of memory.\n\nIn other words, cascades encode information in light probes. Cascade n+1 contains 4x less light probes than cascade n, but each probe is 4x higher resolution.\n\nNote that performance of the algorithm is constant and does"
+}

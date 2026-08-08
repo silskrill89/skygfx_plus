@@ -1,0 +1,29 @@
+# Exploring a New Approach to Realistic Lighting: Radiance Cascades
+
+- **Source**: youtube
+- **URL**: https://www.youtube.com/watch?v=3so7xdZHKxw
+- **Ingested**: 2026-08-07 06:34
+- **Tags**: radiance-cascades, gi, realtime
+
+**Channel**: SimonDev
+**Duration**: 14:56
+
+## Description
+Radiance Cascades are an innovative solution to global illumination from the devs of Path of Exile 2. Let's explore and implement their approach.
+
+Gamedev Courses: https://simondev.io
+Support me on Patreon: https://www.patreon.com/simondevyt
+
+Follow me on:
+Instagram: https://www.instagram.com/beer_and_code/
+Twitter: https://twitter.com/iced_coffee_dev
+
+In this video, we look through the recent Radiance Cascades paper from the devs of Path of Exile 2, explore the ideas behind their approach, and implement something similar.
+
+Reference:
+Paper: https://drive.google.com/file/d/1L6v1_7HY2X-LV3Ofb6oyTIxgEaP4LOI6/view?usp=sharing
+Discord: https://discord.com/channels/318590007881236480/1142751596858593372
+
+Other great explanations:
+GM Shaders: https://mini.gmshaders.com/p/radiance-cascades
+Tmpvar: https://tmpvar.com/poc/radiance-cascades/

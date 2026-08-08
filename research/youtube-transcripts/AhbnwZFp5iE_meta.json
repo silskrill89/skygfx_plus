@@ -1,0 +1,21 @@
+{
+  "video_id": "AhbnwZFp5iE",
+  "title": "Polygonal Radiance Cascades",
+  "channel": "Alexander Sannikov",
+  "channel_id": "UCly0QRJAaJ2UGSGycOQoOdA",
+  "upload_date": "20260228",
+  "duration": 53,
+  "view_count": 6315,
+  "like_count": 237,
+  "tags": [],
+  "categories": [
+    "Science & Technology"
+  ],
+  "chapters": [],
+  "has_manual_subs": false,
+  "has_auto_subs": false,
+  "subtitles_available": [],
+  "auto_subtitles_available": [],
+  "desc_timestamps": [],
+  "description_preview": "A new flavour of radiance cascades capable of producing aliasing-free light from a single pixel light source. You can play with its source in your browser:\nhttps://radiance-cascades.github.io/LegitScriptEditor/?gh=Raikiri/LegitCascades/PolygonalHRC45.ls&rev=master"
+}

@@ -1,0 +1,27 @@
+{
+  "video_id": "DBRBZ1tZv_U",
+  "title": "Realtime fur rendering based on precomputed raytracing",
+  "channel": "Alexander Sannikov",
+  "channel_id": "UCly0QRJAaJ2UGSGycOQoOdA",
+  "upload_date": "20181126",
+  "duration": 57,
+  "view_count": 5846,
+  "like_count": 106,
+  "tags": [
+    "C++",
+    "GLSL",
+    "Fur",
+    "Realtime rendering",
+    "Precomputation"
+  ],
+  "categories": [
+    "Gaming"
+  ],
+  "chapters": [],
+  "has_manual_subs": false,
+  "has_auto_subs": false,
+  "subtitles_available": [],
+  "auto_subtitles_available": [],
+  "desc_timestamps": [],
+  "description_preview": "This is a proof of concept for a fur real-time rendering algorithm that I have come up with. It runs in constant complexity of O(1) using a precalculated data table for raytracing that's calculated on CPU prior to running the program. Fur layer is rendered entirely in a fragment shader using only 2 triangles and performance does not depend on how many hair strands are actually rendered.\n\nResult algorithm is very fast, without VSync it's capable of running at 100+ fps on a laptop GPU. \nThis demo "
+}

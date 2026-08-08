@@ -1,0 +1,789 @@
+# Transcript: TPqTtIoh-BQ
+# Fetched: 2026-08-07T06:23:17.377190
+# Entries: 784
+# Duration: 4454s
+
+[00:02] today we're going to talk about Alma
+[00:04] five three one five three is our latest
+[00:07] major release it will be out tomorrow
+[00:10] and it will feature GPU rendering as a
+[00:13] beta feature so I'll go over the I know
+[00:15] five three release which is in itself
+[00:17] quite a good release I'll go over the
+[00:20] beta GPU and the round over one last
+[00:23] surprise announcement that will make
+[00:24] today
+[00:27] what is Arnold for those of you who
+[00:29] don't know an all A's production
+[00:32] renderer as was perfectly described by
+[00:34] my marks in the previous talk it prides
+[00:37] itself in simplified workflow simplify
+[00:39] controls it handles complexity pretty
+[00:42] well as any production renderer should
+[00:44] do and it was acquired by oDesk two
+[00:47] years two years ago yeah a law was
+[00:51] awarded an Academy Award for for its
+[00:55] pioneering work in in pollution
+[00:58] rendering and physically-based
+[00:59] prediction rendering and I've always
+[01:01] been featured in countless films and
+[01:03] heroes very very tiny sample of the
+[01:05] different production has been featured
+[01:07] in in the past so today we're going to
+[01:13] talk about first on all five three so
+[01:15] first thing first major feature that we
+[01:17] added in Arma 5 3 is that we rewrote the
+[01:21] whole adaptive sampling is now faster
+[01:25] and higher quality we have a better more
+[01:28] effective criterion to terminate pixels
+[01:31] and and and we've improved the window
+[01:34] with adaptive sampling meaning that all
+[01:37] humble in progressive a known
+[01:38] progressive mode will will have lot and
+[01:40] less artifact when using adaptive
+[01:41] resampling we're getting really really
+[01:44] nice speed ups for equivalent noise on
+[01:47] those kind of scenes we're going to X Oh
+[01:50] close enough
+[01:52] of course works in all the demos are not
+[01:55] supporting - in shading works well on
+[01:58] subsurface scattering as well next
+[02:02] feature that we are that we that we
+[02:03] added in normal 5/3 is we improve the
+[02:05] SkyDome sampling I only have a tiny
+[02:08] image and that but really liked the idea
+[02:10] of the improve scheduling is to avoid
+[02:12] shooting rise towards surfaces that are
+[02:16] behind the the current shading point so
+[02:19] this case we have like kind of a worst
+[02:21] case scenario like like space battle
+[02:23] setting where you have a powerful light
+[02:25] source above and powerful light suits
+[02:26] under what would happen before is that
+[02:29] we would lose probably half the shadow
+[02:31] rays and we're now tracing shadow Ray's
+[02:34] for for sky domes in a in a more
+[02:36] efficient way next thing we are adding
+[02:41] in on five three if we've improved the
+[02:43] random walk sss mode so the random walk
+[02:46] exercise is a brute-force rachael ray
+[02:49] traced sss integrator the new and
+[02:53] improved version scatters more
+[02:54] accurately in deeply in transparent
+[02:57] objects so the paths are longer and if
+[02:59] they bounce around a lot more in the
+[03:01] shape making way more accurate image
+[03:03] especially on thin surfaces and and I
+[03:07] did yeah it it has sometimes dramatic
+[03:10] effects so the new sss mode isn't on the
+[03:12] left on the right three on the right as
+[03:15] you should like in in the area the thin
+[03:18] area you get a lot more light all those
+[03:22] kind of scenes you you will see a
+[03:24] dramatic effect the paths are terminated
+[03:30] are not terminated as as quickly as they
+[03:33] are as they were before so like if you
+[03:36] look at for example the ear the ear lobe
+[03:38] see that there's a lot more energy
+[03:40] coming in it's because the the the the
+[03:43] random walk is a simulation managed to
+[03:45] get out of the loop in in the right
+[03:47] place our artists in the beta program
+[03:52] have been playing a lot with that and
+[03:54] they're super happy with it
+[03:55] it is not yet the default sss mode and
+[03:59] that's mostly because since the path the
+[04:02] random walk path are longer it is also
+[04:05] quite expensive in terms of often of
+[04:08] computation and it's like we're still
+[04:12] figuring out the mapping of all for this
+[04:15] thing but definitely check it out if
+[04:17] you're if you're doing realistic skin
+[04:21] rendering another thing we're adding in
+[04:24] in our 5-3 something is wrong with you
+[04:27] is based on spi fantastic word on the
+[04:30] on the subject our micro facets IBS EF
+[04:34] is now energy preserving any time
+[04:39] between conserving and preserving
+[04:41] meaning it doesn't lose energy as you
+[04:43] increase the roughness as you increase
+[04:47] it so the top row is on all five to the
+[04:52] the second row is on all five three and
+[04:55] you see that as you increase the
+[04:56] roughness on those metals you use you
+[04:59] stop losing energy as it was happening
+[05:02] before and all the metal it is very
+[05:07] obvious on that image you can see that's
+[05:08] that's the previous previous on
+[05:10] inversion and it's the new oral version
+[05:12] you can see lots of energy was lost due
+[05:15] to roughness another thing is that we
+[05:20] improve the way we feed data to the
+[05:22] optics denoiser if you use your keys you
+[05:26] know you already know that it is very
+[05:27] very sensitive to do if the feature
+[05:29] buffer you feed to it quite ample
+[05:32] everything has to be normalized
+[05:33] everything has to be noise free how do
+[05:36] you normalize not video contribution
+[05:38] when you have four or 15 closures on the
+[05:41] shading point so that's the things we
+[05:43] work to improve their eyes and this is
+[05:45] the the same origin horrendous a noisy
+[05:48] render but just with different future
+[05:51] buffers and and it improves the noise
+[05:52] quite a lot and of course are not going
+[05:56] to list everything but since our 5 3 2
+[05:58] major release there is a ton of
+[06:00] performance improvements and and and bug
+[06:04] fixes and and and so on
+[06:07] ok so let's see next thing is that ml 5
+[06:10] 3 includes the public GPU beta so we've
+[06:13] been in in private beta for a year now
+[06:15] and we've been iterating
+[06:18] every couple of weeks shipping new
+[06:20] releases I think we've now released like
+[06:21] 20 private beta to our users and I'd
+[06:25] like to thank all the private beta users
+[06:29] because the feedback has been invaluable
+[06:31] in making the thing more useful for
+[06:33] everybody so here is
+[06:39] [Music]
+[06:52] [Music]
+[07:42] okay so to reiterate why we did we did
+[07:47] all that so why why work on GPO Arnold
+[07:50] so if you are DTC you obviously probably
+[07:52] have a pretty good idea but just to
+[07:55] reiterate workflows are moving more and
+[07:59] more towards real time and interactivity
+[08:01] real time look they've doing more and
+[08:04] more things in the viewport and and GPU
+[08:08] will give you the extra speed to achieve
+[08:10] that work add more and more interactive
+[08:13] interactive rate do everything in the
+[08:17] viewport instead of waiting for renders
+[08:19] the other reason we're doing that is
+[08:21] that all our users have been asking for
+[08:24] it for years now and listen to our users
+[08:28] and then GPUs are getting a lot bigger
+[08:31] and our TX 8000 has gigantic 14
+[08:34] gigabytes of frame buffer meaning that
+[08:38] is now possible to render scenes that
+[08:40] before could not even touch GPU and and
+[08:43] the feedback we'll also get is that for
+[08:46] small to medium facilities it is
+[08:48] sometimes a lot easier to scale using
+[08:50] GPUs and CPUs so we set out a present in
+[08:56] that last year we set out four goals
+[08:59] when we started working on all those GPU
+[09:01] and I'm going to go over all those goals
+[09:03] right now to see where we are a year of
+[09:06] the dot so the first goal was to create
+[09:09] a single renderer it has to be
+[09:11] completely integrated into the
+[09:13] analytical system it has to be feature
+[09:15] compatible we really want people to hit
+[09:19] the ground running there are people have
+[09:21] countless Arnold scenes they're working
+[09:23] on current project we want just them to
+[09:25] be able to download on hold and click
+[09:27] the GPU box and they start running on
+[09:29] GPU that's that's our goal so it has to
+[09:32] be feature convertible pixel
+[09:33] compatibility I'll go more into detail
+[09:35] into what what we mean by that an api
+[09:37] compatibility because our log is library
+[09:40] so single renderer we are in pretty good
+[09:44] shape our wall can be an alpha 3 can be
+[09:48] done switch on to GPU in every of the
+[09:51] software we use weather
+[09:52] it's Maya here you can see it running
+[09:56] inside everything inside the olive
+[09:58] viewport in in the mire view boards
+[10:00] three marks is of course reported but
+[10:02] also Houdini has pretty good support for
+[10:06] non GPU cinema4d
+[10:08] and an katana so single renderer we are
+[10:12] again pretty good shape future
+[10:15] compatibility so what we mean by Ito
+[10:17] compatibility is that we're not creating
+[10:19] a preview renderer that the end goal is
+[10:21] to support all the Arnold features and
+[10:24] we're targeting final frame rate so
+[10:27] wrong with that
+[10:29] is that Arnold is 20 year old renderer
+[10:32] and has tons of features lots I keep
+[10:36] discovering some of the features today
+[10:39] and some features are super hard to
+[10:41] support on the GPU especially so we
+[10:44] decided first to focus on features that
+[10:48] were useful for luke dev which
+[10:51] conveniently is also some of the cases
+[10:54] where the dev have will fit on the GPU a
+[10:56] lot a lot more than on final shots so
+[11:01] where are we in terms of features
+[11:03] reports so the first thing we added and
+[11:04] we took kind of an opposite approach off
+[11:06] from from the Randleman team is we went
+[11:09] directly for shading before anything
+[11:11] else really and we stood we added
+[11:14] support for sharing Network and and we
+[11:17] now support chilling network that are
+[11:18] this this is this is a standard basic
+[11:21] training network and this one works on
+[11:23] CPU and GPU seamlessly this the
+[11:25] streaming network for that asset it is
+[11:27] medium complexity of course atmospherics
+[11:34] rendering arraign this scene it is hard
+[11:36] to see but the toes are curves we also
+[11:40] completely ported the multiple
+[11:43] scattering the volume integrator well
+[11:47] the the scene the the the scene is
+[11:50] completely shared and compatible between
+[11:52] CPU and GPU meaning that switching from
+[11:56] CPU to GPU is is very very quick and you
+[12:00] can switch devices at any point without
+[12:02] having to re-explore the scene
+[12:04] and of course if you don't use GPU
+[12:06] there's no overhead of course if the
+[12:10] scene is shared everything just works if
+[12:13] you're using procedurals in Arnall if
+[12:14] you're doing instancing everything works
+[12:16] as usual and then we went for the more
+[12:20] like higher end production features we
+[12:23] now support like path expressions so
+[12:25] it's going to be do able to render final
+[12:28] frame and do compositing in our mold
+[12:31] the thing is when we added what we call
+[12:34] a oh these reports are we supporting are
+[12:36] all are entirely entirely based on
+[12:39] likewise like path expression you can
+[12:41] implement your own life expression or
+[12:43] you can use the built-in ones but indian
+[12:44] it's the same system so we just like bit
+[12:47] the bullet and portal it changes works a
+[12:51] nice showcase of what we can do with all
+[12:55] also this render dot using the ideas
+[12:58] advice Robbie Stephanie yesterday and
+[13:01] this is kind of shows of everything is
+[13:04] working like you have the dystrophies
+[13:06] integrators working the sort of the
+[13:09] subsurface integrators working as well
+[13:13] lighting shinning Network so this is for
+[13:16] things that work of course there's lots
+[13:18] of feature that we should bother I won't
+[13:19] mention because it would be really
+[13:21] tedious but here's the interesting thing
+[13:24] those are the big missing features that
+[13:26] we have right now so the first thing
+[13:27] that we're missing is out of core
+[13:29] textures and that's a big missing part
+[13:31] there is something that we are working
+[13:33] on with highest priority second thing is
+[13:37] well OSL is a big part of Arnold lots of
+[13:40] our users are using it daily a lot of
+[13:43] our users build pipeline over that we
+[13:45] have a pretty good support of it's only
+[13:47] normal we see bottle closures so we need
+[13:51] to step up and implement that on GPU and
+[13:54] this is parametric working progress
+[13:56] next thing is open V DB we do have the
+[14:00] full volumetric logic port ID normal but
+[14:03] we now need to be able to fit data to
+[14:05] that Rajic and that's the next step so
+[14:08] that's where we are in terms of future
+[14:09] compatibility now pixel compatibility
+[14:13] what do we mean when we say pixel
+[14:15] compatibility though there's this idea
+[14:17] of
+[14:18] of pixel compatibility between CPU and
+[14:20] GPU the first level which is the one
+[14:23] we're at right now for the pure beta is
+[14:25] what we call good enough for luke dev
+[14:27] really it means that you trust your the
+[14:31] results that you're getting
+[14:32] interactively in the viewport enough so
+[14:35] that you can kick it the render farm and
+[14:37] and have a matching image that's the
+[14:40] live area right now the next level is to
+[14:43] be able to use a given device for each
+[14:47] shot and integrate that in the
+[14:50] prediction and it just works that's
+[14:52] where we want to be for the first
+[14:53] release then having multiple device
+[14:57] working on the same shot and then of
+[14:59] course like the Holy Grail which is
+[15:01] fully hybrid computing using on the same
+[15:05] frame GPU and CPU are at their best and
+[15:08] that's that's where we want to be
+[15:10] eventually of course there are
+[15:12] performance trade-offs and and and you
+[15:15] ask me the question about what are those
+[15:17] perform traders because I won't have
+[15:19] time to go in in detail on those but
+[15:22] like yeah you want you want to be able
+[15:25] to use the GPU Hardware filtering but
+[15:29] this is lower quality that you get what
+[15:31] you get on CPUs so if you would do
+[15:33] hybrid computing what what what is the
+[15:36] direction you want to go splitting our
+[15:39] mold CPU is a splitting path tracer
+[15:41] which has a very very different
+[15:42] convergence rate than an on splitting
+[15:45] path tracer in on a CPU for lots of
+[15:48] constraints we had to go with a
+[15:50] splitting non splitting path writer so
+[15:54] those those are those are like problems
+[15:56] at how pretty much working progress and
+[15:57] we've been hammering at those problems
+[15:59] for the past year other than that we
+[16:02] stick we still in a pretty good shape
+[16:05] the the we have very very good matches I
+[16:09] will not be able to tell which one is he
+[16:11] which one is GPU between the the
+[16:14] hardware intersector and the cpu
+[16:15] inter-sectoral
+[16:17] pretty much all the lights and Pinkard
+[16:19] and matches a nearly floating-point
+[16:22] precision level sampling patterns work
+[16:26] exactly the same on CPU and GPU so yeah
+[16:29] the match is the match is for huge
+[16:31] and so other examples where you would
+[16:34] not be able to and is again without
+[16:36] touching the scenes like we just open a
+[16:39] CPU scenery's that was existing for
+[16:41] previous release and and and clicked on
+[16:43] GPU render and it was just working the
+[16:46] reason is we use mostly the same code
+[16:49] base so the next thing is bit more
+[16:56] special we want we want the anon GPU to
+[16:58] be to be API compatible and it's pretty
+[17:02] much the single renderer approach Armel
+[17:06] is a and it's at its core it's not a
+[17:09] rendering engine it's a library to build
+[17:12] plug-ins that you do rendering on top of
+[17:16] that library and and and we haven't we
+[17:19] didn't did not even break binary
+[17:21] compatibility with without all GB which
+[17:23] you could take in theory the DLL and
+[17:26] just be able to swap the DLL if you if
+[17:29] you issue using our and we have the the
+[17:31] thing that is important is that we have
+[17:32] clients that are building tools on top
+[17:34] of our wall which are some of them are
+[17:36] big if you've seen the image engine
+[17:40] video at the keynote imagine gene has a
+[17:43] tool is called gaffer a gaffer is based
+[17:45] on OS oh and and and and is it is
+[17:49] lighting look dev interactive edit tool
+[17:52] that uses the journal API and we were
+[17:56] able to directly drop in the Arnold
+[17:59] version in together and in turn on GP
+[18:02] Ren Rainey was just working I'm lying
+[18:05] slightly I had to fix like one bug but
+[18:08] that was the idea so you can you can
+[18:13] build tools on top of Arnold but you can
+[18:15] also be able to inside Arnold's you can
+[18:17] write shaders you can wipe procedurals
+[18:19] you can write lots of plugins inside
+[18:21] Arnold some of them will output code
+[18:24] that will be run at render time and
+[18:27] that's pretty much where we want to be
+[18:28] we have an open we open the shader API
+[18:31] in the public beta but we are nearly
+[18:33] there
+[18:35] this is shader is mixing to closures
+[18:37] this code has been rendering running on
+[18:39] both GPU and CPU being compiled for both
+[18:42] since last year and
+[18:45] everything is working as expected some
+[18:48] parts of the unhold Scherer api ask more
+[18:51] complex to build on others so we have
+[18:53] still like - indeed the idea of
+[18:55] expressing it or not or going towards
+[18:57] away so those are very much working
+[18:59] progress ideas ok so that's where we are
+[19:05] right now in terms of having a single
+[19:08] renderer is feature compatible pixel
+[19:09] compatible and api compatible so we feel
+[19:12] that at the level of where we are right
+[19:15] now I'm all GPU starts to be useful
+[19:19] we still don't recommend you to use it
+[19:20] in production but we urge you to test it
+[19:23] and give feedback so bit more details
+[19:27] into our Arnold is implemented the first
+[19:31] thing is Arnold is embracing optics we
+[19:36] use optics exclusively we not mix optics
+[19:39] and CUDA which is yield optics
+[19:42] exclusively we went we went from that
+[19:45] direction to benefit from the expertise
+[19:48] and there's another good reason for that
+[19:50] is Arnold has tons of features and as I
+[19:54] said and is extremely flexible when you
+[19:58] have tons of features what you need to
+[20:01] do is try to avoid paying for the
+[20:04] features you don't use and a good way of
+[20:07] not paying for the features you don't
+[20:10] use is to compile them out if you're not
+[20:12] using them the fact that optics is a
+[20:15] just in time compiler enables us to do
+[20:18] that to some extent to only pay for the
+[20:21] cost of the feature the user is actually
+[20:22] using because user will understand that
+[20:25] something is slower if they use a
+[20:27] specific feature to some extent they
+[20:30] won't understand that everything is
+[20:31] slower because you added a feature that
+[20:33] they don't use so optics being a
+[20:37] compiler is something that we leverage a
+[20:39] lot like string Doc's reason for using
+[20:42] optics is that the f-16 is amazing
+[20:45] they've been super reactive we have a
+[20:48] great working relationship with them
+[20:50] we've been pushing hard to add some
+[20:53] production features in objects like the
+[20:55] motion blur specification we work
+[20:57] closely on them with
+[20:59] we would not have faster dressing
+[21:02] copulation Justin copulation got out of
+[21:04] hand at some point when we were working
+[21:06] on objects and now the computation the
+[21:09] dressing coefficient can be cached on
+[21:11] disk and and be reused and they've been
+[21:14] adding assault reports recently of
+[21:17] course the next big reason to use optics
+[21:19] is RTX and speaking about hex on in when
+[21:26] you're doing production rendering at
+[21:27] least in the other case Jerry you spend
+[21:30] 30 percent of your time tracing rays if
+[21:34] your scene is simple there might be 50
+[21:37] percent but the bulk of time will be
+[21:40] shading lightly integration then r-tx
+[21:45] makes the ray tracing part really really
+[21:47] really small so you can hope for a 2x
+[21:52] Peter but now run time is is it's mostly
+[21:55] shading and that's the biggest issue we
+[21:57] have right now that's something where we
+[21:59] can't be working with but yeah that's
+[22:00] for production rendering our text is
+[22:02] useful differently but it's not the
+[22:05] whole the whole story so here are some
+[22:08] very early benchmark of course the
+[22:10] performance in the public beta is not
+[22:15] final it may go up it may go down as we
+[22:17] add features as we optimize our CPU has
+[22:21] been optimized for the past 20 years
+[22:22] although GPU has not so there's lots of
+[22:25] thing that we are discovering every day
+[22:28] but we're getting in getting good speed
+[22:31] ups those are benchmark that we haven't
+[22:32] done ourselves or some either we're done
+[22:34] by users so with some caveats of course
+[22:38] but it shows that our GPU in its early
+[22:43] form as it is right now is is already
+[22:47] useful to some people and this is fine I
+[22:52] should add see grafted that's like when
+[22:54] we we just had our TX when I when I when
+[22:57] I did this like like we had access
+[22:58] projects for for maybe like eight days
+[23:01] or something like that so this is nice
+[23:03] experiments to show to showcase how RT X
+[23:07] makes ray tracing a lot cheaper
+[23:11] is going from 200 million shadow raise
+[23:14] to 5 billions and you see how the CPU is
+[23:19] scaling the CPU is scaling okay you see
+[23:22] how igv 100 which is already a pretty
+[23:24] good GPU is scaling and you see how an
+[23:26] archaic 6,000 is scaling and you can see
+[23:28] that the increase in render time when
+[23:31] going from 200 million shadow raise to 5
+[23:34] billion shadow raised on a prediction
+[23:36] scene is tiny on an archaic 6000 and and
+[23:40] the fact that you have all those cheap
+[23:43] raise is not unlocking new research
+[23:45] opportunities before that if you if you
+[23:48] look if you if you access the source
+[23:50] code of Arnold's CPU you see that in
+[23:53] lots of cases it is trying as hard as
+[23:55] possible not to try stray ever ever
+[23:58] never never trace rate when you when you
+[24:00] can't read do light coloring do all sort
+[24:03] of complex techniques to not trace rays
+[24:07] and on the GPU we had to compile them
+[24:10] out because not tracing rays on some
+[24:13] cases is more expensive just by the
+[24:16] divergence so the GP renderer just races
+[24:19] more rate in lots of cases so that's it
+[24:24] for the for the state of the of the GPU
+[24:29] public beta and again tomorrow will be
+[24:32] about you know the different version of
+[24:35] a 3 version and install it and run it
+[24:38] given in license you have watermarks but
+[24:41] you can try it which brings me to my
+[24:45] next thing today we are announcing that
+[24:50] we are publishing the specification of
+[24:52] the Arnold standard surface material so
+[24:56] what is the solid surface the structure
+[24:59] face is the Arnold renderer uber shader
+[25:02] it's it's our main shader that we use
+[25:05] for most all surfaces is production
+[25:07] proven it is physically plausible it we
+[25:10] try to make it computationally efficient
+[25:12] and the goal is to really have a minimal
+[25:15] set of parameters with intuitive meaning
+[25:17] and ranges is capable of rendering a
+[25:19] wide variety of real raw materials not
+[25:21] all materials but most
+[25:24] like if you can get away with like 90%
+[25:26] of your of your object with that
+[25:28] wheelchair we're happy with it
+[25:30] and we you should be able to access it
+[25:34] right now we just put the the white
+[25:36] paper on on github with a reference or
+[25:40] estill implementation so what is our
+[25:44] goal in doing that first first thing is
+[25:48] that we want to have a common
+[25:50] representation of material inside all
+[25:52] the best products the next thing is that
+[25:56] like integer - when we when you exchange
+[25:59] assets between different facilities
+[26:02] especially regarding to suffice apparent
+[26:04] appearance it is really hard and
+[26:06] different renderers and three engines
+[26:08] use differentiating systems training
+[26:11] language fixed function pipelines and so
+[26:14] on and and modeling accurately like
+[26:17] surface appearance it remains a very
+[26:19] complex problem and it's a topic of
+[26:21] active scientific research but there is
+[26:25] women strong demand today for for for
+[26:28] for the industry to find a standardized
+[26:29] material model that both covers most
+[26:32] common use and and and it's easy to use
+[26:37] so you do have today competing standards
+[26:41] to represent surfaces which you have
+[26:45] material eggs or cell MDL but you have
+[26:49] very very few specification for higher
+[26:52] level implementations so this is
+[26:58] something that we are currently using
+[26:59] the solid surface has been in production
+[27:01] for the past two years we have pretty
+[27:04] good support for the solid surface in
+[27:05] the viewport in Maya and and in 3ds Max
+[27:10] and we are now opening that to other
+[27:12] software vendors and cotton providers
+[27:14] and definitely our software vendors have
+[27:16] been providing feedback in the in the
+[27:19] private draft of on the private draft of
+[27:22] the white paper
+[27:24] this material is is doesn't appear out
+[27:28] of the blue it is inspired by a
+[27:30] collection of great resources the first
+[27:33] one being al shadows by by Enders
+[27:36] the 3ds max physical material
+[27:38] was also a good source of inspiration
+[27:39] and also makes the whole thing
+[27:41] compatible with all scenes in 3ds max
+[27:44] that material in its turn was was also
+[27:48] inspired by the algorithmic algorithmic
+[27:52] PBR model and the d-brane poly model
+[27:55] from Disney so this is you can see that
+[27:59] there's a convergence around a set of
+[28:01] parameters and the standard surface is
+[28:03] kind of a new iteration on that
+[28:05] convergence so I can I can go into more
+[28:09] detail into how how the model is
+[28:13] described the surface so the ball is to
+[28:16] create a surface shading model that
+[28:18] Isabel there is about able to faithfully
+[28:20] represent a wide variety of of
+[28:22] real-world materials so the light
+[28:26] scattering characteristic of surfaces
+[28:28] like metal glass wall paint skin wood
+[28:33] cloth semi-transparent layers and so on
+[28:37] we has to it has to represent nearly all
+[28:39] materials so and the whole model is what
+[28:45] we call a layered mixture model so you
+[28:47] can see that some layers are under each
+[28:50] other and some layers cohabit at the
+[28:53] same level when the layer cohabits at
+[28:56] the same level we would call that a
+[28:58] static statistical mixture so you have
+[29:01] to imagine the material as having flakes
+[29:03] of one property and flakes of another
+[29:06] property and those are mixed at the same
+[29:09] level some materials are some some lobes
+[29:12] or some some components are under each
+[29:15] other meaning that all the energy that
+[29:17] is not reflected by the top layer goes
+[29:20] to be potentially reflected by the
+[29:22] bottom layer and so on and and we've
+[29:25] carefully crafted this set of layered
+[29:30] mixtures there's another way of
+[29:33] representing it is in the form of
+[29:35] closures a closure is at least from an
+[29:40] Arnold and other render standpoint a
+[29:43] closure is kind of this anonymous object
+[29:45] which has parameters n type and an RGB
+[29:50] weight
+[29:51] so the closer object is an object that
+[29:54] the shadow the shadow doesn't know much
+[29:56] about it know is that the hospital is a
+[29:58] type in weight and the shadow will
+[30:01] create a list of weighted closures and
+[30:03] pass that on to the integrator the
+[30:06] integrator will then read that list of
+[30:11] closures and integrate them some
+[30:13] closures can be PSD FS and to integrate
+[30:16] to be SDF you you can either do like a
+[30:18] full path tracing Monte Carlo
+[30:20] integration but you can also do a GLSL
+[30:23] like loop there's you can read form
+[30:25] point point clouds you can do pretty
+[30:26] much everything you want same for B so
+[30:29] DFS but the closure can also be a face
+[30:31] function for volume it can be a mission
+[30:34] in can be transparency and so on so the
+[30:38] shadow is responsible for producing that
+[30:40] list of weighted closures and this is
+[30:44] basically the translation of that model
+[30:48] and you can see that some operations are
+[30:51] a statistical mix based in weight and
+[30:54] some operations are a mix based on the
+[30:58] reflectance of the BSF and that's how we
+[31:00] ensure that only bottom layer will only
+[31:05] reflect the energy that's being passed
+[31:06] by another layer and I can go into
+[31:10] details into some of the effects that
+[31:11] are the material the material supports
+[31:13] so first transparency again if you can
+[31:16] look at the on the corner and you have
+[31:18] the the place where the closure I'm
+[31:21] talking about is so transparency is your
+[31:25] basic visibility through specific the
+[31:28] transparency closure has no no
+[31:29] parameters really it just makes the
+[31:31] surface fully transparent at the shading
+[31:33] point and if you have a survey there is
+[31:34] half transparent that's the whole point
+[31:36] of the statistical mix like array has a
+[31:39] probability of going through your face
+[31:41] or stopping the code which is kind of
+[31:48] the top layer and sits at the same level
+[31:50] of transparency
+[31:52] its directive coating with the GTX Micro
+[31:55] facade brdf so as a dielectric this this
+[31:59] BRF is not energy preserving for now and
+[32:03] it over obeys our final reflection
+[32:05] and the lair is for now assumed to be
+[32:08] infinitely thin so the rate the
+[32:10] remaining non reflected light is passed
+[32:12] directly to the underlying layer without
+[32:14] refraction and the reflection color is
+[32:17] fixed to white but the medium color can
+[32:22] be set by the user so you can control
+[32:24] the reflection the color of the
+[32:26] reflection of the layers that are
+[32:28] undercooked but you can change the color
+[32:30] of the coat itself tricky an emission
+[32:34] layer so like having the emission layer
+[32:37] below the code is not a random choice as
+[32:40] all the choices we made I keep it
+[32:43] enables you to model light bulb like
+[32:45] materials it's like your basic
+[32:50] directional uniform emission closure
+[32:56] metal we wish you bought a metallic Club
+[32:59] the metallic globe supports all sorts of
+[33:02] parameters including complex for now and
+[33:06] thin film effects and now it's in Psalm
+[33:09] 5:3 the metallic club is now energy
+[33:12] preserving specular reflection and
+[33:16] transmission like they sit very like one
+[33:19] is below the other of obviously adjust
+[33:22] models using a GTX micro Fassett direct
+[33:25] Rick brdf transmission and refraction a
+[33:29] nice and very very complicated feature
+[33:33] to support now GPU is the fact that the
+[33:41] transmission layer can optionally take a
+[33:45] volume as a parameter so this this is
+[33:47] actually a fully multi scattering
+[33:50] anisotropic volumes that you are seeing
+[33:52] is happening below the the transmission
+[33:56] the transmission layer and this is an
+[33:59] actual fully of a full volume ray much
+[34:03] rendering and this is why we had to port
+[34:07] the volume remap sure to the GPU in the
+[34:09] first place without open video each port
+[34:12] so really easily that that material will
+[34:15] give you real complex blur
+[34:18] and be able to model murky waters and
+[34:21] and all sort of complex materials of
+[34:25] course we have also seen since Arnold
+[34:27] five to I guess which is really useful
+[34:31] to to to to do cheaper to machine for
+[34:34] cloth and and good old diffuse
+[34:37] reflection and transmission not much
+[34:41] more to say about this ones if you use a
+[34:44] thin surface you use a diffuse
+[34:47] reflection a diffuse reflection if
+[34:51] you're sorry a diffuse transmission and
+[34:52] if you have a non thin surface you'd go
+[34:55] to subsurface scattering where you can
+[34:57] use a the diffusion model the random
+[35:01] walk model or the improvement model and
+[35:04] that's that's the whole extent of of the
+[35:08] material itself so when when we when you
+[35:15] suit when we sort out to to publish the
+[35:17] solar surface as an open white paper we
+[35:22] first went to other vendors and users to
+[35:25] get feedback and and following the
+[35:27] feedback we now in on all five three
+[35:30] modified as soon as your face to add
+[35:32] more sometimes more control we we made
+[35:37] it possible to change the transmission
+[35:39] roughness without affecting their
+[35:40] specular roughness made some parameters
+[35:43] linkable improve the code layer for in
+[35:47] in some in some instances we are really
+[35:49] trying to have as little as far as
+[35:53] possible in terms of of of parameters
+[35:56] without constraining the artist to
+[35:58] measure it's a tricky balance to get
+[36:00] because you could expose five or ten or
+[36:03] fifteen specular lobes if you listen to
+[36:07] every request and and you all you can
+[36:10] okay you can try to concentrate on a
+[36:12] small set of parameters concentrating on
+[36:14] a small set of parameters makes it a lot
+[36:16] easier to author content but can
+[36:19] restrain you in some cases so a is a
+[36:21] tricky balance to get and that's also
+[36:23] another reason why we are publishing is
+[36:28] to get feedback and and and get the
+[36:29] conversation going
+[36:31] the story doesn't stop there as I said
+[36:35] material appearance is pretty much a
+[36:38] vast area research the two things that
+[36:43] come in mind first reciprocity that that
+[36:46] model is not a it will not be able to
+[36:51] work in perfectly in an bi-directional
+[36:54] model because what is the reciprocal of
+[36:59] that model a it's it's kind of an open
+[37:01] problem what happens if you see a
+[37:04] surface from behind what how many fuse
+[37:06] use your face from the light not
+[37:08] everything not everything works as
+[37:09] intended next thing is that we currently
+[37:14] model the whole material as a layered
+[37:17] mixture model and this is of obviously
+[37:19] an approximation computing the actual
+[37:20] energy that goes from one layer to
+[37:22] another is again a tricky problem and an
+[37:26] open research topic so that's very much
+[37:29] something that like we discuss in the
+[37:32] next iterations so yeah do do contribute
+[37:36] you're you're free to implement that in
+[37:38] your own renderer and and again there's
+[37:41] a reference imitation available I think
+[37:47] that's it for me if you have any
+[37:48] questions

@@ -1,0 +1,14 @@
+# Realtime fur rendering based on precomputed raytracing
+Channel: Alexander Sannikov
+Duration: 00:57
+URL: https://www.youtube.com/watch?v=DBRBZ1tZv_U
+
+## Description
+This is a proof of concept for a fur real-time rendering algorithm that I have come up with. It runs in constant complexity of O(1) using a precalculated data table for raytracing that's calculated on CPU prior to running the program. Fur layer is rendered entirely in a fragment shader using only 2 triangles and performance does not depend on how many hair strands are actually rendered.
+
+Result algorithm is very fast, without VSync it's capable of running at 100+ fps on a laptop GPU. 
+This demo also features my hierarchical screenspace global illumination algorithm that's now shipped with Path of Exile.
+
+## Subtitles
+Manual: No
+Auto-generated: No

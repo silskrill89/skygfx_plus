@@ -1,0 +1,73 @@
+{
+  "video_id": "TrHHTQqmAaM",
+  "title": "ExileCon 2023 - Rendering Path of Exile 2",
+  "channel": "Path of Exile",
+  "channel_id": "UCA7X5unt1JrIiVReQDUbl_A",
+  "upload_date": "20231101",
+  "duration": 3176,
+  "view_count": 146067,
+  "like_count": 4546,
+  "tags": [
+    "path of exile",
+    "poe",
+    "action rpg",
+    "role playing game",
+    "pc game",
+    "free to play",
+    "hack n slash",
+    "game play",
+    "path of exile 2",
+    "poe2"
+  ],
+  "categories": [
+    "Gaming"
+  ],
+  "chapters": [
+    {
+      "start": 0,
+      "end": 404,
+      "title": "<Untitled Chapter 1>"
+    },
+    {
+      "start": 404,
+      "end": 939,
+      "title": "SUBSURFACE SHADOWS"
+    },
+    {
+      "start": 939,
+      "end": 1612,
+      "title": "BENT NORMALS SHADOWS"
+    },
+    {
+      "start": 1612,
+      "end": 3176,
+      "title": "GLOBAL ILLUMINATION"
+    }
+  ],
+  "has_manual_subs": true,
+  "has_auto_subs": true,
+  "subtitles_available": [
+    "en",
+    "de",
+    "ja",
+    "ko",
+    "pt",
+    "ru",
+    "es",
+    "th"
+  ],
+  "auto_subtitles_available": [
+    "ab-en",
+    "aa-en",
+    "af-en",
+    "ak-en",
+    "sq-en",
+    "am-en",
+    "ar-en",
+    "hy-en",
+    "as-en",
+    "ay-en"
+  ],
+  "desc_timestamps": [],
+  "description_preview": "A talk from Alexander Sannikov, a programmer at Grinding Gear Games. Recorded at ExileCon 2023.\nYou can find Alexander's YouTube channel here:  https://www.youtube.com/channel/UCly0QRJAaJ2UGSGycOQoOdA\n\nThe Shadertoy Alexander mentions during the talk can be found here: https://www.shadertoy.com/view/mlscz8\n\nAlexander's article on Radiance Cascades can be found here: https://drive.google.com/file/d/1L6v1_7HY2X-LV3Ofb6oyTIxgEaP4LOI6/view"
+}

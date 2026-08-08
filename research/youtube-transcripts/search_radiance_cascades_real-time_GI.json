@@ -1,0 +1,26 @@
+{
+  "query": "radiance cascades real-time GI",
+  "results": [
+    {
+      "video_id": "3so7xdZHKxw",
+      "title": "Exploring a New Approach to Realistic Lighting: Radiance Cascades",
+      "channel": "SimonDev",
+      "url": "https://www.youtube.com/watch?v=3so7xdZHKxw",
+      "duration": 897
+    },
+    {
+      "video_id": "qyXwuN2GtWQ",
+      "title": "Screenspace Radiance Cascades using Depth Moments, Realtime Diffuse GI Showcase",
+      "channel": "cyberpiok",
+      "url": "https://www.youtube.com/watch?v=qyXwuN2GtWQ",
+      "duration": 27
+    },
+    {
+      "video_id": "TrHHTQqmAaM",
+      "title": "ExileCon 2023 - Rendering Path of Exile 2",
+      "channel": "Path of Exile",
+      "url": "https://www.youtube.com/watch?v=TrHHTQqmAaM",
+      "duration": 3177
+    }
+  ]
+}

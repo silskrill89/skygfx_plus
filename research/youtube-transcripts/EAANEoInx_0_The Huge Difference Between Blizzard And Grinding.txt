@@ -1,0 +1,259 @@
+# Transcript: EAANEoInx_0
+# Fetched: 2026-08-07T06:23:19.249616
+# Entries: 254
+# Duration: 1208s
+
+[00:00] there's a riveting Tale of Two Titans
+[00:03] here one is setting itself up for
+[00:05] tremendous success while the other
+[00:07] released and has been clawing its way
+[00:10] back into the good graces of its players
+[00:12] for the past year of course I'm talking
+[00:15] about Path of Exile 2 and Diablo 4 two
+[00:18] of the biggest arpg discussion topics of
+[00:21] Our Generation in the historic past it
+[00:24] used to be Diablo I torch light you know
+[00:28] Titan Quest and other games
+[00:30] recently it was Diablo II in Path of
+[00:32] Exile you know last Epoch has broken
+[00:35] onto the scene but even that game with
+[00:38] its incredible player numbers and its
+[00:41] deep customization has not driven the
+[00:44] same sort of hype that the unreleased
+[00:46] Path of Exile 2 and the very much in
+[00:49] progress Diablo I and I'd like to talk
+[00:52] about both of those games today and how
+[00:54] the developers are creating them in
+[00:57] different ways from the outset there's a
+[01:00] long story here but I'm going to try to
+[01:02] condense it down into about 10 minutes
+[01:05] we'll see how I do and if you like
+[01:07] listening to these type of stories and
+[01:09] if you like all the latest Path of Exile
+[01:11] 2 content please make sure to hit the
+[01:13] like button the Subscribe button and
+[01:15] that sub notification Bell so you get
+[01:17] all the latest talk of try content also
+[01:19] haven't done it in a while absolutely a
+[01:22] massive thank you to all of my patreon
+[01:24] supporters and my YouTube members you
+[01:27] are all phenomenal now without further
+[01:29] ado let's get into the tale of Diablo I
+[01:32] and Path of Exile 2 and how they have
+[01:34] been developed differently beginning in
+[01:37] their Alpha faces Diablo I was in
+[01:40] progress for quite some time Diablo I
+[01:43] didn't really pan out it launched it had
+[01:46] one expansion and not many content
+[01:48] updates after that it was not a
+[01:51] competitor to Path of Exile 1 in terms
+[01:53] of the amount of content that it
+[01:55] actually brought into the game sure it
+[01:57] probably had phenomenal player numbers
+[01:59] but a lot lot of people sought more from
+[02:01] a Diablo game Q Diablo 4 which was in
+[02:06] development for a long time and had a
+[02:08] lot of different stages to it it had
+[02:11] game directors come and go developers
+[02:13] rise and fall and the game itself went
+[02:16] through many iterations but when it was
+[02:18] finally announced after the Diablo
+[02:20] Immortal Fiasco the developers began
+[02:23] being a lot more open with what systems
+[02:25] were going into the game and how they
+[02:27] were designing items and monsters and
+[02:29] class and the like and when it was
+[02:31] getting super close to that finished
+[02:33] State back in 2023 or a finished state
+[02:36] in the eyes of blizzard blizzard invited
+[02:39] a bunch of Hardcore Diablo players to
+[02:42] test out the game that includes content
+[02:44] creators like Rax and Woody Joe and lots
+[02:47] of people whose names you don't know
+[02:49] because instead of making content they
+[02:50] spent their time absolutely blasting
+[02:52] through Diablo 3 or Diablo I probably
+[02:56] other args as well lizard invited all of
+[02:59] these people to test out the campaign
+[03:01] the end game the feel of the classes and
+[03:03] the items all the different interacting
+[03:06] systems and from what I've heard from
+[03:10] some inside sources and lots and lots of
+[03:13] public knowledge these people the
+[03:15] testers wrote novels on how to improve
+[03:18] the game exactly how to do it they've
+[03:21] been playing Diablo games for a while
+[03:23] they've been talking to people in the
+[03:24] community creating content reading
+[03:27] comments knowing what people enjoyed so
+[03:29] they crafted all of these
+[03:31] recommendations into literal TOS sent it
+[03:34] to blizzard blizzard just ignored it
+[03:38] they moved forward with their vision and
+[03:40] they released Diablo I in the state that
+[03:42] they thought was best now in early 2023
+[03:46] when they had that very closed beta
+[03:49] basically a press weekend everybody
+[03:50] thought the game was in a great state
+[03:52] but some people content creators testers
+[03:55] who had played the alpha knew what was
+[03:57] to come and sure enough when it released
+[03:59] in June of that year people were very
+[04:02] disappointed in all the problems that it
+[04:04] had the lack of endgame the item systems
+[04:07] the classes the balance all that was
+[04:10] broken people didn't enjoy it and for
+[04:13] the past year Diablo I has spent its
+[04:16] time getting into a better State really
+[04:18] clawing its way back into the good
+[04:19] graces of the people as I said at the
+[04:22] start of the video and you know what the
+[04:23] funny thing is a lot of these problems
+[04:26] were pointed out exactly by the testers
+[04:29] they said there are problems with items
+[04:32] you need to build out your endgame to
+[04:34] compete with other arpg today you need
+[04:37] to have bosses the balance is whack the
+[04:39] feel here is poor oh the open world
+[04:42] what's the point and for the past year
+[04:46] they've been addressing all of these
+[04:47] concerns tackling them trying to become
+[04:50] a Titan once more in the industry and
+[04:53] they've done a great job people enjoy
+[04:55] season 4 even if it's not what I enjoy
+[04:58] lots of other people really do like it
+[05:00] and many are excited for Diablo 4 The
+[05:02] Vessel of hatred as well so we'll see
+[05:05] how that goes but now after talking
+[05:08] about Diablo 4 and looking at that
+[05:10] Journey let's take a look at what
+[05:12] grinding gear games have done with Path
+[05:14] of Exile 2's early testing phases and
+[05:17] how they've reacted to feedback in the
+[05:19] leadup to launch GGG has been cooking
+[05:23] path of exil 2 for a long time probably
+[05:25] longer than blizzard cooked Diablo I
+[05:28] however during this time they have
+[05:30] iterated on their Vision in many
+[05:32] different instances they even split out
+[05:35] Path of Exile 2 from Path of Exile 1
+[05:37] turning it into its own game and only
+[05:40] recently has it really been opened to
+[05:42] people outside of grinding gear games
+[05:44] and their immediate family and friends
+[05:46] for testing and even at grinding gear
+[05:49] games itself they were open to changing
+[05:52] their design their philosophies their
+[05:54] vision and reacting to feedback Jonathan
+[05:57] Rogers the game director on Path of
+[05:59] Exile 2 talked about how he played pee2
+[06:01] with his wife or he watched his wife
+[06:03] play and she wouldn't know when her life
+[06:06] was low and she'd end up dying she was
+[06:08] good at the fights she enjoyed it but
+[06:10] she would just die and not use her
+[06:11] flasks because she didn't know that she
+[06:13] was about to fall well so they made
+[06:15] changes based on that now you have a red
+[06:17] outline around your screen it slowly
+[06:19] starts to darken and get red there are
+[06:21] all these subtle cues and design
+[06:23] additions that they've made to respond
+[06:25] to even the most minor pieces of
+[06:27] feedback and now now that other people
+[06:30] are playing Path of Exile 2 first in the
+[06:33] event in March of this year and then
+[06:35] again in June they're making huge design
+[06:38] decisions they're going back on things
+[06:40] that they thought would feel good and
+[06:41] they were wrong about and they're
+[06:43] reacting to community opinions about
+[06:46] other games we mentioned last Epoch
+[06:48] before grinding your games is
+[06:50] implementing sort of a auction house in
+[06:53] Path of Exile too because of the success
+[06:55] of last epoch's trading system and in
+[06:59] the March event when people saw that the
+[07:01] flask system felt horrid it felt like
+[07:04] you were backwards progressing
+[07:05] constantly in June the new build fixed
+[07:08] that entirely and now in the June play
+[07:11] test people are talking about wanting to
+[07:13] dynamically be able to switch between
+[07:14] mouse and keyboard and a controller so
+[07:16] grinding gear games is going to
+[07:18] implement that now there are many other
+[07:20] examples that I can think of and talk
+[07:22] about to do with grinding your games in
+[07:24] the way they react to feedback but I
+[07:25] don't want to make this a three and a
+[07:27] half hour video instead I just want to
+[07:29] get the point across that the way that
+[07:31] blizzard and grinding gear games operate
+[07:33] is very different blizzard even
+[07:36] presented with novels of evidence about
+[07:38] the design of their game being wrong and
+[07:40] not appealing to players will refuse to
+[07:42] change unless the bottom line does not
+[07:45] show case profitability if those average
+[07:48] player numbers drop if those concurrent
+[07:50] users fall away then and only then will
+[07:53] they back up on their decisions or at
+[07:55] least that's what we've seen with Diablo
+[07:56] 4 with Path of Exile 2 which isn't in
+[07:59] Early Access yet the developers are
+[08:01] already pivoting on decisions they've
+[08:03] made based on the feedback of their most
+[08:05] Avid players of the players that speak
+[08:08] for the community like myself Jonathan
+[08:11] Rogers called me the most positive
+[08:13] person in the universe because when I
+[08:15] played Path of Exile 2 in March of this
+[08:17] year I was very open about the fact that
+[08:19] it didn't feel very good it felt janky
+[08:22] it felt like I was always going backward
+[08:24] and I wasn't progressing and that was
+[08:26] mostly due to the flask system and the
+[08:28] fact that I wasn't getting good items
+[08:29] drops so they fixed both they put item
+[08:32] seeds into the game they gave you more
+[08:34] access to support gems and skill gems
+[08:36] they made it so that flasks now refill
+[08:38] when you kill normal monsters again so
+[08:40] you don't always have to go back to that
+[08:41] well it felt so much better in June and
+[08:45] that was a direct result not just of my
+[08:48] feedback even though I do pride myself
+[08:49] in giving some good feedback to Jonathan
+[08:51] and the rest of the team but due to the
+[08:53] feedback of many other players and that
+[08:56] is such a stark difference and it's
+[08:57] great to see now when we get our hands
+[09:00] on Early Access later this year when
+[09:02] Legions of us are playing in Ray class
+[09:05] 2.0 playing as a druid or a mercenary or
+[09:08] a Huntress and we're giving our feedback
+[09:11] on the skill gems on the unique items on
+[09:13] how the endgame system feels in poe2 I'm
+[09:16] confident that grinding gear games is
+[09:18] not going to ignore our feedback they're
+[09:20] going to Pivot they're going to take it
+[09:22] in stride and they are going to make
+[09:24] positive changes for the future of Path
+[09:26] of Exile 2 truly though whatever game
+[09:28] you enjoy whether it's diablo I whether
+[09:30] it's Path of Exile 2 or some other game
+[09:32] out there it's good that right now
+[09:34] developers seem to be reacting to the
+[09:36] feedback of the community because even
+[09:38] though a lot of the times we think we
+[09:40] want something and we really don't
+[09:42] sometimes we are right and when the
+[09:44] developers can sus out exactly when we
+[09:46] are correct well it feels so darn good
+[09:51] and make sure you watch this video right
+[09:53] here in which I talk about the pros and
+[09:55] cons of playing Path of Exile 1 before
+[09:57] Path of Exile 2 releases later this year
+[10:00] anyways that's all for this video
+[10:02] takakura exiles

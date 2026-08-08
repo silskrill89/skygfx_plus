@@ -1,0 +1,36 @@
+{
+  "video_id": "5Ua-h1pg6yM",
+  "title": "Hierarchal radiance cascades GI experiment",
+  "channel": "Alexander Sannikov",
+  "channel_id": "UCly0QRJAaJ2UGSGycOQoOdA",
+  "upload_date": "20221028",
+  "duration": 71,
+  "view_count": 19655,
+  "like_count": 407,
+  "tags": [
+    "global illumination",
+    "vulkan",
+    "graphics"
+  ],
+  "categories": [
+    "Science & Technology"
+  ],
+  "chapters": [],
+  "has_manual_subs": false,
+  "has_auto_subs": true,
+  "subtitles_available": [],
+  "auto_subtitles_available": [
+    "ab",
+    "aa",
+    "af",
+    "ak",
+    "sq",
+    "am",
+    "ar",
+    "hy",
+    "as",
+    "ay"
+  ],
+  "desc_timestamps": [],
+  "description_preview": "This experiment is a continuation of my previous 2d GI algorithm, now expanded to 3d.\n\nIn a real-world application one would spread cascade calculation over multiple frames to achieve much higher performance, but for demonstration purposes I'm calculating GI every frame from scratch without reprojecting or storing any data.\n\nThis implementation works in world-space voxels that I showcase around 0:15. The scene is assumed to be fully dynamic and is re-voxelized every frame from scratch.\n\nThis alg"
+}

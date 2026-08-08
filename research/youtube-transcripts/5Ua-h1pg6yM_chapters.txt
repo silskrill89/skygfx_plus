@@ -1,0 +1,17 @@
+# Hierarchal radiance cascades GI experiment
+Channel: Alexander Sannikov
+Duration: 01:11
+URL: https://www.youtube.com/watch?v=5Ua-h1pg6yM
+
+## Description
+This experiment is a continuation of my previous 2d GI algorithm, now expanded to 3d.
+
+In a real-world application one would spread cascade calculation over multiple frames to achieve much higher performance, but for demonstration purposes I'm calculating GI every frame from scratch without reprojecting or storing any data.
+
+This implementation works in world-space voxels that I showcase around 0:15. The scene is assumed to be fully dynamic and is re-voxelized every frame from scratch.
+
+This algorithm by design produces lighting that is noise-free, but the downside is that getting higher frequency lighting information is more expensive, that's why it struggles with contact shadows. This can be in theory counteracted with a short-range screenspace GI counterpart.
+
+## Subtitles
+Manual: No
+Auto-generated: Yes

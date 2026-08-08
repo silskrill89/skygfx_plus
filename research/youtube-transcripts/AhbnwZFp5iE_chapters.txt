@@ -1,0 +1,12 @@
+# Polygonal Radiance Cascades
+Channel: Alexander Sannikov
+Duration: 00:53
+URL: https://www.youtube.com/watch?v=AhbnwZFp5iE
+
+## Description
+A new flavour of radiance cascades capable of producing aliasing-free light from a single pixel light source. You can play with its source in your browser:
+https://radiance-cascades.github.io/LegitScriptEditor/?gh=Raikiri/LegitCascades/PolygonalHRC45.ls&rev=master
+
+## Subtitles
+Manual: No
+Auto-generated: No

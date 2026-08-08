@@ -1,0 +1,1621 @@
+# Transcript: GOee6lcEbWg
+# Fetched: 2026-08-07T06:22:45.524957
+# Entries: 1616
+# Duration: 6599s
+
+[00:03] hi my name is justin petri and i work at
+[00:05] sucker punch productions as a lead
+[00:06] rendering engineer i'm honored and
+[00:08] excited to be talking to you today
+[00:11] about some of the techniques that we use
+[00:12] to create a real-time samurai cinema
+[00:14] experience in ghost of sushima
+[00:16] if you're not familiar with sucker punch
+[00:18] we've been a part of sony interactive
+[00:19] entertainment since 2011
+[00:21] and are located in bellevue
+[00:23] washington near seattle
+[00:25] during the development of ghost we
+[00:26] reached a peak of 160 people working in
+[00:29] the studio and our previous games
+[00:31] include the sly cooper series as well as
+[00:34] the infamous series of games
+[00:36] last summer we released gusta sushima
+[00:38] for the playstation 4
+[00:40] a free co-op multiplayer expansion
+[00:42] followed in the fall along with 60 fps
+[00:45] support when playing on the ps5 in
+[00:46] backwards compatibility mode
+[00:50] ghost is an open world action adventure
+[00:52] set in 13th century feudal japan
+[00:54] in which you take on the role of samurai
+[00:56] jin sakai the lone survivor of the
+[00:58] mongol invasion of the island of
+[01:00] tsushima
+[01:01] as he fights to liberate his home
+[01:05] before launching into my material i
+[01:06] wanted to plug some of the other talks
+[01:08] that may be relevant to some of you
+[01:10] at last year's siggraph i gave a talk as
+[01:12] part of the physically based shading
+[01:13] course regarding some of the shading
+[01:15] research that we did for ghost
+[01:17] there were several talks of gdc this
+[01:19] year
+[01:19] eric willab gave a talk about procedural
+[01:21] grass
+[01:22] matthew pullman gave a talk discussing
+[01:24] world building and rendering
+[01:26] bill rockenbeck talked about wind and
+[01:28] cloth
+[01:29] and adrian bentley discussed how we got
+[01:31] the game to load so quickly among other
+[01:33] things
+[01:36] our goals with ghost included what we
+[01:38] called the time machine we wanted to
+[01:40] immerse players in our version of
+[01:41] tsushima from 1274.
+[01:44] this meant creating a large dynamic open
+[01:46] world much much larger than our previous
+[01:48] games
+[01:49] that was breathtakingly beautiful and
+[01:50] felt alive
+[01:52] it also meant creating a dynamic weather
+[01:54] and continuous time of day system which
+[01:56] we hadn't done before
+[01:58] we also wanted to recreate the style of
+[02:00] classic samurai cinema
+[02:02] ghost even has a kurosawa mode in honor
+[02:04] of the legendary filmmaker
+[02:07] which meant that we needed dramatic
+[02:08] lighting biting wind and expressive
+[02:10] skies and atmospherics
+[02:14] now i'll talk a little bit of about the
+[02:15] lighting in ghost our art direction
+[02:17] called for stylized realism so we
+[02:19] weren't aiming for photorealism on this
+[02:20] project
+[02:22] our lighting models are physically based
+[02:24] however they're energy conserving they
+[02:25] use the ggx specular and df with
+[02:27] optional anisotropy they use the smith
+[02:30] visibility function and slick fresnel
+[02:32] approximation
+[02:33] diffuse lighting is lamborghini with
+[02:35] optional energy conserving translucency
+[02:37] and fuzziness models
+[02:39] lights are authored using physical units
+[02:40] and we support energy conserving area
+[02:43] lights
+[02:44] our materials are authored using
+[02:46] physically plausible parameters with
+[02:48] some photogrammetry this allowed our
+[02:50] materials to respond to light in a
+[02:51] consistent way
+[02:54] our indirect lighting consists of
+[02:55] dynamically updated spherical harmonics
+[02:57] and reflection probes based on the
+[02:59] current sky and directional light plus
+[03:01] local light transfer data
+[03:05] speaking of skies we used a physically
+[03:07] based multi-scattering atmospheric
+[03:09] scattering model for all of our
+[03:10] atmospheric lighting including clouds
+[03:12] haze and particles
+[03:15] our scenes are rendered in hdr and tone
+[03:17] mapped using a set of custom techniques
+[03:19] that were necessary to achieve our
+[03:20] desired look
+[03:23] since our goal was not photorealism we
+[03:25] do allow our artists to deviate from
+[03:27] physical correctness at the lighting
+[03:28] stage using a set of knobs that allow
+[03:30] them to globally adjust very various
+[03:32] lighting parameters such as ambient
+[03:34] diffuse and specular balance sky
+[03:36] brightness etc
+[03:38] this is
+[03:39] typically done at the granularity of the
+[03:41] weather and time of day states in our
+[03:43] weather system
+[03:45] in this talk i'll elaborate on the three
+[03:47] topics highlighted here
+[03:50] so this talk will be divided into three
+[03:52] sections
+[03:53] in the first i'll discuss our indirect
+[03:55] lighting techniques
+[03:57] first with regards to diffuse lighting
+[03:59] followed by indirect specular lighting
+[04:03] i'll then discuss our approach to
+[04:04] atmospheric volumetric lighting which
+[04:07] was used to lighter skies clouds
+[04:09] volumetric haze and particles
+[04:13] finally i'll present our tone mapping
+[04:14] techniques
+[04:15] including our local tone mapping
+[04:17] operator
+[04:18] our color grading approach using white
+[04:20] balance and a custom tone mapping color
+[04:22] space
+[04:24] as well as our simulation of the
+[04:25] low-light behavior of the human visual
+[04:27] system to help render convincing
+[04:29] nighttime scenes
+[04:32] now let's talk about indirect lighting
+[04:36] we'll start with diffuse lighting in
+[04:38] infamous second sun we used quadratic
+[04:40] irradiance probes arranged in
+[04:42] tetrahedral meshes to provide the
+[04:44] indirect diffuse lighting for the entire
+[04:46] world
+[04:47] you can see adrian bentley's gdc 2014
+[04:49] talk for more details
+[04:53] this worked quite well for our
+[04:54] requirements that is static time of day
+[04:57] and weather with changes only happening
+[04:58] between
+[04:59] behind loads
+[05:01] here's the same scene without local sh
+[05:03] probes
+[05:08] in ghost we had to light a much larger
+[05:10] world and we had to deal with dynamic
+[05:12] time of day and weather for the first
+[05:13] time so we had to make some changes to
+[05:15] our approach
+[05:17] to cover the island we used a regular
+[05:19] grid of probes arranged at 12.5 meter
+[05:22] intervals along the ground and at
+[05:24] elevations of 1.5 10 and 30 meters above
+[05:27] ground level
+[05:30] here's a 24 hour time of day cycle
+[05:32] showing the absolute values of the 9 sh
+[05:34] bands over the entire island
+[05:36] the quick changes are at are happening
+[05:38] at sunrise and sunset
+[05:41] the spacing of probes was too coarse to
+[05:43] accurately light interiors so we used
+[05:46] tetrahedral meshes or tet meshes in
+[05:48] places such as towns villages farmsteads
+[05:51] etc
+[05:52] these were streamed as separate units
+[05:54] and so the tech meshes were streamed
+[05:56] along with them
+[05:58] when loaded the tap meshes override the
+[06:00] grid and they blend at the boundary
+[06:05] in the foreground is the golden temple
+[06:06] location from the game
+[06:08] and here you can see some of its technic
+[06:12] this buffer shows the diffuse indirect
+[06:14] lighting
+[06:15] and as you can see there's a smooth
+[06:17] transition between the regular grid
+[06:18] lighting and the tet mesh lighting
+[06:23] because of the game's dynamic time of
+[06:24] day cycle and dynamic weather
+[06:27] we need to update our irradiance probes
+[06:28] at runtime
+[06:30] so offline instead of capturing
+[06:32] irradiance
+[06:34] we capture s the sh representation of
+[06:36] sky visibility
+[06:40] now runtime we compute the sh projection
+[06:42] of the sky
+[06:43] and then update
+[06:45] the probes by multiplying the sky
+[06:46] luminance by the sky visibility
+[06:50] we then convolve the result with the
+[06:52] cosine lobe as you do with conventional
+[06:54] irradiance probes the result is used
+[06:57] just like ordinary irradiance pros for
+[06:59] the purposes of lighting
+[07:02] this approach works but it gives direct
+[07:04] skylighting only
+[07:06] that is there's no bounce light from the
+[07:07] environment
+[07:09] in infamous we'd experiment with
+[07:11] radiance transfer matrices which worked
+[07:13] well for small worlds
+[07:14] but since they required at least nine
+[07:16] times the storage they would have taken
+[07:18] too much memory
+[07:21] and also taken too long to capture which
+[07:24] is an important consideration
+[07:27] so we opted for an approximation that's
+[07:29] valid if the skylight is approximately
+[07:31] constant over the hemisphere
+[07:33] we captured bounce light by effectively
+[07:35] lighting the world with a uniform white
+[07:37] sky using the sky visibility sh
+[07:39] functions
+[07:41] we then project this radiance to sh to
+[07:44] capture bounce sky visibility
+[07:47] at runtime we multiply the sky the
+[07:49] bounce sky visibility by the average sky
+[07:51] color and add that to the previous
+[07:53] result
+[07:56] okay let's look at some examples
+[07:58] here we have a scene
+[08:00] that's lit
+[08:01] with the sky's sh representation only
+[08:04] that is there's no sky visibility
+[08:05] information used at all
+[08:08] this is what the direct sky visibility
+[08:10] data looks like
+[08:12] and the bounce sky visibility data looks
+[08:14] like this
+[08:16] the yellow color comes from the bright
+[08:17] yellow leaves of the trees surrounding
+[08:19] the temple and the fallen leaves on the
+[08:21] ground
+[08:23] here again is the scene without using
+[08:25] sky visibility data
+[08:27] and here's what we get if we use the
+[08:28] direct sky visibility
+[08:33] adding the bounce sky visibility adds
+[08:35] some yellow bounce light
+[08:39] however bouncing skylighting by itself
+[08:41] is far from sufficient
+[08:43] it's in clear weather like in the
+[08:45] previous example most of the bounce
+[08:46] light comes from the sun so we needed a
+[08:48] way to add this to our model
+[08:51] we wanted to avoid having to store
+[08:52] additional data so we uh
+[08:54] asked ourselves if we could make use of
+[08:56] the bounce sky visibility data
+[08:58] our idea was to consider a small fixed
+[09:00] sense fixed set of bounce
+[09:03] bounce directions this gave better
+[09:05] results than assuming that bounce light
+[09:06] was uniformly distributed over the
+[09:08] sphere
+[09:10] by multiplying the sh representation of
+[09:12] these bounce directions times the bounce
+[09:14] sky visibility sh
+[09:16] and then by the sun or moon and radians
+[09:18] we get an sh representation of the
+[09:20] bounced light
+[09:22] this makes the rather large assumption
+[09:24] that the cosine weighted average sky
+[09:26] visibility of the surfaces captured by
+[09:28] by the bounce sky visibility
+[09:30] is a good good estimate of their
+[09:32] shadowing
+[09:34] and there are many instances where this
+[09:36] isn't the case but it proved to be a
+[09:37] good enough approximation for our
+[09:39] purposes
+[09:42] okay so what bounce directions did we
+[09:44] use
+[09:45] we observed that in practice most of the
+[09:47] bounce light came from either horizontal
+[09:48] or vertical surfaces so we used
+[09:51] imaginary ground planes
+[09:53] and wall planes
+[09:54] we reflected the light in these planes
+[09:57] it turns out that the vectors rg and rw
+[09:59] point in exactly opposite directions
+[10:02] we project the negated reflected light
+[10:04] directions into sh
+[10:07] and here's what that looks like after
+[10:08] de-ringing to make sure that they're
+[10:10] positive everywhere
+[10:12] then we scaled it by the light color
+[10:14] after applying cloud shadowing which is
+[10:17] dynamic so it isn't captured by the sky
+[10:19] visibility
+[10:20] and we multiply this by the bounced sky
+[10:23] sh representation and add it to the
+[10:25] previous result
+[10:28] here's a scene with no sun bounce
+[10:31] and here's the same scene with the sun
+[10:32] bounce added as you can see it makes
+[10:34] quite a dramatic difference
+[10:40] here's another example this time looking
+[10:42] inside the temple
+[10:44] here we're not using any sky visibility
+[10:46] so the lighting is very flat
+[10:49] here's the direct sky visibility data
+[10:51] and the bounce sky visibility data
+[10:54] here again is the temple without sky
+[10:56] visibility
+[10:57] and here's what we get if we use the
+[10:58] direct sky visibility only
+[11:03] i think bounce skylight brightens things
+[11:05] up a little bit relative to the outside
+[11:08] while adding bounce sunlight warms it up
+[11:10] nicely
+[11:16] if you've worked with sh you know that
+[11:17] quadratic sh can't represent high
+[11:19] frequency data very well
+[11:21] when multiplying quadratic sh functions
+[11:23] together
+[11:25] this gives a degree 4sh result but to
+[11:28] keep data sizes reasonable we truncated
+[11:30] the higher order terms and only store up
+[11:32] to degree 2.
+[11:34] because of this our lighting looked a
+[11:35] little flat
+[11:37] we resorted to another heuristic to
+[11:39] improve this we lurk towards the sh
+[11:41] projection of the delta function in the
+[11:43] direction of the linear sh maximum
+[11:46] which was inexpensive to compute
+[11:48] we did this separately for the direct
+[11:50] and bounce portions of the irradiance
+[11:52] probes and in the end we used a factor
+[11:54] of 25 throughout the game
+[11:57] so here's a scene without directionality
+[11:59] boost applied
+[12:00] and here's the same scene with the 25
+[12:02] boost
+[12:03] as you can see it helps give added
+[12:05] definition to the normal maps
+[12:10] and if you've worked with sh you
+[12:11] probably also know that negative lobes
+[12:13] are are also a problem
+[12:15] in this context de-ringing
+[12:17] d-ringing is the process of modifying
+[12:19] the sh representation to ensure that
+[12:21] it's positive
+[12:22] everywhere initially we tried applying
+[12:25] an extra fixed de-ringing factor to our
+[12:27] sky visibility but that reduced the
+[12:29] directionality and fidelity of the
+[12:31] probes
+[12:32] instead we de-ring sky luminance and the
+[12:35] final radiance probes at runtime on the
+[12:37] gpu
+[12:38] we used this paper by peter pike's loan
+[12:41] and in practice we found that a single
+[12:43] new step was sufficient for finding the
+[12:45] sh minimum
+[12:46] we used a binary search tree of depth 3
+[12:48] to find
+[12:49] the minimum d ringing factor necessary
+[12:51] to ensure that the sh was positive
+[12:53] everywhere
+[12:56] so the paper presents a new windowing
+[12:58] function that gave sharper results than
+[13:00] the old windowing function we were using
+[13:02] in infamous
+[13:04] as you can see here where we're
+[13:05] windowing the sh representation of a
+[13:07] delta function
+[13:09] the red curve is using the old windowing
+[13:11] function while the blue curve is using
+[13:12] the new one
+[13:16] here's a scene that exhibits negative
+[13:17] lobes near the
+[13:18] window which is fixed by runtime
+[13:21] de-ringing
+[13:22] note that the lighting in the rest of
+[13:23] the scene doesn't change
+[13:25] since we de-ring each probe
+[13:27] independently
+[13:31] light leaking arises when a brightly lit
+[13:33] irradiance probe leaks through an
+[13:34] obstruction such as a wall or roof
+[13:37] causing a naturally bright lighting on
+[13:39] the other side
+[13:40] this was a problem that we managed to
+[13:42] work around in infamous mainly because
+[13:44] we didn't have many interiors and
+[13:46] problematic situations could be fixed by
+[13:48] placing extra probes in thick wall in
+[13:50] the thick walls
+[13:52] in ghost however there were lots of
+[13:53] interiors and they all had very thin
+[13:55] walls due to the architecture of the
+[13:58] period
+[13:59] we tried a variety of solutions to
+[14:01] address this problem
+[14:03] we added cones to each probe to indicate
+[14:05] which neighboring probes were occluded
+[14:07] and should therefore not be sampled
+[14:10] we tried adding occlusion planes to
+[14:11] probes to represent walls and other
+[14:13] obstructions
+[14:15] and we tried low-res shadow maps
+[14:18] none of these approaches solved the
+[14:19] problem to our satisfaction and they
+[14:21] also had
+[14:22] very high performance overhead
+[14:27] we finally found a solution that was
+[14:29] workable in terms of runtime overhead
+[14:31] and extra authoring burden
+[14:33] first we classified probes as being
+[14:34] either interior or exterior
+[14:37] and we then assign surfaces an interior
+[14:39] mask value w which defaults to 0.5 the
+[14:43] value could be authored either as a
+[14:44] shader parameter
+[14:46] a vertex color channel or applied
+[14:48] separately as a deferred decal
+[14:51] to perform the lighting we calculate the
+[14:53] tetrahedral barycentric coordinates as
+[14:54] normal
+[14:56] but we then multiply each one by w if
+[14:58] the coordinate belongs to an interior
+[15:00] probe
+[15:01] or by one minus w if it belongs to an
+[15:03] exterior probe
+[15:06] we then renormalize the berry centrics
+[15:08] and compute the weighted irradiance
+[15:10] blend as usual in the event that the
+[15:12] weights are zero
+[15:14] we fall back to the original
+[15:15] berrycentrics
+[15:18] here's an interior scene that without
+[15:20] using
+[15:21] the interior mask weights
+[15:23] the back wall is brighter than it should
+[15:25] be due to light leaking
+[15:28] and applying the interior mask fixes the
+[15:29] light leaking issue
+[15:33] and this here shows the value of the
+[15:34] interior mask for the scene
+[15:38] here's another example first without the
+[15:40] interior mask
+[15:43] and here the
+[15:44] here with the mask applied
+[15:46] note how the light leaking in the upper
+[15:48] part of the back wall is fixed
+[15:54] okay let's move to
+[15:55] let's move on to indirect specular
+[15:57] lighting
+[15:58] infamous second son used 230 static
+[16:00] reflection probes
+[16:02] which was already pushing it memory wise
+[16:05] we ended up using 235 in sushima but
+[16:08] because of the extra data required for
+[16:09] relighting which was 1.5 times the size
+[16:12] of the compressed lit probes
+[16:14] we switched to streaming them on demand
+[16:18] we were able to reduce the number of
+[16:19] probes needed by adding per biome
+[16:22] default probes
+[16:24] as well as instancing many interior
+[16:26] probes for example for many smaller
+[16:28] houses
+[16:30] we also added support for one level of
+[16:32] nesting due to the many interiors in the
+[16:34] game
+[16:35] and in total we supported up to 128
+[16:37] relit probes at any one time
+[16:42] so we captured the following data for
+[16:44] relighting
+[16:46] an albedo cube map compressed to bc1 and
+[16:49] a normal and depth cube map compressed
+[16:50] with bc6h
+[16:53] we use the red and green channels to
+[16:55] store octahedral normals
+[16:57] and we store hyperbolic depth in the
+[16:59] blue channel
+[17:02] by the way all of our qmaps had size
+[17:04] 256.
+[17:07] to read lighter probes we pick one per
+[17:10] frame and update it in async compute
+[17:13] since since the probe's volumes aren't
+[17:14] necessarily covered by our cascaded
+[17:16] shadow maps we used our far shadow map
+[17:19] atlas
+[17:20] which has a 128 by 128 map per 200 meter
+[17:25] tile
+[17:27] for performance reasons we use a single
+[17:29] sh sample for indirect lighting and we
+[17:32] also use the sample converted to
+[17:34] luminance for reflection probe luminance
+[17:36] normalization
+[17:38] this ensures that a probe used at its
+[17:40] capture location will have the expected
+[17:43] luminance and it avoids having to
+[17:44] project the probe to sh
+[17:48] we pre-filter the probes using filtered
+[17:50] important sampling using the ggx ndf
+[17:54] and compress them to bc6h using kristoff
+[17:56] narkowicz's excellent open source
+[17:58] compressor
+[18:01] this was very helpful in reducing the
+[18:03] memory footprint as well as preventing
+[18:05] cache thrashing on surfaces like water
+[18:07] which
+[18:08] have high gloss and
+[18:10] very
+[18:11] highly varying normal maps
+[18:16] one problem we ran into was that our
+[18:17] interior probes weren't correctly
+[18:19] shadowed
+[18:20] because our far shadow maps weren't up
+[18:21] to the task and that's this was partly
+[18:23] due to their low resolution and partly
+[18:25] due to the lotting of many buildings
+[18:28] when rendered
+[18:29] to the far shadow maps
+[18:31] we realized that our cube maps contained
+[18:33] a lot of occlusion information since
+[18:35] they store depth so we use that for
+[18:37] shadowing
+[18:39] when relighting a textile we trace back
+[18:41] towards the light
+[18:42] to find the intersection with the cube
+[18:44] map volume
+[18:45] and sample the depth from the cube map
+[18:47] at that intersection
+[18:49] we treat any sufficiently small value as
+[18:51] being unoccluded since we're using one
+[18:53] minus z depth
+[18:56] and to help soften the shadows we sample
+[18:58] in a four by foot four footprint and
+[19:00] apply pcf filtering
+[19:04] so the techniques fairly crude and we
+[19:06] can improve the accuracy by taking
+[19:07] multiple depth samples along the ray but
+[19:09] this version worked well enough for our
+[19:11] purposes
+[19:12] let's step through a few sample arrays
+[19:13] so you can get a feel for the the
+[19:15] technique
+[19:16] here's our first ray
+[19:18] and it hit something
+[19:19] so that text was shadowed
+[19:22] our next ray doesn't hit anything so
+[19:25] it's unshadowed
+[19:28] with this ray we can see some of the
+[19:29] problems with the approach since it's
+[19:31] clearly should be shadowed
+[19:33] but according to a step sample it is not
+[19:37] finally this ray thinks it hits
+[19:39] something
+[19:41] so it's shadowed
+[19:42] though if we kept marching beyond the
+[19:43] volume spans
+[19:45] we perhaps find it to be unshadowed
+[19:49] here's a scene where the probes aren't
+[19:51] using cube map shadow tracing
+[19:54] and this is the same scene with it
+[19:55] enabled
+[19:59] as you can see it prevents much of the
+[20:00] glowing visible in the previous version
+[20:03] and
+[20:04] the floor and walls in the reflection
+[20:05] closely match the scene
+[20:10] when lighting with our reflection probes
+[20:12] our artists complain that the backsides
+[20:14] of normal map bumps
+[20:16] seem to too bright since reflected light
+[20:18] should be partially occluded by the
+[20:19] macro geometry
+[20:21] so we developed what we called a horizon
+[20:23] occlusion term to account for the tilt
+[20:25] of the normal map normal and m relative
+[20:27] to the vertex normal and v
+[20:30] the input space to this problem is four
+[20:32] dimensional one dimension for the
+[20:33] surface roughness one for the tilt of
+[20:36] the normal map normal relative to the
+[20:37] vertex normal and two for the view
+[20:39] vector orientation
+[20:42] we wanted something that was fast while
+[20:43] giving plausible results so we developed
+[20:45] this
+[20:46] approximation
+[20:48] first we approximate the reflected rays
+[20:50] with the cone using the following
+[20:52] relation
+[20:53] for a ggx roughness alpha the cone half
+[20:55] angle theta c containing the fraction u
+[20:58] e
+[20:59] of the energy is given by this equation
+[21:01] we used a value of 0.95 for ue and we
+[21:05] fit a curve to make computing the cone
+[21:07] angle less expensive
+[21:10] so to simplify the problem
+[21:12] we first project the normal map normal
+[21:14] and m into the plane formed by the
+[21:16] reflection vector and the vertex normal
+[21:19] we'll call this projected normal np
+[21:23] then
+[21:24] we let theta p be the angle between this
+[21:26] projected normal and the vertex normal
+[21:28] and theta r be the tilt of the
+[21:30] reflection vector
+[21:33] we define theta o to be the angle that
+[21:35] the cone dips below the surface
+[21:38] and we calculate it as follows
+[21:40] since the brdf already accounts for
+[21:42] occlusion when theta p is zero
+[21:45] and since a one degree change in theta p
+[21:47] results in a two degree change in theta
+[21:49] r we clamp to two times theta p so that
+[21:52] we only count extra occlusion
+[21:55] we then compute the final occlusion
+[21:57] amount by using the following
+[21:58] approximate formula
+[21:59] note that we never exceed ue which is
+[22:01] the fraction of the energy in the cone
+[22:04] or 95
+[22:08] here's the riverbed here's here's a
+[22:10] riverbed rendered with parallax
+[22:11] occlusion mapping but without horizon
+[22:13] occlusion
+[22:14] and here it is with horizon occlusion
+[22:16] enabled
+[22:17] note how the backsides of the rocks no
+[22:20] longer glow unrealistically
+[22:26] we apply parallax correction to our
+[22:28] reflection probes that is we model the
+[22:30] reflected environment using an authored
+[22:32] bounding box and compute the
+[22:34] intersection of the reflection vector
+[22:35] with that box which gives us the cube
+[22:37] map sample location
+[22:39] in the diagram on the right the cube map
+[22:42] was sampled from the point of view of
+[22:43] the red camera
+[22:45] while the current view is represented by
+[22:46] the blue eye
+[22:48] let's say that the eye is d e units away
+[22:50] from the sample location while the
+[22:52] camera is dc units away
+[22:54] we can reuse the formula we saw earlier
+[22:56] relating the tangent of the cone angle
+[22:58] to roughness for a given fraction of
+[23:00] energy
+[23:02] dividing the expressions for the two
+[23:03] views cancels out everything but the
+[23:05] roughness terms on the right that is
+[23:07] alpha e over alpha c
+[23:09] we then observe that this is
+[23:11] approximately equal to the ratio of the
+[23:13] distances
+[23:14] so we adjust
+[23:15] the roughness by this factor when
+[23:17] sampling from the cube map
+[23:20] here's a scene without parallax
+[23:21] compensation
+[23:23] the reflection of the
+[23:25] shoji screen in the slightly rough
+[23:27] chrome sphere is blurrier than it should
+[23:29] be
+[23:31] applying parallax compensation fixes
+[23:33] this issue
+[23:38] i'll now discuss some of the techniques
+[23:40] that we use to lighter skies clouds haze
+[23:42] and fog
+[23:46] as is pretty common these days we use
+[23:48] precomputed 3d lookup tables to light
+[23:50] our skies
+[23:51] however we also use them to light the
+[23:53] atmospheric phenomena in the game
+[23:55] that is the clouds volumetric haze and
+[23:57] fog particles
+[24:00] the luts used for sky
+[24:02] stored rayleigh and me in scattering
+[24:04] divided by their respective phase
+[24:05] functions
+[24:07] index by altitude directional light
+[24:09] polar angle and view polar angle
+[24:12] the luts include multiple scattering
+[24:14] bounces
+[24:15] and are based on papers by brunothon
+[24:17] elec and yusof
+[24:20] since the 3d luts do not account for the
+[24:23] azimuthal angle we applied an analytic
+[24:25] earth shadow term at runtime
+[24:29] we ran into precision issues especially
+[24:32] at the horizon when trying to use the
+[24:34]  to light clouds haze and fog
+[24:36] so we added parallel luts indexed in the
+[24:39] same way that store the scattered
+[24:41] rayleigh and me light at each point
+[24:43] these are the values prior to
+[24:45] multiplying by the local density and
+[24:47] divided by the phase functions as before
+[24:50] and this has units of
+[24:52] lux and can be thought of as a kind of
+[24:54] average irradiance at each point when
+[24:56] using these irradiance slots for
+[24:58] lighting we apply shadowing to the mia
+[25:00] radiance and ao to the rayleigh radiance
+[25:04] this is because me scattering is
+[25:05] strongly forward scattering
+[25:07] while rayleigh scattering is much more
+[25:09] uniform
+[25:11] volumetric k samples the average sky
+[25:13] visibility from the indirect lighting
+[25:15] data and use that for ao
+[25:17] supplemented by the rain shadow map to
+[25:19] prevent overly bright haze and interiors
+[25:24] clouds render to a paraboloid texture in
+[25:26] rgb11f format
+[25:28] where the red channel stores the me
+[25:30] scattering which is then multiplied by
+[25:31] the me radians from the lut
+[25:34] the green channel
+[25:35] stores rayleigh scattering which is then
+[25:37] multiplied by the rayleigh irradiance
+[25:38] from the light
+[25:40] the blue channel stores the
+[25:41] transmittance
+[25:44] this is the scene that corresponds to
+[25:46] this cloud map
+[25:47] and here i've zoomed into the part of
+[25:48] the cloud map that's visible
+[25:50] in the center of the scene
+[25:52] the benefit of using
+[25:53] these luts for lighting is that it
+[25:55] allows us to use
+[25:57] to include multiple scattering in our
+[25:59] clouds haze and fog lighting
+[26:01] so here's a scene without multiple
+[26:02] scattering
+[26:04] and here's the same scene after
+[26:06] including multiple scattering
+[26:08] as you can see it has a big impact on
+[26:09] the look of our scene
+[26:11] especially at sunrise and sunset
+[26:18] now for some implementation details
+[26:20] each frame we re-sample the 3d luts into
+[26:22] 2d using the current sun and moon angles
+[26:26] and we use cubic up sampling which
+[26:27] avoids aliasing issues at sunrise and
+[26:29] sunset
+[26:30] and it also makes the
+[26:32] lot look ups cheaper
+[26:36] since atmospheric scattering drives most
+[26:38] of our world lighting it was important
+[26:40] for us to try to get rayleigh scattering
+[26:41] to be as accurate as possible
+[26:43] we found a blog post by kristen schuler
+[26:45] that discussed using a custom color
+[26:47] space to approximate spectral rendering
+[26:49] so we decided to give that a try
+[26:52] as in the blog post we used spectral
+[26:54] primaries for the color space
+[26:56] we minimized the error in rayleigh
+[26:58] transmittance over a range of sun angles
+[27:00] waiting shallow angles corresponding to
+[27:02] sunrise and sunset more heavily
+[27:05] the optimization consisted of two steps
+[27:08] first we found three really three
+[27:11] wavelengths long medium and short for
+[27:13] our spectral primaries that minimized
+[27:14] this error using point sampled rayleigh
+[27:16] scattering coefficients at these
+[27:18] wavelengths
+[27:20] we then fixed the primaries and allowed
+[27:22] the rayleigh coefficients to vary
+[27:24] refining the results we found in step
+[27:25] one
+[27:28] this shows the comparison of spectral
+[27:30] rayleigh scattering versus
+[27:32] versus scattering computed in rec 709
+[27:35] rgb space
+[27:36] with printed on scattering coefficients
+[27:39] the left shows the transmittance while
+[27:41] the right half shows the out scattering
+[27:44] as you can see there's a
+[27:46] noticeable difference in both the
+[27:48] absolute value of the transmittance as
+[27:50] well as the hue
+[27:53] here's a comparison using our lms color
+[27:55] space and scattering coefficients
+[27:57] the results very closely match those of
+[27:59] spectral rendering
+[28:04] here's a scene using the rec709 color
+[28:06] space with the brunoton08 coefficients
+[28:10] and here's the same scene using the new
+[28:12] lms color space and scattering
+[28:13] coefficients the difference is most
+[28:15] pronounced at sunrise and sunset and
+[28:17] helps to reduce the greenish hue that
+[28:19] that we sometimes noticed
+[28:21] with the old color space
+[28:26] here are the details for the new color
+[28:28] space
+[28:29] note that we used the same d65 white
+[28:31] point as rec 709
+[28:38] i'll now talk a little bit more about
+[28:39] cloud rendering
+[28:40] we built on the ideas presented by andew
+[28:43] andrew schneider in this course in 2015
+[28:45] and by sebastian hiller in the physical
+[28:48] based shading course in 2016.
+[28:52] as i mentioned earlier we rendered our
+[28:54] clouds to a paraboloid map that covers
+[28:56] the entire hemisphere
+[28:58] for performance reasons it had to be
+[29:00] fairly low resolution only 768x768
+[29:05] we used three of these textures
+[29:07] two that we blend between while
+[29:09] scrolling in the direction of movement
+[29:11] and one for rendering
+[29:14] time sliced over 60 frames to keep the
+[29:16] overhead as low as possible
+[29:19] because of the low resolution we needed
+[29:21] to reduce the cloud density in areas
+[29:23] where the cloud position position
+[29:24] changed quickly in uv space
+[29:28] to do this we calculate
+[29:30] the derivatives of the radial cloud
+[29:31] position with respect to the radial
+[29:33] texture coordinate
+[29:35] and the angular cloud position with
+[29:36] respect to the angular texture
+[29:38] coordinate working in polar coordinates
+[29:41] allowed us to find a relatively simple
+[29:43] analytical expression for these
+[29:44] derivatives
+[29:47] we then reduced the cloud density when
+[29:49] the maximum of these derivatives was
+[29:50] high
+[29:53] so here are clouds with density
+[29:55] anti-aliasing turned off
+[29:58] and here's what they look like with
+[29:59] density anti-aliasing enabled note that
+[30:02] the noisy sampling artifacts
+[30:04] and pixelated edges all disappear
+[30:11] the design of our phase function was
+[30:12] very important in getting our clouds to
+[30:14] look right we use the henny greenstein
+[30:16] phase function where the value of the
+[30:18] asymmetry parameter g depends on how
+[30:20] deep we are in the cloud the idea is
+[30:22] that forward forward biased single
+[30:25] scattering predominates in low density
+[30:27] wispy parts of the cloud
+[30:29] while multiple scattering becomes more
+[30:31] important as density increases and also
+[30:33] as the density in the direction of the
+[30:35] light increases
+[30:37] so we use a product of the transmittance
+[30:40] to the light
+[30:41] and the transmittance of the current ray
+[30:43] march segment to lurk between back
+[30:46] scattering when the product is zero and
+[30:48] forward scattering when the product is
+[30:50] one
+[30:51] this naturally produces the silver
+[30:54] lining effect
+[30:55] present on backlit clouds as well as the
+[30:58] dark edges that schneider described in
+[30:59] his talk without the use of his powdered
+[31:02] sugar heuristic
+[31:07] because back scattering results from
+[31:08] multiple scattering we scaled the
+[31:09] brightness of the backscattering phase
+[31:11] function by 2.16
+[31:13] this value was found by simulating a
+[31:15] dense me scattering layer using our
+[31:17] atmospheric multiple scattering model
+[31:18] with an albedo of 0.9
+[31:21] note that the limit for the scale is 4
+[31:24] in the case of a uniform scattering
+[31:26] layer with albedo of 1
+[31:28] which gives a white lambertian surface
+[31:33] here are the clouds using only forward
+[31:35] scattering
+[31:37] well here's what they look like using
+[31:39] only backscattering
+[31:41] and combining forward and back
+[31:42] scattering gives this result
+[31:46] and you can see the dark edges of the
+[31:48] cloud are clearly visible here
+[31:52] here's how the clouds look when backlit
+[31:54] note the silver lining effect on the top
+[31:56] edge of the clouds
+[31:59] okay let's move on to our volumetric
+[32:01] haze lighting and rendering
+[32:03] we built on the techniques described by
+[32:05] bart ronsky at siggraph in 2014 and by
+[32:07] mikhail drobot at digital dragons in
+[32:09] 2017.
+[32:11] we used a low resolution froxl grid with
+[32:13] a width of 128 and a height and depth of
+[32:16] 64.
+[32:18] this covered the entire viewfrustum from
+[32:20] the near plane at 10 centimeters to the
+[32:22] far plane at 100 kilometers
+[32:25] our depth slices grew exponentially with
+[32:28] each one being 20
+[32:29] thicker than the previous one
+[32:32] we restricted ourselves to a combination
+[32:34] of two analytic and integral density
+[32:36] functions
+[32:38] the first was an exponential height
+[32:40] falloff
+[32:41] and the second was a sigmoidal height
+[32:43] falloff with d1 here being zero in
+[32:45] almost all cases
+[32:48] to add local variation in the other
+[32:50] dimensions we used particles as i'll
+[32:52] discuss shortly
+[32:56] the froxl grid is updated with a single
+[32:58] compute dispatch
+[32:59] it integrates in scattering from front
+[33:01] to back with quad swizzling
+[33:03] using four by four by four thread groups
+[33:06] we use temporal filtering to smooth the
+[33:09] jittered shadow and ambient occlusion
+[33:11] samples
+[33:12] as well as the jittered local light
+[33:14] samples
+[33:16] using a single rgb11f buffer to filter
+[33:19] the final light value resulted in
+[33:20] objectionable banding
+[33:22] and this arrangement lets us use a
+[33:24] different reprojection strategy for the
+[33:26] local lights and also lets us skip the
+[33:29] lighting of occluded fraxels
+[33:31] both textures are filtered at full rates
+[33:33] so the performance is about the same as
+[33:35] sampling a single rgba 16f texture
+[33:39] before adding the early outs
+[33:42] we still update the shadow and ambient
+[33:44] occlusion terms for the occluded froxels
+[33:46] to reduce declin
+[33:48] disocclusion artifacts
+[33:50] and all of this is performed in acing
+[33:51] compute in about 0.5 milliseconds in a
+[33:54] heavy scene with lots of local lights on
+[33:56] the base ps4
+[34:01] our tiled light culling compute shader
+[34:02] also outputs a set of per-tile lights
+[34:04] for use by our volumetric haze
+[34:07] divergence in the set of lights between
+[34:09] threads has a big performance impact so
+[34:11] we adopted the flat bit array technique
+[34:14] described by called robot in this course
+[34:16] in 2017
+[34:17] which significantly sped up our shader
+[34:19] in some cases by nearly two times
+[34:23] as an interesting aside for our forward
+[34:25] shaded materials we found that it was a
+[34:27] little bit faster to use a list of
+[34:29] sorted light indices instead of bit
+[34:31] arrays since the overhead of the light
+[34:34] list was a little bit lower than
+[34:36] iterating through the bit arrays
+[34:40] our froxl grid is very coarse yet it
+[34:42] covers the entire viewfrustum
+[34:45] and using the traditional approach
+[34:46] resulted in very bad aliasing at the
+[34:48] horizon and when using thin haze layers
+[34:51] due to the undersampled density changes
+[34:55] we solved this by storing in scattered
+[34:57] radiance divided by the opacity or one
+[34:59] minus the transmittance
+[35:02] because our density functions are
+[35:03] analytic we can recompute the
+[35:04] transmittance per pixel and then apply
+[35:06] it when compositing into the scene
+[35:09] this also means that we don't have to
+[35:10] store opacity anywhere so we're able to
+[35:12] use an rgb11f format for the volume
+[35:17] here's the scene without density
+[35:18] anti-aliasing note that the bands along
+[35:21] the water
+[35:22] note the bands along the water parallel
+[35:24] to the horizon
+[35:27] applying density anti-aliasing
+[35:29] significantly reduces these artifacts
+[35:34] so that's a neat trick but why does it
+[35:36] work
+[35:37] we'll start off with a fairly reasonable
+[35:38] assumption that the scattering sigma s
+[35:41] is proportional to the extinction sigma
+[35:43] e with the ratio being the albedo c
+[35:46] then consider the volume rendering
+[35:48] equation for the n-scattered radius over
+[35:49] distance d
+[35:51] where l i is the integral over the
+[35:53] sphere of the incoming radians times the
+[35:56] phase function
+[35:59] we then substitute for sigma s
+[36:02] and pull the albedo c
+[36:04] out in front of the integral
+[36:07] now we'll assume that l i is relatively
+[36:09] constant which in our case it generally
+[36:11] is except for shadowing
+[36:13] we can then separate the integral like
+[36:15] so
+[36:18] and call
+[36:19] the first integral l i bar since it's
+[36:21] the average of li over the interval
+[36:25] the remaining integral has a simple
+[36:27] analytic solution
+[36:30] and the term in square brackets is just
+[36:32] one minus the transmittance or the
+[36:34] opacity alpha
+[36:37] so if we divide by alpha we get the
+[36:40] albedo times the average of li as a
+[36:42] function of d
+[36:43] which by assumption is a constant
+[36:46] so to the extent that that assumption is
+[36:48] true l over alpha will be a smoother
+[36:50] function than l
+[36:56] so that took care of aliasing due to
+[36:58] density but we aren't done
+[37:00] to reduce aliasing in all three
+[37:01] dimensions we sampled uh the volume
+[37:04] using tricubic b-spline filtering which
+[37:06] requires eight trilinear tabs
+[37:08] this is surprisingly inexpensive it'd
+[37:11] only cost
+[37:12] uh 50 microseconds more than try linear
+[37:15] sampling on a ps4 pro
+[37:17] at 3200 by 1800 checkerboard resolution
+[37:22] to help optimize the alu we used an
+[37:24] approximation for the tricubic waiting
+[37:26] functions which didn't affect the visual
+[37:28] results at all
+[37:29] details are in the the linked desmos
+[37:31] graph here
+[37:35] so here we're using tri-linear filtering
+[37:38] and here i've increased the contrast so
+[37:40] you can see the aliasing more clearly
+[37:44] bi-cubic filtering in x and y helps but
+[37:46] there's still some banding visible
+[37:50] tricubic filtering almost completely
+[37:51] eliminates the remaining aliasing
+[37:57] here's another example first using
+[37:59] tri-linear filtering where the aliasing
+[38:02] in x and y is very apparent
+[38:05] and by cubic filtering fixes that
+[38:08] while tricubic filtering helps connect
+[38:10] the light shafts to the openings
+[38:17] so as i mentioned earlier we used
+[38:18] particles to add local fog
+[38:21] we did this by adding an optional haze
+[38:22] lighting model to our particles
+[38:25] in our volumetric case shader
+[38:27] we store li from the earlier equations
+[38:30] in a parallel light volume
+[38:32] and this light is sampled from the luts
+[38:35] this is the light sampled from the luts
+[38:37] times the phase function with shadowing
+[38:39] and ao applied
+[38:40] plus the local light contributions
+[38:44] this is sampled in the particle shader
+[38:46] by sampling the fraxel light volume and
+[38:48] multiplying by the particle opacity
+[38:52] as an optimization we use tri-linear
+[38:54] filtering until the opacity exceeds the
+[38:56] threshold at which point we switch to
+[38:58] bicubic filtering most of the particles
+[39:01] are camera facing so extra filtering in
+[39:03] z isn't necessary
+[39:06] here's a scene with particles lit using
+[39:08] our standard particle lighting model
+[39:11] and here we've switched to the haze
+[39:13] lighting model for the fog-like
+[39:14] particles this helps them fit better
+[39:16] into the scene
+[39:21] after adding particle haze lighting our
+[39:23] effects artists complained that the
+[39:24] particles were too hard to see when lit
+[39:26] from the front
+[39:27] and this is because haze assumes single
+[39:29] scattering within the haze layer and
+[39:31] uses predominantly forward scattering
+[39:34] so to solve this problem we added an
+[39:36] inexpensive multi-scattering
+[39:37] approximation term which works as
+[39:39] follows
+[39:40] on the cpu we calculate the ratio of
+[39:42] backscattering of a backscattering phase
+[39:45] function to the haze me function
+[39:47] in the forward and back directions
+[39:50] we use the same henny greenstein phase
+[39:51] function in a symmetry parameter
+[39:54] of z minus 0.15 to simulate multiple
+[39:57] scattering just like we did for clouds
+[40:01] in the
+[40:02] the particle pixel shader we learn
+[40:04] between the two values based on the dot
+[40:06] product between the view and light
+[40:08] directions which gives us a
+[40:10] multi-scattering scale factor rms
+[40:14] we lurp from 1 to rms based on the
+[40:16] opacity of the particle and use the
+[40:17] resulting value to scale the particle
+[40:19] luminance
+[40:21] in practice we reduce the strength of
+[40:23] this effect for backscattering
+[40:24] especially
+[40:26] since the particles appeared unnaturally
+[40:28] lit when lacking the full me color
+[40:30] contribution
+[40:33] so here are particles lit without the
+[40:34] multi-scattering approximation
+[40:37] and here the multi-scattering
+[40:38] approximation is on
+[40:41] as you can see the particles gain more
+[40:42] shape and definition
+[40:47] so in the final section of this talk
+[40:48] i'll discuss some of the tone mapping
+[40:50] techniques that we used in ghost
+[40:53] first some words about exposure
+[40:55] in infamous second sun and first light
+[40:57] we struggled to maintain physically
+[40:59] plausible diffuse albedo values for our
+[41:01] assets
+[41:03] our assumption was that the feedback
+[41:05] loop between luminance-based exposure
+[41:07] and albedo was largely responsible for
+[41:09] this
+[41:10] and resulted in diffusivity albedo
+[41:12] values that were too dark
+[41:14] and therefore the specular component was
+[41:16] too bright in relation
+[41:19] to help artists choose more physically
+[41:20] plausible albedo values we created a
+[41:22] diffused color reference chart
+[41:25] which you can see here
+[41:26] it's based on the reflectance spectra of
+[41:28] a variety of objects converted to srgb
+[41:30] colors
+[41:33] we also switch to a primarily
+[41:35] illuminance-based exposure system which
+[41:37] takes albedo out of the equation
+[41:39] altogether
+[41:40] we only use luminance if the highlight
+[41:42] luminance exceeds the threshold
+[41:44] for example because of fire particles or
+[41:47] bright specular highlights
+[41:52] so because of the historical setting of
+[41:53] the game the interior lighting is
+[41:55] generally very dim which results in a
+[41:58] difference of up to 10 ev between the
+[42:00] interiors and exteriors
+[42:02] we wanted to maintain visibility as much
+[42:04] as possible
+[42:05] which meant brightening parts of the
+[42:07] scene that were too dark while avoiding
+[42:08] blown-out lighting in the bright areas
+[42:12] since our skies drove our indirect
+[42:14] lighting it was often brighter than the
+[42:16] environment but it was important to us
+[42:18] artistically to prevent it from becoming
+[42:20] too desaturated due to tone mapping
+[42:24] a few months after we did this work
+[42:27] bart ronsky wrote a blog that addresses
+[42:29] many of the same issues and suggests a
+[42:31] similar solution so i'll refer you to
+[42:33] that for a more complete discussion
+[42:36] but i'll briefly go over some of the
+[42:40] photography and cinematography
+[42:41] techniques
+[42:42] uh in ways of dealing with these
+[42:45] problems
+[42:46] include the use of graduated filters
+[42:48] special lighting rigs and bounce cards
+[42:51] dodging and burning during film
+[42:52] development or these days shadow and
+[42:54] highlight
+[42:56] adjustment as well as well as the use of
+[42:59] multiple exposures and so-called hdr
+[43:01] photography
+[43:03] we also wanted to simulate the dynamic
+[43:05] range of the human eye which is capable
+[43:07] of perceived receiving a much higher
+[43:09] dynamic range than a camera is is
+[43:12] capable of
+[43:14] we knew that a bilateral filter could be
+[43:16] used to maintain image detail while
+[43:18] reducing overall contrast so we decided
+[43:21] to experiment with that to see if we
+[43:22] could make it perform it
+[43:25] so consider this scene with no
+[43:26] adjustments applied
+[43:29] and if we do reduce contrast by 50 we
+[43:32] get this which restores a lot of color
+[43:35] but flattens the detail significantly
+[43:37] note that this is an extreme example for
+[43:39] illustrative purposes only
+[43:43] using a bilateral filter we get this
+[43:45] which helps to retain a lot of the local
+[43:46] contrast
+[43:50] naive implementations of the bilateral
+[43:52] filter are expensive
+[43:54] but the bilateral grid algorithm allows
+[43:57] them to be computed efficiently with a
+[43:58] low memory footprint
+[44:00] the algorithm allows the image data to
+[44:02] be aggressively down sampled
+[44:04] we used a volume of 64 by 32 by 32
+[44:08] excuse me 64 by 32 by 64.
+[44:12] and this naturally fit
+[44:14] alongside luminance histogram generation
+[44:17] used for dynamic exposure
+[44:19] the overhead of the algorithm was
+[44:21] approximately 250 microseconds
+[44:23] on the ps4 at 1080p so it wasn't too bad
+[44:28] so here's an overview of how it works
+[44:30] first we populate a volume
+[44:32] the grid
+[44:34] with homogeneous log luminance values wi
+[44:37] vi and wi where wi is the weight and vi
+[44:41] is the log luminance
+[44:44] the initial weights for each sample are
+[44:46] chosen based on the linear z-axis
+[44:48] weights
+[44:49] that is each sample contributes to the
+[44:50] two nearest z slices
+[44:53] we can skip waiting in x and y because
+[44:55] we'll apply a wide blur in those axes
+[44:57] later
+[44:59] so
+[45:00] we next apply a gaussian blur to the
+[45:01] grid using wide blur in x and y and a
+[45:04] smaller blur in z
+[45:06] and sometimes the c blur is omitted
+[45:08] altogether
+[45:11] finally the bilaterally filtered value
+[45:13] for a pixel is obtained by tri-linearly
+[45:15] sampling the grid and normalizing the
+[45:17] result
+[45:19] so here's the basic formula for detail
+[45:21] preserving contrast adjustment
+[45:24] ii is the input images log luminance
+[45:28] io is the output log luminance
+[45:31] b is the bilaterally filtered log
+[45:32] luminance
+[45:34] m is the midpoint log luminance that is
+[45:36] it's the point that
+[45:38] the luminous values will be drawn
+[45:39] towards as we reduce contrast
+[45:42] c is the contrast scale and d is the
+[45:45] detail strength
+[45:48] so this works fairly well
+[45:50] although we did encounter ringing
+[45:51] artifacts when applied to scenes with
+[45:53] smooth gradients
+[45:55] this most often occurred on clouds soft
+[45:57] shadows and specular highlights as you
+[45:59] can see here
+[46:01] these artifacts can be reduced by using
+[46:03] larger luminance buckets or a wider
+[46:05] zebra but the trade-off is increased
+[46:07] haloing
+[46:12] this animation demonstrates how ringing
+[46:14] can occur
+[46:15] we start with the green input signal and
+[46:17] bilaterally blur it to get the purple
+[46:19] curve we then produce the blue output
+[46:21] signal
+[46:22] by reducing the contrast of the blurred
+[46:24] curve
+[46:25] and adding bad back detail which is the
+[46:27] difference between the input and blurred
+[46:29] signals
+[46:36] to eliminate these artifacts we adopted
+[46:38] a hybrid approach by blending between
+[46:39] the output of the bilateral filter and a
+[46:41] very wide 2d gaussian blur
+[46:44] in the end we used a weighting of 40 for
+[46:46] the bilateral blur and 60 for the
+[46:48] gaussian blur
+[46:51] it's important that the 2d gaussian be
+[46:52] wide enough to avoid noticeable haloing
+[46:56] we used a filter with a radius of 13
+[46:58] taps
+[46:59] which was used on a 64 by 32 image
+[47:02] we then up sampled this to 256 by 128
+[47:06] using b-spline or using bicubic b-spline
+[47:08] filtering which avoided by linear
+[47:11] filtering artifacts
+[47:13] and added even more blur
+[47:17] this animation shows alert between a
+[47:19] bilateral
+[47:20] filter and a white gaussian blur
+[47:23] note how the ringing artifacts are
+[47:24] reduced by mixing in more of the
+[47:26] gaussian blur
+[47:36] this is the same
+[47:37] image we saw before with a 50
+[47:39] contrast reduction using the bilateral
+[47:41] filter only
+[47:43] here's the same image after mixing in
+[47:45] the gaussian blur the appearance is more
+[47:47] natural overall while still retaining
+[47:50] color in the skies
+[47:54] for comparison here's the original image
+[47:56] once again
+[47:59] and here's a scene using typical in-game
+[48:01] settings
+[48:02] for this time of day and weather state
+[48:09] i haven't talked much about the d
+[48:10] parameter in this equation but it's
+[48:12] possible to adjust local contrast by
+[48:14] varying it here i've set it to 1.5 which
+[48:16] makes the scene a bit punchier
+[48:18] we used it fairly sparingly
+[48:21] but it can be a useful tool to have
+[48:25] so it's well known that per channel tone
+[48:27] mapping and the rendering color space
+[48:30] clips saturated non-primary colors to
+[48:32] cyan magenta and yellow
+[48:35] here we're just applying the reinhardt
+[48:37] operator per channel to keep things
+[48:38] simple
+[48:40] note that we've also scaled the input
+[48:42] colors so that no component exceeds one
+[48:53] in practice tone mapping this way gives
+[48:54] pretty ugly results
+[48:57] notice the saturated yellow at the
+[48:59] sunset and specular highlight
+[49:03] so during a conversation in 2017 brian
+[49:05] karis mentioned that he liked to roll
+[49:07] off to white behavior of asus cg as a
+[49:09] tone mapping space
+[49:11] so we decided to try that along with
+[49:13] several other color spaces including
+[49:15] asus ap0
+[49:17] asus cg
+[49:19] rec 2020
+[49:20] and dci p3
+[49:24] asus cg was just to be judged to be the
+[49:27] best out of all of these
+[49:29] but we still felt that it bent reds too
+[49:31] much towards yellow during tone mapping
+[49:33] so we adjusted the x-coordinate of the
+[49:35] red primary from 0.713 to 0.75 and that
+[49:39] gave us results that we were all happy
+[49:40] with
+[49:42] so here you can see how asus cg bends
+[49:45] the lines of a red and orange hue in
+[49:48] input space towards yellow
+[49:51] by adjusting the red primary the
+[49:53] redshift or this yellow shift is reduced
+[49:58] this animation shows how the color space
+[50:01] is transformed by tone mapping in our
+[50:02] custom color space
+[50:04] note that there's likely still room for
+[50:05] improvement here
+[50:07] note how the colors near the blue
+[50:08] primary are shifted fairly strongly
+[50:10] towards magenta
+[50:16] so this scene is using asus cg for tone
+[50:18] mapping
+[50:19] note the specular highlight in
+[50:21] particular
+[50:22] our art director really disliked how
+[50:24] sunsets tended towards this yellow color
+[50:26] when using asus cg
+[50:29] using a custom color space result
+[50:31] reduced the color shift
+[50:33] and saturation just enough here without
+[50:35] adversely affecting the show mapping of
+[50:37] yellows like in the golden forest area
+[50:40] let me go back and forth
+[50:46] so on ghost we still used our fairly old
+[50:48] school color grading tools
+[50:50] consisting of manipulating screenshots
+[50:52] with an embedded 32 by 32 by 32 srgb
+[50:55] color lut in photoshop
+[50:57] our art director liked this workflow so
+[50:59] we weren't too eager to change
+[51:02] however due to limited resolution
+[51:04] we had to use it conservatively to avoid
+[51:07] introducing banning artifacts which was
+[51:09] too limiting in many cases
+[51:12] i'd read a blog post by bartronsky
+[51:14] discussing some ideas about white
+[51:16] balance and games
+[51:18] and the idea of introducing a white
+[51:20] balance control into our grading
+[51:22] pipeline made a lot of sense so we gave
+[51:24] it a try
+[51:25] it was free in terms of gpu performance
+[51:28] since we could roll it into our rec709
+[51:30] to tonemap color space transformation
+[51:31] matrix
+[51:33] and fortunately it worked so well that
+[51:35] we didn't end up needing to change our
+[51:37] color grading tool set at all
+[51:41] the interface we provided was a little
+[51:42] different than traditional white balance
+[51:45] tools rather than providing color
+[51:47] temperature and hue sliders we let the
+[51:49] artist choose the color that they wanted
+[51:51] white to change to
+[51:53] this is backwards from a tool like
+[51:55] lightroom which lets you click on a
+[51:57] pixel
+[51:58] that should be neutral like a gray card
+[52:00] so in lightroom you pick the color that
+[52:02] should change to white
+[52:04] but the way we did it if you want the
+[52:06] scene to be bluer you pick a blue color
+[52:08] which the artists found to be more
+[52:10] intuitive
+[52:12] the transformation we used is called a
+[52:14] chromatic adaptation matrix and models
+[52:16] how the human visual system adapts to
+[52:19] different lighting environments
+[52:21] specifically we use the von cruze
+[52:23] transform in bradford lms color space
+[52:26] this transform
+[52:28] changes the color space
+[52:30] to to a color space that approximates
+[52:32] the response of the long medium and
+[52:34] short cones in the retina scales them by
+[52:37] the ratio of the white points in the
+[52:38] space and then transforms them back
+[52:42] and this does fairly interesting
+[52:43] interesting things to the color space
+[52:46] this animation shows the color space
+[52:49] being transformed to a light blue white
+[52:51] point
+[52:52] because our final color space after tone
+[52:54] mapping is still rec 709 bright colors
+[52:57] still roll off to display white as you
+[52:58] can see when the outer layers of the
+[53:00] color space are peeled away to show only
+[53:03] low saturated colors
+[53:12] here's the scene without white balance
+[53:14] adjustment
+[53:15] and this is the scene after applying
+[53:17] artistic white balance adjustment
+[53:19] uh where white was shifted to blue in
+[53:21] the square in the top left
+[53:26] let me go back and forth a few times
+[53:30] i'll now talk about one of the
+[53:32] techniques that we used to overcome the
+[53:34] challenges we faced when trying to
+[53:35] render nighttime scenes
+[53:37] the first challenge was to make night
+[53:39] feel like night and not just like a
+[53:40] darker version of daytime
+[53:43] the second challenge was to make sure
+[53:44] that the player was able to see clearly
+[53:46] enough at night and
+[53:48] to be so that they're able to play the
+[53:50] game
+[53:52] so we came across some research in this
+[53:53] area described in these two papers the
+[53:56] kirk paper is based on the cow at all
+[53:58] paper
+[53:59] but we found the
+[54:01] that following the equations and
+[54:02] constants in the cow paper gave better
+[54:04] results and almost mostly used their
+[54:07] symbols here
+[54:09] the research is based on models and
+[54:11] measurements of the human visual system
+[54:13] so i'll briefly go into some of the
+[54:15] background
+[54:17] so our retinas have four types of
+[54:19] receptors
+[54:20] three types of cones long medium and
+[54:22] short which are responsible for regular
+[54:24] color vision
+[54:26] and rods which are more sensitive to low
+[54:28] light fit levels and are monochromatic
+[54:31] however human vision is 3d not 4d in
+[54:34] most people at least
+[54:36] which is because the rods use the same
+[54:38] neural pathways as the cones
+[54:41] the result is that low light vision is
+[54:43] not black and white
+[54:45] but there's a color shift introduced by
+[54:46] the rods as they take over from the
+[54:48] cones which is sometimes called the
+[54:50] prakini shift
+[54:53] this color change can be modeled as a
+[54:56] delta and opponent color space
+[54:58] which is the color space believed to be
+[55:00] used within the visual system
+[55:04] to use this technique we need a way to
+[55:06] convert between hdr scene colors and
+[55:08] cone and rod excitations
+[55:11] and while we could
+[55:12] try using an existing lms transform such
+[55:15] as the previously mentioned bradford
+[55:17] space
+[55:17] we'd still need a way to compute rod
+[55:19] values
+[55:21] cone and rod wavelength response curves
+[55:23] are available from kirk and others
+[55:25] so we needed a way to convert scene rgb
+[55:28] colors into a frequency spectrum
+[55:32] this is an underspecified problem
+[55:34] we use the approach described by smith's
+[55:36] in this paper which finds a set of rgb
+[55:39] basis spectra that maximize smoothness
+[55:43] here are the reflectant spectra that we
+[55:45] found using smith method we constrain
+[55:47] the rgb curves so that they were between
+[55:49] 0 and 1 and sum to 1.
+[55:54] first we need to calculate a matrix to
+[55:56] convert from rec 709 rgb to lmsr space
+[56:00] using the rec709 d65 illuminant
+[56:03] m is the conversion matrix
+[56:06] i is the row index corresponding to the
+[56:08] lmsr responses
+[56:10] j is the column index corresponding to
+[56:12] the red green and blue
+[56:14] colors
+[56:16] or primaries
+[56:18] lambda is the wavelength and capital
+[56:20] lambda lambda is the range of visible
+[56:23] wavelengths that we integrate over
+[56:26] ei is the response curve for receptor i
+[56:29] and i is the d65 luminance spectrum
+[56:33] and rj is the reflectance spectrum for
+[56:35] red green or blue found using smith's
+[56:37] method
+[56:41] we then use this matrix to convert from
+[56:43] the scene color c to the l msr response
+[56:47] q
+[56:48] and then calculate what's known as the
+[56:50] multiplicative gain control vector g
+[56:54] which is only defined for the cones
+[56:56] and where m is a constant vector
+[56:58] describing cone sensitivity given by
+[57:00] this value
+[57:01] and k is a vector describing rod input
+[57:03] strength
+[57:05] describing rod input strength for the
+[57:07] lms pathways with kl and km restricted
+[57:10] to be equal
+[57:12] according to cow k decreases with
+[57:15] increasing illuminance level but we
+[57:17] chose to follow kirk and used constant
+[57:19] values given here
+[57:22] note that there is some freedom in
+[57:23] choosing these values and so and
+[57:25] experimenting with different values
+[57:27] gives different results so you you if
+[57:29] you're implementing this you might want
+[57:30] to try different values here
+[57:34] for a color q
+[57:37] if we let q hat be a color in lms space
+[57:39] dropping the r component
+[57:42] then the opponent's base color is given
+[57:43] by this equation with the matrix a given
+[57:46] here
+[57:48] so we're almost done we can now
+[57:49] calculate the incremental effect delta o
+[57:52] that the rods have an opponent color
+[57:54] space
+[57:55] and that's given by this equation
+[57:57] where the new terms are all constants
+[57:59] given here
+[58:03] finally we compute the rgb color change
+[58:05] using this formula
+[58:07] where m hat is the top left three by
+[58:09] three sub matrix
+[58:10] of m
+[58:12] and the shader code for implementing
+[58:14] this on the gpu is straightforward it's
+[58:16] just these three lines of code
+[58:19] this animation shows the effect of
+[58:21] reducing the brightness of the light
+[58:22] from bright light to an illuminance
+[58:25] averaging about 0.5 0.05 lux
+[58:28] as you can see the darker colors
+[58:30] especially are brightened and blue
+[58:32] shifted
+[58:39] to show the difference again here's the
+[58:41] output without any color shift
+[58:43] and here's the color shift at 0.05 lux
+[58:48] finally here's an end game example
+[58:50] without perkins shift applied
+[58:52] and here's the same scene with burkini
+[58:54] shift enabled the average illuminance
+[58:56] for this scene is about 0.05 lux again
+[58:59] and note how the dark areas
+[59:01] are brighter after applying the purkinje
+[59:02] effect especially the dark blue water
+[59:05] and sky
+[59:08] so before wrapping up i want to thank
+[59:10] all of the following people for their
+[59:12] help and support
+[59:16] and here are the references for the talk
+[59:20] and finally i'd like to thank you very
+[59:22] much for your attention if you have any
+[59:23] questions my twitter handle is at
+[59:25] jasminepatry thanks again

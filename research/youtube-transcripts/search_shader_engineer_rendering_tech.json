@@ -1,0 +1,107 @@
+{
+  "query": "shader engineer rendering techniques real-time",
+  "results": [
+    {
+      "video_id": "kTpPL9Kj4lc",
+      "title": "Hogra: A Homebrew Graphics Engine | CESCG 2023 Posters",
+      "channel": "CESCG",
+      "url": "https://www.youtube.com/watch?v=kTpPL9Kj4lc"
+    },
+    {
+      "video_id": "XXT3GZ4dXb0",
+      "title": "Advances in real-time rendering in games, part 1 (ACM SIGGRAPH 2019)",
+      "channel": "Dan the Man",
+      "url": "https://www.youtube.com/watch?v=XXT3GZ4dXb0"
+    },
+    {
+      "video_id": "wOEKjawI0gc",
+      "title": "Angelo Pesce - Open Problems in Realtime Rendering",
+      "channel": "Digital Dragons",
+      "url": "https://www.youtube.com/watch?v=wOEKjawI0gc"
+    },
+    {
+      "video_id": "y4KdxaMC69w",
+      "title": "Interactive Graphics 25 - Volume Rendering",
+      "channel": "Cem Yuksel",
+      "url": "https://www.youtube.com/watch?v=y4KdxaMC69w"
+    },
+    {
+      "video_id": "GOee6lcEbWg",
+      "title": "Real-Time Samurai Cinema: Lighting, Atmosphere, and Tonemapping in Ghost of Tsushima",
+      "channel": "SIGGRAPH Advances in Real-Time Rendering",
+      "url": "https://www.youtube.com/watch?v=GOee6lcEbWg"
+    },
+    {
+      "video_id": "brDJVEPOeY8",
+      "title": "How Real Time Computer Graphics and Rasterization work",
+      "channel": "FloatyMonkey",
+      "url": "https://www.youtube.com/watch?v=brDJVEPOeY8"
+    },
+    {
+      "video_id": "n5OiqJP2f7w",
+      "title": "Forward and Deferred Rendering - Cambridge Computer Science Talks",
+      "channel": "Ben Andrew",
+      "url": "https://www.youtube.com/watch?v=n5OiqJP2f7w"
+    },
+    {
+      "video_id": "kbQc2cVRLSY",
+      "title": "REAC 2023 DAY 2 Lessons Learned from Far Cry Dunia Engine\u2019s Shader Pipeline",
+      "channel": "Rendering Engine Architecture Conference",
+      "url": "https://www.youtube.com/watch?v=kbQc2cVRLSY"
+    },
+    {
+      "video_id": "2GYXuM10riw",
+      "title": "Radiance Caching for Real-Time Global Illumination",
+      "channel": "SIGGRAPH Advances in Real-Time Rendering",
+      "url": "https://www.youtube.com/watch?v=2GYXuM10riw"
+    },
+    {
+      "video_id": "NIPB6_qTouE",
+      "title": "Modern Techniques for Real-Time Rendering",
+      "channel": "Kainkun",
+      "url": "https://www.youtube.com/watch?v=NIPB6_qTouE"
+    }
+  ],
+  "transcripts": [
+    {
+      "video_id": "kTpPL9Kj4lc",
+      "error": "type object 'YouTubeTranscriptApi' has no attribute 'get_transcript'"
+    },
+    {
+      "video_id": "XXT3GZ4dXb0",
+      "error": "type object 'YouTubeTranscriptApi' has no attribute 'get_transcript'"
+    },
+    {
+      "video_id": "wOEKjawI0gc",
+      "error": "type object 'YouTubeTranscriptApi' has no attribute 'get_transcript'"
+    },
+    {
+      "video_id": "y4KdxaMC69w",
+      "error": "type object 'YouTubeTranscriptApi' has no attribute 'get_transcript'"
+    },
+    {
+      "video_id": "GOee6lcEbWg",
+      "error": "type object 'YouTubeTranscriptApi' has no attribute 'get_transcript'"
+    },
+    {
+      "video_id": "brDJVEPOeY8",
+      "error": "type object 'YouTubeTranscriptApi' has no attribute 'get_transcript'"
+    },
+    {
+      "video_id": "n5OiqJP2f7w",
+      "error": "type object 'YouTubeTranscriptApi' has no attribute 'get_transcript'"
+    },
+    {
+      "video_id": "kbQc2cVRLSY",
+      "error": "type object 'YouTubeTranscriptApi' has no attribute 'get_transcript'"
+    },
+    {
+      "video_id": "2GYXuM10riw",
+      "error": "type object 'YouTubeTranscriptApi' has no attribute 'get_transcript'"
+    },
+    {
+      "video_id": "NIPB6_qTouE",
+      "error": "type object 'YouTubeTranscriptApi' has no attribute 'get_transcript'"
+    }
+  ]
+}

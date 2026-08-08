@@ -1,0 +1,1168 @@
+# Transcript: V9E43cCJHWU
+# Fetched: 2026-08-07T06:23:07.580966
+# Entries: 1022
+# Duration: 2753s
+
+[00:14] Hello, how is it going?
+[00:17] Welcome to the founders panel. I'm Nick.
+Here with me today are Chris, Jonathan and Erik.
+[00:24] We'll be asking them questions about the company.
+[00:28] Not about balance...
+[00:30] I think the balance for the company is pretty good.
+[00:34] Unless you want to tackle..
+[00:35] We could talk about company balance. Mark is a bit OP.
+[00:41] If you've got some questions, you should be able to send them to normal URL.
+[00:45] We'll start off by asking you, "How is the convention going?"
+[00:51] Well I'm enjoying it definitely.
+[00:53] I'm really happy with how everyone received the card game.
+[00:56] I bet people people are way more aggressive in their card...
+[01:00] Chris: There is Shaper Number One killer.
+Jonathan: There is Shaper Number One killer on the front there.
+[01:04] Yeah, that's been crazy.
+[01:07] Honestly, I just love the way that it's really brought the players and the staff together.
+[01:11] I was super worried that they would feel like they're being hounded all the time.
+[01:14] But all the feedback I've had from them as well has been super positive about it too.
+[01:17] I spoke to some staff this morning.
+[01:19] There's this girl that joined our accounting team a couple of months ago.
+[01:21] She hadn't played any Path of Exile before, and she is over the moon at people challenging her.
+[01:25] And she was so
+excited to see all the cards.
+[01:27] And collecting the autographs on
+the shirt and that kind of stuff.
+[01:31] People are really engaging well from our
+side with the card game.
+[01:34] But it's great to see the players...
+Jonathan: I'm slightly concerned about running out of stickers.
+[01:37] Because I didn't anticipate how hard people would slam the crafting bench.
+[01:41] People love crafting. I can attest to that.
+[01:44] We ran Auckland supplier out of stickers.
+[01:48] Has anything
+about the convention or about the announcement, of all of the things we've announced surprised you?
+[01:57] It went well.
+[01:58] Chris: People liked it.
+Nick: That was a surprise!
+[02:00] Well we haven't even prepared for hundreds of contingencies of anything failing.
+[02:04] Like that game demo for example. It went well.
+[02:06] Chris: It's good.
+Jonathan: That was good.
+[02:12] Also the number of things that there are just anywhere in the convention.
+[02:15] Like random things that could break.
+[02:16] It's horrifying when you really
+think about it,
+[02:18] So it's best just not to think about it too much.
+[02:20] Thankfully everything basically went on track.
+[02:22] Cool! Just to show off hands.
+Who's actually played Path of Exile 2?
+[02:26] That's basically everybody, fantastic! What do you think?
+[02:35] I think they like it.
+[02:38] Let's get to the history of the
+company.
+[02:40] Chris.
+[02:41] Jonathan.
+[02:43] How and when did you guys first meet?
+[02:47] At high school there was this computer in the library that had a copy of Quick Basic
+installed on it.
+[02:52] Because they didn't have it in the computer labs of course. Because why would you do that.
+[02:55] So I'd go there in the library at
+lunchtime to do some programming.
+[02:58] This is when I was like 16 or so.
+[03:00] And one time there's this kid on the computer.
+[03:03] And I'm like, 'Hey!''...
+[03:04] Kind of, you know...
+[03:06] Jonathan: That may sound more inappropriate than it was.
+[03:09] So I introduced myself, we were chatting.
+[03:11] He was a few years younger than me.
+[03:12] And so we started talking about coding and kept in touch pretty well.
+[03:16] I went to university, then he went a few years later and we were good friends.
+[03:19] Eventually we decided that once we get out 
+of university we're gonna go make a game.
+[03:22] We weren't sure what it was yet and...
+[03:24] Jonathan: I think we had a vague idea.
+Chris: We had ideas, but it was...
+[03:28] Did you get inspiration for that game at all?
+[03:30] Yeah, a little bit.
+[03:31] Well we've both played a lot of Diablo 2 together.
+[03:33] By the time Jonathan had finished university.
+[03:35] We were pretty set on this idea that everyone was terrible at making action RPGs.
+[03:40] And we could actually make a good one.
+[03:41] Which is hubris and crazy when you're just
+a couple of random guys in your very early twenties..
+[03:45] Chris: I think you were twenty years old...at the time?
+Jonathan: Yes, twenty.
+[03:48] We haven't had commercial game development experience.
+[03:50] We were just hobbyists... Like, way less qualified than most of the people we hire now.
+[03:54] About what year would you say that was?
+[03:56] This is late 2006 when we started.
+[03:58] And now, Erik. How and when did you
+join this ragtag couple of guys?
+[04:06] First of all, I actually met Chris in
+Diablo 2 strategy forum.
+[04:11] So that would be maybe around year 2000 or so.
+[04:16] That was back in the day when it was harder to find out
+the best builds and so on.
+[04:20] You didn't have streamers and everything back then.
+[04:24] But then, a few years after that I got a random message.
+[04:31] Where Chris was saying that him and Jonathan
+were thinking about.
+[04:38] Or wanted to make a Diablo-like game.
+[04:42] "That sounded amazing." I thought.
+[04:45] Now for context, you were living in Sweden at the time?
+[04:47] Erik: Oh yeah, so I'm on the opposite side of the world.
+Nick: Literally about as far as you can go.
+[04:51] I think we needed an artist and
+we knew no one who's ever drawn anything in their lives.
+[04:55] And Erik is an accomplished artist
+and has done a whole industrial design thing.
+[04:59] He wrote a textbook that many
+universities use, he's up there.
+[05:02] So I said to him, "Where would we find a lead artist?"
+[05:05] And he looked up plane tickets.
+[05:07] Yeah, yeah. It took like...
+I think I flew down two weeks after that conversation.
+[05:12] So I guess my question is, "What on earth were you thinking?"
+[05:18] Well at the time I had just
+graduated that industrial design education.
+[05:24] But I didn't really want to get a normal job.
+[05:27] So that was a really good excuse to dodge that.
+[05:31] I think you nailed that.
+[05:34] Was there moments after you moved, Erik, that cemented for you that you made the right decision?
+[05:41] Not until many years later I would say.
+[05:45] I'm glad he didn't say 'Yesterday'.
+[05:50] So there were a few years where you were just like, "Welllll I don't know..."?
+[05:55] Well it was quite a strange feeling, we just...
+[05:59] Worked on things and kind of knew that
+it was a good game or that it would be. So I don't know.
+[06:08] I didn't really think about it failing much.
+[06:11] My feeling always was that as long as we finish this game, then it will be awesome.
+[06:16] Jonathan: I never had any doubt.
+Chris: I was terrified.
+[06:19] It always felt like it was a good gap
+in the market I guess, you could say...
+[06:29] Because something hasn't been
+announced yet, right? Certain..other action RPGs.
+[06:34] Of course, yeah. We had no clue about other things going on.
+[06:36] Right.
+[06:39] What was the original time frame
+and budget for your game?
+[06:42] And how close to that were you actually by the time it launched?
+[06:46] Off by so much.
+[06:52] You can't make games that cheaply and quickly it turns out.
+[06:54] We thought, a couple years, a few hundred thousands or less than a million dollars.
+[06:58] I remember Erik was always saying, "It feels like it's always a year and a half away".
+[07:03] So when we were asking, "When will we finish?"
+[07:04] "A year and a half." was always an answer no matter how much time passed.
+[07:07] It was crazy, how things just stretched.
+[07:10] It took about six years to get something released to the players at all.
+[07:13] Jonathan: Is it really six years? Man...
+Chris: From 2006, yeah.
+[07:24] If you could go back and talk to your past 2006-selves.
+[07:27] What advice would you give yourself?
+[07:31] The sad thing is if someone came to me and said
+[07:33] "Chris, my friends and I are 20 and we
+have no experience in making games.
+[07:37] And we're gonna make some. It's gonna be online.
+[07:39] And it's gonna compete with a billion-dollar company.
+[07:41] And it's gonna have... all these things, experimental business model..."
+[07:45] I would say them, "You are crazy, go get a real job, you're just wasting your twenties." or whatever, right?
+[07:49] That's my advice and I would mean it, they're going to fail, 99.9%.
+[07:53] However, that means the one in a thousand will succeed.
+[07:55] So there's a bit of survivorship bias here.
+[07:57] What you attribute your survivorship to?
+[08:01] Personally, I think there's...
+[08:02] We were definitely in the right place at the right time with the right product for what needed to be made.
+[08:09] I mean obviously we happen to know Action RPGs really well.
+[08:14] But also there was so much luck involved and picking that is the thing we were doing.
+[08:17] And lots of other things that we were doing.
+[08:19] Chris: I think it's the items.
+Jonathan: The items, yeah.
+[08:21] We spent so long talking about Diablo 2 items.
+[08:25] Like out of conversations with people like Brian, our American [investor]...
+[08:28] He was there at the start, helping
+us from the States.
+[08:32] Which is one of the reasons why he's not on the stage with us at the moment.
+[08:35] Is because we were the team in New Zealand and were trying to keep it simple and everything here.
+[08:38] But he was there from the start and we spoke to him about Diablo 2 items.
+[08:42] And he related this story to me
+about this lance that he wanted to get.
+[08:45] This guy in Taiwan, he had a lance and Brian really needed this lance.
+[08:48] And the passion in his voice about staying up late
+at night thinking
+[08:52] about this one item that he needed
+[08:53] and how important it was for this life, right?
+[08:55] That kind of thing is the conversation
+we would have with each other, about items and games.
+[08:59] And we knew we had to capture that in that game. And I think we did
+[09:02] And I think that's why Path of Exile was successful.
+[09:04] It is very true that there are
+so few games these days that take items seriously in a way that we do.
+[09:10] And allowing free trade of all the things
+and all that sort of stuff.
+[09:14] I think that's definitely a huge part of
+why the game resonates.
+[09:20] And I think it's just so important.
+[09:22] Was there ever a point where you
+thought Path of Exile might be dead in the water?
+[09:27] There were some pretty
+rough development times.
+[09:29] There was a period during that six years ...
+[09:34] Where you just run the game and there was just a blue screen.
+[09:37] Because the graphics engine stuff had been broken and nobody had fixed it for ages.
+[09:41] And there was all sorts of stuff
+[09:42] It was really bad for a little while in there,
+but we got through it.
+[09:46] I've seen some very early versions where the graphics were a blue screen in a box...
+[09:51] That was just programmer out,
+[09:56] .... but there was a period after that where the game looked okay for a while
+[09:57] And we made a bunch of changes then for a good two months we couldn't really run it.
+[10:02] We had a prototype graphics
+engine that was thrown together very quickly.
+[10:05] Which was good for getting a character moving,
+and we decided to move away from that to a real one.
+[10:09] We had a guy working on something quite 
+advanced and it never really panned out.
+[10:12] So Jonathan just sat down and wrote
+the engine and we switched over to that.
+[10:16] But there was a good six months in there of the inability for the artists to see their work in the game.
+[10:20] Jonathan: It was a dark time.
+Chris: It was bad.
+[10:22] But this is 2009, no one knew about it
+publicly and we're glad...
+[10:26] We're glad we hadn't announced [the game].
+[10:27] Our plan was to announce when
+we got something looks good.
+[10:29] If you look now what it looked like
+when we announced...it's pretty terrible.
+[10:32] What year it was when we announced?
+Was it 20...10? Okay, right.
+[10:35] I remember because it was the end...
+[10:39] I think you actually technically announced
+in early 2011.
+[10:43] But you showed the game off in 2010.
+[10:44] Jonathan: Yeah.
+Chris:  In fact, here's an interesting story.
+[10:46] So, announcement of Path of Exile,
+which is September 2010.
+[10:49] We decided we're going to go to a press tour.
+[10:51] So we asked our PR guy, "Find a bunch of journalists
+in San Francisco that we can talk to.
+[10:55] People at PC gamer, IGN and all these various places.
+[10:58] Get us in the room with them".
+[10:58] Which is really hard because
+we're some randoms from New Zealand.
+[11:00] So we played up the whole Lord of the Rings
+thing really hard.
+[11:02] We booked our tickets over to the States...
+[11:05] We booked our tickets to the States
+and the plan was:
+[11:08] We talk to all the journalists, get some articles.
+[11:09] And then we go to PAX Prime.
+[11:11] And we'd show [the game] to people on a laptop in the corner of the room without having a booth.
+[11:15] Which totally not supposed to do,
+so I'm sorry about that.
+[11:17] Sorry about that, Mike and Jerry!
+[11:20] So we did this, and one of the journalists
+that we were assigned was Nick.
+[11:24] He was one of the very first people
+as working as a journalist in the States to see Path of Exile.
+[11:30] Yes.
+[11:32] I was given that assignment as, "There are
+some people from New Zealand coming to show a game.
+[11:37] I don't know what it is".
+[11:41] But it turned out to be super cool.
+[11:43] I remember dying on...
+I think I died to Hillock.
+[11:47] And you got very frustrated that
+I didn't know how to use the health flasks.
+[11:51] Jonathan: Did I?
+Nick: Yeah.
+[11:52] Okay. I don't remember this.
+[11:56] I specifically remember you saying,
+[11:57] "Nobody can find the health flasks!
+[11:59] That's interesting. No one knows about health flasks".
+[12:02] Jonathan: I don't remember this very well.
+Nick: I do. I was very embarrassed.
+[12:09] Tell me about the first time you thought Path of Exile might actually be a hit?
+[12:14] So I remember..oh, actually you go on.
+[12:17] I have an answer. This was at PAX Prime, this must have been the year after...That one.
+[12:26] We had a very small booth with a couple of screens and three playing computers, maybe?
+[12:33] I don't quite remember.
+[12:34] I think it was a few more, but it was all just botched together from Home Depot...
+[12:38] Has anyone been at PAX Prime 2011 and played Path of Exile right at the back of the show?
+[12:42] Nick: I see one hand.
+Chris: Okay.
+[12:44] You're a real OG supporter then.
+[12:48] That was amazing to see.
+[12:51] Because we were competing against many other 'real' companies there.
+[12:56] And there was just lots of people lining up to see our game.
+[13:00] And you could see the spark in their eye, that this was really interesting.
+[13:05] Actually, do you remember the thing that... Was it Tyco or Gabe?
+[13:08] It was Tyco.
+[13:09] It was Tyco, yeah. Do you want to [tell about it]...?
+[13:11] Penny Arcade!
+[13:12] Yeah, the Penny Arcade... It's his show.
+[13:14] So he walks by and he's playing and
+he's looking at the game and watching the queues,
+[13:18] And his comment to me was, "Blizzard really left a lot of money on the table here".
+[13:24] That was fun to meet him and that was really cool.
+[13:27] But as Erik saying, there was quite a lot
+of interest in the game even in this really early stage.
+[13:32] And this was a bad build of the game.
+[13:34] We were exhibiting next to Torchlight 2...
+Torchlight 1, sorry.
+[13:37] And their game looked a lot better.
+[13:39] And it was really professional compared to where we were at at that time.
+[13:42] But we had a lot of people there.
+[13:45] We had items, that was good.
+[13:47] I think... honestly, for me though that one was when we launched the close beta keys.
+[13:52] And the furore there was around  buying... That whole thing.
+[13:56] You brought Stripe down.
+[13:58] Stripe is a billion dollar payment processing company.
+[14:00] But at the time...
+[14:01] At the time we crashed it.
+[14:05] So, my favourite moment that made me realize the game was going to be successful
+[14:09] Is when we turned our alpha server on for the first time.
+[14:10] We gave out some access to literally friends and family.
+[14:13] Like, there was my brother and a couple of guys and so on.
+[14:15] And so we give out for access, three
+people log in...
+[14:18] And I play for a while and I'm sitting there at level 10...
+[14:22] It goes up to Brutus at that time, you can kill Brutus and he drops items.
+[14:25] He's like level 10 and he drops level 12 items or whatever.
+[14:29] So you want to farm Brutus for good rare item, to find a rare sword or whatever.
+[14:33] So I was sitting there farming and it gets to the point of diminishing returns to the experience.
+[14:36] I've got some good items, I'm gonna come back tomorrow but I need to sleep, so I go to bed.
+[14:40] I wake up the following morning, go to the office, log in, and I look at the ladder.
+[14:44] And there's some dude Peter who's three levels higher than me.
+[14:47] Got some serious diminishing returns going on.
+[14:49] And I'm like, "Whoa, did you play all night?! What have you got?"
+[14:52] So he links me to a sword.
+[14:53] I'm like, "Dude that's awesome!" So i link him to my one and he calls me a noob.
+[15:00] So, the fact that game can capture someone to not sleep.
+[15:02] And grind out an amazing sword when it goes to literally Brutus.
+[15:06] With terrible graphics.
+[15:07] I don't want to think about how much it was crashing.
+[15:09] On a topic of graphics.
+[15:11] How long did it take you guys to settle on an aesthetic for Path of Exile?
+[15:18] I wish we had a good answer of
+trying many different things.
+[15:22] But it was really a matter of...
+[15:25] Throwing in what we got.
+[15:29] We all knew that we all really loved Diablo 2.
+[15:34] So we went in that direction. But it was very much a matter of,
+[15:38] "Okay, what monsters can we have? A skeleton? Okay, let's make a skeleton and put it in;
+[15:44] let's make a bandit and put it in."
+[15:46] I'd say it's a lot more unified now.
+[15:48] Oh yeah, and especially with PoE 2.
+[15:51] PoE 2 is almost rebooting it and making it a perfect dream version of what we would have done back then.
+[16:01] I mean, I can speak
+[16:03] that internally we often see monsters get
+improved over time.
+[16:08] What was the first art asset that you were really satisfied with?
+[16:13] Erik:  I really like the original player characters.
+[16:19] Do you have a personal favourite?
+[16:21] It's the Witch, Marauder and Ranger.
+[16:25] Nick: Oh, the 'original' originals? Jeez.
+Erik: Yeah, from back then.
+[16:30] Because we got...we were really
+lucky in the sense that we had a freelancer.
+[16:37] That also knew cylinder, that
+made models for us.
+[16:41] He was a really talented guy.
+[16:45] Maybe he was even in college that time, but then he went on to work at Weta.
+[16:50] And he was a lead creature designer for the Hobbit later.
+[16:56] So we managed to catch someone early
+on there.
+[16:59] Nick: Nice.
+Chris: And we're still using those models to 2019.
+[17:03] Sure, we're replacing them soon.
+[17:04] And they look old now, but bear in mind
+they're 12 years old, they've held up okay.
+[17:11] Though you landed on 3D models as the rendering type.
+[17:16] I don't know if that's the right term.
+[17:18] But had you tried anything else?
+[17:22] Yeah so there was certainly
+a discussion at the beginning of 'Do we go 2D or 3D'?
+[17:27] That was the an interesting question at that time.
+[17:29] Obviously I think 3D was the right answer, but...
+Nick: And why is that?
+[17:34] Well, it's actually easier in a lot of ways to bodge content together in 3D.
+[17:41] Oh! What's going on?
+[17:42] Chris: Your mic is gone.
+Jonathan: My mic is gone? All right, it's back.
+[17:45] Okay, It's easier in a lot of ways to
+bodge content together in 3D I think.
+[17:49] But also just because...
+[17:51] Chris: Your mic's gone again.
+[17:54] Jonathan: Is it working?
+Chris: It's working now.
+[17:57] I can't remember where I was.. Anyway...
+[18:00] You said bodging content together is easier in 3D.
+[18:03] Yeah yeah yea. I think it is, but also in terms of...
+[18:07] Modernist, people expect everything in 3D these days.
+[18:10] But there was a really awesome technique
+I really wanted to try.
+[18:12] Which we almost did.
+[18:14] Where I wanted to do a game where it
+was rendered in 2D.
+[18:18] But with normal maps and lighting all done in 3D.
+[18:22] And if you do that, you get something
+that has a really distinctive art style.
+[18:27] Actually, I think Pillars of Eternity, the other PoE uses that.
+[18:32] But I came up with it and the idea of doing it in 2007...
+[18:36] Nick: So you did it first.
+Jonathan: Well I didn't, because I didn't actually do it.
+[18:39] But this was something I was thinking of doing in 2007
+[18:42] It was a really interesting idea.
+[18:44] But I think what we did actually
+was the right choice in the end.
+[18:49] There's quite a few games doing it now.
+[18:51] I mean, it's a cool technique, but 3D is cooler.
+[18:56] Supporter creative content like unique items and divination cards have existed throughout Path of Exile's entire lifetime.
+[19:03] How early on did you guys know you
+wanted input from players on design of Path of Exile?
+[19:08] Well, we always knew we wanted to have a community-driven focus.
+[19:11] Regardless what we're doing for monetization.
+[19:13] We will be taking advice from the community because they know the game well.
+[19:15] Once it's released - it's in their hands, not ours.
+[19:18] We know what we want to play
+but there are a lot more of you, guys.
+[19:22] So, the "supporter created items" and stuff came from the concept of...
+[19:25] Initially we weren't planning to ever sell anything apart from microtransactions.
+[19:31] The plan was "There'll be microtransactions, we'll do them later.
+[19:33] We can make money when the game is good".
+[19:36] So we were eventually running out
+of money during our closed beta.
+[19:39] And players were petitioning us to buy closed beta keys.
+[19:41] They really wanted to buy closed beta keys.
+[19:43] Because I mean, they're on eBay for $200.
+[19:44] When people played the game for a while eventually moved on, they sell that key or their account in this case.
+[19:49] And so, we held off on this for a long time.
+We entered closed beta in late 2011.
+[19:55] September or August...I think August. 
+We only started selling keys in April of the following year.
+[19:59] And the reason why was we were running out of money.
+[20:02] And selling beta keys as a prepayment
+for microtransactions credit later.
+[20:05] Like, "pay 10 dollars, get 10 dollars
+as a credit and a beta key." seemed like a harmless way to do it.
+[20:09] There was also a Kickstarter thing coming up as well.
+[20:11] Right. So when we were
+discussing selling the beta keys,
+[20:14] we noticed that on Kickstarter
+Wasteland 2 just has been incredibly funded.
+[20:18] You have these packs which get more and more stuff.
+[20:19] And you check a T-Shirt in, and people want to pay a lot because it's for their favourite game.
+[20:23] Even they don't know it's their favourite game yet.
+[20:24] And so we came up with a crazy set of Kickstarter-like packs.
+[20:29] Which if you look at them
+by today's standards, are incredibly gifty.
+[20:32] Like, there's some stuff you get in those... For the early ones.
+[20:36] We decided not to use Kickstarter as a platform,
+[20:38] Because we are really really frugal
+when it comes to paying fees for stuff...
+[20:41] There was also a fact that you have to... There's the whole...
+[20:44] You couldn't use it outside of America at the time I think.
+[20:46] That's true.
+And there were other issues as well,
+[20:47] Like you only get the money at the end of it
+and various other things.
+[20:49] The numbers are public, and we don't really like
+our revenue numbers being public and so on.
+[20:53] But.. So, we ran it on our site, and as Jonathan mentioned before
+[20:57] it was wildly successful, and the top pack included the ability to design an unique item.
+[21:02] That was a cool perk to try
+to persuade people to pay $1,000.
+[21:05] And 250 did.
+[21:07] Yep. Yes, they did.
+[21:08] I feel though it's been super important.
+[21:11] As soon as we started actually doing that, 
+we realized that...
+[21:15] For one thing if someone works of that
+team to work on an item.
+[21:20] They're kind of a fan for life at
+that point, you know.
+[21:27] People really enjoy doing their stuff
+and it just ends up really well.
+[21:32] So when there's something of yours in the game you feel a little bit of ownership over it as well.
+[21:35] And so that means that you want to tell your friends about it and that kind of stuff.
+[21:38] So it just ends up being a thing where it's just really fosters that sense of community.
+[21:42] I think it's actually an important part of that.
+[21:44] Were there any other supporter created elements that you guys wanted to try?
+[21:49] For a while each expansion was including some when we replaced the packs.
+[21:53] Like, for the Awakening we did Divination Cards for example.
+[21:57] We felt very strongly when we were doing Ascendancy that we needed to find...
+[22:03] A way to have some supporter created content.
+[22:06] And there were crazy ideas that we thought of.
+[22:08] Like, people making their own mini Labyrinth gauntlets that other players can play and stuff like that.
+[22:14] We had, at one stage we were thinking you can take your hideout
+[22:16] and export it as an area people can find in the game
+[22:19] and this kind of stuff.
+[22:20] Unfortunately because of penises
+we decided not.
+[22:26] I mean, look, years later I understand it would be toucans, right? Significantly more offensive.
+[22:33] But because of the joy of player created content
+[22:36] we decided not to have arbitrary toucan dens you can encounter as you play through the game.
+[22:42] It's honestly really tough.
+[22:43] Divination cards managed to get to this point where it feels like you're making something that is significant for the game.
+[22:52] But yet at the same time it doesn't take so much of our time with arguing back and forth that like it's a real problem.
+[22:57] Because that the uniques are real tough. They take a lot of work.
+[23:00] We raised the price on those so many times.
+[23:02] Yes, but we had to because we really underestimated the amount of back and forth there would be for uniques.
+[23:07] Nick should know as the person
+who primarily communicates.
+[23:10] I did that for about three years.
+[23:13] And the other one we're not mentioning, the Hall of Grandmasters was very cool but so hard to maintain
+[23:17] to this day whenever we release an
+expansion.
+[23:19] We have a guy who has to spend several days going and fixing the Grandmasters to work.
+[23:22] And I'm sure the people who got Grandmasters probably are still a little unsatisfied with how it turned out.
+[23:28] Yeah, it's really tough. To even fit PoE2 it's going to be really hard to...
+[23:32] Oh my God.
+[23:33] The amount of work to make that work. We will do it...
+[23:36] Can't we just agree to not?
+[23:37] No, no no, we have to do it.
+[23:38] Yeah I know we have to, and that's the thing.
+[23:40] It's great to get a burst of revenue and it's got a lot of advantages.
+[23:43] But you have to maintain that literally for your entire life it seems.
+[23:50] Yeah well hopefully not.
+[23:52] So you can stop asking questions about Grandmasters by the way.
+[23:55] You can stop sitting those.
+[23:59] What about leagues?
+[24:00] When did you guys realize you wanted to do leagues as a method of introducing a mechanic that would permeate throughout the game?
+[24:09] We knew from the start we needed to have
+ladder resets.
+[24:12] Because that was an important thing in other Action-RPG. I didn't put a plural on that.
+[24:17] Leagues are a super important thing
+in other Action-RPG.
+[24:21] We knew we need that from the beginning.
+[24:23] But when it actually came to starting our first one the context was, "We're in open beta.
+[24:27] And we've been going for about six months.
+[24:29] And player numbers have trailed off".
+[24:30] Partly because that happens with any kind of... you release a new economy, people will play...
+[24:34] We didn't really know at the time how much it would... You know what the ratios would be between...
+[24:37] That's right. But we needed to start some new leagues and we decided we were going to do that.
+[24:40] The problem was that it seemed
+really unexcited to a news post going,
+[24:44] "Hey guys if you want to play a new
+character just go over there to do it.
+[24:46] There's a new ladder have fun with that".
+[24:47] Which nowadays honestly because people understand it.
+[24:50] Would probably be pretty cool without a mechanic.
+[24:52] Though of course we're still doing mechanics.
+[24:54] So we came up with Anarchy and Onslaught.
+[24:56] Both of which were very easy to do.
+[24:57] They were real simple.
+[24:58] Yeah, real simple.
+[24:59] Onslaught was just, "Things are faster".
+[25:01] Right.
+[25:03] There was Rogue Exiles. Which was a few days of work.
+[25:06] And that was cool. It was a marketable thing.
+[25:07] And we also experimented with turning uniques off.
+[25:10] Which I'd still love to do but then people would be angry that their builds don't work.
+[25:13] Who would want to see
+uniques turned off?
+[25:16] We don't mean globally. We mean certain uniques to change the meta are disabled.
+[25:19] So there's a bit of interest.
+[25:20] Like unique sets.
+[25:21] I don't know that I'd say that that's more than half of the audience.
+[25:24] No. It's interesting.
+[25:24] We're not selling it well.
+[25:26] Having it so that each league has a completely different meta because we say,
+[25:29] "This is the set of stuff in play. These things aren't there, these things are there.
+[25:31] When they come back there might be different".
+[25:33] Is something that some people do.
+[25:35] It's like, with Magic the Gathering.
+[25:37] See, it's the first time I started a sentence with Magic the Gathering so far. I've done a good job.
+[25:40] Well done, Chris!
+[25:41] With Magic the Gathering they decide with their standard sets.
+[25:44] The ones that are the most up to date ones.
+[25:47] Which staples they've reprinted.
+[25:48] Like, "Is shock in the format or not" is a decision that they make.
+[25:51] Sometimes it is sometimes it isn't
+[25:53] And that means there are situations where it's cheap to burn small creatures.
+[25:56] There are situations where it's more expensive.
+[25:58] And so having it so that, I don't know. Goldrim is present versus isn't
+[26:01] might affect how you're doing your twinking, for example.
+[26:04] I kind of feel that there's enough meta shifts anyways.
+[26:07] With just all the balance change we make
+that we're not so in need of that as we might otherwise be.
+[26:12] I don't know that we need to do it.
+[26:14] What about as a private league option?
+[26:16] I mean we still need to take advantage fully of all the private league stuff that we could do.
+[26:21] We've kind of been a little busy recently.
+[26:29] I can't remember what the question was anymore.
+[26:31] The question was Leagues, why and how?
+[26:33] Oh yea that's right.
+[26:34] Leagues are awesome.
+[26:36] I think that's actually a really important part of our success as well.
+[26:39] Leagues are the secret to Path of Exile's success after items.
+[26:42] And the reason is, we're not a game like League of Legends that people are going to play
+[26:45] and then gradually grow of gradually decline based on the success of the game.
+[26:48] We're a game that you will play very hard on day one, slightly less out on day two,
+[26:53] slightly less out on day three.
+[26:54] Until you kind of don't care after two and a half months.
+[26:56] And then you're very excited again when there's new content.
+[26:59] And this is good with us.
+[27:00] It gives you a chance to play other games and rest and get some sleep before you destroy yourself on launch weekend again.
+[27:07] I want to hear what each of your personal favorite leagues so far have been.
+[27:14] I'm going to sound terrible.
+[27:17] Can I try and guess yours?
+[27:19] I thought it was a good league.
+[27:23] Is it Talisman?
+[27:24] Yeah.
+[27:24] Yeah.
+[27:29] They didn't let me design leagues after that one.
+[27:33] Me neither.
+[27:34] For me, I definitely loved Delve. But it
+was the darkness thing.
+[27:38] I just really loved the awesome lighting stuff we did,
+it was just so cool.
+[27:42] I have to tell them the beanstalk story at some stage.
+[27:45] People on Reddit keep messaging me about that. Let's let Erik finish his part and Jonathan finish his.
+[27:51] I really liked Anarchy back in the day.
+[27:54] Because I thought it was a really clever way to get existing assets reused.
+[27:59] You love using existing assets.
+[28:02] I too approve of us making a league in three days.
+[28:06] So, the beanstalk story.
+[28:07] I mentioned this in the context of Delve at some stage, and people on Reddit keep bugging me ever since, even though it's a tiny anecdote.
+[28:12] So we don't have league ideas that are very good during our discussion.
+[28:15] We're sitting in the office going like, "What could we possibly do?"
+[28:18] "Everyone, leave the room and come back with five ideas."
+[28:21] So I come back with like, "Colossus, dragons". And we're like, "Okay what would Colossus be?"
+[28:25] They're walking the land. They're huge. What does that mean for the players?
+[28:27] Are you fighting their feet? Are you fighting on them?
+[28:29] And that gets discarded because it's stupid.
+[28:31] Okay Dragons. What's it like? Can we do...
+[28:33] Shadow of the Colossus begs to differ.
+[28:34] Can we have it so there's twenty types of dragons and they're intelligent and there's dragons caves.
+[28:37] And there are huge fights. And we'll do this later in Path of Exile 2. Where we can have gigantic bosses.
+[28:42] Like the feet are individual monsters...Nope we're not doing that, for various reasons.
+[28:46] So we go through these crazy ideas.
+[28:48] Trust me, the dragons one wouldn't work out.
+[28:50] And one of the things is we're just thinking of random concepts.
+[28:52] What if there is a beanstalk that you can climb up and as you get higher and higher and higher there's complicated stuff.
+[28:56] And that turned into Delve.
+[28:58] Because it makes much more sense.
+[29:00] I'm pretty sure I was the one who said.. "Okay up is, okay like that's cool.
+[29:05] But up is bad, down is way better.
+[29:09] And then we go talking about Motherload, the old flash game.
+[29:12] Yes Motherload.
+[29:12] Yep and so that turned into Delve.
+[29:14] Who here has played Motherload, the flash game?
+[29:17] Nice, yeah. Cool, me too. It's a good game.
+[29:22] So obviously Path of Exile is made in New Zealand.
+[29:25] It's got a strong Maori influence in the art style and in a bunch of the characters, the Karui.
+[29:33] How early on did you know you wanted to introduce that?
+[29:38] It happened pretty much...
+[29:40] You look to the Swede.
+[29:42] It happened pretty much automatically because...
+[29:47] Like when we first made grass in the game for example.
+[29:50] Someone had to go out and take photographs of grass.
+[29:54] And sort of cut it out and put the grass sheets in game.
+[30:01] When it comes to weapons, there is a great museum here in Auckland.
+[30:05] That has these cool shark tooth weapons and wooden carved weapons.
+[30:12] It sort of just happened from that
+[30:16] It's just a nice touch to get inspired by what's around you.
+[30:20] I mean most gamers are just not used to seeing content created in this area of the world.
+[30:27] So therefore it seems totally unique to them for that reason.
+[30:31] It's a point of difference.
+[30:32] Yeah, it is a point of difference.
+[30:33] It just something that happens by virtue of just being here in this environment.
+[30:38] So it wasn't necessarily a "we want that".
+[30:40] Yeah we didn't think of it that way. It's just what naturally occurs.
+[30:43] I was talking to Kripparrian about this, where he's been researching New Zealand before he flew over.
+[30:47] Watching some movies and so on.
+[30:49] And he really feels that New Zealand is Wraeclast from the point of view that it....
+[30:54] He's seen so many similarities that he didn't realise before.
+[30:57] Has he been to Australia? Everything there is trying to kill you.
+[30:59] Wasn't Australia a prison colony where they exiled all the...
+[31:02] Yep.
+[31:03] Interesting. But people overseas think of Path of Exile as a game we've got like weird stuff going on.
+[31:08] And then you arrive in New Zealand and you arrive at the airport and you see all the carvings and they're like "Oh it's like Act Three!"
+[31:15] Except everything here is so gentle.
+[31:17] I meant Act Four. I should know this game by now.
+[31:19] Oh its like Act Three of the new one!.. Yeah.
+[31:26] Cut his feed, no.
+[31:28] Tell me about the night before you first launched Path of Exile back in 2012.
+[31:33] The very night you were going to go from beta to live.
+[31:38] To live?
+[31:38] Yeah.
+[31:39] There has been so many launches now.
+[31:42] How many of them do you actually remember?
+[31:44] And how many of them do you think you've forgotten.
+[31:46] They blur together.
+[31:47] There's one continuous hellscape.
+[31:50] You guys just do not understand how stressful it is on launch day.
+[31:52] Well the thing is I feel so much responsibility when the game goes down or there's some problem.
+[31:57] It's the worst. The idea that there's a hundred thousand people or more just hating me right now because the game isn't working.
+[32:03] They write that pretty explicitly.
+[32:04] I know, there's a lot of stress in that.
+[32:06] It's actually really hard to explain.
+[32:09] Raise your hand if you've personally blamed Jonathan.
+[32:19] Fears realised.
+[32:21] It's honestly terrible.
+[32:24] We have situations where it will launch and for example, in Prophecy, in predictive mode.
+[32:30] As in not lockstep. It would crash when you get to town.
+[32:32] Something to do with Navali in predictive mode.
+[32:35] So now we've got like fifteen percent of our users just repeatedly crashing.
+[32:37] Remember that time when everyone logs in and they can't move?
+[32:40] Yeah, how about that one?
+[32:42] Because nobody had actually tested that...
+[32:44] A build that was compiled without cheats.
+[32:47] Seriously. There was like a late breaking change.
+[32:50] No one had tested it. Like seriously.
+[32:52] There are so many things that can go wrong.
+[32:55] Speaking of.
+[32:56] Does that date, 25th of March, 2014 ring any bells?
+[33:02] Kiwi Halt.
+[33:03] Aw man, yeah.
+[33:04] Who remembers Kiwi Halt?
+[33:06] That was, I remember...
+[33:09] So the thing that caused that was we had just...
+[33:13] We had started using technology that allowed us to deploy server changes without restarting the realm.
+[33:18] So basically the hotfix things.
+[33:20] So it was the instance servers are the old code, and the new areas you go to are the new code.
+[33:25] But what I hadn't taken into account was the fact that when we deploy...
+[33:29] I assumed the data files would still be compatible.
+[33:33] Which is not a good thing to assume.
+[33:35] Because what would happen is that if someone had added a new column to the game database.
+[33:42] Then it would bump all of the other...
+[33:45] Sorry it wasn't even columns. It was rows. It was just rows.
+[33:48] If people added rows to the database then all the rows, once all the data files baked out like done by index.
+[33:54] So if you shift everything then that means that you're like "Okay so I'm an item and I'm looking at my mods or just anything.
+[34:00] And all of the offsets are wrong so you get random other item stuff just going on there.
+[34:04] And then your shield, instead of I look like a shield, I look like a kiwi.
+[34:07] Exactly exactly.
+[34:08] The weird thing is you literally see people holding kiwis and...
+[34:15] All your data is random now, is effectively what it was.
+[34:18] And then it gets saved.
+[34:20] And then it gets saved to the database, some of that stuff as well which was kind of bad.
+[34:23] I remember...
+[34:25] It's funny, to this day there is actually a thing in the database saving code.
+[34:30] At the point where you load an item, it says, "Was this item generated between this time and this time?
+[34:35] If so, just destroy it".
+[34:38] That is literally what the... there's like code for this that still survives now.
+[34:42] And we can't take that out. Otherwise some guy who hasn't logged in since that day will log in have a Kiwi.
+[34:47] Exactly.
+[34:48] I think it was only about a nineteen minute window as well.
+[34:50] Yeah yeah, it was very small.
+[34:51] Talking about obscure bugs. Okay so I have a story here.
+[34:54] Chris: This is probably not something, okay so.
+Nick: Love a good obscure bug.
+[34:57] Someone posts on Reddit an item with impossible mods. Like a rare.
+[35:01] And it's the wrong base type.
+[35:04] Having come from a Diablo 2 background, I am very unhappy at this point.
+[35:09] So how did this item occur?
+[35:10] How is a corrupted item possible?
+[35:12] Our game doesn't have exploits, you know.
+[35:14] When you say corrupted item, you probably mean something different?
+[35:16] Yeah, I mean corrupted from a memory point of view.
+[35:18] Database corrupt.
+[35:19] So we see this. We ask the guy. He's like, "I don't know. My item just changed into it".
+[35:23] I'm like, "Don't say that oh my God!"
+[35:24] So, how often is this happening?
+[35:26] We run some scans, it doesn't appear to be any other items.
+[35:29] A week later, there's another one.
+[35:30] And you know, we're not deleted their items from them.
+[35:32] It was quite a long time as well.
+[35:34] Just very occasionally there be just some weird as hell item just show up.
+[35:38] Is this the one... Was there a Shav's that was missing the Shav's mod?
+[35:42] Yes there was, that was one of them.
+[35:43] So there were some fun items being made.
+[35:45] And every time it happens, we go and talk about it for twenty minutes, can't work out how it's possible.
+[35:49] Like, we're talking like memory corruption here. We're trying to isolate which machines have these gone through.
+[35:53] Is this something with bad RAM? You know, do we have to hash the items and compare it?
+[35:56] And a long time goes by.
+[35:58] And so Thomas, our lead server administrator, who likes to tenaciously investigate stuff.
+[36:03] Looks into this. And by looks into this, I mean at a low level.
+[36:06] Recording packets and dumping them and what's in memory and basically just doing it the hard way.
+[36:10] If you're an Assembler programmer or whatever, you'll know what I mean.
+[36:13] We're talking some good low level debugging here.
+[36:15] And so he looks into it for a while, it's quite quiet.
+[36:17] And he comes back and says, "I have submitted a patch to the C standard library.
+[36:22] That will fix memory corruption that occurs when moving memory across a two gigabyte boundary on Linux.
+[36:26] Like, it was the operating system's standard library.
+[36:29] If you're a programmer, memcpy. The byte was a memcpy!
+[36:34] They have not merged this fix yet. It's still in the C standard library.
+[36:38] We are running Linux with that patched. No one else is.
+[36:41] Exactly yeah, it's ridiculous.
+[36:42] And that was causing item corruption very very very rarely in Path of Exile and probably other problems around the world.
+[36:47] Probably yeah.
+[36:48] Very very rare to reproduce.
+[36:50] Then there's bank accounts being run on Linux that just get an extra zero.
+[36:54] It's certain conditions.
+[36:56] And that's the case of hunting down bugs, it's not a case of, "Why wont GGG fix it?"
+[37:00] It's the case of lots of smart people in a room going, "how is this even possible".
+[37:03] And months later you find there's a problem in the operating system.
+[37:05] You know.
+[37:07] We've had cases where we think network cards are cursed.
+[37:09] You know.
+[37:10] There was definitely some cursed hardware we had at some point.
+[37:12] We've swapped servers out because they were cursed, and that fixed it.
+[37:15] Yes, thats...
+[37:17] Do you remember when we deployed the new microtransaction system?
+[37:19] Oh my God!
+[37:20] Chris: And it took multiple attempts.
+Jonathan: Oh my God!
+[37:22] Chris: So we tested the hell out of that.
+Jonathan: That might have been one of the worse periods of my life honestly.
+[37:26] We knew it was going to be hard. Because we have to migrate everyone's microtransactions from a completely different system to a new one.
+[37:30] It just would not work.
+[37:31] So we tested it. We got computers identical to the production ones. We ran a full scale test. It was good.
+[37:37] So we ran it on production and it was just incredibly slow and broken and everything broke.
+[37:41] So we rolled it all back and wasted several hours. So we did our test again and it was perfect.
+[37:44] And what could we do apart from do it again?
+[37:46] So we put some extra logging in, some extra safety. Ran it again and wrecked the realm for half a day.
+[37:50] So many times, that I...
+[37:51] Chris: And eventually we throw all those servers in the trash.
+Jonathan: I need to get off this topic again.
+[37:53] Literally at the end it was the servers. Like, replace them and then it was fine.
+[37:58] It was just the worst.
+[37:59] Hey Erik, how glad are you that you just work on art?
+[38:02] Yeah, I was just thinking that.
+[38:04] It's great to be an artist.
+[38:07] Does the door between our offices block the screaming?
+[38:13] Is there anything about running a live game like Path of Exile that took you by surprise?
+[38:17] All that stuff.
+[38:18] Okay, yeah yeah yeah.
+[38:19] Anything else?
+[38:22] Honestly I think for me it's...
+[38:25] The thing I realised after running a live game for a while.
+[38:27] I think there was this division in my mind for a long time about the game
+[38:31] versus all the discussion and community around the game.
+[38:36] And the thing I realised eventually was that the patch notes are actually part of the game.
+[38:41] At the end of a day, when you're playing the game, what we're doing is we're trying to make you feel good.
+[38:45] We're trying to make you feel a sense of fun.
+[38:47] And if reading something in the patch notes gives you that sense of fun.
+[38:50] Then that is just as valid as an actual thing happening in the game as well.
+[38:54] Like thinking about, "How is the community going to react to something." and all that stuff.
+[38:57] Is actually a huge part of running a live game that a lot of people don't appreciate.
+[39:01] Who here gets really excited by the patch notes?
+[39:06] So we've realised that we can put a lot of work in to adding something cool and secret to the game that half a percent of players will ever notice.
+[39:12] And that we don't mention in the patch notes and it kind of has no immediate value.
+[39:15] But putting it in the patch notes is like now it's a cool thing you know what I mean?
+[39:18] Whereas we can phrase something wrong in the patch notes and get like five percent less revenue for the next three months.
+[39:22] Because people like, "I'm not playing this league!"
+[39:24] But the thing is it's actually an important part of game design.
+[39:26] Is how do you address the community. And how do they understand what you're doing.
+[39:30] It's like that's actually part of the game too.
+[39:32] So I think that's probably...
+[39:33] That's something we've tried very hard to do well.
+[39:36] Patch notes are cool.
+[39:38] Didn't you write the patch notes?
+[39:40] Yeah, for the last two years.
+[39:41] I have also written the patch notes before.
+[39:42] Yeah.
+[39:43] I delegated this.
+[39:44] You did.
+[39:45] Thank you.
+[39:45] I've been doing them since 3.0.0
+[39:47] That was a like, fourteen-thousand word patch note.
+[39:51] Okay.
+[39:52] Now we've got some questions from you guys.
+[39:54] I love this one.
+[39:55] How far in advance do you plan the April fools jokes?
+[39:58] Such as cats on crit.
+[39:59] And how big of a job are those jokes?
+[40:02] It's usually not too far in advance.
+[40:04] We'll realise a week before. And then we'll get out the list of ideas. And they're all impossible.
+[40:07] And then awesome ones get turned down. You know what I'm talking about.
+[40:10] Well they know what I'm talking about. In terms of... The mirror one.
+[40:13] Chris: Yeah, they know.
+Nick: Oooooh.
+[40:15] Chris: I'm still bitter about that.
+Nick: Yeaaah.
+[40:18] I do like that one.
+[40:20] The ROYALE one we had to plan, a little bit.
+[40:22] Nick: Yep.
+Jonathan: Not too much though.
+[40:23] It was just one dude.
+[40:24] Yeah, well. No no.
+[40:26] Chris: It was one day, for many people.
+Jonathan: It was like one day for many people. So we had like, several steps.
+[40:30] So a few weeks before.
+[40:32] I think it was a couple of weeks before we thought about doing that.
+[40:35] All I remember was Rian going, "I have a day to do this".
+[40:38] Yeah yeah.
+[40:40] But the things is there were a few other bits and pieces from various people like UI.
+[40:44] I had to do some time as well to make the servers be able to have more than 32 people on them.
+[40:50] Which took me a day.
+[40:51] So that was my contribution.
+[40:53] ROYALE actually helped Blight. Because we added support for these big instances that can have a hundred people.
+[40:58] If it's a really busy instance.
+[40:59] It will spread it out among the servers more equally as opposed to just throwing them wherever.
+[41:03] Yeah because Blight was such a performance garbage fire in the backend.
+[41:06] We had to actually use that tech.
+[41:09] Chris: So we made Blighted maps into...
+Nick: Only on the backend?
+[41:11] Yes. Heavy instances we called them.
+[41:14] Blighted maps are like ROYALE instances in terms of being spread out a bit.
+[41:19] Here's another one.
+[41:21] So next year is the 10-year anniversary. Are there plans?
+[41:25] Of release you mean?
+[41:26] Nick: Yeah.
+Jonathan: Really?
+[41:27] Well according to this.
+[41:28] According to that.
+[41:29] I don't think that's right. They might mean like closed beta or open beta.
+[41:33] We've done Path of Exile stuff most years recently. So there's going to be a 10-year anniversary.
+[41:36] I guess so yeah.
+[41:36] I think it's probably closed or open beta.
+[41:38] Nick: Probably closed.
+Chris: It will have to be announcement if it's 2020.
+[41:41] Either way, we'll do a news post and some cool stuff.
+[41:46] Show those old screenshots again?
+[41:51] Do you each have a co-worker that your rely on the most? I think I can guess for at least two of you.
+[41:55] All of us Mark2
+[41:56] Jonathan: Mark2
+Chris: That's Neon, Yep.
+[41:58] He is so important.
+[42:03] He just knows everything about the balance and everything.
+[42:05] And honestly I don't anymore.
+[42:07] Who here has had a chance to meet Neon?
+[42:09] /Mark2.
+[42:10] /Mark.
+[42:12] Not that many.
+[42:14] He's got a secret villain shirt on. You should try and find and fight him.
+[42:18] Oh yeah, you're right. He has a shirt that might be worth trying to take down.
+[42:21] He's somewhat elusive though.
+[42:24] He doesn't like too much publicity.
+[42:26] It was very nice of him to come out multiple times onto the stage to talk to you guys.
+[42:29] Like when I realised I was going to have to answer 3.9.0 questions yesterday I had this sinking feeling like...
+[42:34] I just realised I need to find Mark. Like, "Where is he in this building?"
+[42:38] Mark come with me. "What huh?"
+[42:39] You're going on stage.
+[42:43] How do other games/developers affect Path of Exile/GGG?
+[42:49] I can think of one notable example.
+[42:54] They release releases of their 2004 games and take all our players for a league.
+[42:57] Uh huh.
+[43:01] We noticed that one.
+[43:03] Was it good though, did you have fun?
+[43:09] We don't try to necessarily follow trends too much.
+[43:14] But on the other hand, getting inspiration for leagues is super important.
+[43:17] I definitely look to other games to...
+[43:20] Especially ones that are just completely not in our genre at all.
+[43:23] That's what I'm always looking at.
+[43:25] So I try to play as many different things as I can.
+[43:27] I mean honestly I don't get a huge amount of time these days to play everything that comes out.
+[43:31] But I really do try because like getting inspiration from other things and then thinking like,
+[43:35] "How could I apply this type of game design to an Action-RPG." is really interesting.
+[43:39] The Binding of Isaac and Dead Cells and stuff like that have a lot of...
+[43:42] Dead Cells I loved. Dead Cells was awesome
+[43:44] Those games have influence in subtle ways.
+[43:45] Yeah yeah.
+[43:46] What's an example of something from Dead Cells or The Binding of Isaac?
+[43:49] I mean I don't know if there's anything like really explicit but like you know...
+[43:53] It's just kind of like...
+[43:54] That's a great question because I can't think of anything either but yet I'm constantly thinking of games.
+[43:58] Exactly I'm using it as a reference point all the time when I'm talking to people in the office.
+[44:01] But I don't know...
+[44:03] Like special rooms in Rogue Legacy will come up as, "Could this be a league mechanic?"
+[44:06] And obviously, they generally can't be.
+[44:08] But it's still interesting.
+[44:09] Rogue Legacy does have a notable mechanic that we haven't done.
+[44:13] Which is the Legacy part.
+[44:15] Oh interesting.
+[44:15] Where you die and you get some stuff.
+[44:17] Well actually wait a second. No there was a league that was based on that heavily modified. I'm sure there was.
+[44:24] Chris: You're thinking of the Nemesis system.
+Jonathan: Wait, no no no no.
+[44:25] Ohhhh.
+[44:26] I think we've talked about it.
+[44:28] No no yea it really... Oh yeah no that's what I was thinking of yeah you're right.
+[44:34] Did you guys get that?
+[44:35] Don't worry, this is what our design discussions are like.
+[44:38] We should design a league on the stage! We got ten minutes.
+[44:43] No, no no no no.
+[44:44] Oh I wanted to address, so.
+[44:46] Over Christmas two years ago we made Bestiary and we were really time pressured.
+[44:49] And it didn't help that we'd release War for the Atlas a week late.
+[44:51] So we only had twelve weeks to do Bestiary.
+[44:53] And everyone went away for Christmas.
+[44:55] And the next year we had to do Synthesis and we had a full thirteen weeks.
+[44:58] But it was really hard and everyone went away for Christmas.
+[44:59] So we're aware of this this time.
+[45:01] We're going to make a good one for March, okay?
+[45:03] So the "March releases are bad" ends.
+[45:06] We're having fourteen weeks this time.
+[45:08] Or at least the full thirteen, right?
+[45:10] We're definitely going to make sure we take our time.
+[45:11] So we've gone a week late on our current one.
+[45:13] Releasing in the middle of December.
+[45:14] We'll definitely not catch of a week for the March release.
+[45:17] It will be mid March. Or maybe a week later if we need to.
+[45:19] What league is that going to be?
+[45:21] 3.10
+[45:22] And what's the... Damnit.
+[45:24] Almost got him.
+[45:25] We have no idea what it its. We'll work it out.
+[45:27] We have to finish 3.9.0
+[45:28] But the point is we're going to put some effort into making sure the March one doesn't fall into the Christmas trap.
+[45:33] It is a trap.
+[45:39] Could you speak a little bit about your company growth philosophy?
+[45:43] Is there mentoring? Talk about speed of growth?
+[45:45] And maintaining/evolving the game vision as new employees join and establish themselves.
+[45:50] Personally I hate having to hire more people.
+[45:54] We have to do it. And it just feels like the company grows like a weed.
+[45:57] Even without me trying. New people just seem to show up.
+[46:00] I felt we were fine at twenty.
+[46:02] Yeah but the thing is that obviously you have to but..
+Nick:  What if I joined?
+[46:04] The thing that does suck is as companies get bigger it gets harder and harder to maintain the...
+[46:11] We have a very kind of like...
+[46:14] Or what I should say we do not have, is we do not have a really rigid structure with lots of middle management.
+[46:20] Or anything like that. We're very kind of free form.
+[46:22] And so as you get bigger, if you expand too fast I think that would really really break down.
+[46:28] Way too easily. I think its important not to grow too fast.
+[46:35] It seems like... How much did we scale up in the last year?
+[46:39] Oh I could think of about twenty people joining.
+[46:42] Yeah that seems crazy to me.
+[46:44] It does seem like a lot.
+[46:45] Yeah I don't understand how so many people.
+[46:46] There was a few weeks, were it was like week after week after week people would just show up.
+[46:50] Right, right. Yeah.
+[46:51] So as for bringing people onboard, the mentoring is super important.
+[46:55] Hopefully the new programmer I have hired recently appreciate the...
+[46:59] We do have a special guest. Mark2 himself. Neon. Is here.
+[47:04] What up?
+[47:13] Neon: Hey everyone. Thanks.
+Chris: We were just talking about you.
+Nick: What's on your shirt?
+[47:16] The Orion.
+[47:18] The code name for the boss at the end of the new expansion.
+[47:20] Yes it is.
+[47:24] This thing's replacement.
+[47:27] In game.
+[47:36] Honestly one day if I ever do retire and he replaces me. Don't be worried.
+[47:41] It will be fine.
+[47:42] But no, Mark is. We really rely on him.
+[47:45] He's really important.
+[47:46] Thank you for everything.
+[47:47] No, thank you.
+[47:48] I mean you gave me this opportunity.
+[47:52] So heart warming.
+[47:52] I was like most people here. Just a gamer at home.
+[47:55] I'd finished uni. I was just gaming.
+[47:58] And then I get a call from Chris one day.
+[48:01] I wasn't really expecting it.
+[48:03] It was through my brother, who had a friend and...
+[48:07] Chris: We needed a QA department.
+Neon: Yeah.
+[48:09] There was indirect and yeah, I got a call.
+[48:13] Took it. Didn't even know what I was getting paid. Didn't care.
+[48:16] I wanted it.
+[48:17] Thing is I originally vetoed the hire.
+[48:20] I was like, I think I looked at him and went, "Man he's just playing MMOs all day."
+[48:24] So Jonathan's like, "Nah, we need to find somebody with experience".
+[48:27] And I'm like, "We're desperate. We just need him"...
+[48:29] But honestly, you were the best person we ever hired.
+[48:32] So he was our entire QA department.
+[48:34] We now have like eighteen people.
+[48:37] That's fair.
+[48:38] And yeah, he runs the show now.
+[48:42] Now what was the thing that got you to hire him?
+[48:45] There was a certain exploit I know of, and I think if I recall it was your favorite ever nerf.
+[48:50] Because it was also a buff.
+[48:52] Are we talking about the flame totem stuff? I can't remember.
+[48:54] No.
+[48:55] Freeze mining.
+[48:56] That was post hiring.
+[48:57] Oh was that post hiring?
+[48:59] He was just exploiting that on live.
+[49:00] Aw I didn't know that.
+[49:04] How to tell a real PoE player.
+[49:05] Ehhh, clever use of game mechanics.
+[49:08] I believe is the terminology
+[49:11] Oh here's a... Okay what's the weirdest thing in Chris's garage?
+[49:18] They never found that out.
+[49:20] Huh?
+[49:21] Nothing.
+[49:22] At one point it was a massive stack of Tabulas.
+[49:26] If I remember correctly.
+[49:28] Those old Tabula shirts, we stored them at my garage.
+[49:31] And they kind of went moldy. And so we threw them in the wash.
+[49:35] And we washed them so they're fine but we have to give them to staff now. And we can't sell them.
+[49:40] I'm pretty sure, Mark, you wore Tabula shirts every day.
+[49:43] They were clean ones.
+[49:45] I got something like fifteen real life Tabulas.
+[49:49] And I rotated them for a very long time.
+[49:53] Hey Mark. What's the highlight of the convention for you so far?
+[49:59] I guess honestly, I mean I had... I was so nervous. All week.
+[50:05] Especially the last couple of days. I wasn't sleeping.
+[50:08] Just the kinda...
+[50:11] Everyone embracing it. This is a side of me that I never knew.
+[50:15] I mean I'm not exactly ultimately confident here, but
+[50:18] I never thought I would ever see my self doing this, so
+[50:21] it's kind of a change of myself.
+[50:23] And just honestly the recognition, everyone's just so happy, so positive.
+[50:30] I've never been to a social event ever. It's not like I go to many.
+[50:36] I've never been to many where just everyone is so friendly.
+[50:40] Nick: Yeah, you guys have been awesome.
+[50:41] Outside it's been so positive everywhere.
+[50:45] Out in the city. I love that.
+[50:54] I love that you all have effectively taken over Auckland City.
+[50:58] It's really good to see.
+[51:00] I've got friends who don't work... Aren't even associated with the game, and they're just like,
+[51:06] "Exile people are everywhere"
+[51:08] The Uber driver this morning asked me, "Are you there for the gaming thing?"
+[51:13] Yeah. Yeah I am.
+[51:15] And the amount of pride. I almost got quite chocked up about it up there when that first keynote happened was...
+[51:23] Immense.
+[51:24] It was...
+[51:26] It was incredible. It just made everything so worthwhile.
+[51:29] And I know a lot of our staff felt the exact same way.
+[51:32] Thank you everyone. So so much.
+[51:34] It's been the best weekend.
+[51:41] Alright. Thank you Mark.
+[51:42] Get off stage.
+[51:43] Thanks everyone.
+[51:45] Have a good one.
+[51:52] We're almost out of time. Is there anything you guys wanna say to our lovely fans?
+[51:57] Before we, also get off stage.
+[51:58] Thank you for being there for us.
+[52:00] Yeah, seriously. It's been so great.
+[52:03] You know, the keynote.. I felt.. when all you guys stood up and clapped and everything.
+[52:08] I was just... I felt so proud. It was amazing.
+[52:11] Yeah. I got goosebumps.
+[52:13] There are pictures of me almost crying on Reddit which is great.
+[52:17] I was trying to explain to people how this is a good thing.
+[52:21] We'll find a use for it.
+[52:23] Alright I think that probably. Oh Erik, anything?
+[52:27] Just that it's fantastic to finally be able to show PoE 2.
+[52:33] A lot of people have been working on that for a long time.
+[52:35] And have been forced to keep it completely under wraps.
+[52:41] So it's great to get it out there and actually see people like it.
+[52:46] Because there's always a worry that maybe it's kind of off the mark or something.
+[52:51] Did anybody predict the number or type of announcements we had?
+[52:56] No, no hands.
+[52:58] Ha-ha, surprise mobile project.
+[52:59] Fantastic. How about a round of applause.
+[53:01] Okay there's one hand. I don't believe you.
+[53:03] Oh I have something to say.
+[53:03] Oh yeah?
+[53:04] Yesterday I hinted on the pre-show I did a thing to try and tease it out.
+[53:08] So, we took pathofexile2.com which we've registered literally a decade ago.
+[53:12] And we changed its DNS to point to pathofexile.com,
+[53:15] set up a redirect to pathofexile.com/poe2,
+[53:17] hit okay and then refreshed Reddit.
+[53:19] And nothing happened.
+[53:20] And no one noticed.
+[53:21] I tested that out and I was like, "Ooo it goes to Path of Exile now".
+[53:25] Yeah you should notice these things.
+[53:28] So now they'll probably be checking the DNS records for every domain we've ever registered.
+[53:31] Chris: I don't think we have pathofexile3
+Jonathan: Yeah we don't have pathofexile3.com.
+[53:35] Someone does though.
+[53:36] Yeah someone probably does.
+[53:37] Wanting to buy our domain back.
+[53:39] Send it to us please. We want it.
+[53:40] But yeah. We were disappointed that because we were okay with plausible deniability of,
+[53:44] "We did something with the domain name" would be kind of cute.
+[53:48] Well, I would like to hear a round of applause for all the people who didn't leak the number of things we had to announce.
+[53:54] So yeah.
+[54:01] Alright. I want to thank you guys for coming out. And for obviously putting on such a wonderful convention.
+[54:05] And I'm looking forward to working with you guys and see what you guys do next.
+[54:09] Thanks very much for the questions and your hard work.
+[54:11] Thank you.
+[54:11] Thanks everyone.
+[54:12] Thanks everybody.

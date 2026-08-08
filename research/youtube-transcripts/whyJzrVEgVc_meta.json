@@ -1,0 +1,221 @@
+{
+  "video_id": "whyJzrVEgVc",
+  "title": "ExileCon Dev Talk - Evolving Path of Exile's Renderer",
+  "channel": "Path of Exile",
+  "channel_id": "UCA7X5unt1JrIiVReQDUbl_A",
+  "upload_date": "20200406",
+  "duration": 3277,
+  "view_count": 150458,
+  "like_count": 3492,
+  "tags": [
+    "dev talk",
+    "developer talk",
+    "path of exile",
+    "exilecon",
+    "video games",
+    "games",
+    "renderer",
+    "hack n slash",
+    "free to play",
+    "pc games",
+    "console games",
+    "action rpg",
+    "rpg",
+    "arpg",
+    "multiplayer",
+    "online"
+  ],
+  "categories": [
+    "Gaming"
+  ],
+  "chapters": [
+    {
+      "start": 0,
+      "end": 164,
+      "title": "<Untitled Chapter 1>"
+    },
+    {
+      "start": 164,
+      "end": 175,
+      "title": "WHAT IS PBR"
+    },
+    {
+      "start": 175,
+      "end": 252,
+      "title": "ADVANTAGES OF PBR"
+    },
+    {
+      "start": 252,
+      "end": 273,
+      "title": "DIFFERENT PBR RENDERERS"
+    },
+    {
+      "start": 273,
+      "end": 409,
+      "title": "SAFE DRIVING PRACTICE IN RENDERING"
+    },
+    {
+      "start": 409,
+      "end": 578,
+      "title": "POE 4.0.0 IS ALL-PBR"
+    },
+    {
+      "start": 578,
+      "end": 588,
+      "title": "TYPICAL START FOR A NEW TECH"
+    },
+    {
+      "start": 588,
+      "end": 690,
+      "title": "FAQ OF CREATING UNIQUE TECH"
+    },
+    {
+      "start": 690,
+      "end": 883,
+      "title": "STRUCTURE OF SHADOW"
+    },
+    {
+      "start": 883,
+      "end": 1288,
+      "title": "SSHVSM: SCREENSPACE MAP"
+    },
+    {
+      "start": 1288,
+      "end": 1584,
+      "title": "RENDERING EQUATION IS NASTY"
+    },
+    {
+      "start": 1584,
+      "end": 1594,
+      "title": "MIPPED COLOR"
+    },
+    {
+      "start": 1594,
+      "end": 1631,
+      "title": "HORIZON-BASED SCREENSPACE"
+    },
+    {
+      "start": 1631,
+      "end": 1718,
+      "title": "DETAILS: HBVSSGI"
+    },
+    {
+      "start": 1718,
+      "end": 1726,
+      "title": "OBSERVATIONS"
+    },
+    {
+      "start": 1726,
+      "end": 1743,
+      "title": "RAYTRACED REFRACTIONS"
+    },
+    {
+      "start": 1743,
+      "end": 1779,
+      "title": "RAYTRACED REFRACTION DRAWBACKS"
+    },
+    {
+      "start": 1779,
+      "end": 1989,
+      "title": "MEET SUBSURFACE REFRACTION"
+    },
+    {
+      "start": 1989,
+      "end": 2006,
+      "title": "SIMULATING FLOW"
+    },
+    {
+      "start": 2006,
+      "end": 2096,
+      "title": "EARLY RESULTS"
+    },
+    {
+      "start": 2096,
+      "end": 2182,
+      "title": "ALGEBRAIC MULTIGRID TESTBED"
+    },
+    {
+      "start": 2182,
+      "end": 2288,
+      "title": "PRECALCULATED RAYCASTING"
+    },
+    {
+      "start": 2288,
+      "end": 2341,
+      "title": "2D RAYCASTING"
+    },
+    {
+      "start": 2341,
+      "end": 2360,
+      "title": "FIRST ITERATION: INFINITY NOODLES"
+    },
+    {
+      "start": 2360,
+      "end": 2468,
+      "title": "GRASS UNCANNY VALLEY"
+    },
+    {
+      "start": 2468,
+      "end": 2474,
+      "title": "HUNTING GROUNDS"
+    },
+    {
+      "start": 2474,
+      "end": 2487,
+      "title": "GRAVEYARD"
+    },
+    {
+      "start": 2487,
+      "end": 2553,
+      "title": "DETAILS: GRASS RENDERING"
+    },
+    {
+      "start": 2553,
+      "end": 2601,
+      "title": "SYNTHESIS ITERATIONS"
+    },
+    {
+      "start": 2601,
+      "end": 2629,
+      "title": "SYNTHESIS FRACTURING"
+    },
+    {
+      "start": 2629,
+      "end": 2656,
+      "title": "ATLAS"
+    },
+    {
+      "start": 2656,
+      "end": 2676,
+      "title": "MEET VECTORIZATION TESTBED"
+    },
+    {
+      "start": 2676,
+      "end": 3277,
+      "title": "CURVATURE ADJUSTMENT"
+    }
+  ],
+  "has_manual_subs": true,
+  "has_auto_subs": true,
+  "subtitles_available": [
+    "en",
+    "de",
+    "pt-BR",
+    "ru",
+    "es"
+  ],
+  "auto_subtitles_available": [
+    "ab-en",
+    "aa-en",
+    "af-en",
+    "ak-en",
+    "sq-en",
+    "am-en",
+    "ar-en",
+    "hy-en",
+    "as-en",
+    "ay-en"
+  ],
+  "desc_timestamps": [],
+  "description_preview": "A talk from Alexander Sannikov, a programmer at Grinding Gear Games. Recorded at Exilecon 2019. You can find Alexander's Youtube channel here: https://www.youtube.com/user/DonXenapo"
+}

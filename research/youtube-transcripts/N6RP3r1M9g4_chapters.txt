@@ -1,0 +1,15 @@
+# Single shot global illumination with no denoiser
+Channel: Alexander Sannikov
+Duration: 02:37
+URL: https://www.youtube.com/watch?v=N6RP3r1M9g4
+
+## Description
+In this demo I present my first (mostly) working prototype of cascaded image space global illumination. It's fast enough to converge to a noise-free solution in about 5ms that does not require any denoising. My goal was to achieve this in one frame, which means no temporal reprojection, no reusing data from previous frames, etc. This implementation works in screenspace because I found a particularly efficient way of utilizing image space samples with this approach, but it obviously has classic image-space drawbacks.
+
+I show how cascades of varying spatial resolution all combine to form the final GI solution. The core idea here is that GI can be broken down into "cascades" of different spatial resolutions, where low spatial resolution cascades have higher angular resolution and allow capturing far-field GI, and high spatial resolution cascades complement them by capturing low angular resolution near-field global illumination data.
+
+The work is relatively evenly distributed between cascades, which means that for example level 6 cascade is downscaled 64x64 times, but there's as much GI to calculate at that frequency as there is at cascade level 0 that has no downscaling.
+
+## Subtitles
+Manual: No
+Auto-generated: Yes

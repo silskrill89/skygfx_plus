@@ -1,0 +1,23 @@
+# ExileCon 2023 - Rendering Path of Exile 2
+Channel: Path of Exile
+Duration: 52:56
+URL: https://www.youtube.com/watch?v=TrHHTQqmAaM
+
+## Chapters
+- [00:00] <Untitled Chapter 1>
+- [06:44] SUBSURFACE SHADOWS
+- [15:39] BENT NORMALS SHADOWS
+- [26:52] GLOBAL ILLUMINATION
+
+## Description
+A talk from Alexander Sannikov, a programmer at Grinding Gear Games. Recorded at ExileCon 2023.
+You can find Alexander's YouTube channel here:  https://www.youtube.com/channel/UCly0QRJAaJ2UGSGycOQoOdA
+
+The Shadertoy Alexander mentions during the talk can be found here: https://www.shadertoy.com/view/mlscz8
+
+Alexander's article on Radiance Cascades can be found here: https://drive.google.com/file/d/1L6v1_7HY2X-LV3Ofb6oyTIxgEaP4LOI6/view
+
+## Subtitles
+Manual: Yes
+Auto-generated: Yes
+Languages: en, de, ja, ko, pt, ru, es, th

@@ -1,0 +1,21 @@
+{
+  "video_id": "qyXwuN2GtWQ",
+  "title": "Screenspace Radiance Cascades using Depth Moments, Realtime Diffuse GI Showcase",
+  "channel": "cyberpiok",
+  "channel_id": "UC4Olb0WecroEisdhbe7cmYg",
+  "upload_date": "20260501",
+  "duration": 27,
+  "view_count": 1651,
+  "like_count": 75,
+  "tags": [],
+  "categories": [
+    "People & Blogs"
+  ],
+  "chapters": [],
+  "has_manual_subs": false,
+  "has_auto_subs": false,
+  "subtitles_available": [],
+  "auto_subtitles_available": [],
+  "desc_timestamps": [],
+  "description_preview": "Scene is lit with direct sunlight + screenspace emission + GI calculated in screenspace using depth moments, then fake multi-bounce with temporal feedback.\n\nUnlike bitmasks, depth moments can be aggressively filtered to hide small emission jittering during camera movement. This recording only applies 1 pass of simple blurring to it."
+}

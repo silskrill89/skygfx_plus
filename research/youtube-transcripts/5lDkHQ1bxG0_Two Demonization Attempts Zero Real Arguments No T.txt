@@ -1,0 +1,689 @@
+# Transcript: 5lDkHQ1bxG0
+# Fetched: 2026-08-07T06:23:51.106851
+# Entries: 684
+# Duration: 2872s
+
+[00:00] Neither AMD or Intel, if we include XCSS
+[00:03] in this discussion, cannot magically
+[00:05] clone Nvidia's several year head start
+[00:07] in research and development. So, why do
+[00:09] these companies even try? Because they
+[00:11] know channels like Hardware Unboxed,
+[00:13] Gamers Nexus, Digital Foundry, and all
+[00:15] these other mainstream voices are going
+[00:17] to be good little marketing slaves that
+[00:19] are going to dramatize a non-existent
+[00:21] race like some kind of infinite NASCAR
+[00:23] event. This video aged so unbelievably
+[00:26] well, it's not even funny. In only 10
+[00:28] days, every single influencer that we
+[00:30] mentioned proved us right. The script
+[00:32] for this video could barely keep up in
+[00:34] terms of revisions in order to tackle
+[00:36] everything in one concise video. And
+[00:38] we're not even going to be able to cover
+[00:40] the blatant corruption surrounding
+[00:41] Crimson Desert. So, to remind everyone,
+[00:43] we predicted poor optimization via
+[00:45] visuals and performance when everyone
+[00:47] else was putting their trust into
+[00:48] Digital Foundry, who also failed to
+[00:50] evaluate Silent Hill F correctly, but
+[00:52] moving on. There's not really a whole
+[00:54] lot to say about Digital Foundry's take
+[00:56] on DLSS 5 because we already told people
+[00:58] to ignore them. And while it's really
+[01:00] good to see our coverage on them
+[01:02] resurface, it's surprising that more
+[01:04] people aren't discussing our last
+[01:05] mention about them in our previous
+[01:07] video, in which we pointed out they will
+[01:09] lie to your face for Nvidia's benefit.
+[01:11] And their attempted damage control their
+[01:13] DLSS 5 comments only proved our point
+[01:15] regarding their actions. So, all we
+[01:17] really have to say is that they're not
+[01:19] surprising us. Now, the great thing
+[01:20] about Hardware Unboxed is that they
+[01:22] tried to make it seem like my statements
+[01:23] about them would hurt our credibility,
+[01:25] when only 2 days later they proved our
+[01:27] point and boosted our channel's
+[01:29] credibility instead. AMD's just behind
+[01:31] Nvidia. Can they get ahead, everyone?
+[01:33] No. If everyone used common sense, we'd
+[01:36] be able to predict their trajectory.
+[01:38] That is the logic we provided their
+[01:40] viewers with so that they could predict
+[01:41] the video's conclusion. But, I want to
+[01:43] point out two issues with Hardware
+[01:45] Unboxed. They tried defending themselves
+[01:47] by comparing this to hardware
+[01:48] development, when the entire point of
+[01:50] our last presentation showed the
+[01:52] anti-consumer vendor locked practices
+[01:54] are manufactured for the sole purpose of
+[01:57] complicating hardware purchases.
+[01:59] But instead of advocating for a hardware
+[02:01] agnostic solution, they instead
+[02:03] advocated for more consumer manipulation
+[02:05] by advocating for our DNA owners instead
+[02:08] of the industry. They clearly aren't
+[02:10] getting it. It doesn't matter if FSR 4
+[02:12] catches up because it's not vendor
+[02:14] agnostic. No, it's not vendor agnostic.
+[02:18] Stop forgetting about consoles as their
+[02:20] development on base machines like the
+[02:22] PS5 determines optimization on PC. We've
+[02:26] already discussed this a year ago, but
+[02:28] now more people are waking up to the
+[02:29] issue we discussed previously. These
+[02:31] dramatized races are detracting from the
+[02:33] true consumer based reality, which is
+[02:35] horrendous.
+[02:37] Then the announcement of DLSS 5 further
+[02:39] incriminated their choice of content and
+[02:41] perfectly complemented topics we
+[02:43] discussed a year ago. It also seems like
+[02:45] Hardware Unboxed hasn't understood my
+[02:47] explanation showing why AMD will never
+[02:50] truly match Nvidia in terms of quality.
+[02:52] The situation with Hardware Unboxed
+[02:54] could have gone more perfectly for us,
+[02:56] especially since Gamers Nexus tried to
+[02:58] defend them days before they proved us
+[03:00] right. But boy, Gamers Nexus video
+[03:03] proved our point so perfectly. This is
+[03:05] why we're going to dive into this one
+[03:07] the most. I want to clarify a few
+[03:09] things.
+[03:10] I know exactly what Gamers Nexus is
+[03:12] known for and I apologize for nothing.
+[03:15] Everyone said the same thing when I
+[03:17] attacked Digital Foundry saying they
+[03:18] were going to crush us. Yet, here we are
+[03:21] because they showed their following how
+[03:22] right we are.
+[03:24] We did not delete their reply on our
+[03:25] last video. We even screenshot it
+[03:28] immediately to respond to it publicly.
+[03:31] Their impatient edit caused it to be
+[03:33] removed, so our statement saying they
+[03:34] deleted it before they provided the
+[03:36] necessary context to publicly change our
+[03:38] conclusion was not a lie.
+[03:40] If their trolls cannot comprehend that
+[03:42] this reply proves we did our part in
+[03:44] approving it, that's on you and your
+[03:46] inability to understand basic evidence.
+[03:49] It is extremely ironic that they went
+[03:51] off and called us liars, when in their
+[03:53] own video, they literally made up quotes
+[03:55] we never said.
+[03:57] And they have given our channel a great
+[03:58] opportunity to show everyone how poorly
+[04:01] they handled our 100% correct statement
+[04:03] about them.
+[04:04] We are not going to waste our viewers
+[04:06] valuable time addressing his slew of
+[04:08] cheap shots, attempts to attack my
+[04:10] looks, and we're so not going to fall
+[04:12] for their pathetic attempt to demonize
+[04:14] us for copy striking accounts that steal
+[04:17] our content. If you really give a crap
+[04:19] about irrelevant DMCA and want to learn
+[04:22] why we strike disgusting lying thieves
+[04:24] on multiple platforms, you can read the
+[04:26] pinned comment on this video, because
+[04:28] I'm not letting Steve buy any more time
+[04:30] against my accusations. It is such a
+[04:32] blatant red herring, it's embarrassing.
+[04:35] Long story short, we made sure
+[04:36] disgusting people got exactly what they
+[04:38] deserved, and we would do it again in a
+[04:40] heartbeat because we've done nothing
+[04:42] wrong. You are a lazy, gullible
+[04:45] hypocrite if you try to use this topic
+[04:47] to invalidate this channel's work.
+[04:49] Moving on. Steve from Gamers Nexus
+[04:51] tragically didn't even seem to
+[04:52] understand the points I made. So, I'm
+[04:55] going to explain it again.
+[04:57] And this is not to insult anyone, but if
+[04:59] we're going to fix the broken industry
+[05:01] we previously defined, Gamers Nexus
+[05:04] needs to understand what we explained in
+[05:06] our last video. So, I'm going to explain
+[05:08] it to them and you other influencers as
+[05:11] if you are cavemen.
+[05:14] Let's picture three balloons, and their
+[05:16] height represents their market value
+[05:17] {slash} market demand. Picture the
+[05:20] media, influencers, and their news
+[05:22] reports as the wind that controls the
+[05:24] market value of what these balloons
+[05:26] represent. Gamers Nexus, Hardware
+[05:28] Unboxed, Digital Foundry, etc. are the
+[05:31] wind {slash} news that propel and
+[05:34] control the market incentive and market
+[05:36] demand of these balloons. Some of these
+[05:38] influencers have been doing it for 17
+[05:41] long years. This balloon represents
+[05:43] Nvidia, and it's filled with air. We
+[05:46] don't want Nvidia going up because
+[05:48] everything they do is founded in
+[05:50] manipulative anti-consumer practices
+[05:53] such as vendor locking graphic
+[05:54] techniques. This second balloon, also
+[05:57] filled with air, represents AMD and
+[05:59] Intel's graphics development. We do not
+[06:02] want this balloon up either because it's
+[06:04] currently copying Nvidia's anti-consumer
+[06:06] practices. This third balloon represents
+[06:09] regular vendor agnostic TAA {slash}
+[06:11] image quality and it's filled with
+[06:13] helium representing its pro-consumer
+[06:16] potential because nothing about it is
+[06:18] vendor locked. Brian Karis' abuse of
+[06:21] philosophy on optimization is the weight
+[06:23] holding down this balloon limiting its
+[06:26] potential.
+[06:27] So now vendor agnostic image quality has
+[06:29] become a gimped standard. From here on
+[06:32] out, I will refer to this as the Karis
+[06:34] gimped standard.
+[06:36] Now we need to quickly explain how FSR 1
+[06:38] through 3 fits in this. These were poor
+[06:41] vendor agnostic methods because they
+[06:42] mirrored the Karis gimped standard more
+[06:44] than DLSS. As explained in my LTT
+[06:47] response video, higher-ups at AMD were
+[06:50] more focused on how they could market
+[06:51] their quote competitive tech as a
+[06:53] DLSS-like solution rather than
+[06:56] distributing a new incompetent image
+[06:58] quality standard. Because DLSS is
+[07:00] essentially the most developed version
+[07:03] of the Karis gimped standard through
+[07:04] hardware acceleration, this is why FSR 1
+[07:07] through 3 were such failures in the
+[07:09] vendor agnostic development space.
+[07:11] The wind's current direction is causing
+[07:13] Nvidia's competitors to jump in and
+[07:15] basically leech on Nvidia's balloon by
+[07:18] creating tech based on Nvidia's DLSS and
+[07:21] copying other tech like ray
+[07:23] reconstruction. This is because
+[07:24] corporate graphics development is driven
+[07:26] by market demand. If vendor agnostic
+[07:28] development had proper market value,
+[07:30] companies would showcase their hardware
+[07:32] competence in such conditions. The wind
+[07:35] causes damage to gaming in two ways. If
+[07:38] an influencer {slash} wind says DLSS is
+[07:41] better than the vendor agnostic image
+[07:42] quality, then the market value of Nvidia
+[07:44] {slash} DLSS goes up, and vendor
+[07:47] agnostic development stays suppressed by
+[07:49] Carcass' standard.
+[07:51] But if the wind {slash} influencer says
+[07:53] vendor agnostic image quality is better
+[07:56] than DLSS, then Nvidia is simply
+[07:58] incentivized to make DLSS improvements.
+[08:01] It is still energy that incentivizes
+[08:03] Nvidia. It is a lose-lose scenario in
+[08:05] which Nvidia rises no matter what, and
+[08:08] causes vendor agnostic development to
+[08:10] remain by Carcass' standard weight.
+[08:13] What we really need is the wind to focus
+[08:16] on vendor agnostic image quality. That
+[08:18] is the only thing that will loosen the
+[08:20] hold of the weight that is holding down
+[08:21] real progress.
+[08:23] And that is the only thing that will
+[08:25] lower Nvidia's market value. As the
+[08:27] current gap between Nvidia and vendor
+[08:29] agnostic image quality is what helps
+[08:31] Nvidia's market value. This is what it
+[08:33] means to be a good little marketing
+[08:35] slave. It doesn't mean actively
+[08:37] promoting DLSS, it means rewarding the
+[08:39] culture that makes DLSS thrive. In
+[08:42] Steve's video, he is constantly trying
+[08:44] to convince the viewer that he and other
+[08:46] influencers stand up to Nvidia. But this
+[08:48] is not relevant. At the very end, he
+[08:51] tries to claim he's fair by calling
+[08:53] Nvidia's most recent marketing material
+[08:55] cool. And it's at this moment that he
+[08:58] shows that we are 100% right about
+[09:00] influencers. RTX Remix is not cool or
+[09:03] good. And from what he said in the
+[09:05] video, he would call that a difference
+[09:07] of opinion,
+[09:08] which is wrong. This channel doesn't
+[09:10] provide opinions. Everything we state
+[09:12] abides by objective standards defined by
+[09:15] reality. And the reality is is that RTX
+[09:18] Remix is a big ploy to turn modders into
+[09:20] good little Nvidia minions in order to
+[09:23] mass manipulate gamers for Nvidia's
+[09:25] benefit.
+[09:26] Nvidia is turning graphics modding into
+[09:28] a vendor locked activity. So, down the
+[09:30] line, modders can't switch from Nvidia.
+[09:32] This isn't even the worst aspect of RTX
+[09:34] Remix. The problem is that they're
+[09:36] getting thousands of hobbyists to turn
+[09:38] legacy titles into Nvidia hardware
+[09:41] biased products. Yes, the mods can be
+[09:44] played on any vendor with DXR, but the
+[09:46] graphic technologies provided through
+[09:48] RTX Remix are designed to perform poorly
+[09:51] on other vendors and even Nvidia's own
+[09:53] hardware in order to manufacture a
+[09:55] bigger need for DLSS performance gains.
+[09:58] RTX Remix doesn't provide modders with
+[10:00] perspective shadow maps, competent
+[10:02] BRDFs, etc. But that's what needs to be
+[10:04] talked about when you report on
+[10:06] marketing material.
+[10:08] 7 years ago when Gamers Nexus did their
+[10:10] first coverage on DLSS in Final Fantasy
+[10:12] 15, they spent more time talking about
+[10:15] Nvidia's grammar issues than discussing
+[10:17] the regress TAA in that game. TAA Nvidia
+[10:21] instructed people like Gamers Nexus to
+[10:23] compare DLSS against. But Steve made up
+[10:25] this random quote suggesting we label
+[10:28] him a marketing slave or judge their
+[10:29] content on whether or not do you talk
+[10:32] about the things I'm talking about and
+[10:34] starts ranting about irrelevant White
+[10:35] House visits because of this fake quote.
+[10:38] What was actually said if we look at the
+[10:40] full quote was the fact that they failed
+[10:42] to warn consumers about the complete
+[10:44] version of whatever topic they choose to
+[10:46] discuss. Regressed graphics have
+[10:49] everything to do with upscalers, not RAM
+[10:51] cartel investigations or waifu GPU
+[10:53] reviews. Why did it take 13 years for a
+[10:57] mainstream voice, being this channel, to
+[10:59] showcase the difference between TXAA 2X
+[11:01] and a vendor agnostic approach being
+[11:03] SMAA 4X? Why didn't it all these stable
+[11:06] tech influencers that have been around
+[11:08] for so many years not talk about that,
+[11:11] but talk about DLSS?
+[11:13] It seems like everyone with common sense
+[11:15] can take a guess why.
+[11:17] Because neural rendering sounded cooler,
+[11:19] didn't it? So they discussed it and in
+[11:21] turn created a culture in which AI
+[11:24] gaming could thrive in. A vendor locked
+[11:26] method being worse than a vendor
+[11:28] agnostic method? Not cool enough for
+[11:30] influencers. TAA becoming vastly worse
+[11:33] than previous TA implementations, not
+[11:35] cool enough for influencers. An AI
+[11:37] rebrand of a resolution reduction
+[11:39] competing with aggressively regressed AA
+[11:41] quality, greenlight that investigation.
+[11:45] All these influencers have been
+[11:46] contributing to this imbalance for over
+[11:47] a decade. If they finally understand
+[11:50] this,
+[11:51] it will probably shock them because I've
+[11:52] proven that everything shown here is
+[11:54] true.
+[11:55] And all you people who are their patrons
+[11:57] and give these channels your money and
+[11:59] support have also contributed to the
+[12:01] devastating downfall of vendor agnostic
+[12:03] visuals.
+[12:04] You are part of that wind that is
+[12:06] responsible for the present state of
+[12:08] graphics, and supporting us instead
+[12:10] makes that suppression end.
+[12:12] Now, who do you think should be
+[12:13] apologizing? You still think it's
+[12:15] Hardware Unboxed Active?
+[12:17] Here's the reason why we're not afraid
+[12:18] of calling out these egotistical
+[12:20] influencers, because they can either
+[12:22] ignore us, laugh in dismission, and
+[12:24] prove us right by continuing to produce
+[12:26] marketing slave content, or they could
+[12:28] start changing how they report marketing
+[12:30] material to consumers, which will fully
+[12:32] validate our aggressive tactics as
+[12:34] apparently the massive amount of work
+[12:36] that we've done isn't enough to
+[12:38] positively change their content. They've
+[12:40] already partially proven us correct as
+[12:42] all the sudden they've given us the time
+[12:44] of day after we called them good little
+[12:46] marketing slaves. More than a year's
+[12:48] worth of cleaning up the mess they let
+[12:50] happen in the past 17 years, reduced to
+[12:52] pathetic rumors pushed by corporate
+[12:54] shills.
+[12:56] The point is, to all these influencers,
+[12:58] no matter what you choose to do, the
+[13:00] entire industry will see us vindicated.
+[13:03] Either way, it's a win-win for us. It's
+[13:06] a checkmate, and it's a little trick we
+[13:08] picked up from Nvidia.
+[13:10] Speaking of Nvidia, let's discuss DLSS
+[13:13] 5.
+[13:14] We all know it looks uncanny, but even
+[13:15] if it looked great, it doesn't matter
+[13:18] because it's not vendor agnostic. This
+[13:20] is still our reality, not some software
+[13:23] ploy to reinvent graphics. But what I do
+[13:25] want to discuss is this specific
+[13:27] marketing material provided by Nvidia.
+[13:29] Because outside of ignorant AI art
+[13:31] direction changes and exaggerations, the
+[13:34] marketing material is pointing out
+[13:35] objective improvements like the material
+[13:37] lighting response and AO. Things this
+[13:40] channel has already stated are being
+[13:42] implemented incompetently in modern
+[13:44] games. We've already discussed far
+[13:46] better performing solutions like BRDFs
+[13:49] and ways to improve SSAO. Even if
+[13:52] someone is a fan of the more vibrant
+[13:53] colors shown on the left, that's all
+[13:55] data trained on photographs. And we've
+[13:58] been pushing an open source GT7 tone
+[14:00] mapper as a way to get photographically
+[14:02] validated coloring in games. So if
+[14:05] you're out there praising Nvidia and
+[14:06] DLSS 5, you are praising a band-aid
+[14:09] instead of looking at what the industry
+[14:11] has already achieved in graphics.
+[14:13] Before viewers leave the video, we need
+[14:15] viewers to join our Patreon in order to
+[14:17] vote for the next video topic as we're
+[14:19] sort of split on what viewers are
+[14:20] requesting versus what we think the
+[14:22] industry should spend more attention on.
+[14:24] Option one is what we feel like the
+[14:26] industry needs right now. It's an
+[14:28] analysis that will push for one of the
+[14:29] most important vendor agnostic graphical
+[14:31] progressions. And it's going to touch on
+[14:34] why demos have zero impact on the
+[14:36] graphics industry even if the graphics
+[14:38] technology is important and
+[14:40] pro-consumer.
+[14:41] Then option two is what's being
+[14:43] requested by our developer following as
+[14:45] they want a video listing our advice on
+[14:47] how to render modern content. So most of
+[14:49] the video will describe a sequence of
+[14:51] rendering passes, render target formats,
+[14:53] required optimizations, and map out
+[14:55] reasons why certain decisions are made
+[14:58] based on what we found in a more than a
+[14:59] year's worth of graphical analysis.
+[15:02] This video is very important because
+[15:03] your mainstream rendering discussions
+[15:05] are either discussing how to create the
+[15:07] fastest deferred renderer that is very
+[15:09] limited or the highest quality deferred
+[15:11] renderer that doesn't account for
+[15:13] performance. We can provide a video
+[15:15] describing the requisites to keep an
+[15:17] advanced deferred renderer performing
+[15:19] well. The issue with picking option two
+[15:21] is that we've always planned on making
+[15:23] this video, but only after completing
+[15:25] the analysis we feel are required to
+[15:27] explain first. Because the more analysis
+[15:29] we are able to get done before making
+[15:31] this video, the more concepts we'll be
+[15:33] able to discuss. Whereas a lot of the
+[15:35] topics and passes are going to be
+[15:36] labeled in need of more research. But we
+[15:39] don't know how long it will take to get
+[15:40] the rest of those analyses done. So
+[15:42] maybe it would be good to give some
+[15:44] engineers some goals to work on as we
+[15:46] continue to build this library of
+[15:47] optimization standards. But you will
+[15:50] only have three days to get your vote in
+[15:52] on Patreon and you'll be able to do so
+[15:54] on any subscription tier. Subscribe to
+[15:56] show support for our message and thank
+[15:58] you for your continued support. No
+[15:59] matter how many times you save the
+[16:01] world, it always manages to get back in
+[16:04] jeopardy again. I mean, sometimes I just
+[16:06] want it to stay saved, you know?
+[16:09] For a little bit. I feel like the maid.
+[16:11] I just cleaned up this mess. Can we keep
+[16:13] it clean for for 10 minutes? Yeah, this
+[16:16] month has been a little relentless in
+[16:17] terms of topics we need to address, but
+[16:20] there's not enough time to make another
+[16:21] revision for this video. So just
+[16:23] consider everything from this point
+[16:24] bonus footage. The blatant issue with
+[16:27] Hardware Unboxed is that they are
+[16:28] celebrating the fact that they have
+[16:29] created more consumers who go off and
+[16:31] demand AI upscaling from a hardware
+[16:34] vendor instead of demanding better
+[16:36] optimization and better vendor agnostic
+[16:38] image quality from studios. The
+[16:40] destruction of proper incentive was
+[16:42] already discussed in the last video. Why
+[16:44] would studios invest in basic competent
+[16:47] vendor agnostic graphics when Nvidia has
+[16:49] created an army of brainwashed consumers
+[16:51] that refuse to look at what pre-RTX
+[16:53] graphics had achieved? Why would
+[16:55] non-leading hardware vendors promote
+[16:57] vendor agnostic graphics to lower
+[16:59] Nvidia's market value when tech
+[17:01] influencers were reward their
+[17:02] second-rate upscaling developments with
+[17:04] constant attention? Hardware Unboxed's
+[17:06] discussion around FSR is so disgusting
+[17:09] because their complaints are about how
+[17:11] there's a lack of driver support for FSR
+[17:13] and how AMD is refusing to bring to
+[17:15] Vulcan, but it's not out of a
+[17:16] pro-consumer view. It's all in a
+[17:19] comparative view of DLSS. But why is
+[17:22] DLSS their reference? This is apparent
+[17:25] even in their comparisons. Why is a
+[17:27] slow, hardware-accelerated graphics API
+[17:30] picky solution that requires driver
+[17:31] tweaks from a user the reference instead
+[17:34] of a pixel or compute shader
+[17:35] implementation that has none of those
+[17:37] issues? Because Hardware Unboxed is too
+[17:40] blind and ignorant to understand and
+[17:42] research what vendor-agnostic graphics
+[17:44] have already achieved. Their discussion
+[17:46] is so ridiculous because the most simple
+[17:48] example of anti-consumer graphics that
+[17:51] was shown in the last video explained
+[17:53] the problem with driver-based graphics.
+[17:56] No one should have to use a most likely
+[17:58] incompatible third-party image quality
+[18:00] tool.
+[18:01] But they will go off and defend AI
+[18:03] upscalers because of butchered in-game
+[18:05] anti-aliasing. But the in-game butchered
+[18:07] anti-aliasing exist because marketing
+[18:09] slaves like them go off and market AI
+[18:12] medicine instead of referencing the
+[18:15] vendor-agnostic cure. It's a loop of
+[18:17] stupidity that just ends up helping
+[18:19] three corporations. By boosting the
+[18:22] literal market demand of AI gaming, they
+[18:25] are helping AMD and Sony perfectly copy
+[18:27] Nvidia's tensor core scheme in the
+[18:29] console market. When AMD and Sony
+[18:32] standardize AI in the console market,
+[18:34] that will only strengthen Nvidia in the
+[18:36] PC market. Now, let's discuss Vex. It is
+[18:40] impossible to reach the conclusions he
+[18:41] presents in this video if you watch our
+[18:43] channel's content in order of release as
+[18:46] the intended viewing process for our
+[18:47] content. This is because this video
+[18:50] disregards so many better performing and
+[18:52] so many better looking innovations in
+[18:54] graphics we've covered. When someone
+[18:56] says a game with extreme temporal smear,
+[18:59] extreme LOD pop, lagging graphical
+[19:01] updates, and hideously noisy visuals is
+[19:04] optimized because it gets above 50 FPS
+[19:07] on arbitrary hardware along with basic
+[19:09] object interactions, that person or
+[19:12] influencer collectively bash the market
+[19:14] value of real optimization.
+[19:17] Market value that our channel is
+[19:18] struggling to raise because of all these
+[19:21] other ignorant influencers that refuse
+[19:22] to educate themselves.
+[19:24] They are effectively telling the
+[19:25] industry to not be innovative because
+[19:27] they're willing to excuse whatever
+[19:29] garbage they're given. Whether those
+[19:31] excuses were made up by the influencers
+[19:33] guesses, propagated by incompetent
+[19:36] studios, or even hardware vendors, they
+[19:38] are saying those excuses sound good
+[19:40] enough instead of reasonable evidence. I
+[19:43] want it to be very clear that I loathe
+[19:45] the mainstream discussion of graphics
+[19:47] and tech.
+[19:48] I am honestly so sick of influencers
+[19:51] that pretend to be sort of friendly with
+[19:53] this channel and its methodologies, but
+[19:55] their friendly words, their friendly
+[19:57] references, and even their fairly
+[19:59] friendly personalities are all worthless
+[20:01] to me and this channel's following, and
+[20:03] only acts as a distraction from the fact
+[20:05] that they are brutally hurting our
+[20:07] consumer options. For instance, this
+[20:09] channel tirelessly fights to lower the
+[20:11] value of Epic Games and Unreal by
+[20:13] showing how it fails to live up to
+[20:14] previous graphic standards and workflow
+[20:16] efficiency. That will create market
+[20:18] incentive for Epic Games to fix issues
+[20:20] we've magnified over time, because
+[20:23] that's the only way they can raise back
+[20:24] the market value they lose.
+[20:26] If Epic fixes their issues, the rest of
+[20:29] the industry follows because Unreal
+[20:30] Engine is the industry standard. But if
+[20:33] influencers keep giving technical
+[20:34] compliments to garbage-looking and
+[20:37] garbage-performing games like Expedition
+[20:39] 33, well then Epic doesn't have to do
+[20:41] anything, do they?
+[20:42] The influencers inflate Epic's market
+[20:44] value for free, and they do it with ease
+[20:47] because all of them do it in a constant
+[20:49] synchronized fashion.
+[20:50] They tell Epic Games whatever they're
+[20:52] currently providing developers is good
+[20:54] enough for consumers. But our channel is
+[20:56] the only mainstream voice that puts
+[20:58] together evidence showing the objective
+[21:01] failures of Unreal and other graphic
+[21:02] pipelines, but unlike these people, it
+[21:05] takes weeks and weeks to put together.
+[21:06] This channel is only able to affect the
+[21:08] market because of the revenue support
+[21:10] from our following and because those
+[21:12] weeks worth of data collections we
+[21:13] provide affect people so much more than
+[21:16] shallow compliments thrown around by
+[21:18] ignorant influencers. Influencers who I
+[21:20] think can fix their content if they just
+[21:23] choose to learn from this channel
+[21:24] already. Now, the last thing I guess I
+[21:26] want to mention is something this
+[21:27] channel presented in this video where we
+[21:29] state Unreal Engine shows are shills
+[21:31] because they either get money from Epic
+[21:33] Games or because Epic provides that
+[21:35] entity with free marketing for their
+[21:37] product. This was something we shared on
+[21:38] X/Twitter regarding Osiris Reborn and
+[21:41] that Samsung game, which both look like
+[21:43] disgusting generic UE5 garbage. I want
+[21:45] to point out that these studios are
+[21:47] either too incompetent to recognize how
+[21:49] Unreal is murdering their art or they
+[21:52] know and they're sellouts for Epic Games
+[21:54] marketing. I want to share something
+[21:56] that really bothers me.
+[21:58] These studios have enough money to make
+[22:01] games but not enough money for custom
+[22:03] graphics development. So, they could
+[22:05] kill three birds with one stone by
+[22:06] creating independent marketing value
+[22:09] from publicly denouncing Unreal Engine's
+[22:11] competence. This would create news
+[22:13] against Epic Games creating development
+[22:16] incentive on Epic Games part and the
+[22:18] studio would gain respect from
+[22:19] consumers. And at that point, these
+[22:22] studios could promise custom graphics
+[22:23] development for their next game if their
+[22:26] first game is a financial success.
+[22:28] They will even get developers supporting
+[22:30] their game sales if they promise open
+[22:32] source graphics development. But so many
+[22:34] studios throw out this marketing
+[22:36] potential in favor of Epic Games
+[22:38] marketing instead. And one of the
+[22:39] biggest issues with Epic Games or Nvidia
+[22:42] marketing is that they can't counteract
+[22:44] the negative market value this channel
+[22:46] creates.
+[22:48] The more subscribers this channel gains,
+[22:49] the more people who spread the data on
+[22:51] this channel, the less incentives
+[22:53] developers have to being willing Unreal
+[22:55] Engine slaves. For instance, imagine if
+[22:58] Sandfall Interactive said, "Our game is
+[23:00] successful in despite of being made in
+[23:02] Unreal and we hate Epic's technologies
+[23:04] but their terrible workflows forced our
+[23:06] low-budget studio into using their
+[23:08] hideous technologies we disapprove of
+[23:10] etc. That would break the internet and
+[23:13] Epic would have to work much harder on
+[23:15] creating better tech and fixing issues
+[23:17] to raise their market value from such as
+[23:19] devastating blow to their current
+[23:20] status.
+[23:21] In the end, Sandfall Interactive would
+[23:23] have to do less custom development for
+[23:25] their next game. They would just be able
+[23:27] to reap Epic's new developments created
+[23:30] from their initial attack on Epic. I
+[23:32] would go as so far to say it's Sandfall
+[23:34] Interactive's responsibility to do so
+[23:37] because of how successful E33 was. But
+[23:40] instead, they're going around game
+[23:41] developer conferences brown-nosing Epic
+[23:43] Games and Unreal. More people need to
+[23:45] see it that way or things are going to
+[23:47] get worse. Anyways, I thought I might as
+[23:50] well discuss some marketing thoughts
+[23:51] before expanding on them in future
+[23:53] videos. So, thanks for sticking around.

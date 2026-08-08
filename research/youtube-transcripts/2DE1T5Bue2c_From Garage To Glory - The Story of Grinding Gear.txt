@@ -1,0 +1,765 @@
+# Transcript: 2DE1T5Bue2c
+# Fetched: 2026-08-07T06:23:01.483581
+# Entries: 760
+# Duration: 3020s
+
+[00:00] so basically the player plays a
+[00:01] character who's been exiled from their
+[00:03] Homeland they've committed a crime which
+[00:05] varies depending on their character
+[00:06] class and have been exiled to the world
+[00:08] of rust which is a very hostile
+[00:09] forbidden continent the everything
+[00:12] raging from the monsters to the
+[00:13] environment other players are out to get
+[00:15] them here and they have to forge their
+[00:16] way in this world but we stress it isn't
+[00:18] about the players saving the world in
+[00:20] this case they're trying to save
+[00:21] themselves and to gain tools that allow
+[00:23] them to survive against the Wilderness
+[00:25] greetings Gamers I'm gav this is the
+[00:27] story of grinding gear games and the
+[00:29] creation of their amazing title Path of
+[00:31] Exile from Chris Wilson's Garage to
+[00:33] where they are today G's consistent
+[00:35] communication and openness with the
+[00:37] community regarding their development
+[00:38] set a new standard in the space a
+[00:41] connection between the player and the
+[00:42] developer that's unfortunately been lost
+[00:44] over time in many genres and titles they
+[00:46] do write by the fans of their game and
+[00:48] are constantly delivering fantastic
+[00:50] content officially announced in 2010
+[00:52] Path of Exile has continued growing its
+[00:54] dedicated player base year over year
+[00:57] ever since in this video I'll start from
+[00:59] the very beginning when the studio and
+[01:00] game were first being established all
+[01:02] the way to the successful launch of
+[01:04] their game in 2013 I won't be going over
+[01:06] every patch or how the game has evolved
+[01:08] over the years but perhaps in a future
+[01:10] video we can take a look at the patch
+[01:12] by- patch progression of the game I'll
+[01:13] list off what I think are the top three
+[01:15] major contributors to path of exile's
+[01:17] long-term success and at the end of the
+[01:20] video we'll take a brief look at how
+[01:21] they're bringing over a decade of
+[01:23] experience into their highly anticipated
+[01:25] sequel Path of Exile 2 which is set to
+[01:27] release in Early Access later this year
+[01:29] all right let's Venture all the way back
+[01:31] to the beginning and dive
+[01:36] in at the age of 5 in the mid 1980s a
+[01:39] Young Chris Wilson stared longingly at
+[01:42] the new Amiga 500 computer system that
+[01:44] his parents had brought home he was
+[01:45] still a bit young and his parents were
+[01:47] apprehensive about allowing Chris to use
+[01:48] it just yet keeping the computer away
+[01:50] from him however only sparked his
+[01:52] curiosity further by the age of 7 Chris
+[01:54] had already started a program on that
+[01:56] very same Amiga 500 system his obsession
+[01:59] had begun fast forward to Chris's teen
+[02:01] years spent at Avendale College a
+[02:03] secondary school located in his hometown
+[02:05] of Auckland New Zealand let's let's get
+[02:07] to the history of the company Chris yes
+[02:10] Jonathan how and when did you guys first
+[02:13] meet so at high school there was this
+[02:16] computer in the library that had a copy
+[02:18] of quick basic installed on it and that
+[02:20] was kind of the because they didn't have
+[02:20] it in the computer labs of course
+[02:22] because why would you do that so I'd go
+[02:24] there in the library at lunchtime to do
+[02:25] some programming and this is when I was
+[02:27] like 16 or so and so one time there's
+[02:29] this kid on the computer and I'm like
+[02:31] hey kind of you know so sound
+[02:37] way so I introduced myself when we were
+[02:39] chatting he was a few years younger than
+[02:40] me and so we started talking about
+[02:42] coding and um kept in touch pretty well
+[02:44] as I went to University then he went a
+[02:45] few years later and we were good friends
+[02:47] and eventually decided that once we get
+[02:49] out of University we're going to go make
+[02:50] a game we weren't sure what it was yet
+[02:52] and um I think we had a vague idea we we
+[02:54] we had ideas but it was was inspiration
+[02:57] for that game at all yeah a little bit
+[02:59] well we both played a lot of D2 together
+[03:01] um so you know by the time Jonathan had
+[03:03] finished University we were pretty set
+[03:05] on this idea that everyone was terrible
+[03:07] at making action upgs and we could
+[03:09] actually make a good one which is huous
+[03:11] and crazy when you're just a couple of
+[03:12] random guys in your very early 20s I
+[03:14] think you were like 20 years old yeah at
+[03:16] the time we hadn't had commercial game
+[03:18] development experience we were just
+[03:19] hobbyists like way less qualified than
+[03:21] most of the people we hire now Jonathan
+[03:23] and Chris were fast friends with a
+[03:25] shared dream of making a game together
+[03:27] this was much more preferable to them
+[03:28] than making a career out of the mundane
+[03:30] software industry at the time through
+[03:32] their love of Diablo I Jonathan and
+[03:34] Chris would find the next piece of their
+[03:35] puzzle by pure happen stance they found
+[03:37] their art director Eric olafson Eric how
+[03:41] and when did you join this rag tag
+[03:44] couple of guys well so first of all I I
+[03:48] actually met Chris in a Diablo 2
+[03:51] strategy Forum so that would be maybe
+[03:54] around year year year 2000 or so so that
+[03:57] was back in the day it was harder to
+[03:59] find out the like the best builds and so
+[04:01] on you didn't have streamers and
+[04:02] everything back
+[04:04] then uh but then a few years after that
+[04:09] I got a a random message where Chris was
+[04:13] saying that him and Jonathan were
+[04:16] thinking about or like wanted to make a
+[04:20] Diablo like game and that sounded
+[04:23] amazing I thought so now for context you
+[04:26] were living in Sweden at the time oh
+[04:28] yeah so I'm on the opposite side of the
+[04:29] the world yeah literally about as far as
+[04:31] you can go I think we needed an artist
+[04:34] and we knew no one who's ever drawn
+[04:35] anything in their lives and Eric is an
+[04:36] accomplished artist and has done a whole
+[04:38] a whole industrial design thing he wrote
+[04:40] a textbook that many universities use
+[04:41] like he's he's he's up there and so I
+[04:44] said to him where would we find a lead
+[04:45] artist and he looked at plane tickets
+[04:48] the Trinity was formed Chris Wilson with
+[04:50] his vision for the next great arpg to
+[04:52] fill the Gap they saw in the market and
+[04:54] scratch that Eternal Diablo 2 itch
+[04:57] Jonathan Rogers who knew from a very
+[04:58] young age that wanted nothing more than
+[05:00] to make video games and was completely
+[05:02] on board with the project and last but
+[05:05] not least Eric olafson The Man Behind
+[05:07] the art and aesthetic of the game now
+[05:09] what they needed was funding to make
+[05:10] this Vision a reality unfortunately at
+[05:12] the time in New Zealand the games
+[05:14] industry was still very underdeveloped
+[05:16] making investors and funding difficult
+[05:18] to obtain we're lucky to have rich
+[05:20] friends so they've been willing to
+[05:21] invest some money in the project to see
+[05:22] it a FR ocean it's very difficult to get
+[05:24] Venture capitalists or Angel Investors
+[05:26] interested especially in online games
+[05:28] as's a mixture of fear and
+[05:29] misunderstanding in in the industry
+[05:30] that's where their fourth co-founder
+[05:32] came in that rich friend was none other
+[05:34] than Brian Weissman Weissman lives in
+[05:36] the United States and he privately
+[05:38] funded the Project's early development
+[05:40] as its executive producer believing in
+[05:42] the vision that Chris Wilson and the
+[05:43] others had brought forth Brian was a
+[05:45] promagic the Gathering player from 1994
+[05:48] to 1999 for all you MTG fans out there
+[05:51] he invented the most well-known control
+[05:53] deck in all of magic history simply
+[05:55] known as the deck I met Brian in the
+[05:58] early 2000s because we both played uh
+[06:00] online role playing games and we at the
+[06:02] time we were playing a game called
+[06:03] Diablo I a very formative game and that
+[06:05] resulted in a close friendship which is
+[06:06] endured to the state and one interesting
+[06:09] thing kept reappearing in our
+[06:11] conversations over and over again could
+[06:13] we in fact make a game that would be a
+[06:15] worthy sequel to Diablo
+[06:17] I crazy idea Chris Wilson has an
+[06:20] absolutely insane magic collection and
+[06:23] I'll have a video Linked In the
+[06:24] description for those interested in the
+[06:26] video he shows off some of this
+[06:27] collection of his which contains some of
+[06:29] the craziest Magic the Gathering
+[06:30] misprints that I've ever seen in late
+[06:33] 2006 early 2007 the trio used Chris's
+[06:36] Garage as an office space the first year
+[06:38] the guys did nothing but talk about the
+[06:40] project and played games for further
+[06:42] research in an attempt to dissect what
+[06:44] made different games so compelling as
+[06:46] well as meticulously going over the
+[06:47] details of their company and laying out
+[06:49] the foundations for their game back in
+[06:52] the mid 2000s my co-founders and I had
+[06:54] played a ton of Diablo I like like
+[06:56] thousands and thousands and thousands of
+[06:58] erors and as we over time tired of the
+[07:00] game we looked at other action RPGs that
+[07:02] we wanted to try out you know we tried
+[07:03] out Dungeon Siege series and Titan Quest
+[07:05] and so on and we played those games too
+[07:07] and enjoyed them but only for dozens of
+[07:09] hours rather than thousands of hours and
+[07:11] so this caused us to ask why did we SN
+[07:13] so much more time into Diablo I what was
+[07:15] perfect what made that game the best
+[07:16] action RPG that had ever existed and so
+[07:19] we came up with a bunch of design
+[07:20] pillars that we feel a perfect action
+[07:22] RPG needs that some of the other games
+[07:23] hadn't quite hit in all cases those
+[07:26] design pillars are still used by
+[07:27] grinding gear games today all being had
+[07:29] a bit more refined and expanded upon
+[07:31] their unpaid research and development
+[07:33] time that first year was well spent
+[07:35] Brian weissman's funding aided in their
+[07:36] ability to hire salaried workers and
+[07:38] contractors as well as run out actual
+[07:41] office space as the team grew their
+[07:42] Vision was starting to become a reality
+[07:44] and after much debate the co-founders
+[07:46] had finally decided on a company name
+[07:48] grinding gear games the name had a
+[07:50] hidden double meaning which they thought
+[07:52] was clever and it fit perfectly grinding
+[07:54] gear games stood for both the visual
+[07:55] representation of the gears grinding
+[07:57] together as shown in their logo but the
+[07:59] name also exhibits the core gameplay
+[08:01] Loop of Path of Exile which has you
+[08:03] grinding for the best gear you can
+[08:11] acquire the small GGG team worked in
+[08:13] secret for the next several years not
+[08:15] even publicizing the fact that they were
+[08:17] making a game not until what they had
+[08:19] was ready to blow people's minds in 2010
+[08:22] with Diablo I now announced and set to
+[08:24] release in 2012 Chris and the team knew
+[08:26] it was now or never to build hype for
+[08:28] their game the project was originally
+[08:29] going to be called one with nothing a
+[08:31] name which was scrapped in favor of the
+[08:33] more epic title Path of Exile it was
+[08:35] speculated that the name Path of Exile
+[08:37] was inspired by this D2 expansion set
+[08:40] Lord Of Destruction and so in September
+[08:42] of 2010 they flew to the US to show the
+[08:45] world what they had been working on
+[08:53] [Music]
+[09:00] [Music]
+[09:14] h
+[09:38] [Music]
+[09:45] grinding gear games and Path of Exile
+[09:47] were completely unknown at the time but
+[09:49] the announcement of their game was a
+[09:51] success it was unique and although not
+[09:53] perfect the game was well polished for
+[09:55] its stage of development and scratched
+[09:57] that Diablo 2 hge for many players paab
+[09:59] Exile received coverage in major
+[10:01] Publications at the time including PC
+[10:03] Gamer Inc gamers IGN and more Alpha and
+[10:06] closed beta for the game ran from 2010
+[10:08] to 2013 and the team had scaled up from
+[10:11] the original Three all the way to 18
+[10:13] employees and contractors looking to see
+[10:15] the project through the open Beta was
+[10:17] launched and the team was on top of the
+[10:19] world things were going well for the
+[10:20] Indie developer very well achieving a
+[10:23] peak of 70,000 concurrent users and
+[10:25] nearly 2 million signups their initial
+[10:27] growth was spectacular but but
+[10:29] maintaining those players was the issue
+[10:31] as their small weekly patches shifted to
+[10:33] large quarterly updates they started to
+[10:35] see a rise in returning and new players
+[10:38] these large content updates became known
+[10:39] as challenge leagues which would reset
+[10:41] the economy and bring forth a ton of new
+[10:43] content leagues and expansions allowed
+[10:45] for both experimentation for future game
+[10:47] mechanics and also did its job in
+[10:49] bringing players back fairly
+[10:51] consistently every update on October
+[10:53] 23rd 2013 Path of Exile was officially
+[10:56] released
+[10:58] [Music]
+[11:04] [Music]
+[11:08] they named me
+[11:15] sinner they stripped me of my
+[11:17] [Music]
+[11:26] life but this land was a will y land
+[11:31] Bounty as plentiful as
+[11:33] bones there is a life here if I have the
+[11:37] will to take
+[11:39] [Music]
+[11:41] it I will take from
+[11:46] others I will use others to take from
+[11:48] this
+[11:50] world or I will fight
+[11:53] alone I am an exile condemned to live in
+[11:57] fear
+[12:09] if I am to survive I must do but one
+[12:17] thing conquer the Beast
+[12:20] Within grinding gear games had learned a
+[12:23] lot of lessons through Alpha and beta
+[12:25] and they had their fair share of ups and
+[12:26] downs over the years to follow 1.0 but
+[12:28] they've never lost sight of their
+[12:30] original vision and have always remained
+[12:32] authentic and transparent both the team
+[12:34] size and the content additions to the
+[12:36] game have scaled up tremendously as the
+[12:38] game has grown over the years let's go
+[12:40] over the three things that I think have
+[12:42] allowed Path of Exile and grinding gear
+[12:43] games to not only survive but
+[12:50] Thrive there are many more factors than
+[12:53] the three that I'll be going over here
+[12:54] but I'm going to list off the top three
+[12:56] things that I think have allowed the
+[12:57] game to grow relatively consistently
+[12:59] year-over-year first up has to be their
+[13:02] free-to-play business model in 2006 when
+[13:04] they were first laying out their
+[13:06] foundational principles and Chris
+[13:07] Wilson's Garage this one was near the
+[13:09] top of their list at the time of path of
+[13:11] Exiles Inception they would have been
+[13:13] one of the first free-to-play Western
+[13:14] games on the market and you're using
+[13:16] your own technology for the engine
+[13:18] correct that's right yeah it was WR
+[13:19] entirely in house why why'd you do that
+[13:22] it was cheaper I mean we we funded the
+[13:25] game based on our savings and you know
+[13:26] the savings of friends and family and
+[13:27] stuff so we had to take Che keep uh I
+[13:29] guess smart options rather than buying
+[13:31] tools because we just couldn't afford
+[13:32] them economical yes indeed well we where
+[13:35] possible we'll try to we'll try to think
+[13:37] of a way which saves US money to solve a
+[13:39] problem got it uh and so why free to
+[13:41] play in that case following up when we
+[13:44] started the projects in 2006 there
+[13:45] weren't any Western free games it was
+[13:47] popular um in Asian markets you know
+[13:49] games like maple story were doing really
+[13:50] well so we had this plan to be the first
+[13:52] freet to-play game in Western markets
+[13:55] then it took six years to make the game
+[13:57] so we were not the first and and since
+[13:59] then the term free to play has become
+[14:00] poisoned a bit by games that sell
+[14:02] advantage and experience potions and a
+[14:04] ton of convenience options which are
+[14:06] almost cheating if you see what I mean
+[14:08] so we've been very clear that while our
+[14:10] game is free we don't sell advantage in
+[14:11] that way and so this is something our
+[14:13] fans actually really appreciate ethical
+[14:15] microtransactions right yes they knew
+[14:18] that their monetization model would
+[14:19] prove effective but they were completely
+[14:21] unaware at just how effective it all
+[14:24] started out as a crowdfunding program on
+[14:25] their website as funding grew thin for
+[14:27] their beta development they looked to
+[14:29] the success of Kickstarter campaigns for
+[14:31] other games Kickstarter was riddled with
+[14:33] fees that they didn't want to pay so
+[14:34] they decided to run their own variation
+[14:36] of crowdfunding containing different
+[14:38] backer tiers on their official Path of
+[14:40] Exile website the $10 tier contained a
+[14:42] Clos Beta key and the higher up you went
+[14:44] the more rewards you would receive no
+[14:46] pay to win ever the company raised over
+[14:49] $2.5 million during this campaign the
+[14:51] early stages of what would later become
+[14:53] supporter packs these packs would
+[14:55] contain physical items from the
+[14:56] developers such as t-shirts mouse pads
+[14:59] ad s Decor art and otherwise they would
+[15:01] also contain some pretty exclusive and
+[15:03] amazing in-game Cosmetics to add on to
+[15:05] that you would receive the monetary
+[15:07] value of that supporter pack as store
+[15:09] points to spend on anything of your
+[15:10] choosing for instance a $100 supporter
+[15:13] pack contains all of the merchant
+[15:14] Cosmetics that are listed as well as a
+[15:16] th000 in-game store points which is the
+[15:18] equivalent of the $100 that you just
+[15:20] spent they try very hard to cram value
+[15:22] into these packs and they seem to get
+[15:24] better every year by allowing everyone
+[15:26] to try your full game out for free those
+[15:28] that stick around and receive hundreds
+[15:29] of hours of enjoyment out of the game
+[15:31] actually want to help with the funding
+[15:33] of continued development it's a direct
+[15:34] incentive especially when the content
+[15:36] updates have done nothing but increase
+[15:38] in size and quality over the years this
+[15:40] free-to-play model that they've kept the
+[15:41] entire time has been pivotal to grinding
+[15:43] gear game success in my eyes zero
+[15:45] barrier to entry the second success
+[15:48] factor would have to be their leagues
+[15:49] and overall content release Cadence
+[15:51] Chris Wilson likes to attribute the
+[15:52] realization of this lesson to his now
+[15:55] good friend and Infamous gamer karion
+[15:59] the final story is one that I did not
+[16:01] realize myself I wish I was smart enough
+[16:03] to think of this but this actually came
+[16:04] from Karan the awesome streamer who
+[16:06] played a lot of Path of Exile at the
+[16:07] time and so karian and I were chatting
+[16:09] on Skype as I like to say that we did um
+[16:12] occasionally and he said to me you know
+[16:14] what Chris I've got I've got a lesson
+[16:15] for you that really helped me as my with
+[16:16] my streaming he said every day I will
+[16:19] wake up and I'll stream at a reliable
+[16:20] time I'm there right at that moment and
+[16:22] I'm going to stream until a predictable
+[16:23] time and then I'm going to work on my
+[16:24] highlights video and I'm going to post
+[16:25] that at a predictable time and then I'm
+[16:27] back tomorrow doing exactly the same
+[16:29] thing and I'm going to try not to take
+[16:30] days off I'm just going to stream at
+[16:31] these times and the reason he explained
+[16:34] was because that way when someone com
+[16:35] comes home from work and they're wanting
+[16:36] to watch Karan if that's the time and
+[16:38] day that he's streaming then they'll be
+[16:39] able to watch him and if they want to
+[16:40] watch a video before they go to bed or
+[16:41] whatever the timing is it will be there
+[16:43] and the day that it's not there is the
+[16:44] day they look on the internet and say
+[16:46] what will entertain me what else is
+[16:47] there in the world and they'll find some
+[16:48] other thing maybe another streamer maybe
+[16:50] a TV show and now that's the thing
+[16:51] they're doing for entertainment and he
+[16:53] felt that his numbers dropped
+[16:54] significantly if he deviated from his
+[16:55] very rigid schedule now you know he's a
+[16:58] Powerhouse of streaming right he's he's
+[16:59] amazing and he recommended that we do a
+[17:02] similar schedule with path of EXL
+[17:03] because he he said look at your graph of
+[17:05] what you've actually done in 2014 I I
+[17:07] made this graph not him but um this is
+[17:10] it was all over the place right we've
+[17:12] got medium leagues at 20 weeks big ones
+[17:13] at 16 they arbitrarily get small and
+[17:15] close together no path of EXL player is
+[17:17] going to think anything other than is
+[17:19] that game dying like what's going on
+[17:20] with them getting smaller and what's
+[17:21] with the timing no one can predicts
+[17:23] anything and so he strongly suggested we
+[17:25] have a rigid schedule because that way
+[17:26] it's more convenient for him because
+[17:28] then he knows when to stream but it's
+[17:29] also convenient for everyone else and so
+[17:31] we tried this
+[17:32] out so this was our new schedule the new
+[17:34] era of leagues as it's called and so
+[17:36] they're every 13 weeks so this means
+[17:38] exactly four of them fit into a year
+[17:40] that means that we know that they're
+[17:41] going to be on the second weekend of the
+[17:43] final month in each quarter or whatever
+[17:45] we do and this perfectly fits having one
+[17:46] a few weeks before Christmas and a week
+[17:48] before GDC and a week before E3 it just
+[17:51] just matches everything and it's great
+[17:52] so we started doing this and we were
+[17:54] initially doing some pipelining we work
+[17:55] on a small one while working on a bigger
+[17:57] one in the background and then in the
+[17:58] the second part of the cycle we released
+[18:00] the big one and then repeat this and
+[18:01] that enabled us to experiment with scope
+[18:03] and so on because to the at this point
+[18:05] we still weren't 100% sure how large
+[18:07] these had to be to have the correct
+[18:08] effect we were pretty sure 13 weeks
+[18:10] which is roughly three months was the
+[18:11] right amount of time during this game
+[18:13] development conference talk Chris
+[18:15] continues to explain how players
+[18:16] quitting your game is inevitable their
+[18:18] goal was to ensure that with this new
+[18:20] content release cycle and predictable
+[18:21] schedule that the players that did stop
+[18:23] playing for whatever the reason may be
+[18:25] would have a plan to return for the
+[18:27] following league and that they would
+[18:28] know reliably when the following league
+[18:30] would be released this content cycle has
+[18:32] been working out very well for both GGG
+[18:34] and the players ever since and so when
+[18:38] you look at it in the context of all of
+[18:40] The Path of Exile history you can see
+[18:42] that we were clearly declining there's
+[18:43] no argument about that for the first few
+[18:45] years and then really clearly climbing
+[18:47] they were clearly climbing indeed and
+[18:49] with their latest patch 3.25 Settlers of
+[18:52] calgar which was released on July 26th
+[18:54] of this year they continued that same
+[18:56] growth trend on the same day as the
+[18:58] release of 3.25 the game exceeded its
+[19:01] alltime peak on Steam with over 229,000
+[19:04] players online concurrently and what
+[19:06] some people neglect to remember is that
+[19:07] Path of Exile has its own Standalone
+[19:09] client as well and as long as they keep
+[19:11] the quality and Cadence consistent I
+[19:13] don't see that stopping anytime soon my
+[19:15] third and final arguably most important
+[19:17] factor is the community that they've
+[19:19] built the game was in development for
+[19:21] over 7 years for at least four of those
+[19:23] grinding gear games did no press or
+[19:25] announcements for their game no one knew
+[19:27] about them or the game that they were
+[19:28] creating from the time Path of Exile was
+[19:30] announced in 2010 Chris Wilson was
+[19:32] extremely active on their websites
+[19:34] forums he made weekly Dev blogs on their
+[19:36] YouTube channel to update everyone on
+[19:37] their development and he was constantly
+[19:39] involved on Reddit not only did this
+[19:41] allow him to quite literally shape the
+[19:43] community and keep the messaging of his
+[19:44] company and game authentic it was
+[19:46] something the fans of the game really
+[19:47] appreciated and Chris really enjoyed it
+[19:49] too between constant news updates
+[19:51] announcements and otherwise Chris earned
+[19:53] the trust and respect of the players and
+[19:56] in 2014 Chris said if they raised over
+[19:58] 20 $5,000 for the child's play charity
+[20:01] that he would shave his head for the
+[20:02] community they did just that and it was
+[20:04] time for him to ascend to his true form
+[20:07] hey I'm Chris Wilson from granding gear
+[20:08] games over the last couple of weeks we
+[20:10] raised over $25,000 for the child's play
+[20:12] charity and I promised I'd shave my head
+[20:14] if we reach 25k so let's go find a
+[20:16] hairdresser I guess
+[20:22] [Music]
+[20:30] [Music]
+[20:32] this one looks
+[20:34] [Applause]
+[20:39] good
+[20:43] [Applause]
+[20:44] [Music]
+[20:47] hello y
+[20:49] [Applause]
+[20:49] [Music]
+[20:51] [Applause]
+[20:59] this is simulating Bolding pretty well
+[21:01] right
+[21:02] [Applause]
+[21:04] there looks
+[21:09] good it does look
+[21:12] good well done good on you thank you
+[21:14] very
+[21:15] [Music]
+[21:17] much all right got to place the music
+[21:20] back at the office I think you got to
+[21:22] film that part yeah I'll get get the
+[21:25] reaction
+[21:28] all right we have to get some reactions
+[21:39] now it's pretty cold out there it's like
+[21:43] 10° need some
+[21:45] cold that same year he also did the ALS
+[21:48] Ice Bucket Challenge ALS is a horribly
+[21:51] crippling disease and it's a really
+[21:52] serious business I know it's funny to
+[21:53] watch videos of people getting wet on
+[21:54] YouTube but you should seriously
+[21:56] consider donating to the course I've put
+[21:57] 100 bucks in and hopefully you guys do
+[21:59] as well I'd like to nominate three
+[22:01] people first person is Max schaer from
+[22:03] runic games the second one is Mike deset
+[22:06] from five life Studios and finally sha
+[22:08] from Brin pill okay well we've got this
+[22:11] nice and cold for quite a while now so
+[22:13] hit me guys
+[22:18] okay need more cold
+[22:21] resist the game was really solidifying
+[22:23] itself in the market and the team was
+[22:25] earning respect and admiration across
+[22:27] the board Chris and the team at grinding
+[22:28] gear games have not only Built a
+[22:30] fantastic game they've handcrafted and
+[22:32] curated an amazing community of fans
+[22:35] fans that will follow them and support
+[22:36] them until the end there are a million
+[22:38] more factors I could mention such as
+[22:40] their highly unique and versatile skill
+[22:42] system their passive tree whether that
+[22:44] terrifies or Delights you Maps items and
+[22:47] all of their meta systems and way more
+[22:49] that I could list off and talk about but
+[22:51] I wanted to keep the length of this
+[22:52] video relatively reasonable I'd love to
+[22:54] hear about what your favorite thing
+[22:55] about Path of Exile is and what keeps
+[22:57] you coming back every league if you'd be
+[22:59] so kind to let me know down in the
+[23:01] comments now let's wrap up this video
+[23:03] and take a look at how grinding gear
+[23:04] games plan to carry forward this recipe
+[23:06] for success in Path of Exile
+[23:10] 2 originally announced at Exile Con in
+[23:13] 2019 Path of Exile 2 was meant to be a
+[23:15] major content update to the original
+[23:17] game it was going to be the 4.0 patch
+[23:20] and we're really proud to finally reveal
+[23:22] path of EXL
+[23:24] [Music]
+[23:25] 4.0 the gods are dead
+[23:29] but left on their own men will always
+[23:32] seek to take their place criminals your
+[23:36] sentence is to be hanged from the neck
+[23:39] until dead let your souls feed the first
+[23:42] ones and your bodies feed the land the
+[23:46] only result is
+[23:48] pain and
+[23:52] death is escaping kill her
+[24:07] [Music]
+[24:14] this Vision has changed a bit since then
+[24:16] here's a portion of the keynote from
+[24:18] exilecon 2023 when we announced Path of
+[24:21] Exile to at exilecon 2019 we told you
+[24:23] guys that we were releasing it as an
+[24:24] expansion to pee 1 and that both
+[24:26] campaigns would be playable in the same
+[24:28] game Cent at a with a shared endgame but
+[24:30] poe2 scope has continued to grow and
+[24:32] grow and it's far more than just an
+[24:34] expansion with a new campaign it is
+[24:36] entirely new monsters skills mechanics
+[24:38] classes everything you'd expect from the
+[24:40] next generation of action RPGs not to
+[24:42] mention revamps of most of the pee1
+[24:43] league content this thing is just
+[24:45] freaking huge there was a point when we
+[24:48] realized that our plan to replace pee 1
+[24:50] with pee 2 would essentially be getting
+[24:52] rid of a game that people love for no
+[24:53] real reason so we made a decision path
+[24:56] of xile 1 and two will be separate with
+[24:58] their own mechanics balance in games and
+[25:00] leagues but it's still a shared platform
+[25:03] your microtransactions are available
+[25:05] across both games everything you have
+[25:06] ever purchased or will ever purchase in
+[25:08] the future will be usable in both games
+[25:10] unless it's hypers specific to the
+[25:11] content of one of them you can't
+[25:13] transform into a bear in pee1 so a
+[25:15] reskin of your bare form isn't going to
+[25:16] work but you absolutely can equip the
+[25:18] awesome armor set that you got and use
+[25:19] all your stash tabs the separation
+[25:22] wasn't well received initially after the
+[25:24] announcement but it truly was the right
+[25:26] path forward it removed any Shack that
+[25:28] the original game would have placed on
+[25:30] the design of Path of Exile 2 and both
+[25:32] games will receive content updates that
+[25:34] offset each other so that you can
+[25:35] constantly play Path of Exile 1 and then
+[25:37] back to Path of Exile 2 rinse and repeat
+[25:40] for those of you unsure who Mark Roberts
+[25:42] the man standing next to Jonathan is
+[25:43] he's affectionately referred to as Mark
+[25:45] 2 since he was the second Mark to join
+[25:47] the company but most everyone else calls
+[25:49] him neon and he's an absolute badass
+[25:51] with an encyclopedic knowledge of the
+[25:53] game he competed in race events and on
+[25:55] the ladder for fun he plays the game a
+[25:57] lot and really knows his [ __ ] starting
+[25:59] out as a simple QA tester on Path of
+[26:01] Exile neon has proved himself an
+[26:03] invaluable asset to the team and I
+[26:05] couldn't be happier that him and
+[26:07] Jonathan are heading up this sequel
+[26:08] project I have to say from the footage
+[26:10] I've seen the past few years Path of
+[26:12] Exile 2 looks absolutely spectacular as
+[26:15] an avid MMO player the WD movement has
+[26:17] me very excited and just everything
+[26:19] about the game seems so well thought out
+[26:21] and Polished you can really see how much
+[26:23] grinding gear games and Path of Exile
+[26:25] has evolved over the years Path of Exile
+[26:27] 2 is their opportunity to truly bring
+[26:29] their new tech and all of those Lessons
+[26:31] Learned forward with Early Access open
+[26:33] for everyone beginning in November of
+[26:35] this year barring any issues when
+[26:37] comparing Path of Exile 2 to other games
+[26:39] on the market I like many others find
+[26:41] myself asking how on Earth is this game
+[26:48] free grinding gear games has achieved
+[26:51] The Impossible their continued growth
+[26:53] can be attributed to a lot of strategy
+[26:55] and luck but the amount of hard work and
+[26:57] passion that has been poured into this
+[26:58] company and game cannot be understated I
+[27:01] personally began playing in breach
+[27:02] League myself and have returned off and
+[27:04] on ever since I absolutely can't wait
+[27:06] for Path of Exile 2 and I'll definitely
+[27:08] be covering it and maybe even the lore
+[27:10] on this channel come November thank you
+[27:13] so much for watching I hope you all
+[27:14] enjoyed as always for those that made it
+[27:16] this far into the video I have a
+[27:18] question for you and I'll respond to
+[27:20] everyone that takes the time to comment
+[27:21] their thoughts what feature in Path of
+[27:23] Exile 2 has you most excited for me it
+[27:26] has to be the silky smooth WD movement
+[27:28] that I mentioned earlier putting that in
+[27:30] an already epic arpg I absolutely can't
+[27:33] wait like the video if you liked it
+[27:35] subscribe to my channel if you're
+[27:36] looking forward to more reviews
+[27:37] documentaries and lore out of me and
+[27:39] I'll see you all in the next one
+[27:41] farewell

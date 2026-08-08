@@ -1,7 +1,7 @@
 # Remaining Roadmap — Implementation Plan
 
 > Created: 2026-08-01
-> Branch: `experimental` (HEAD = 3999f8c)
+> Branch: `experimental` (HEAD = 535cde7)
 > Scope: Everything still TODO across all planning docs
 
 ---
@@ -15,7 +15,8 @@
 | Phase 2 (Visual) | CJ depth, glass, sun streaks, CryEngine PBR, env reflections, normal buffer | ✅ DONE (a600105, c671ce3, f09e50a) |
 | vehiclePipe dedup | Extract 5 shared helpers, refactor 5 callbacks | ✅ DONE (b680e31) |
 | Normalmap deferred attach | RpNormMapPluginAttach timing fix | ✅ DONE (b680e31) |
-| Architecture (WORKFLOW_PLAN 3) | Config refactor, buildingPipe dedup, render state | 🔧 IN PROGRESS |
+| Architecture (WORKFLOW_PLAN 3) | Config refactor, buildingPipe dedup, render state | ✅ DONE (aa8693b, 4ef8ce3) |
+| **Phase F** | **Atmospheric: height fog ✓, god rays ✓, stencil shadows, clouds** | **🔧 IN PROGRESS** |
 | Phase 2 (Roadmap) | Platform/game style selection UI | ❌ NOT STARTED |
 | Phase 3 (Roadmap) | GTA V/IV-style settings menu | ❌ NOT STARTED |
 | Phase 4 (Roadmap) | Forward+ unified pipeline | ❌ NOT STARTED |

@@ -1,0 +1,497 @@
+# Transcript: h9Z4oGN89MU
+# Fetched: 2026-08-07T06:23:05.596515
+# Entries: 246
+# Duration: 1708s
+
+[00:00] How many calculations do you think your 
+graphics card performs every second  
+[00:04] while running video games with incredibly 
+realistic graphics? Maybe 100 million? Well,  
+[00:11] 100 million calculations a second is what’s 
+required to run Mario 64 from 1996. We need  
+[00:21] more power. Maybe 100 billion calculations a 
+second? Well, then you would have a computer  
+[00:27] that could run Minecraft back in 2011. In order 
+to run the most realistic video games such as  
+[00:34] Cyberpunk 2077 you need a graphics card that can 
+perform around 36 trillion calculations a second. 
+[00:43] This is an unimaginably large number, so let’s 
+take a second to try to conceptualize it. Imagine  
+[00:50] doing a long multiplication problem once every 
+second. Now let’s say everyone on the planet does  
+[00:57] a similar type of calculation but with different 
+numbers. To reach the equivalent computational  
+[01:03] power of this graphics card and its 36 trillion 
+calculations a second we would need about 4,400  
+[01:12] Earths filled with people, all working together 
+and completing one calculation each every second.  
+[01:20] It’s rather mind boggling to think that a 
+device can manage all these calculations,  
+[01:25] so in this video we’ll see how graphics cards work 
+in two parts. First, we’ll open up this graphics  
+[01:32] card and explore the different components inside, 
+as well as the physical design and architecture  
+[01:38] of the GPU or graphics processing unit. Second, 
+we’ll explore the computational architecture and  
+[01:46] see how GPUs process mountains of data, and why 
+they’re ideal for running video game graphics,  
+[01:53] Bitcoin mining, neural networks and AI.
+So, stick around and let’s jump right in. 
+[02:08] This video is sponsored by 
+Micron which manufactures  
+[02:11] the graphics memory inside this graphics card.
+Before we dive into all the parts of the GPU,  
+[02:19] let’s first understand the differences between 
+GPUs and CPUs. Inside this graphics card,  
+[02:26] the Graphics Processing Unit or GPU has over 
+10,000 cores. However, when we look at the  
+[02:33] CPU or Central Processing Unit that’s mounted to 
+the motherboard, we find an integrated circuit or  
+[02:40] chip with only 24 cores. So, which one is more 
+powerful? 10 thousand is a lot more than 24,  
+[02:48] so you would think the GPU is more powerful, 
+however, it’s more complicated than that. 
+[02:55] A useful analogy is to think of a GPU as a massive 
+cargo ship and a CPU as a jumbo jet airplane.  
+[03:03] The amount of cargo capacity is the amount of 
+calculations and data that can be processed,  
+[03:09] and the speed of the ship or airplane is the 
+rate at which how quickly those calculations  
+[03:15] and data are being processed. Essentially, 
+it’s a trade-off between a massive number  
+[03:21] of calculations that are executed at a 
+slower rate versus a few calculations  
+[03:27] that can be performed at a much faster rate.
+Another key difference is that airplanes are a  
+[03:32] lot more flexible since they can carry passengers, 
+packages, or containers and can take off and land  
+[03:39] at any one of tens of thousands of airports. 
+Likewise CPUs are flexible in that they can run  
+[03:46] a variety of programs and instructions. However, 
+giant cargo ships carry only containers with bulk  
+[03:53] contents inside and are limited to traveling 
+between ports. Similarly, GPUs are a lot  
+[04:00] less flexible than CPUs and can only run simple 
+instructions like basic arithmetic. Additionally  
+[04:08] GPUs can’t run operating systems or interface 
+with input devices or networks. This analogy  
+[04:15] isn’t perfect, but it helps to answer the question 
+of “which is faster, a CPU or a GPU?”. Essentially  
+[04:24] if you want to perform a set of calculations 
+across mountains of data, then a GPU will be  
+[04:30] faster at completing the task. However, if you 
+have a lot less data that needs to be evaluated  
+[04:36] quickly than a CPU will be faster. Furthermore, 
+if you need to run an operating system or support  
+[04:43] network connections and a wide range of different 
+applications and hardware, then you’ll want a CPU. 
+[04:50] We’re planning a separate video on CPU 
+architecture, so make sure to subscribe  
+[04:55] so you don’t miss it, but let’s now dive into this 
+graphics card and see how it works. In the center  
+[05:02] of this graphics card is the printed circuit 
+board or PCB, with all the various components  
+[05:08] mounted on it, [Animator Note: Highlight and list 
+out the various parts that will be covered.] and  
+[05:10] we’ll start by exploring the brains which is 
+the graphics processing unit or GPU. When we  
+[05:17] open it up, we find a large chip or die named 
+GA102 built from 28.3 billion transistors. The  
+[05:26] majority of the area of the chip is taken up by 
+the processing cores which have a hierarchical  
+[05:33] organization. Specifically, the chip is divided 
+into 7 Graphics Processing Clusters or GPCs,  
+[05:41] and within each processing cluster are 12 
+streaming multiprocessors or SMs. Next,  
+[05:48] inside each of these streaming multiprocessors 
+are 4 warps and 1 ray tracing core, and then,  
+[05:56] inside each warp are 32 Cuda or shading cores and 
+1 tensor core. Across the entire GPU are 10752  
+[06:08] CUDA cores, 336 Tensor Cores, and 84 Ray Tracing 
+Cores. These three types of cores execute all the  
+[06:18] calculations of the GPU, and each has a different 
+function. CUDA cores can be thought of as simple  
+[06:24] binary calculators with an addition button, a 
+multiply button and a few others, and are used  
+[06:31] the most when running video games. Tensor cores 
+are matrix multiplication and addition calculators  
+[06:38] and are used for geometric transformations 
+and working with neural networks and AI. And  
+[06:45] ray tracing cores are the largest but the fewest 
+and are used to execute ray tracing algorithms. 
+[06:53] Now that we understand the computational 
+resources inside this chip, one rather interesting  
+[06:59] fact is that the 3080, 3090, 3080 ti, and 3090 ti 
+graphics cards all use the same GA102 chip design  
+[07:11] for their GPU. This might be counterintuitive 
+because they have different prices and were  
+[07:16] released in different years, but it’s true. 
+So, why is this? Well, during the manufacturing  
+[07:23] process sometimes patterning errors, dust 
+particles, or other manufacturing issues  
+[07:29] cause damage and create defective areas of the 
+circuit. Instead of throwing out the entire chip  
+[07:35] because of a small defect, engineers find the 
+defective region and permanently isolate and  
+[07:41] deactivate the nearby circuitry. By having a GPU 
+with a highly repetitive design, a small defect in  
+[07:49] one core only damages that particular streaming 
+multiprocessor circuit and doesn’t affect the  
+[07:55] other areas of the chip. As a result, these chips 
+are tested and categorized or binned according  
+[08:02] to the number of defects. The 3090ti graphics 
+cards have flawless GA102 chips with all 10752  
+[08:13] CUDA cores working properly, the 3090 has 10,496 
+cores working, the 3080ti has 10,240 and the 3080  
+[08:26] has 8704 CUDA cores working, which is equivalent 
+to having 16 damaged and deactivated streaming  
+[08:34] multiprocessors. Additionally, different graphics 
+cards differ by their maximum clock speed and the  
+[08:41] quantity and generation of graphics memory that 
+supports the GPU, which we’ll explore in a little  
+[08:47] bit. Because we’ve been focusing on the physical 
+architecture of this GA102 GPU chip, let’s zoom  
+[08:54] into one of these CUDA cores and see what it looks 
+like. Inside this simple calculator is a layout  
+[09:00] of approximately 410 thousand transistors. This 
+section of 50 thousand transistors performs the  
+[09:08] operation of A times B plus C which is called 
+fused multiply and add or FMA and is the most  
+[09:17] common operation performed by graphics cards. 
+Half of the CUDA cores execute FMA using 32-bit  
+[09:24] floating-point numbers, which is essentially 
+scientific notation, and the other half  
+[09:29] of the cores use either 32-bit integers or 32-bit 
+floating point numbers. Other sections of this  
+[09:36] core accommodate negative numbers and perform 
+other simple functions like bit-shifting and bit  
+[09:42] masking as well as collecting and queueing 
+the incoming instructions and operands,  
+[09:47] and then accumulating and outputting the results. 
+As a result, this single core is just a simple  
+[09:55] calculator with a limited number of functions. 
+This calculator completes one multiply and one add  
+[10:01] operation each clock cycle and therefore with this 
+3090 graphics cards and its 10496 cores and 1.7  
+[10:12] gigahertz clock, we get 35.6 trillion calculations 
+a second. However, if you’re wondering how the GPU  
+[10:20] handles more complicated operations like division, 
+square root, and trigonometric functions, well,  
+[10:27] these calculator operations are performed by 
+the special function units which are far fewer  
+[10:33] as only 4 of them can be found in each streaming 
+multiprocessor. Now that we have an understanding  
+[10:38] of what’s inside a single core, let’s zoom out 
+and take a look at the other sections of the GA102  
+[10:45] chip. Around the edge we find 12 graphics memory 
+controllers, the NVLink Controllers and the PCIe  
+[10:54] interface. On the bottom is a 6-megabyte Level 
+2 SRAM Memory Cache, and here’s the Gigathread  
+[11:01] Engine which manages all the graphics processing 
+clusters and streaming multiprocessors inside. 
+[11:08] Now that we’ve explored this GA102 GPU’s physical 
+architecture, let’s zoom out and take a look at  
+[11:15] the other parts inside the graphics card. On this 
+side are the various ports for the displays to be  
+[11:22] plugged into, on the other side is the incoming 
+12 Volt power connector, and then here are the  
+[11:28] PCIe pins that plug into the motherboard. On 
+the PCB, the majority of the smaller components  
+[11:36] constitute the voltage regulator module which 
+takes the incoming 12 volts and converts it to  
+[11:42] one point one volts and supplies hundreds 
+of watts of power to the GPU. Because all  
+[11:49] this power heats up the GPU, most of the weight 
+of the graphics card is in the form of a heat  
+[11:54] sink with 4 heat pipes that carry heat from the 
+GPU and memory chips to the radiator fins where  
+[12:01] fans then help to remove the heat. Perhaps some of 
+the most important components, aside from the GPU,  
+[12:09] are the 24 gigabytes of graphics memory chips 
+which are technically called GDDR6X SDRAM and  
+[12:17] were manufactured by Micron which is the sponsor 
+of this video. Whenever you start up a video game  
+[12:23] or wait for a loading screen, the time it takes 
+to load is mostly spent moving all the 3D models  
+[12:29] of a particular scene or environment from the 
+solid-state drive into these graphics memory  
+[12:35] chips. As mentioned earlier, the GPU has a small 
+amount of data storage in its 6-megabyte shared  
+[12:41] Level 2 cache which can hold the equivalent of 
+about this much of the video game’s environment.  
+[12:47] Therefore in order to render a video game, 
+different chunks of scene are continuously being  
+[12:53] transferred between the graphics memory and the 
+GPU. Because the cores are constantly performing  
+[12:59] tens of trillions of calculations a second, 
+GPUs are data hungry machines and need to be  
+[13:06] continuously fed terabytes upon terabytes of data, 
+and thus these graphics memory chips are designed  
+[13:14] kind of like multiple cranes loading a cargo ship 
+at the same time. Specifically, these 24 chips  
+[13:21] transfer a combined 384 bits at a time, which 
+is called the bus width and the total data that  
+[13:28] can be transferred, or the bandwidth is about 1.15 
+terabytes a second. In contrast the sticks of DRAM  
+[13:37] that support the CPU only have a 64-bit bus width 
+and a maximum bandwidth closer to 64 gigabytes a  
+[13:44] second. One rather interesting thing is that you 
+may think that computers only work using binary  
+[13:50] ones and zeros. However, in order to increase data 
+transfer rates, GDDR6X and the latest graphics  
+[13:58] memory, GDDR7 send and receive data across the bus 
+wires using multiple voltage levels beyond just  
+[14:06] 0 and 1. For example, GDDR7 uses 3 different 
+encoding schemes to combine binary bits into  
+[14:14] ternary digits or PAM-3 symbols with voltages of 
+0, 1, and negative 1. Here’s the encoding scheme  
+[14:22] on how 3 binary bits are encoded into 2 ternary 
+digits and this scheme is combined with an 11  
+[14:29] bit to 7 ternary digit encoding scheme resulting 
+in sending 276 binary bits using only 176 ternary  
+[14:39] digits. The previous generation, GDDR6X, which 
+is the memory in this 3090 graphics card, used a  
+[14:47] different encoding scheme, called PAM-4, to send 
+2 bits of data using 4 different voltage levels,  
+[14:54] however, engineers and the graphics memory 
+industry agreed to switch to PAM-3 for future  
+[15:00] generations of graphics chips in order to reduce 
+encoder complexity, improve the signal to noise  
+[15:06] ratio, and improve power efficiency. Micron 
+delivers consistent innovation to push the  
+[15:15] boundaries on how much data can be transferred 
+every second and to design cutting edge memory  
+[15:20] chips. Another advancement by Micron is the 
+development of HBM, or the high bandwidth memory,  
+[15:27] that surrounds AI chips. HBM is built from 
+stacks of DRAM memory chips and uses TSVs  
+[15:35] or through silicon vias, to connect this stack 
+into a single chip, essentially forming a cube  
+[15:42] of AI memory. For the latest generation of high 
+bandwidth memory, which is HBM3E, a single cube  
+[15:51] can have up to 24 to 36 gigabytes of memory, thus 
+yielding 192 gigabytes of high-speed memory around  
+[15:59] the AI chip. Next time you buy an AI accelerator 
+system, make sure it uses Micron’s HBM3E which  
+[16:07] uses 30% less power than the competitive products. 
+However, unless you’re building an AI data center,  
+[16:15] you’re likely not in the market to buy one 
+of these systems which cost between 25 to  
+[16:20] 40 thousand dollars and are on backorder for a 
+few years. If you’re curious about high bandwidth  
+[16:27] memory, or Micron’s next generation of graphics 
+memory take a look at one of these links in the  
+[16:33] description. Alternatively, if designing the next 
+generation of memory chips interests you, Micron  
+[16:40] is always looking for talented scientists and 
+engineers to help innovate on cutting edge chips  
+[16:46] and you can find out more about working for Micron 
+using this link. Now that we’ve explored many of  
+[16:53] the physical components inside this graphics card 
+and GPU, let’s next explore the computational  
+[17:00] architecture and see how applications like video 
+game graphics and bitcoin mining run what’s called  
+[17:06] “embarrassingly” parallel operations. Although 
+it may sound like a silly name, embarrassingly  
+[17:13] parallel is actually a technical classification 
+of computer problems where little or no effort is  
+[17:19] needed to divide the problem into parallel tasks, 
+and video game rendering and bitcoin mining easily  
+[17:27] fall into this category. Essentially, GPUs solve 
+embarrassingly parallel problems using a principle  
+[17:34] called SIMD, which stands for single instruction 
+multiple data where the same instructions or steps  
+[17:41] are repeated across thousands to millions of 
+different numbers. Let’s see an example of how  
+[17:48] SIMD or single instruction multiple data is used 
+to create this 3D video game environment. As you  
+[17:55] may know already, this cowboy hat on the table is 
+composed of approximately 28 thousand triangles  
+[18:02] built by connecting together around 14,000 
+vertices, each with X, Y, and Z coordinates.  
+[18:10] These vertex coordinates are built using a 
+coordinate system called model space with the  
+[18:16] origin of 0,0,0 being at the center of the hat.
+To build a 3D world we place hundreds of objects,  
+[18:24] each with their own model space into the world 
+environment and, in order for the camera to be  
+[18:29] able to tell where each object is relative to 
+other objects, we have to convert or transform  
+[18:36] all the vertices from each separate model space 
+into the shared world coordinate system or world  
+[18:43] space. So, as an example, how do we convert the 
+14 thousand vertices of the cowboy hat from model  
+[18:51] space into world space? Well, we use a single 
+instruction which adds the position of the origin  
+[18:57] of the hat in world space to the corresponding 
+X,Y, and Z coordinate of a single vertex in  
+[19:04] model space. Next we copy this instruction to 
+multiple data, which is all the remaining X,Y,  
+[19:11] and Z coordinates of the other thousands of 
+vertices that are used to build the hat. Next,  
+[19:17] we do the same for the table and the rest of 
+the hundreds of other objects in the scene,  
+[19:22] each time using the same instructions but with 
+the different objects’ coordinates in world space,  
+[19:29] and each objects’ thousands of vertices in model 
+space. As a result, all the vertices and triangles  
+[19:36] of all the objects are converted to a common 
+world space coordinate system and the camera  
+[19:42] can now determine which objects are in front 
+and which are behind. This example illustrates  
+[19:48] the power of SIMD or single instruction multiple 
+data and how a single instruction is applied to  
+[19:54] 5,629 different objects with a total of 8.3 
+million vertices within the scene resulting  
+[20:02] in 25 million addition calculations. The key to 
+SIMD and embarrassingly parallel programs is that  
+[20:09] every one of these millions of calculations 
+has no dependency on any other calculation,  
+[20:15] and thus all these calculations can be distributed 
+to the thousands of cores of the GPU and completed  
+[20:22] in parallel with one another. It's important to 
+note that vertex transformation from model space  
+[20:28] to world space is just one of the first steps of 
+a rather complicated video game graphics rendering  
+[20:34] pipeline and we have a separate video that delves 
+deeper into each of these other steps. Also,  
+[20:41] we skipped over the transformations for the 
+rotation and scale of each object, but factoring  
+[20:46] in these values is a similar process that requires 
+additional SIMD calculations. Now that we have a  
+[20:53] simple understanding of SIMD, let’s discuss how 
+this computational architecture matches up with  
+[20:59] the physical architecture. Essentially, each 
+instruction is completed by a thread and this  
+[21:05] thread is matched to a single CUDA core. Threads 
+are bundled into groups of 32 called warps,  
+[21:11] and the same sequence of instructions is issued to 
+all the threads in a warp. Next warps are grouped  
+[21:18] into thread blocks which are handled by the 
+streaming multiprocessor. And then finally thread  
+[21:24] blocks are grouped into grids, which are computed 
+across the overall GPU. All these computations are  
+[21:32] managed or scheduled by the Gigathread Engine, 
+which efficiently maps thread blocks to the  
+[21:38] available streaming multiprocessors. One important 
+distinction is that within SIMD architecture,  
+[21:44] all 32 threads in a warp follow the same 
+instructions and are in lockstep with each  
+[21:50] other, kind of like a phalanx of soldiers moving 
+together. This lock step execution applied to GPUs  
+[21:57] up until around 2016. However, newer GPUs follow 
+a SIMT architecture or single instruction multiple  
+[22:06] threads. The difference between SIMD and SIMT is 
+that while both send the same set of instructions  
+[22:13] to each thread, with SIMT, the individual 
+threads don’t need to be in lockstep with  
+[22:19] each other and can progress at different rates. 
+In technical jargon, each thread is given its own  
+[22:25] program counter. Additionally, with SIMT all the 
+threads within a streaming multiprocessor use a  
+[22:32] shared 128 kilobyte L1 cache and thus data that’s 
+output by one thread can be subsequently used by  
+[22:41] a separate thread. This improvement from SIMD to 
+SIMT allows for more flexibility when encountering  
+[22:48] warp divergence via data-dependent conditional 
+branching and easier reconvergence for the threads  
+[22:55] to reach the barrier synchronization. Essentially 
+newer architectures of GPUs are more flexible and  
+[23:02] efficient especially when encountering branches 
+in code. One additional note is that although  
+[23:08] you may think that the term warp is derived from 
+warp drives, it actually comes from weaving and  
+[23:14] specifically the Jacquard Loom. This loom from 
+1804 used programmable punch cards to select  
+[23:22] specific threads out of a set to weave together 
+intricate patterns. As fascinating as looms are,  
+[23:29] let’s move on. The final topics we’ll explore are 
+bitcoin mining, tensor cores and neural networks.  
+[23:37] But first we’d like to ask you to ‘like’ 
+this video, write a quick comment below,  
+[23:42] share it with a colleague, friend or on social 
+media, and subscribe if you haven’t already.  
+[23:49] The dream of Branch Education is to make free 
+and accessible, visually engaging educational  
+[23:55] videos that dive deeply into a variety topics on 
+science, engineering, and how technology works,  
+[24:02] and then to combine multiple videos into an 
+entirely free engineering curriculum for high  
+[24:08] school and college students. Taking a few seconds 
+to like, subscribe, and comment below helps us  
+[24:15] a ton! Additionally, we have a Patreon page 
+with AMAs and behind the scenes footage, and,  
+[24:22] if you find what we do useful, we would appreciate 
+any support. Thank you. So now that we’ve explored  
+[24:31] how single instruction multiple threads is used 
+in video games, let’s briefly discuss why GPUs  
+[24:38] were initially used for mining bitcoin. We’re not 
+going to get too far into the algorithm behind  
+[24:44] the blockchain and will save it for a separate 
+episode, but essentially, to create a block on  
+[24:50] the blockchain, the SHA-256 hashing algorithm is 
+run on a set of data that includes transactions,  
+[24:57] a time stamp, additional data, and a random number 
+called a nonce. After feeding these values through  
+[25:04] the SHA-256 hashing algorithm a random 256-bit 
+value is output. You can kind of think of this  
+[25:11] algorithm as a lottery ticket generator where you 
+can’t pick the lottery number, but based on the  
+[25:17] input data, the SHA-256 algorithm generates 
+a random lottery ticket number. Therefore,  
+[25:24] if you change the nonce value and keep the rest 
+of the transaction data the same, you’ll generate  
+[25:29] a new random lottery ticket number. The winner of 
+this bitcoin mining lottery is the first randomly  
+[25:35] generated lottery number to have the first 80 bits 
+all zeroes, while the rest of the 176 values don’t  
+[25:42] matter and once a winning bitcoin lottery ticket 
+is found, the reward is 3 bitcoin and the lottery  
+[25:49] resets with a new set of transactions and input 
+values. So, why were graphics cards used? Well,  
+[25:56] GPUs ran thousands of iterations of the SHA-256 
+algorithm with the same transactions, timestamp,  
+[26:05] other data, but, with different nonce values. 
+As a result, a graphics card like this one could  
+[26:11] generate around 95 million SHA-256 hashes or 95 
+million randomly numbered lottery tickets every  
+[26:19] second, and hopefully one of those lottery numbers 
+would have the first 80 digits as all zeros.  
+[26:27] However, nowadays computers filled with ASICs or 
+application specific integrated circuits perform  
+[26:34] 250 trillion hashes a second or the equivalent 
+of 2600 graphics cards, thereby making graphics  
+[26:42] cards look like a spoon when mining bitcoin next 
+to an excavator that is an asic mining computer.  
+[26:50] Let’s next discuss the design of the tensor cores. 
+It’ll take multiple full-length videos to cover  
+[26:56] generative AI, and neural networks, so we’ll focus 
+on the exact matrix math that tensor cores solve.  
+[27:04] Essentially, tensor cores take three matrices and 
+multiply the first two, add in the third and then  
+[27:11] output the result. Let’s look at one value of the 
+output. This value is equal to the sum of values  
+[27:18] of the first row of the first matrix multiplied 
+by the values from the first column of the  
+[27:23] second matrix, and then the corresponding 
+value of the third matrix is added in.  
+[27:28] Because all the values of the 3 input 
+matrices are ready at the same time,  
+[27:33] the tensor cores complete all of the matrix 
+multiplication and addition calculations  
+[27:38] concurrently. Neural Networks and generative 
+AI require trillions to quadrillions of matrix  
+[27:45] multiplication and addition operations and 
+typically uses much larger matrices. Finally,  
+[27:52] there are Ray Tracing Cores which we explored in 
+a separate video that’s already been released.  
+[27:58] That’s pretty much it for graphics cards. 
+We’re thankful to all our Patreon and YouTube  
+[28:03] Membership Sponsors for supporting our videos. 
+If you want to financially support our work,  
+[28:09] you can find the links in the description below.
+This is Branch Education, and we create 3D  
+[28:15] animations that dive deeply into the technology 
+that drives our modern world. Watch another Branch  
+[28:22] video by clicking one of these cards or click 
+here to subscribe. Thanks for watching to the end!

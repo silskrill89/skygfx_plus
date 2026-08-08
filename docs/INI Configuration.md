@@ -139,6 +139,32 @@ Preset defaults are applied first, then individual INI values override them.
 | `CrScale` | float | `1.23` | config.cpp | Cr scale |
 | `CrOffset` | float | `0.0` | config.cpp | Cr offset |
 
+## Atmospheric (Phase F)
+
+### Height Fog
+
+| Key | Type | Default | Parsed In | Notes |
+|-----|------|---------|-----------|-------|
+| `heightFogEnable` | int | `0` | config.cpp | Enable height fog |
+| `heightFogDensity` | float | `0.002` | config.cpp | Fog density (0-0.1) |
+| `heightFogHeightFalloff` | float | `0.8` | config.cpp | Height falloff factor (0-5) |
+| `heightFogStartHeight` | float | `0.0` | config.cpp | Fog start Y height (-100 to 500) |
+| `heightFogR` | float | `0.5` | config.cpp | Fog color red (0-1) |
+| `heightFogG` | float | `0.5` | config.cpp | Fog color green (0-1) |
+| `heightFogB` | float | `0.5` | config.cpp | Fog color blue (0-1) |
+| `heightFogTimecycleScale` | float | `1.0` | config.cpp | Timecycle fog influence on density (0-5) |
+
+### God Rays
+
+| Key | Type | Default | Parsed In | Notes |
+|-----|------|---------|-----------|-------|
+| `godRaysEnable` | int | `0` | config.cpp | Enable god rays |
+| `godRaysExposure` | float | `0.0034` | config.cpp | Ray exposure (0-0.05) |
+| `godRaysDecay` | float | `1.0` | config.cpp | Decay falloff (0-2) |
+| `godRaysDensity` | float | `0.84` | config.cpp | Ray density (0-2) |
+| `godRaysWeight` | float | `1.0` | config.cpp | Ray weight/intensity (0-5) |
+| `godRaysNumSamples` | int | `20` | config.cpp | Blur samples (1-64) |
+
 ## SMAA (Anti-Aliasing)
 
 | Key | Type | Default | Parsed In | Notes |

@@ -142,3 +142,41 @@ Key game function hooks (addresses are for GTA SA v1.0 US):
 - Render state is persistent/shared across all pipelines. PostFX must restore states it modifies.
 - `pRasterFrontBuffer` may be 2048x2048 while camera is 1920x1080 — UpdateFrontBuffer handles this via RwRasterRenderFast.
 - `g_iblTex` is a raw `IDirect3DTexture9*`, not an `RwTexture*` — set via `dev->SetTexture(3, g_iblTex)`.
+
+## Knowledge System
+
+Unified CLI for managing project knowledge, research, and documentation.
+
+### Quick Commands
+
+```bash
+python tools/skytool.py help                    # Show all commands
+python tools/skytool.py status                  # System health overview
+python tools/skytool.py sync                    # Full sync: ingest + xref + graph
+python tools/skytool.py ingest --force          # Sync wiki/research → Obsidian
+python tools/skytool.py xref --query GGX        # Find GGX in all sources
+python tools/skytool.py graph --query PBR       # Concept dependency tree
+python tools/skytool.py gaps --query "SSR"      # Gap analysis
+python tools/skytool.py mem                     # Compact reference (<500 tokens)
+python tools/skytool.py dream                   # Dream consolidation context
+python tools/skytool.py moon                    # Moon phase status
+python tools/skytool.py yt --search "PBR"       # YouTube transcript search
+python tools/skytool.py research <url>          # Ingest URL to research docs
+```
+
+### Components
+
+1. **Ingestion Pipeline** — Syncs GTAMods wiki (130 articles), research docs, science pillars → Obsidian vault
+2. **Cross-Reference System** — 43 concepts, 369 files, 1996 cross-links
+3. **Knowledge Graph** — 44 concepts, 9 implementations, 16 concept chains
+4. **Gap Detector** — 12 features tracked, 6 implemented, 50% coverage
+5. **Memory System** — 15 logarithmic tiers + lunar phase dual-track
+
+### Data Sources
+
+| Source | Location | Count |
+|--------|----------|-------|
+| GTAMods Wiki | `H:/wikis/gtamods/rendering/` | 130 articles |
+| Obsidian Vault | `E:/dev(dave)/SKYGFXPLUS_DOCS/` | 180+ docs |
+| Science Pillars | `memory-bank/.cache/science-pillars/` | 3 docs |
+| Research | `docs/research/youtube/` | 6 transcripts |

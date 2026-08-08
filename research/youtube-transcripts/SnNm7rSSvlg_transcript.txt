@@ -1,0 +1,3240 @@
+# Transcript: SnNm7rSSvlg
+# Fetched: 2026-08-07T06:23:35.315265
+# Entries: 3235
+# Duration: 14470s
+
+[00:00] For almost two years, this channel has
+[00:02] been explaining how various game engines
+[00:04] render realworld video game graphic
+[00:05] scenarios in order to find out what
+[00:07] optimized and nonoptimized games have in
+[00:10] common. And well, me and my team found
+[00:12] those commonalities. After several
+[00:15] requests on our channel's content from
+[00:16] both our gamer and developer following
+[00:18] and confirmed content demand via Patreon
+[00:21] polling, we are here to take a break
+[00:22] from our analysis and industry
+[00:24] discussion content to explain how modern
+[00:26] games should be rendered for optimal
+[00:28] performance and visual quality. This
+[00:30] video is intended for both gamers and
+[00:32] developers. Gamers need to watch this
+[00:34] video for two reasons. The first reason
+[00:36] is similar as to why you would learn the
+[00:38] basics of your own car. If you take your
+[00:40] car to a mechanic to get a broken window
+[00:42] motor fixed, most likely that mechanic
+[00:44] will try to jack up the price on a
+[00:46] fairly simple job. If you learn a bit
+[00:48] about the actual steps to fix that motor
+[00:50] and search the part price yourself,
+[00:52] you're going to see that mechanic is
+[00:53] charging you several hundred more for
+[00:56] what you can tell is pretty simple
+[00:57] labor. So, you can either haggle with a
+[00:59] mechanic for a better deal, or you can
+[01:01] fix the window motor yourself. Now, as a
+[01:04] gamer, you most likely won't be able to
+[01:05] fix poor graphic pipelines, but you can
+[01:07] haggle by calling out studios or
+[01:09] influencers that try to gaslight you
+[01:11] into thinking ugly-looking graphical
+[01:13] practices or optimizations. A consumer
+[01:16] that challenges abusive and ignorant
+[01:18] graphics lowers the market value of
+[01:20] titles adopting such poor techniques.
+[01:23] And a consumer who creates tangible
+[01:25] demand by requesting what's shown in
+[01:27] this video raises the market value of
+[01:29] real optimization. Market value is the
+[01:32] second reason why you have to watch this
+[01:34] video. You are the market, but you have
+[01:36] to realize a lot of other people are
+[01:38] willing to purchase garbage. So, studios
+[01:40] have very little reason to take
+[01:41] optimization seriously. A studio needs a
+[01:45] market that incentivizes and rewards
+[01:46] their graphics development. If a studio
+[01:49] advertises that they implemented a
+[01:51] non-alpha tested partial prepass, that
+[01:53] advertisement, that marketing only works
+[01:56] if you know how great that is. and
+[01:59] you're going to learn about that term I
+[02:01] just mentioned along with a whole lot of
+[02:02] other things you'll want implemented in
+[02:04] your game. As for developers, this is
+[02:06] clearly helpful for graphic engineers,
+[02:08] but say you're a developer who doesn't
+[02:10] work in the graphics field. This video
+[02:12] will help you know what to demand from
+[02:14] your engine distributors, whether that's
+[02:16] a department within your own current
+[02:18] studio or a major licenser. All right,
+[02:21] so we're going to be using this graphics
+[02:22] pipeline diagram to show all the
+[02:24] information we need to discuss. I'm not
+[02:26] going to read everything that's in this
+[02:27] file because that would be redundant as
+[02:29] most of the information here was already
+[02:31] discussed in previous videos. I'm just
+[02:33] going to share context about certain
+[02:35] decisions, new information about certain
+[02:37] pipelines missed in previous analysis
+[02:39] videos, and show how to advertise
+[02:41] related optimizations. It is highly
+[02:43] recommended that you have this free
+[02:44] diagram file loaded on your desktop as I
+[02:47] go through this video. We highly
+[02:49] recommend that you have this pipeline
+[02:51] chart and follow along as I go through
+[02:52] this video. This chart took us 1 month
+[02:55] to create and this video represents
+[02:57] three months of production time. It is
+[02:59] available as an exclusive gift to all
+[03:01] tiers of our Patreon members. We
+[03:03] seriously need your support and we are
+[03:05] so thankful to our current members. This
+[03:07] pipeline accommodates for a very
+[03:08] specific yet common technical scenario
+[03:11] and targets specific hardware and visual
+[03:13] standards explained in previous videos.
+[03:16] You can either blindly adopt these
+[03:17] common sense standards now or watch the
+[03:20] various videos included in the
+[03:21] description explaining these standards.
+[03:24] The chart progresses from left to right.
+[03:27] So, we'll hold control while scrolling
+[03:30] to zoom up on the beginning. I felt that
+[03:32] separating the discussion into three
+[03:34] different layers would help break apart
+[03:36] the data in a more digestible form. The
+[03:38] middle layer is a step-by-step
+[03:40] description of what graphical passes
+[03:42] your GPU should process per frame. This
+[03:45] is analogous to the graph seen in our
+[03:47] analysis videos and only pertains to GPU
+[03:50] processing as that's where most of our
+[03:52] research is relevant. The top layer
+[03:54] contains the related workflow nodes.
+[03:56] This is a massive area of development
+[03:58] many people ignore. It doesn't matter
+[04:00] how excellent or optimized the graphics
+[04:02] pipeline is if the game engine doesn't
+[04:05] provide specific workflows for artists.
+[04:07] The bottom layer explains the related
+[04:09] issues we avoid, what visual goals we
+[04:12] achieve, and what pipelines showcase the
+[04:14] poor/optimal viability of said
+[04:17] approach/pass.
+[04:19] Now, originally, I wanted to discuss
+[04:21] graphic APIs such as Vulcan, which
+[04:23] really aligns with the open standards we
+[04:25] advocate for. From a proconsumer view,
+[04:28] it's optimal. From a development point,
+[04:29] it's optimal. But from an optimization
+[04:32] point, it's tough because the
+[04:33] optimization debugging tools for Vulcan
+[04:35] aren't as matured as the DX11 tools. So,
+[04:39] two different paths might need to be
+[04:40] developed. Right now, we need more
+[04:42] testing comparing DX11 and Vulcan
+[04:44] performance, as some of our testing has
+[04:46] shown that hardware shades pixels two
+[04:48] times faster with DX11 than DX12. And
+[04:52] we're currently concerned that Vulcan
+[04:54] may perform more similarly to DX12 in
+[04:56] terms of shading efficiency. But because
+[04:59] our testing has been limited to Unreal
+[05:00] Engine's API implementations, there's a
+[05:03] chance this could just be an exclusive
+[05:05] failure on Epic Games graphics
+[05:06] management. A failure DX12 and Vulcan
+[05:09] could potentially overcome if the issue
+[05:11] is identified. Fortunately, this doesn't
+[05:13] impact the core topics of this video. I
+[05:16] just wanted to share a few thoughts
+[05:17] regarding APIs. Okay, so let's start
+[05:19] breaking down the first step. We have
+[05:22] our past title and pass description
+[05:24] boundary. The gray description battery
+[05:26] indicates more testing could lead to a
+[05:28] different way of managing its said
+[05:30] contents, such as being moved later in
+[05:32] the pipeline or being removed entirely.
+[05:34] Text boxes inside the pass description
+[05:37] boundaries act as steps describing what
+[05:39] actions the GPU performs within this
+[05:41] pass. Later on, we'll encounter passes
+[05:44] containing multiple steps. Sometimes
+[05:46] these steps are labeled. Red text boxes
+[05:49] indicates more custom in-g engine tests
+[05:51] are needed which could lead to changes
+[05:53] in the approach. Connected question mark
+[05:55] tags indicate we have some thoughts to
+[05:57] share about the topic but need to
+[05:59] complete a related video before
+[06:00] discussing its factual content. It can
+[06:02] also indicate more optimization research
+[06:05] via custom in engine implementations are
+[06:07] needed. I want to discuss why starting
+[06:09] frame compute shaders were brought up as
+[06:11] plenty of pipelines don't actually have
+[06:13] them. Basically, modern games are trying
+[06:15] to move a bunch of traditional CPU tasks
+[06:17] to the GPU like animations and geometry
+[06:19] management, but we're not moving
+[06:21] anything from the GPU to the CPU. So
+[06:23] modern games are making the GPU work
+[06:25] more even though plenty of other games
+[06:27] in the past have done just fine with
+[06:29] minimal GPUdriven systems. The reason
+[06:31] why there's such a mainstream effort in
+[06:33] moving CPU tasks to the GPU is because
+[06:36] we are bloating our CPU pipelines with
+[06:38] unoptimized code and languages like
+[06:40] Unreal Blueprints which have been known
+[06:42] to be up to 10 times slower than its C++
+[06:44] counterpart. One of the most influential
+[06:46] GPUdriven pipelines was created for AC
+[06:49] Unity. They couldn't have the CPU
+[06:51] managed geometry like most pipelines
+[06:53] because they spent so much CPU resources
+[06:55] on massive crowd animations. Just think
+[06:58] about these three things. That is not a
+[07:00] popular technical scenario to cater
+[07:02] towards. We're targeting 9th gen CPUs
+[07:04] now, not eighth gen. And the NPCs in
+[07:07] that game looked terrible. So, do we
+[07:10] really want to spend tons of computing
+[07:11] resources on dense crowds of garbage?
+[07:14] more reasonable NPC counts with higher
+[07:16] quality appearances akin to something
+[07:18] like we've seen in KCD2 is a much more
+[07:20] sustainable approach. Anyways, there's a
+[07:23] few reasonable processes to manage at
+[07:25] the start of the frame with compute
+[07:26] shaders, but these processes need to
+[07:28] remain very small. The main point here
+[07:30] is that the GPU pipeline needs to
+[07:32] process a lot of steps and it can only
+[07:34] process so many things. Do not bloat it
+[07:37] with actions the CPU can handle instead.
+[07:39] I also want to make sure people know I
+[07:41] don't have an issue with visual
+[07:42] scripting systems. I simply think more
+[07:45] investments need to be made in bringing
+[07:46] its efficiency closer to native C++. I
+[07:49] definitely think that is possible and I
+[07:51] think performance comparisons of
+[07:52] different visual scripting systems would
+[07:54] incriminate UEIE blueprints which in
+[07:57] turn would raise demand for such a
+[07:58] massive software renovation. Moving on
+[08:00] to the next pass. So what is it and why
+[08:02] is it so important? When you render
+[08:05] geometry, that data is stored on a
+[08:07] resource, usually referred to as a
+[08:08] buffer or render target. Usually, a
+[08:11] specialized accelerated hardware
+[08:13] function will clear that digital
+[08:14] resource before everything new is
+[08:16] rendered on it. Again, these clears are
+[08:18] typically completed at the start of the
+[08:20] frame or before its corresponding pass.
+[08:22] While more testing is needed for shadow
+[08:24] and effect resources, the deferred
+[08:26] Gbuffers like base colors and normals,
+[08:28] which would also exist in a complex SSR
+[08:31] supported forward plus renderer, don't
+[08:33] need to be cleared because as long as
+[08:35] the depth buffer is cleared, the other
+[08:37] outdated information can just be
+[08:39] overwritten with pixel perfect accuracy.
+[08:41] Many engines don't take this seriously,
+[08:43] but we want our GPU to overwrite pixels
+[08:46] instead of clearing and then writing
+[08:47] pixels because that writing action is
+[08:50] effectively a free clear for whatever
+[08:53] pixels that object invokes. Effects can
+[08:56] suffer from poor clear management too,
+[08:58] like this ambient occlusion pass that
+[08:59] clears the ambient occlusion output
+[09:01] instead of letting the pixel shader
+[09:03] invocations in the next pass overwrite
+[09:05] the current values for free instead.
+[09:08] It's something to be very conscientious
+[09:09] about, but a few of Jeep buffers should
+[09:11] still be hardware cleared, such as the
+[09:13] emissive diffuse buffer. You have to
+[09:14] clear this because you will not have the
+[09:16] opportunity to overwrite its entire
+[09:18] surface area as only emissive
+[09:20] objects/materials will get the chance to
+[09:22] write data to it. We don't have to clear
+[09:24] the specular RGBA 16 because it's
+[09:27] overwritten/recycled in a later pass. It
+[09:30] may be best to clear any buffer where
+[09:31] MSAA coverage information is stored. It
+[09:34] made sense to store it with motion
+[09:35] vector data as both will be relevant in
+[09:37] later anti-aliasing stages, but more on
+[09:40] this later. You'll want to clear the
+[09:42] dual normal buffer which exists for
+[09:44] Kalisto protocol character rendering
+[09:45] research. It needs to be cleared because
+[09:47] like the emissive diffuse RGBA 16, you
+[09:50] will not have the opportunity to
+[09:52] overwrite its entire surface area as it
+[09:54] will only be called when certain
+[09:55] materials like skin appear. Having an
+[09:58] accurate stencil stored in the 2-bit
+[10:00] alpha for later stages could end up
+[10:02] being pretty helpful. The advice here is
+[10:05] applicable to any genre, deferred
+[10:07] rendering or forward plus renderers. And
+[10:09] there's nothing about this topic that
+[10:11] should require configurations from
+[10:13] studio members unless an artist wants to
+[10:15] recycle a resource for some effect later
+[10:18] on in the pipeline. The term hijack
+[10:20] clear is used in the notes here. And
+[10:22] this means hijacking a process in the
+[10:24] last frame and telling a shader, hey,
+[10:26] while you're writing data to your main
+[10:28] output, simultaneously, meaning for
+[10:31] almost free, overwrite some additional
+[10:33] outputs with data equivalent to a clear.
+[10:36] This was a really cool trick I wanted to
+[10:38] bring attention to. The next thing I
+[10:39] want to mention, even though some people
+[10:41] were wrongly whin about how this is
+[10:43] so-called common knowledge, a full
+[10:44] screen triangle should never be used to
+[10:46] clear a render target. I've seen it too
+[10:48] many times in our analysis videos and
+[10:50] pipelines to not mention it. Using quads
+[10:53] or triangles will always be slower than
+[10:55] a hardware clear, at least on modern
+[10:57] hardware. You will destroy performance
+[10:59] doing this. Now, the last thing I want
+[11:01] to mention for resources that do end up
+[11:03] being hardware cleared is that they
+[11:05] don't tend to be equal across pipelines.
+[11:07] A cool detail that didn't make it into
+[11:09] our KCD2 analysis was the fact that it
+[11:11] cleared resources such as the native RGB
+[11:14] A8 two to three times faster than most
+[11:16] engines, including DX12 UE5. Speaking of
+[11:20] UE5, I have found its hardware clears to
+[11:22] be incredibly inconsistent, such as this
+[11:24] clearing action done for the UE5 tone
+[11:27] mapping stage output, which could have
+[11:29] just been overwritten, akin to Crisis
+[11:31] 3's post-processing stage. Now, let's
+[11:33] actually take a moment to address
+[11:34] something real quick because I already
+[11:36] see low IQ haters coming up with some
+[11:37] fake gotcha a mile away. They're going
+[11:40] to add up that inconsistent clearing
+[11:41] cost with that UE5 tone map draw timing
+[11:44] and point out that this UE5 tone mapping
+[11:46] is faster than the Crisis 3 processing
+[11:48] draw. Even though it's not using full
+[11:50] screen overwriting to skip the clear. So
+[11:52] the tone mapping Crisis 3 draw in this
+[11:55] comparison is more expensive because
+[11:56] unlike the UE5 tone mapping draw, the
+[11:59] Crisis 3 draw is integrating a bunch of
+[12:01] filmic functions, resolving a bloom
+[12:03] resource, and upscaling halfresolution
+[12:06] volumetric fog. It's merging all these
+[12:08] functions with tone mapping as an
+[12:10] optimization we'll explain more about
+[12:11] later. But the reason why this would be
+[12:13] such a low IQ gotcha is that even if the
+[12:16] UE5 draw was functionally equivalent and
+[12:19] faster, this would still not invalidate
+[12:21] the advice being given here. I'm using a
+[12:23] 13-year-old tone mapping akin stage for
+[12:26] mere theme, but I could reference a full
+[12:28] screen overwrite technique used in Need
+[12:30] for Speed 2015's HBAO pass, and it would
+[12:33] still be a good example of an older game
+[12:35] optimizing its performance more than
+[12:38] newer games by skipping an unneeded
+[12:40] clear. No one is low IQ if they have a
+[12:42] question. I will gladly answer genuine
+[12:44] comments below, but it's absolutely low
+[12:47] IQ to take our points and pretend to
+[12:49] have some so-called ironic gotcha
+[12:51] because they lack basic comprehension
+[12:53] skills. As a good faith viewer, just be
+[12:55] vigilant of that kind of idiocy because
+[12:57] we don't have the resources or time to
+[12:59] constantly correct such stupidity. Do
+[13:01] not underestimate the advice being given
+[13:03] here because if you're able to save
+[13:05] just.1 millisecond, which would probably
+[13:07] be the minimum performance enhancement
+[13:09] you'd get from implementing this, that
+[13:11] can make a huge difference for something
+[13:13] like lighting or higher quality
+[13:15] anti-aliasing. Micro optimizations like
+[13:17] this are going to stack up. If you're
+[13:20] trying to promote a game or engine, you
+[13:22] should make posts discussing your
+[13:24] product's hardware clear cost, full
+[13:26] screen overwrites, and hijack clears
+[13:28] with hardware and resolution
+[13:29] specifications. The less powerful the
+[13:31] hardware and higher the resolution, the
+[13:33] more impressive. If you need time to
+[13:35] implement this advice, document
+[13:37] performance improvements as an
+[13:38] advertisement for your product. Here on
+[13:41] this channel, we're doing our part
+[13:43] explaining the importance of these
+[13:44] techniques to your customers. We're
+[13:46] raising the market value of these
+[13:48] optimizations, but studios have to do
+[13:50] the actual marketing. But as a consumer
+[13:52] watching this video, now you know what
+[13:54] to look for. Now, timings in the lower
+[13:56] right corner of some past descriptions
+[13:57] indicate a maximum cost studios should
+[14:00] aim for. Again, reference the slide
+[14:02] shown earlier for resolution and
+[14:04] hardware context. Green text down here
+[14:07] indicates we're learning positive
+[14:08] attributes from various products. Red
+[14:11] text means we're avoiding visual or
+[14:12] performance issues discovered in past
+[14:14] analysis videos. Okay, so let's discuss
+[14:17] the next stage of rendering. This right
+[14:20] here is something that can make a huge
+[14:21] difference in our performance. Now, the
+[14:23] title for this pass might be
+[14:24] self-explanatory for some of our more
+[14:26] experienced viewers, but let's dive into
+[14:28] some context that puts us all on the
+[14:30] same page. You can first look at GPU
+[14:32] performance as almost scaling with the
+[14:34] amount of pixel surface area we've
+[14:36] shaded. There are two ways your GPU can
+[14:38] shade pixels with compute shaders, which
+[14:40] can be used for anything on the GPU. But
+[14:42] when shading pixels, use computational
+[14:45] grids that range from one-dimensional to
+[14:47] three-dimensional functionality. Or you
+[14:49] can rasterize a triangle across a grid
+[14:51] of pixels and invoke a specialized pixel
+[14:53] shader wherever an intersection is
+[14:55] successful. I said GPU performance
+[14:58] almost scales with the amount of pixel
+[14:59] surface area we've shaded because the
+[15:01] actual bottleneck is a product of the
+[15:03] total surface area shaded and its
+[15:05] retrospective shader efficiency. So you
+[15:07] could shade 2 million pixels with one
+[15:09] shader and have it cost.3 milliseconds.
+[15:12] Then have two other draws process 2
+[15:14] million pixels each but together only
+[15:16] cost2 milliseconds. It wouldn't indicate
+[15:19] that the first draw is unoptimized. It
+[15:21] could just mean that either the output
+[15:23] requires much more complex arithmetics
+[15:26] and or requires a lot more bits worth of
+[15:28] input data which is called throughput
+[15:31] because it's the amount of input bits
+[15:33] going through a shader. The shader
+[15:35] efficiency per pixel can be optimized in
+[15:37] a few ways independently of
+[15:39] arithmetic/th throughput complexity.
+[15:42] There can be shader logic that cancels
+[15:44] operations if that certain pixel isn't
+[15:46] in need of such processing. A mask or
+[15:49] tiled resource can tell a comput shader,
+[15:50] hey, cancel any operations in that
+[15:53] certain area. This is called branching.
+[15:55] And even though they might prevent
+[15:57] expensive operations, branching in GPU
+[16:00] code can slow the overall shader
+[16:01] performance. And these techniques don't
+[16:04] come anywhere close in terms of speed as
+[16:06] depth stencil testing, which is a
+[16:08] feature exclusive to traditional
+[16:10] triangle rasterization. Remember how
+[16:13] intersections gained from rasterization
+[16:15] invoke a pixel shader? Depth testing
+[16:17] allows us to almost instantly cancel or
+[16:20] allow pixel shader invocations based on
+[16:23] information and functions related to
+[16:25] corresponding values stored in the depth
+[16:27] buffer, such as checking if pre-existing
+[16:30] geometry is oluding the rasterized pixel
+[16:32] to cancel its pixel shader invocation.
+[16:35] You can also use additional or
+[16:36] standalone functions based on values
+[16:39] stored in the depth buffer stencil
+[16:41] channel, such as preventing skin
+[16:42] lighting on non-skin materials. Again,
+[16:45] remember that you can use both stencil
+[16:48] and depth testing at the same time or
+[16:50] independently as our pipeline is heavily
+[16:52] dependent on stencil channel management.
+[16:55] When you render a geometry pass like a
+[16:57] deferred Gbuffer base pass or a forward
+[16:59] plus base pass, even if the geometry
+[17:01] draws are properly zorded from front to
+[17:04] back, you will still end up with tons of
+[17:06] overdraw, which is the overlapping of
+[17:08] pixel surface area shaded. But by the
+[17:11] end of these passes, you will have your
+[17:13] final depth. If we had the final scene
+[17:15] depth before we rendered the base pass,
+[17:18] we could prevent all this overdraw using
+[17:20] depth testing's equal to function. A
+[17:22] prepass is an approach at getting that
+[17:24] scene depth information early by
+[17:26] rendering the same objects beforehand
+[17:28] and only rendering their depth
+[17:30] information. This means overdraw only
+[17:33] resides in the depth prepass. But this
+[17:35] is supposed to be better because depth
+[17:37] only information can be rendered way
+[17:39] faster. So it can chew through surface
+[17:42] area overdraw much more efficiently. In
+[17:44] fact, motion vector passes and
+[17:47] visibility buffer alike solutions can
+[17:49] chew through surface area overlap as
+[17:51] well and generally function as
+[17:53] additional or replacement prepass
+[17:55] approaches. The only reason why the
+[17:58] visibility buffer in UE5 is slow is
+[18:00] because they use mesh shaders instead of
+[18:02] vertex shaders for large triangles and
+[18:04] compute shader software rasterization
+[18:06] for micropoly clusters. both of which we
+[18:09] proved are horrifically slow to process,
+[18:12] partly because of broken or completely
+[18:14] missing hardware depth testing. Speaking
+[18:17] of slow performance, the process of
+[18:19] rerendering everything with depth to rid
+[18:21] our more expensive stages of overdraw is
+[18:24] not all cookies and rainbows. These
+[18:26] stages are somewhat immune to overdraw,
+[18:29] but the efficiency of these can plummet
+[18:31] due to two other factors. The first
+[18:33] reason is related as to why they're so
+[18:35] fast in the first place. They don't
+[18:37] sample any textures, motion vectors,
+[18:40] visibility data, and even an alou2x2
+[18:43] bayer matrix dither all require
+[18:46] arithmetic processing, which is really
+[18:48] cheap on modern GPUs, unlike sampling a
+[18:50] texture per pixel, which none of these
+[18:53] do until you start processing alpha
+[18:55] tested content like foliage or hair.
+[18:58] because each pixel is forced to fetch an
+[19:00] opacity map value. When you start
+[19:02] sampling an opacity map, the cost of the
+[19:05] prepass draw becomes too similar to its
+[19:07] base pass counterpart. We saw this in
+[19:10] our days gone analysis, but let's take a
+[19:12] look at Crisis 3, which uses a partial
+[19:15] alpha tested prepass. Partial because it
+[19:17] doesn't draw distant geometry for
+[19:19] reasons we'll explore in a few moments.
+[19:21] Alpha tested because it's pre-passing
+[19:23] alpha tested content. But let's take a
+[19:25] look at this large alpha tested tree. It
+[19:28] provides a great amount of depth surface
+[19:30] area for our deferred base pass, but its
+[19:32] retrospective base pass draw is really
+[19:35] similar in cost even though it's
+[19:37] accessing two larger textures and
+[19:39] outputting way more render targets. This
+[19:41] is because GPUs process things in the
+[19:44] most parallel way possible. And of
+[19:46] course, it's a little bit faster than
+[19:48] its depth prepass counterpart because
+[19:50] the depth testing function is preventing
+[19:52] invocations where alpha testing
+[19:54] previously failed. I could explain this
+[19:56] at a more granular level, but honestly,
+[19:59] we have professional tools that just let
+[20:02] us see the results via testing instead
+[20:04] of babbling about theoretical
+[20:06] performance this or that. This alpha
+[20:08] tested draw cost3 milliseconds with a
+[20:10] pre-assed counterpart. If we disable its
+[20:13] pre-ass draw and enable the same depth
+[20:16] function on its standalone base pass
+[20:18] draw, that asset's total performance
+[20:20] cost becomes at least 13% faster. even
+[20:24] if you disable all the draws in between,
+[20:26] which I'll explain why this is shown
+[20:27] here later. But that 13% is actually
+[20:31] boring until you realize that's the
+[20:33] draws cost with depth writing disabled.
+[20:37] This means only pre-existing depth is
+[20:40] preventing invocations, but it's not
+[20:42] writing its own depth, which means it's
+[20:45] not helping its own performance with
+[20:47] additional depth surface area like a
+[20:49] realtime alpha tested draw would. Its
+[20:52] cost is massive because it's blindly
+[20:54] overlapping the mesh triangles, hence
+[20:56] its own material surface area. When we
+[20:59] take the extra steps to ensure death
+[21:01] writing is enabled on the draw. Now we
+[21:03] see that its performance is nearly
+[21:05] identical to the pre-ass cost, which
+[21:08] means if we only wrote the base pass
+[21:10] draw in place of the prepass draw, we
+[21:12] would increase the efficiency of this
+[21:14] draw by 40%. Imagine that level of
+[21:17] performance enhancement on a whole scene
+[21:19] of alpha tested content. Now, there are
+[21:22] two issues people may raise about this
+[21:24] test. The prepass and in turn the
+[21:26] original.13 millisecond cost might be
+[21:29] lower if this pipeline didn't output
+[21:31] vertex normals. That's not going to make
+[21:33] or break pre-pass performance. It's
+[21:36] going to have the same efficiency as
+[21:37] those passes I mentioned earlier. The
+[21:39] last issue will probably center around
+[21:41] the fact that the base pass draw isn't
+[21:43] actually alpha tested. The pixels
+[21:45] rendered cost being higher in the
+[21:47] non-alpha tested draw than the pixel
+[21:50] shader invocations number in the alpha
+[21:52] tested draw indicates the base pass draw
+[21:55] is doing more work. But you know what?
+[21:57] We got another example with a purely
+[21:59] depthbased prepass and a massive gbuffer
+[22:02] layout. This asset incurs a6 millisecond
+[22:04] cost with a prepass counterpart and only
+[22:07] cost44 milliseconds without. And this
+[22:10] time the base pass draw is actually
+[22:12] alpha tested. And for some reason, I
+[22:14] can't get this draw to write its own
+[22:16] depth. So, obviously, that's only going
+[22:19] to increase performance even more in a
+[22:21] properly configured non-debugging
+[22:23] scenario. Let me remind you that KCD2
+[22:26] broke the internet for the amount of
+[22:27] foliage it could render, and that game
+[22:30] only partially prepasses alpha tested
+[22:32] content and gained performance when we
+[22:35] disabled its pre-pass in game. still
+[22:37] think this Silent Hill 2 remake test
+[22:39] isn't good enough because the draw makes
+[22:41] up 250,000 triangles. Well, the geometry
+[22:44] bottleneck test doesn't indicate that
+[22:46] the geometry is the biggest issue with
+[22:48] this draw, unlike the invocation stats.
+[22:50] But hey, let's test a huge amount of
+[22:52] slightly unoptimized yet lower poly
+[22:55] foliage assets. Still faster without
+[22:57] pre-passed counterparts, even with all
+[22:59] that scary overlap that still exists in
+[23:02] the prepast without showing you when you
+[23:04] allow alpha tested prepassing in Unreal.
+[23:06] Let's analyze the performance of dense
+[23:08] cutout alpha tested geometry. Still
+[23:11] slower with pre-ass counterparts. There
+[23:13] are only two online encounters that act
+[23:16] as potential discredititors to this
+[23:18] advice. This video of someone gaining
+[23:20] around 30% more performance by including
+[23:22] alpha tested content in the preass and
+[23:25] advice given by Guerilla Games. That
+[23:27] video lacks too much context. There was
+[23:29] no concrete indication UI wasn't
+[23:31] automatically upscaling from a lower
+[23:33] resolution using its temporal upscaler.
+[23:36] Or maybe there was a sorting issue in
+[23:38] which the method we're proposing here
+[23:40] would work far better. As for Guerilla
+[23:42] games, remember that decimal engine
+[23:44] games run 30fps on PS4 in comparison
+[23:47] with Fox Engine titles. In other words,
+[23:50] we're working on some content that
+[23:51] challenges that studios research even
+[23:53] further. So stay tuned for that. Now,
+[23:56] the other thing that can harm preppass
+[23:58] performance is quad overdraw/dense
+[24:00] geometry. This is a separate issue from
+[24:02] those overlap heat maps. Pixel shader
+[24:05] invocation counts are sort of a lie
+[24:07] because pixel shaders actually work in
+[24:10] 2x two pixel groups called quads that
+[24:12] work in parallel. A more honest metric
+[24:15] would be quad invocations as that's what
+[24:17] we want to minimize instead. If one
+[24:19] pixel request more samples or
+[24:21] arithmetics than the others, the other
+[24:23] pixels could finish and then be forced
+[24:25] to wait for the complex pixel before
+[24:27] moving the whole quad on another set of
+[24:30] four pixels to work on. This introduces
+[24:32] something called quad overdraw. Let's
+[24:34] say we have a diamond shaped mesh made
+[24:36] up of two triangles. The GPU will
+[24:39] rasterize the first triangle, invoke the
+[24:41] appropriate pixel shaders, and have some
+[24:43] pixel work wasting away on the edges.
+[24:46] When the GPU rasterizes the next
+[24:48] triangle within the mesh, it invokes
+[24:50] quads again in the same location. So,
+[24:53] we're overlapping/overdrawing
+[24:56] quads. Modern affordable hardware can
+[24:58] handle a lot more quad overdraw than
+[25:00] previous console generations. But when
+[25:03] 70% of our material surface area starts
+[25:05] exceeding three out of four failed
+[25:07] quads, that's when non-exture sampling
+[25:09] geometry passes start crumbling and
+[25:12] having performance issues. You know, the
+[25:14] internet right now is filled with all
+[25:15] these epic game damage controllers that
+[25:18] don't showcase LOD quad overdraw when
+[25:20] comparing to Nanite performance because
+[25:22] it would expose how unoptimized their
+[25:24] LODs are and how much performance their
+[25:26] LODs are leaking via redundant quad
+[25:29] invocations. And they certainly never
+[25:31] show the prepass setting because
+[25:33] prepassing can act as a 2x quad overdraw
+[25:36] multiplier for dense geometry. That's
+[25:39] why it's so funny when you see these UE
+[25:41] tutorial morons showing the quad
+[25:43] overdraw view mode on Nanite meshes
+[25:45] because it writes base pass data using
+[25:48] quadless compute shaders or a flat low
+[25:51] poly geometry plane that references the
+[25:53] visibility buffer. Both of which of
+[25:55] course we proved performed equivalent to
+[25:58] really bad quad overdraw. Anyways, we
+[26:01] don't want to prepass distant geometry
+[26:03] because they get so small on screen.
+[26:05] Even with good LODs, we'll end up paying
+[26:08] too much in quad overdraw cost for
+[26:10] pretty poor occlusion data. Pre-passing
+[26:12] geometry doesn't help the overdraw cost
+[26:15] that is bound to exist in the base pass
+[26:17] counterpart draws. So only large/close
+[26:20] geometry should be prepassed with pure
+[26:22] death rendering. Using various game
+[26:24] examples, this is what the prepass
+[26:26] result should look like. Make marketing
+[26:29] use of this technique by sharing images
+[26:31] of your game and their retrospective
+[26:33] prepass depth outputs. Customers should
+[26:36] look for large amounts of depth surface
+[26:38] area rendered with relatively simple
+[26:40] geometry determined through additional
+[26:42] wireframe or prepass quad draw debugging
+[26:45] views. Ensure your customers that no per
+[26:47] pixel texture sampling is allowed in the
+[26:49] prepass such as alpha testing or per
+[26:52] pixel displacement. I will say though,
+[26:54] Fox Engine has shown the viability of
+[26:56] pervertex displacement using textures
+[26:58] through its terrain approach, but that's
+[27:00] likely dependent on minimal quad
+[27:02] overdraw. It should remain under.3
+[27:04] milliseconds as that's what HalfLife
+[27:06] Alex is able to achieve while processing
+[27:09] a full non-alpha tested prepass and
+[27:11] heavily urban scenes. A partial prepass
+[27:14] is one of the reasons why deferred
+[27:16] rendering was chosen for this video
+[27:18] opposed to forward plus since the latter
+[27:21] usually demands a full alpha tested
+[27:23] prepass. It's not the only reason as a
+[27:25] lot of it has to do with micro detail
+[27:27] issues and redundant MSAA shading
+[27:29] deferred rendering can actually
+[27:31] overcome. But forward plus rendering is
+[27:33] not entirely out of the picture as
+[27:35] internal conversations with consultants
+[27:37] and channel followers have led to
+[27:39] discussions about maybe not requiring a
+[27:41] full prepass for forward plus and after
+[27:44] a certain point a forward plus renderer
+[27:46] can adopt the various stages mentioned
+[27:48] in this video. There are certain
+[27:50] pre-processing steps that we need to
+[27:51] take to make sure all content is prepass
+[27:54] friendly like reordering triangles,
+[27:56] minimizing the amount of bits per
+[27:58] vertex. The workflow should be dead
+[28:00] simple check mark actions that are final
+[28:02] material/artist needs aware such as
+[28:05] reducing the amount of bits based on
+[28:07] object UV or vertex color requirements.
+[28:09] The next two steps prepass semi- rare
+[28:12] content that requires specific dedicated
+[28:14] output buffers in the base pass. By
+[28:16] getting their motion vector/mssa
+[28:19] data out of the way while also enhancing
+[28:21] our prepass depth, we comfortably keep
+[28:23] our base pass output count below the
+[28:25] pixel shader limit. I feel more strongly
+[28:28] about dual normal objects being motion
+[28:30] vector pre-passed over emissives because
+[28:32] this setup prevents alpha tested content
+[28:34] from having access to emissive
+[28:36] properties. Since there's a surprising
+[28:38] amount of sci-fi/fantasy games that have
+[28:41] emissive alpha testing, in that case,
+[28:44] the emissive buffer can just be included
+[28:45] as one of the main base pass outputs. It
+[28:48] should even fit perfectly fine with the
+[28:49] base pass layout we suggest here, too.
+[28:52] Now, because we will have a prepass
+[28:53] containing the best occluders, it would
+[28:56] be nice to take advantage of that with
+[28:57] some sort of occlusion approach that
+[28:59] could minimize our base pass draws, but
+[29:01] I haven't found this to be a
+[29:02] wellressearched topic. All right, as
+[29:04] usual, a base pass follows the prepass,
+[29:06] but luckily all the core rendering
+[29:08] technicalities were explained during the
+[29:10] prepass segment, so discussing these
+[29:11] steps should be pretty simple. Now that
+[29:13] we don't prepass our close alpha tested
+[29:15] content and lose that depth surface
+[29:18] area, we need to compensate by rendering
+[29:20] all the alpha tested content that would
+[29:22] appear in an alpha tested partial
+[29:23] prepass first in the base pass. That
+[29:26] test we did shows the additional depth
+[29:28] provided by the removed draws in between
+[29:30] the prepass and base pass didn't affect
+[29:32] the 13% performance boost in the lone
+[29:34] base pass draw via additional depth
+[29:36] occlusion. Now the rest of our base pass
+[29:39] can depth test against a resource
+[29:41] equivalent to an alpha tested partial
+[29:42] prepass without the performance cost.
+[29:45] Then we need to render all the nonp
+[29:47] preassed non-alpha tested geometry. That
+[29:49] means all the content in this pass will
+[29:51] suffer from overlap overdraw where z
+[29:54] sorting isn't accurate. But this is fine
+[29:56] because their small size makes the
+[29:58] overlap too minimal to care about in
+[30:00] comparison with the inherent quad
+[30:01] overdraw this content will induce. And
+[30:04] no, a visibility buffer would not be
+[30:06] good here because we still have to face
+[30:07] the quad over a draw, then compute even
+[30:09] further to evaluate the material. But
+[30:11] after this step is done, the draws
+[30:13] together provide a massive amount of
+[30:15] depth surface area. This will help the
+[30:16] GPU render the remaining alpha tested
+[30:18] content since this content will still
+[30:20] incur a much more problematic overlap
+[30:23] cost that will massively benefit from
+[30:25] full scene depth testing. The last steps
+[30:27] just render the pre-passed content with
+[30:28] the appropriate render target outputs.
+[30:31] Some upcoming content will show how
+[30:32] beneficial the proposed approach here
+[30:34] would have been had such product used
+[30:36] it. Now the meat of what the base
+[30:38] passath discussion requires is why
+[30:40] certain decisions are made, what needs
+[30:42] to already exist in terms of research
+[30:44] and what workflow this caters towards.
+[30:47] 32-bit depth was chosen because of some
+[30:49] AMD hardware quirks and it is the
+[30:51] highest quality output typically used
+[30:53] for large environments. This should be
+[30:55] using reverse Z rendering. Nvidia has an
+[30:58] article on it. Just search Nvidia
+[30:59] reverse Z rendering and you'll find it.
+[31:01] The Kalisto protocol gets amazing
+[31:03] results using 10- bit normals. So, I
+[31:05] don't feel like risking a drop in
+[31:07] quality using 24-bit normals, but at
+[31:09] least we know we don't need RG16
+[31:11] normals, which some games use. An RGB
+[31:14] 10A2 allows us to easily store an
+[31:16] isotropy flag and one lighting channel
+[31:18] stencil in the last two bits, which is
+[31:20] really important for keeping characters
+[31:22] looking acceptable in modern games. The
+[31:24] G-Buffer layout is largely undecided as
+[31:26] of now. Storing albido and roughness
+[31:29] together might be helpful for rain
+[31:30] effects as both of these pertain to
+[31:32] paracity effects, but this is more of a
+[31:34] reference to Need for Speed 2015's
+[31:36] Gbuffer layout since the costic SSR uses
+[31:39] an albido roughness RGB A8 to determine
+[31:42] scene variance. I do appreciate some
+[31:44] aspects of the UE4 layout since it
+[31:46] provides an isotropy meadow specular
+[31:49] transforms the opacity channel into a
+[31:50] cloth value via shading model ID, but
+[31:53] this pipeline may not have to pack eye
+[31:55] or hair data and a lot of per pixel
+[31:57] approaches in UEIE aren't really needed
+[31:59] with the workflow we propose. In many
+[32:02] games, there are so many shading
+[32:03] limitations in terms of throughput,
+[32:05] outdated photographically validated
+[32:07] parameters, and limits on how many
+[32:10] objects can express natural shading.
+[32:12] This is why we're proposing a new
+[32:14] workflow that aims to rework the common
+[32:16] metallic and specular PBR channels. Take
+[32:19] this painted material with iron
+[32:21] weathering. Paint tends to have specific
+[32:23] BRDF properties. And even if the
+[32:25] lighting shader fetches a material
+[32:27] profile with paint-like BRDF
+[32:29] expressions, our metallic buffer's
+[32:31] function becomes too shallow as it tries
+[32:34] to blend metallic values to portray
+[32:36] thinning paint. Metals have their own
+[32:39] complex expressions and changing values
+[32:41] in the ID map won't blend the iron metal
+[32:44] values. It will just completely swap out
+[32:47] the lighting appearance. This is why the
+[32:49] ID channel must become a dual material
+[32:51] profile ID channel that sends the
+[32:54] lighting shader to fetch a pre-created
+[32:56] dual profile. The previous metallic
+[32:58] channel now determines what profile is
+[33:00] predominantly expressed in the shading
+[33:02] process. As long as artists don't create
+[33:05] too many metal variants for blending,
+[33:07] the production shouldn't hit the 8,000
+[33:09] slot limit. Remember, if an artist needs
+[33:11] an additional metal like gold, the
+[33:14] artist can just change the ID of a pixel
+[33:16] to another material profile with a gold
+[33:18] variant and bias the metallic blending
+[33:20] buffer completely. Artists only need to
+[33:23] create metallic variance if they need
+[33:25] blending, which doesn't need to be that
+[33:27] common. The specular PBR channel needs
+[33:30] to be reworked as well as it tends to
+[33:32] represent index of refraction data which
+[33:35] doesn't fit in the typical 8-bit
+[33:36] allocation. We can store a higher
+[33:38] precision index of refraction variable
+[33:41] in the material profile and have the
+[33:42] specular channel always scale that value
+[33:45] to zero. This means legacy
+[33:47] specular/cavity maps will need to be
+[33:50] pre-processed so that edges between the
+[33:52] material profiles are always the closest
+[33:55] in value. That is unless we find a way
+[33:57] to completely replace cavity maps with
+[33:59] the baked bent normals. As a quick
+[34:01] reminder, the DMP ID channel is separate
+[34:04] from the shading model ID as we'll
+[34:06] explore the difference later. I've seen
+[34:08] many people ask things like what's the
+[34:10] proper poly count range for foliage or
+[34:12] certain assets. A very freeing
+[34:14] philosophy for artists is to know it's
+[34:16] not a matter of poly count, it's a
+[34:18] matter of overlap and quad overdraw.
+[34:20] This is what artists have to manage in
+[34:22] very specific ways we've covered in
+[34:24] previous videos. Now, let's review some
+[34:26] of the workflow notes. Unreal Engine
+[34:28] provides partial pre-passing and a quad
+[34:30] overdraw debug view mode based on the
+[34:32] postpl,
+[34:35] but it doesn't display overlap based on
+[34:37] what objects haven't been previously
+[34:38] prepassed. LOD transitions should only
+[34:41] be using an ALU based two position
+[34:44] jittered Bayer matrix. The arithmetics
+[34:46] it requires is going to be nothing on
+[34:48] modern hardware. And Days Gone's LOD
+[34:50] transitions really blew Decimal Engine
+[34:52] out of the water. Also make sure that
+[34:54] the retrospective shadow map draws are
+[34:56] dithered since that destroyed KCD2 with
+[34:59] popping issues. The specular analying is
+[35:01] mentioned here because multi-billion
+[35:03] dollar engines like Unreal are still
+[35:05] using the oldest anti-specular shaders
+[35:07] from Valve in which several developers
+[35:09] since then have created improved
+[35:11] versions. We will utilize SV coverage, a
+[35:14] hardware feature that tracks our scene
+[35:16] multi-sampling coverage. Multisample
+[35:18] rasterization and sample frequency
+[35:20] shading act as cost multipliers to scene
+[35:23] quad overdraw. This is why Crisis 3
+[35:25] didn't use SV coverage and instead used
+[35:28] a fake coverage mask derived from the
+[35:30] depth and normal information. But we
+[35:32] proved that their approach removed too
+[35:34] many multi-sampling coverage points
+[35:36] creating a basically worthless MSAA
+[35:38] coverage mask. This is why we need to
+[35:40] bake information into the vertices that
+[35:43] are aware of shared flat discontinuities
+[35:45] which can potentially use a small amount
+[35:47] of bits reserved for vertex colors. The
+[35:50] vertices for this edge will not be
+[35:51] affected because bent edges between
+[35:54] triangles need multis-sampling as do
+[35:56] lone triangle edges. So our SV coverage
+[35:59] mask should look a bit like this.
+[36:01] Obviously we need to develop the
+[36:03] appropriate shaders and baking tools.
+[36:05] But this should be a massive win for
+[36:07] deferred MSAA because in forward
+[36:08] rendering all these flat mesh
+[36:10] discontinuities would be forced to
+[36:12] process redundant lighting evaluations.
+[36:14] Anyways, there are a lot of cool ways to
+[36:16] promote these kinds of optimizations. We
+[36:18] could discuss more things like building
+[36:20] upon pre-existing quad-friendly
+[36:22] retriulation algorithms, why most
+[36:24] environmental PBR assets could be
+[36:26] converted into tiled mass materials
+[36:28] instead of the typical memory hungry
+[36:30] triple uniform layout. something we
+[36:32] talked about in our Kalisto protocol
+[36:34] pipeline analysis, but our engineering
+[36:36] followers will just have to brainstorm
+[36:37] on these workflows alone for today since
+[36:40] we want to focus on explaining the
+[36:41] pipeline in this video first.
+[36:44] All right, so the next steps are pretty
+[36:45] simple. This large stage is modeled
+[36:48] after two major pipelines. The first
+[36:50] pipeline being the G-buffer resolve
+[36:52] stage that takes place after Crisis 3's
+[36:54] base pass where multi-sample zero data
+[36:57] is stored in non multi-sampled render
+[36:59] targets and the pixel frequency MSAA
+[37:01] stencil is created. Then the MSAA
+[37:04] stencil is written inside the hardware
+[37:05] depth stencil channel for later stages.
+[37:08] As of now, we are not going to use or
+[37:10] generate non- multis-sampled Gbuffer
+[37:12] render targets simply because I know our
+[37:14] target hardware isn't going to be
+[37:15] affected by the bandwidth. And we're
+[37:17] going to create a sample frequency
+[37:19] stencil, which will help the hardware
+[37:21] access multi-sampled render targets more
+[37:23] efficiently. Our sample frequency
+[37:25] stencil data will also contain bits
+[37:27] representing that sample's shading
+[37:28] model, which is where we start to
+[37:30] resemble techniques used in days gone in
+[37:33] which after its base pass first combines
+[37:35] the 24-bit hardware depth with the
+[37:37] 12-bit displacement channel just before
+[37:39] decal projections. Then another step is
+[37:42] taken to combine the decal buffers with
+[37:44] the new bit shifted render target
+[37:45] outputs. But our pipeline doesn't
+[37:47] suggest decal buffers. So this step is
+[37:49] avoided. Basically, this first step
+[37:52] stores either the 32 displays depth or
+[37:54] 44bit channel data in our
+[37:57] overwritten/upcoming
+[37:58] specular lighting two times MSAA RGBA 16
+[38:02] while the SV coverage related data and
+[38:04] shading model bits are stored in either
+[38:06] the remaining RGBA 16 or separate 2*
+[38:09] MSAA 16bit depth buffer so that our next
+[38:12] step can write all the information into
+[38:14] our hardware depth stencil buffer empty/
+[38:17] disabled subsample values and sky pixels
+[38:20] will share a stencil value in the
+[38:22] hardware stencil channel. It's probably
+[38:24] best to generate other resources needed
+[38:26] for later stages afterwards. After that,
+[38:28] occlusion queries can be done with
+[38:30] precision and ease. Baked lighting bound
+[38:32] workflows based on the Kalisto protocol
+[38:34] development must be implemented in the
+[38:36] engine and decal buffers need to be
+[38:38] avoided since those will require
+[38:40] unperformant resolve steps and memory we
+[38:43] can't spare. Decals in Fox Engine write
+[38:46] to all the render target channels except
+[38:48] for the shading model ID. This means
+[38:50] decals take on the shading properties of
+[38:52] the base object, but adding a workflow
+[38:54] that allows artists to generate an
+[38:55] opaque threshold for overwriting the
+[38:57] material expression ID should probably
+[38:59] exist. It's now time to discuss how to
+[39:02] render non-cascaded shadow maps, which
+[39:04] render scene depth from the perspective
+[39:06] of the retrospective light to provide
+[39:08] shadowing information. There's a lot of
+[39:11] research that needs to be completed
+[39:12] first, such as finding out how
+[39:14] beneficial MSAA shadow maps can be, what
+[39:17] precision our shadow maps should be
+[39:19] using. But those aspects have to be
+[39:21] tested after two major requisites are
+[39:23] implemented first, such as perspective
+[39:25] shadow map logic. Even though shadow
+[39:27] maps only usually render cheap depth
+[39:29] information, many shadow maps per frame
+[39:32] need to be rendered, so every little
+[39:34] shading and surface area is a big deal.
+[39:36] I cannot stand seeing games render
+[39:39] massive amounts of depth in areas where
+[39:41] the on-screen light can't logically
+[39:43] evaluate that shadowing. And these
+[39:46] images are previous examples shown on
+[39:48] the channel regarding this issue. But
+[39:49] let's look at a dedicated example. A
+[39:51] shadow map is projected on the scene by
+[39:53] cross- refferencing the shadow map depth
+[39:55] and the player scene depth. But
+[39:57] sometimes we can get artifacts like
+[39:59] light leaking and jagged aliasing issues
+[40:02] which sort of put into perspective how
+[40:04] low resolution said object's
+[40:05] representation is inside the shadow map.
+[40:08] Now every mainstream game or engine
+[40:10] gives you the option to increase the
+[40:12] shadow map resolution with higher
+[40:14] settings. And while highresolution
+[40:16] shadow maps can mitigate the previous
+[40:18] issues or maybe even solve them
+[40:20] completely which by the way almost never
+[40:22] happens. The biggest issue is the
+[40:24] massive 4x or even 8x increase in depth
+[40:27] surface area shading which causes our
+[40:29] performance to plummet when we could
+[40:31] instead use the player and lights view
+[40:33] positions to render the shadow map
+[40:35] closer within those bounds and scale the
+[40:37] shadows field of view based on the
+[40:39] player's perspective. By scaling the
+[40:41] shadow field of view, we can see that
+[40:44] this pawn's shadow map representation is
+[40:46] being rendered at a much higher density.
+[40:49] Therefore, when projected, we have far
+[40:51] less jagged aliasing. This is
+[40:53] perspective shadow maps. And even though
+[40:55] this paper is more than two decades old,
+[40:57] it was honestly ahead of its time
+[40:59] because the downsides are either
+[41:01] irrelevant on modern hardware or largely
+[41:03] solved with new algorithms. Processing
+[41:06] power that can handle the cost of the
+[41:07] 1080p plus 8% rule we discovered in our
+[41:10] analysis of days gone. It's a depth
+[41:13] rendering density that the shadow
+[41:14] resolutions need to constantly scale for
+[41:17] while remaining under a48 squared
+[41:19] resolution as anything above this is too
+[41:22] wasteful and expensive. The shadow map
+[41:24] size should begin to shrink as it
+[41:26] becomes more distant within the frustm
+[41:28] of the player's camera view. I'm not
+[41:30] going to go through the workflow notes
+[41:31] since those are pretty dead simple to
+[41:33] understand. Next up is the deferred
+[41:36] rendering. Every time we find a game
+[41:38] that uses compute shaders to process all
+[41:40] lights in one draw, the singular light
+[41:42] per pixel cost has always been slower
+[41:44] than stencil volume lighting. Stencil
+[41:46] volume lighting is used in Fox Engine
+[41:48] Crisis 3 and Days Gone. It's when an
+[41:51] extremely cheap geometry volume
+[41:53] representing our light is rendered
+[41:55] inside the stencil channel to increase
+[41:57] pre-existing values within its
+[41:59] retrospective lights evaluation range.
+[42:02] This way, expensive lighting shader
+[42:03] pixel invocations don't waste time on
+[42:06] surface area where the light can't even
+[42:08] affect those pixels. When the lighting
+[42:10] shader is specified to only invoke
+[42:12] pixels for stencil values created by the
+[42:14] stencil volume, we save invocations
+[42:17] therefore cost and the lighting draw
+[42:19] simultaneously reverts the stencil
+[42:21] volume values to what they were before.
+[42:23] Fox Engine uses the same geometry for
+[42:26] both the stencil volume and lighting
+[42:27] draw, but this will induce unneeded quad
+[42:30] overdraw in the mesh discontinuities
+[42:32] when the lighting shader could just draw
+[42:34] a single full screen triangle instead as
+[42:36] this is what days gone does except days
+[42:39] gone draws multiple full screen draws
+[42:41] for each shading model. While quad or
+[42:43] redraw will be induced along each
+[42:45] shading model edge, this is far less
+[42:48] problematic than the alternatives, which
+[42:49] is why our pipeline has adopted this
+[42:51] approach. By separating each shading
+[42:54] model with a different draw, we can load
+[42:56] a different material expression ID as
+[42:58] each will hold different values and we
+[43:01] can selectively optimize bandwidth
+[43:03] requirements per pixel. For example, the
+[43:05] skin shading draw is the only shading
+[43:07] model that should be sampling the dual
+[43:09] normal buffer as input, similar to how
+[43:12] skin draws in Days Gone are the only
+[43:14] shaders that use the custom skin shading
+[43:16] lookup table as input. While related to
+[43:18] some important topics, I think our
+[43:20] developer following should look into,
+[43:22] separating the shading models creates
+[43:24] complexity room for advanced PCF
+[43:26] anti-alias shadowmat projection and more
+[43:29] complex BRDF/ shading models. In
+[43:32] comparison with say UI's approach that
+[43:34] has so many branches for different
+[43:36] shading models, it has to separate
+[43:38] shadowing in a slower separated pass
+[43:40] from lighting. Along with so many other
+[43:42] issues we've talked about previously
+[43:45] because of our perspective shadow maps
+[43:47] and discoveries regarding how
+[43:48] destructive shadow softening can be.
+[43:50] These aspects should not be toggable or
+[43:53] accessible on the artist's side. Artists
+[43:56] will have to remain restricted to barely
+[43:58] softened shadows for perfect biasing out
+[44:01] of the options that artists have right
+[44:03] now. This is the best choice hands down.
+[44:06] Shadow leaking and shadowing biasing is
+[44:09] an area this generation of graphics
+[44:11] needs to solve already. Maybe the next
+[44:13] generation can dominate shadow softening
+[44:15] since the required higher resolution
+[44:17] shadow maps and advanced/ more expensive
+[44:19] shadow softening logic will be
+[44:21] computationally affordable. Do note that
+[44:23] the timing here is under the assumption
+[44:25] of high action content and the lighting
+[44:28] shaders need to draw a permutation at a
+[44:30] certain distance that swaps out the
+[44:32] shadow map projection with
+[44:33] noiseless/high sample count screen space
+[44:36] shadows. I want to mention the fact that
+[44:38] stencil volumes become slower with MSAA
+[44:40] depth stencil buffers, which is why the
+[44:42] volume itself needs to be rendered with
+[44:44] early stencil testing to prevent
+[44:46] invocations on subsample pixels where
+[44:48] that empty/ sky shared value is
+[44:51] currently set.
+[44:52] Sun/Moon shadows are a bit trickier
+[44:55] since they usually use cascaded shadows,
+[44:57] which render several shadows from the
+[44:59] same perspective with progressively
+[45:01] decreasing distances from the player's
+[45:03] camera to shadow large scale worlds.
+[45:06] Perspective shadow maps were originally
+[45:08] designed to enhance sun shadows, but
+[45:11] more testing would have to prove better
+[45:12] results than orthographic shadows using
+[45:15] proper distance ratios, which is
+[45:17] referenced here from Days Gone. Farfield
+[45:19] cascaded shadows, which typically shadow
+[45:21] content beyond three standard cascades,
+[45:24] don't need a whole lot of accuracy, but
+[45:26] it's still a work in progress, as Dead
+[45:28] Space Remake and Days Gone have their
+[45:30] own approaches. But it turns out KCD2
+[45:33] uses five cascades per frame, but
+[45:35] updates the further cascades across a
+[45:38] few frames. I'm open to this approach,
+[45:40] but logic needs to exist for calling
+[45:43] objects that can't logically cast into
+[45:45] the player's view to reduce surface area
+[45:47] shading. This is an issue that exists
+[45:49] for non-cascaded shadows, but
+[45:51] perspective shadow maps inherently
+[45:53] relieve issues related to this. It also
+[45:55] needs testing with high-speed movement
+[45:57] like you'd find in racing scenarios and
+[46:00] frequently camera cutting content since
+[46:02] these scenarios can cause two cascades
+[46:04] to be totally invalidated. We could
+[46:06] potentially compensate for camera
+[46:08] cutting by rendering those last cascades
+[46:10] in the same starting frame at a smaller
+[46:12] resolution, then have those scale back
+[46:15] to the original three frame alternation.
+[46:17] Overall though, it just makes sense to
+[46:19] rely on approximated distance shadowing
+[46:22] such as the Atlas system used for
+[46:23] foliage and days gone or signed distance
+[46:26] field shadows with native resolution
+[46:28] projection. Remember that Crisis 3's six
+[46:31] cascades cost around 1.2 2 milliseconds,
+[46:34] but we're aiming for half that cost. And
+[46:36] the biggest performance killers in that
+[46:38] scenario came from the last cascades
+[46:40] where static high poly or alpha tested
+[46:43] content was drawn. Both of which
+[46:45] approximated shadowing techniques could
+[46:47] help with in terms of performance.
+[46:49] Shadows need to be pre-repped on a
+[46:51] native resolution 8-bit buffer channel
+[46:53] to make blending various techniques
+[46:55] easier. We'll save some performance by
+[46:58] using tricks used in Crisis 3 that
+[47:00] utilize sample frequency shadow masking.
+[47:03] The workflow notes are pretty basic, but
+[47:05] overall this is just an incomplete area
+[47:07] in terms of research, and I think
+[47:08] there's way too much potential we're
+[47:10] throwing out with costly alpha tested
+[47:12] distance shadowing that could be handled
+[47:14] with approximated shadowing and further
+[47:16] cascades. Now, when you advertise about
+[47:19] shadow optimizations, you should focus
+[47:21] on your results being noiseless,
+[47:23] artifact free, and faster than ray trace
+[47:25] shadows, remember that new games lack so
+[47:28] much shadowing in comparison with titles
+[47:30] made within the last decade because of
+[47:32] unoptimized geometry, no approximated
+[47:35] distance shadowing, and bad practices
+[47:37] such as shadowing floors. Shadows are
+[47:40] not expensive if you properly optimize
+[47:42] them. If you focus on fixing these
+[47:44] issues, you should have a lot to work
+[47:46] with in marketing material. These next
+[47:49] stages are mostly a work in progress and
+[47:51] somewhat optional if we want to reduce
+[47:53] the amount of shading models our lights
+[47:55] have to iterate through. Eyes and hair
+[47:57] should either be forward rendered or
+[47:59] tile deferred shaded since these
+[48:00] materials don't generally consume much
+[48:03] screen space surface area. These should
+[48:05] be using stencil testing from values
+[48:07] written during their base pass draws.
+[48:09] Remember that forward rendering doesn't
+[48:11] exclusively mean lighting. For many
+[48:13] years, it's just a way to reference that
+[48:15] mesh rendering is used for geometric
+[48:18] context a full screen pixel shader can't
+[48:20] provide, such as this subsurface
+[48:22] scattering pass that forward renders
+[48:24] related skin textures that couldn't fit
+[48:26] inside the GBuffers on the diffuse and
+[48:28] specular resolved lighting, which is
+[48:31] forward rendered again, meaning the same
+[48:33] head mesh is used to render that result
+[48:36] with even more skin textures and
+[48:37] specular input. Since many games like
+[48:40] Days Gone and Costa Protocol already
+[48:42] forward render eye meshes, there might
+[48:44] be some benefit in merging some of the
+[48:47] work. Hair is more of a work in
+[48:48] progress, but the end result should be
+[48:51] catapulted thanks to MSAA. The core
+[48:53] discussion here really concerns eyes.
+[48:55] I've seen many people mention
+[48:57] experimental eye shaders that cost
+[48:58] several milliseconds, and that's not
+[49:00] what we're aiming for here. Both Days
+[49:03] Gone and the Kalista protocol forward
+[49:05] render additional eye layers that cost
+[49:06] under 02 milliseconds in the translucent
+[49:09] pass. In addition to UI's eye shader
+[49:11] model, we simply need to implement more
+[49:13] special attributes like tear lines,
+[49:15] brightness adapting pupils and features
+[49:18] explored by striking distance studios
+[49:20] such as internal pupil flares as they
+[49:22] were coined and internal iris shadowing
+[49:24] which was locked to RT shadows. These
+[49:27] attributes are incredibly important to
+[49:29] crossing the uncanny valley and we
+[49:31] should be able to achieve the results
+[49:33] without RT, but it's going to require
+[49:35] standardized workflows that can deliver
+[49:37] the related eye shaders, live eyelid,
+[49:40] and light position values information
+[49:42] forward rendering already has to access.
+[49:45] Now, the next topic is global
+[49:46] illumination. And since this area is
+[49:48] pretty complex and honestly not concrete
+[49:51] enough as the approach could easily
+[49:52] change with more research, I highly
+[49:54] suggest reading through this section
+[49:55] yourself. The basic core idea is that
+[49:58] we'll determine global
+[49:59] illumination/indirect lighting by
+[50:01] tracing our shadowm map information
+[50:03] first, then falling back to a world
+[50:05] space tracing method. Do not waste time
+[50:08] implementing reflective shadow maps.
+[50:10] These are lowresolution shadow maps with
+[50:12] color and normal data which are used to
+[50:14] gather world space, meaning not limited
+[50:16] to screen space, direct lighting
+[50:18] information. This information is used to
+[50:20] then propagate an approximate indirect
+[50:22] lighting into the screen space view.
+[50:25] Reflective shadow maps or RSMs cost
+[50:28] around.3 to 6 milliseconds if you render
+[50:31] them every frame. That's a lot in
+[50:33] comparison with the zero cost of not
+[50:35] rendering it at all and instead feeding
+[50:38] your indirect lighting evaluation
+[50:39] process with the pre-existing shadow
+[50:41] maps and baked world space information
+[50:44] as days gone and the division do. If
+[50:46] these layers are provided under a 2
+[50:48] millisecond budget with noiseless
+[50:50] results and your direct lighting will be
+[50:52] massively complimented. Now, I already
+[50:55] foresee some bad faith or ignorant
+[50:57] discussion points regarding this topic,
+[50:59] and some comments on this repost kind of
+[51:01] perfectly encapsulated what I need to
+[51:03] quickly address. This guy Ryan here was
+[51:06] kind of mocking baked lighting in terms
+[51:08] of large scale worlds. But there's
+[51:09] nothing to joke about or mock other than
+[51:11] the fact that UEI's only form of baked
+[51:14] lighting is light maps. Light maps are a
+[51:16] stupid technique for the majority of
+[51:18] games because they are the least robust
+[51:20] in terms of interactability and memory.
+[51:23] Several other games we've discussed on
+[51:24] this channel, The Division, Days Gone,
+[51:26] Fox Engine games, use baked grids or
+[51:29] noiseless probes, which are much more
+[51:31] memory efficient. They can look worse
+[51:33] unless noless SSDO and SSGI and a
+[51:36] separate large-scale occlusion system is
+[51:38] put in place. Two systems that should
+[51:40] not require massive storage
+[51:42] requirements, which was one of the first
+[51:44] points John Linaman used to gaslight
+[51:46] other users into thinking slow, smeary
+[51:49] GI is acceptable. He repeats this stupid
+[51:52] outdated lie about static environments
+[51:54] and dynamic objects appearing different
+[51:57] because baked lighting so-called
+[51:58] requires different lighting methods. Oh,
+[52:01] look, Alan Wakeake 2. Static and dynamic
+[52:04] objects lit with the same sparse baked
+[52:06] lighting grid. Days Gone. Static and
+[52:09] dynamic objects lit with the same baked
+[52:11] voxal GI and occlusion tech. The Phantom
+[52:14] Pain. Oh, look. Static and dynamic
+[52:17] objects lit with the same baked lighting
+[52:18] probes. Stop listening to Digital
+[52:21] Foundry. And the next thing is stop
+[52:24] asking for worse game tech because you
+[52:26] think it's going to help game devs. This
+[52:29] was a lie propagated by marketing slaves
+[52:31] and lazy studios that need to damage
+[52:33] control. Outside of the fact that it's
+[52:36] not practical to develop a game with
+[52:38] noisy or slow visuals, a fully dynamic
+[52:41] or even rayraced version of the baked
+[52:43] tech can reside in the editor to help
+[52:46] artists iterate faster. and the shipping
+[52:48] product can use a baked version based on
+[52:51] the final artist results. This is not
+[52:54] some ultra special solution that
+[52:55] requires galaxy brain level thinking.
+[52:58] It's common sense. This is already a
+[53:00] workflow offered by DJI. Stop letting
+[53:03] productions like the one that made Doom:
+[53:05] The Dark Ages damage control through
+[53:07] obvious ignorant morons like Digital
+[53:09] Foundry. These influencers in these
+[53:11] lying studios are Nvidia/Sony pimps and
+[53:14] they want to blame your hardware to
+[53:16] distract from the fact that they are too
+[53:18] poor at managing their development
+[53:20] budgets or too lazy to develop a system
+[53:22] that helps both consumer and artist
+[53:24] needs as described in this section's
+[53:26] notes. Reflections are much like GI in
+[53:29] the sense that it's a layer of systems
+[53:31] that uses non-raced methods first to
+[53:33] minimize world space tracing. The stages
+[53:36] here are pretty self-explanatory, so I
+[53:38] won't go through much of it other than
+[53:39] the fact that world space RT
+[53:41] representation should be near voxil
+[53:43] simplified and dynamic cube maps are not
+[53:46] entirely out of the question yet. Screen
+[53:48] space subsurface scattering is the next
+[53:50] area that needs a lot of testing and
+[53:52] development work since we want something
+[53:54] optimal for MSAA. Subsurface scattering
+[53:57] is when we blur the diffuse aspect of
+[53:59] our object to add in scatter translucent
+[54:02] color. For instance, red is often chosen
+[54:04] for skin. The Phantom Pain does this at
+[54:06] native resolution with a pretty
+[54:08] aggressive blur filter that is sort of
+[54:10] destructive to shadowing. Newer methods
+[54:12] are a lot more conservative with how
+[54:13] much they affect lighting, such as this
+[54:15] Kalisto protocol frame with full
+[54:17] resolution RGBA 16 subsurface
+[54:20] scattering. This approach also
+[54:22] references the subsurface profile ID of
+[54:24] the pixel to look up its unique
+[54:27] translucent color. Silent Hill 2 remake
+[54:29] by default shades subsurface scattering
+[54:31] at a half resolution. And as you can
+[54:34] see, skin details appear too blurred,
+[54:36] and we're dealing with upscaling
+[54:38] artifacts. Skin blurring isn't even the
+[54:40] biggest issue as an optimization I've
+[54:43] only been able to find in Kalisto
+[54:44] protocol uses a halfresolution
+[54:47] subsurface resource and only blends 80%
+[54:50] of that halfresolution result with the
+[54:52] native resolution non-blur diffuse
+[54:54] buffer in the following specular diffuse
+[54:57] resolve stage to look near identical at
+[54:59] three times the speed but it doesn't
+[55:01] help with upscaling artifacts so unless
+[55:03] we use an ID and depthaware upscale I
+[55:06] can't really recommend halfresolution SS
+[55:08] SS shading. I like how days Gone and
+[55:11] Phantom Pain managed this effect in only
+[55:13] two draws, but Days Gone uses the
+[55:16] combined specular and diffuse lit result
+[55:18] for SSS shading. And I feel that the
+[55:21] result is questionable and not
+[55:23] particularly faster than native RGBA 16
+[55:26] SS in cluster protocol when the RG11B10
+[55:30] input formats in Days Gone are forced as
+[55:32] RGBA 16 formats. This might be a good
+[55:36] scalability option if hardware has
+[55:38] issues with said RGBA 16 diffuse
+[55:40] buffers, but you might as well use a
+[55:42] Crisis 3 I like method with stencil
+[55:45] testing and a modernized GBuffer layout,
+[55:47] which ends up being around three times
+[55:49] faster than Kalista protocol with forced
+[55:52] RGBA 16 inputs. And Crisis 3 is
+[55:54] automatically outputting to an RGBA 16.
+[55:58] After some testing and comparisons with
+[56:00] a singular light to isolate the
+[56:02] subsurface scattering impact in the
+[56:04] original Crisis 3, I find these results
+[56:06] really impressive for its cost. It's a
+[56:09] pixel shader implementation, meaning it
+[56:11] can use stencil testing. I'm not finding
+[56:14] any banding or noise, and all it really
+[56:16] needs is access to an ID buffer to look
+[56:19] up unique subsurface color/propies.
+[56:22] We can probably easily merge this pass
+[56:24] with the next stage. So, we can either
+[56:26] aim for a 1.4 4 millisecond full screen
+[56:29] cost modeled after Kalista Protocol's
+[56:31] native RGBA 16 UE subsample 2 compute
+[56:35] shader performance or look into
+[56:38] something more conservative since I
+[56:40] think Kalista protocol shows that
+[56:41] there's actually too much subsurface
+[56:43] scattering in which a lower and cheaper
+[56:46] sample set may be appropriate. If you
+[56:48] run into banding, use the same two
+[56:50] position 2x2 jitter baiter matrix and
+[56:53] take advantage of 60fps persistence.
+[56:56] Unreal Engine is one of the few engines
+[56:58] that doesn't use normals for this pass,
+[57:00] but I can't say they matter though since
+[57:02] the subsurface results in Kalisto
+[57:03] Protocol seem adequate. But overall, in
+[57:06] general third person gameplay, this
+[57:08] should only cost around.3 milliseconds.
+[57:11] Since these last few topics are such
+[57:13] massive working progresses, I'll let
+[57:15] these example posts explain some extra
+[57:17] details since it's best to explain these
+[57:19] aspects in their marketing anyway. All
+[57:21] right, so the next step is combining the
+[57:23] diffuse and specular lighting buffers.
+[57:25] Now, plenty of games don't have this
+[57:27] step because they store the diffuse and
+[57:29] specular result in a combined fashion.
+[57:31] This separation is mainly done because
+[57:33] of that screen space subsurface
+[57:35] scattering we need to perform on the
+[57:36] standalone diffuse result. We already
+[57:39] discussed how days gone's customized UEE
+[57:41] approached that effect, but Epic Games
+[57:44] UEE will checkerboard the diffuse and
+[57:46] specular result if the lighting buffer
+[57:47] is a 32-bit RG11B10,
+[57:50] which works okay, but causes similar
+[57:52] issues as upscaling half-resolution
+[57:55] screen space SS. Besides these
+[57:57] artifacts, I don't want to adopt this
+[57:59] approach because I'm hesitant to settle
+[58:01] for an RG11B10 lighting buffer for
+[58:04] reasons I'll come back to in a few
+[58:05] moments. What we want is our lighting to
+[58:08] be stored in an RGBA 16 lighting buffer,
+[58:11] and we want those results fed into the
+[58:13] SDR or HDR tone mapping step. KCD2 in
+[58:17] Dead Space remake shades the majority of
+[58:19] material lighting in a single RGBA 16,
+[58:23] but KCD2 uses an additional RG11B10 for
+[58:26] skin diffuse before compositing it with
+[58:29] the main lighting buffer, which holds
+[58:31] the specular skin result. But now skin
+[58:34] isn't being shaded with RGBA6 precision
+[58:36] like the rest of the scene. Deadspace
+[58:39] remake fixes this by ensuring the
+[58:40] secondary skin diffuse buffer is also in
+[58:43] RGBA 16. You can use an RGBA6 lighting
+[58:46] buffer in Unreal by changing the scene
+[58:48] color format value from 2 to 4, which
+[58:51] allows the entire scene to have RGBA 16
+[58:54] lighting and uses the alpha channel to
+[58:56] store data that helps extract the
+[58:58] standalone non-checkerboarded full
+[59:00] resolution diffuser result for the
+[59:02] screen space SS pass. I don't want to
+[59:05] adopt this method because I want to
+[59:07] measure the error with the reference
+[59:08] approach first. And we need the
+[59:11] standalone skin specular result for a
+[59:13] Gaussium blurring step mentioned and
+[59:15] unfortunately poorly documented aspect
+[59:17] in striking distance studios character
+[59:19] rendering research. This is the only
+[59:21] apparent reason why Kalisto BRDF shaded
+[59:24] objects and TCP would use a secondary
+[59:27] specular buffer through custom engine
+[59:29] modifications. Both formats respond
+[59:31] accordingly to the scene color format
+[59:33] command. Crisis 3 uses two RG11B10
+[59:37] formats for the diffuse and specular
+[59:38] lighting buffers, then combines them
+[59:41] with the base color data in an RGBA 16
+[59:44] because according to Krytek, the extra
+[59:46] precision isn't needed until material
+[59:48] colors come into play. This is something
+[59:50] that Alen Wake 2 could have taken
+[59:52] advantage of, but didn't, at least
+[59:53] during the time we did our analysis. It
+[59:56] may have upgraded by then, but I want to
+[59:58] verify Krytek's opinion on this matter
+[60:00] on a better SDR and HDR monitor,
+[60:03] specific content, and pipeline design
+[60:05] first before adopting their advice on
+[60:07] this. The main reason I feel very
+[60:09] strongly about RGBA 16 lighting is
+[60:12] because the best looking games I've seen
+[60:14] in terms of lighting contrast are games
+[60:16] that use pure RGBA 16 lighting, such as
+[60:20] KCD2, Dead Space Remake, and The Phantom
+[60:22] Pain. Maybe it's placebo or coincidence,
+[60:25] but that's why we need more testing and
+[60:27] validations. The Phantom Pain, unlike
+[60:30] other engines here, tone map the
+[60:32] lighting in the same draw where base
+[60:33] color data is blended in. And while I
+[60:36] think the benefits of this approach
+[60:37] should be investigated, my main concern
+[60:40] is compatibility with VFX compositing,
+[60:42] as we're going to want to copy Crisis
+[60:44] 3's approach for tone mapping for later
+[60:46] anti-aliasing stages. Plus, we already
+[60:49] have a viable 2x MSAA RGBA 16 if we use
+[60:52] full resolution screen space subsurface
+[60:55] scattering. This pass tends to be a
+[60:57] great place for functionality merging
+[60:59] and fog shading makes the most sense at
+[61:01] this point. Maybe it won't be necessary,
+[61:03] but both Need for Speed 2015 and the
+[61:05] Phantom Pane use fog atlases from this
+[61:07] point. But maybe an ALU approach might
+[61:10] be better. After we get the direct
+[61:12] lighting resolved properly, we need to
+[61:14] compute the sky and cloud rendering. as
+[61:16] many other pipelines do at this point.
+[61:19] Now, unlike other timings, if you add
+[61:21] them up, they'll end up matching a 59
+[61:23] FPS cost because this does assume high
+[61:26] action worst case scenario rendering.
+[61:28] But you shouldn't add this cloud timing
+[61:30] without understanding its context. The
+[61:32] per pixel cost of cloud rendering should
+[61:34] scale with the base path surface area,
+[61:36] which also scales with the cost of
+[61:38] indirect and direct lighting. Even if
+[61:40] you have an elaborate cloud system, as
+[61:43] long as an equilibrium between the cost
+[61:45] of those three aspects is maintained,
+[61:47] clouds really shouldn't impact
+[61:49] performance much. We were going to do a
+[61:51] video on Horizon Forbidden West, but
+[61:53] Nixie's ports are very unfriendly to
+[61:55] debugging software. So far, we've only
+[61:57] been able to measure KCD2's comparable
+[62:00] results, which you can learn about in
+[62:02] this video. This is what the timings on
+[62:04] our pipeline graph mainly reference, but
+[62:06] chances are we're probably going to want
+[62:08] to replicate the results found in this
+[62:10] GT7 presentation as it goes through a
+[62:13] number of sky related topics with heavy
+[62:15] photographic validation. I cannot stress
+[62:18] enough how incredible the sky rendering
+[62:20] is in GT7. And this resource confirmed
+[62:23] my long-standing concerns with how
+[62:25] uncanny sky rendering tends to be. So
+[62:28] really bank on this marketing wise if
+[62:30] you explore this research beyond what we
+[62:32] can cover about it in this video. This
+[62:34] stage is pretty basic. Transparent draws
+[62:36] like glass are going to be rendered
+[62:38] next. But just before that we're going
+[62:40] to render a variety of decal options
+[62:42] ranging from basic blending which will
+[62:44] allow artists to create things like this
+[62:46] makeshift shadow beneath this Need for
+[62:48] Speed 2015 car and forwardlit decals
+[62:51] which is important for blood or soot
+[62:53] effects. The biggest performance
+[62:55] optimization we can use in this section
+[62:57] is the Phantom Pain's halfresolution
+[62:59] minmax depth effect rendering for low
+[63:02] frequency effects and sprites. The
+[63:04] resources required for this step should
+[63:06] be used for halfresolution subsurface
+[63:08] scattering if that route or scalability
+[63:10] is taken. This will massively reduce
+[63:13] pixel shader invocations by rendering
+[63:15] effects at a half resolution without
+[63:17] common lowresolution depth
+[63:18] discontinuities.
+[63:20] The only reason why this may not have
+[63:21] had such a widespread adoption is
+[63:23] because fine particles cannot be shaded
+[63:25] at a half resolution. The problem is
+[63:28] having to clear the two halfresolution
+[63:30] buffers in between native resolution VFX
+[63:32] and half resolution shading. But
+[63:34] considering how expensive the most
+[63:36] simple native resolution sprite effects
+[63:38] can be, I can't see the alternatives
+[63:40] costing more. Now all of these V effects
+[63:43] and transparent draws/materials should
+[63:45] be writing additional values in the
+[63:47] alpha channel that represent a
+[63:49] responsive mask. This responsive mask
+[63:51] will reduce the amount of temporal
+[63:53] anti-alasing blending in later stages.
+[63:55] This is easy to get from halfresolution
+[63:57] effects because you can just recycle the
+[63:59] blend mask in their alpha channels. I
+[64:01] remember seeing people make posts about
+[64:03] how the newer DLSS models will handle
+[64:05] particles better when so-called smarter
+[64:08] AI is just more expensive AI whereas the
+[64:10] vendor agnostic solution is just being
+[64:12] neglected. As for previous
+[64:14] implementations of this responsive mask,
+[64:16] these still look bad because the TAA
+[64:18] shader accumulates more than a single
+[64:21] frame. So in the end, these are the two
+[64:23] main aspects you should market. Depth of
+[64:25] field and bloom need more work. Again,
+[64:27] that is just a consequence of making
+[64:29] this video early. I will say for now
+[64:31] that the best implementations we haven't
+[64:32] covered yet are all half resolution and
+[64:35] composited in the next stage that being
+[64:37] tone mapping. But we want to process DOF
+[64:40] after anti-aliasing and we want to do
+[64:42] anti-aliasing after tone mapping. So
+[64:44] again this needs refinement. Now as said
+[64:46] before the next step will be tone
+[64:48] mapping which will convert our high
+[64:50] precision lighting into a format that
+[64:52] our display can show. Why we don't
+[64:54] render lighting in a format our display
+[64:56] can show in the first place is a
+[64:58] discussion we're not going to go into.
+[65:00] And this video does a pretty good job
+[65:01] showing the benefits of high precision
+[65:03] lighting if you want to learn more about
+[65:05] that. To make things clear, our focus is
+[65:07] on maximizing limited RGB SDR content
+[65:11] simply because maximizing baseline
+[65:13] standards will help us all better
+[65:15] understand what benefits full RGB and
+[65:17] HDR provide. Now, let's get you familiar
+[65:20] with tone map curves, which map our high
+[65:22] dynamic range lighting into a format
+[65:24] typical SDR displays can show. We can do
+[65:27] this in a perfectly linear fashion, but
+[65:29] this doesn't look too good, which is why
+[65:31] many different tone map curves have been
+[65:33] developed over time. We've shown in
+[65:35] previous videos how ASUS tone mapping
+[65:37] destroys images with detail destruction
+[65:39] and inaccurate colors, but let's take
+[65:41] Reinhardt for example. It can make the
+[65:44] image look more natural than linear
+[65:46] mapping, but the overall image ends up
+[65:48] looking too washed out and dull. Now, in
+[65:50] the past, this channel has discussed the
+[65:52] GT tone mapper with heavy praise. And I
+[65:55] want to go a little more into why. The
+[65:57] majority of this curve is linear. The
+[65:59] developers of this tone mapper
+[66:01] specifically said this helped convey
+[66:03] realism, and that was backed by Kalisto
+[66:05] Protocol, which adopted the standalone
+[66:07] GT curve. Other standout games in terms
+[66:10] of perceptually accurate color
+[66:12] management also use linear portions and
+[66:15] their tone mappers to some degree. The
+[66:17] Phantom Pain is memorable, but you can
+[66:19] turn to post 2017 Frostbite games like
+[66:23] Star Wars Battlefront 2 and Dead Space
+[66:25] remake that most likely utilize display
+[66:27] mapping. We'll show examples of that in
+[66:29] a few moments. The next thing that makes
+[66:31] GT tone mapping so good is the contrast
+[66:34] toe, which makes the darker parts of the
+[66:36] image shift quicker to black. ASUS tone
+[66:39] mapping only has a slight contrast to,
+[66:41] but it's not as effective because it
+[66:43] doesn't blend into linear midtones. The
+[66:45] highlights, or the bright parts of the
+[66:47] image, are compressed by the smooth
+[66:49] shoulder at the top of the curve. This
+[66:51] is all pretty easy to understand if you
+[66:53] simply see these pieces work together.
+[66:55] Here is the scene with completely linear
+[66:57] tone mapping. As the exposure raises,
+[67:00] watch what happens behind the white
+[67:02] sphere and specular highlights as we add
+[67:04] the smooth shoulder from, say, MGSV's
+[67:07] tone mapping curve. It's starting to
+[67:09] look a bit more natural. But let's lower
+[67:11] the exposure to understand the contrast
+[67:13] toe. In this case, the GT contrast toe.
+[67:16] Before the contrast toe was added, it
+[67:18] wasn't apparent how much gray was in the
+[67:21] image. But we don't need our exposure
+[67:23] all the way down to see the profound
+[67:25] effects of the contrast tone. It makes
+[67:27] the image richer and aligns with how we
+[67:29] see content in real life according to
+[67:31] the deaf Verz Rose law. While the MGSV
+[67:34] tone mapping curve doesn't have a
+[67:36] contrast toe, the custom curve on screen
+[67:38] with the contrast toe is more similar to
+[67:40] the phantom panes displayed results
+[67:43] according to some basic experiments. If
+[67:45] you have watched our Fox Engine
+[67:47] analysis, you would know it immediately
+[67:49] resolves lighting in a 24-bit color
+[67:51] space, which uses that lineer smooth
+[67:54] shoulder curve that doesn't include a
+[67:56] contrast toe. After certain effects are
+[67:59] rendered in that 24-bit space, the
+[68:01] result is color graded with a lot. That
+[68:04] lot produces another 24-bit image with
+[68:07] raised highlights and lowered shadows
+[68:10] like a retrospective contrast toe.
+[68:12] That's why so many materials such as the
+[68:14] asphalt gain more perceivable detail and
+[68:17] pop a bit more color-wise without
+[68:19] looking oversaturated. This was easy to
+[68:22] confirm as we can simply take the source
+[68:24] 24-bit image and lower the shadows
+[68:26] manually. The less difference we see in
+[68:28] our manual color grading means we're
+[68:30] accurately describing what the L grading
+[68:33] is doing. We conducted the same test in
+[68:35] some night scenes and found nothing was
+[68:37] really too different except a dark blue
+[68:40] tone is configured in the L, which
+[68:42] really isn't a discovery considering it
+[68:44] was mentioned at GDC 2013. It is
+[68:47] technical competence that plays such a
+[68:49] massive role in this title's vivid
+[68:51] presentation today. It is wrongfully
+[68:53] simplified as better artistry. The
+[68:56] Kalista protocol implements the GT tone
+[68:58] mapper with console command
+[68:59] configuration which allows us to better
+[69:02] understand its impact on realism. The
+[69:04] footage below is using the DX11 mode, so
+[69:07] shadow resolution and Q maps butcher the
+[69:09] graphics, but again that is unrelated to
+[69:12] tone mapping differences shown here.
+[69:14] Hopefully YouTube compression won't
+[69:15] destroy the differences shown here
+[69:17] because in person the difference in SDR
+[69:19] was massive. The contrast toe is removed
+[69:22] by default in this title for unapparent
+[69:24] reasons and the smooth shoulder value is
+[69:26] changed to compensate for an overall
+[69:28] curve change caused by the contrast toe
+[69:31] removal. It seems like they were trying
+[69:33] to match the default smooth shoulder in
+[69:35] which a value of 0.527 would have been
+[69:38] more accurate. The contrast toe command
+[69:41] seemed to be the only custom command
+[69:43] that had a decimal place shift since a
+[69:45] value of 222 completely overtook all
+[69:48] midtone values unlike standard
+[69:50] implementations where a value of 0022
+[69:54] will result in identical removal of the
+[69:56] contrast toe. What you get with true GT
+[69:59] tone mapping the result that you see on
+[70:01] the right is deeper blacks which makes
+[70:03] you feel more like you're in the room
+[70:05] with these characters. More detail is
+[70:07] visible in some textures, and colors
+[70:09] appear a little more vibrant without
+[70:11] looking oversaturated in comparison with
+[70:14] other tone mappers like AGX Punchy,
+[70:17] which compensate for the defaulted
+[70:18] desaturated look of plain AGX. The
+[70:21] impact of these tone map curves should
+[70:23] make a lot more sense now, but there's
+[70:25] another issue that needs discussion. Hue
+[70:27] shifts that distort material colors.
+[70:30] This is a common issue even the GT tone
+[70:32] mapper suffers from. And one of the main
+[70:34] issues the GT7 tone mapper aimed to fix
+[70:37] not by removing but by changing the
+[70:40] behavior of the hue shifts such as
+[70:42] remaining more neutral color. As a quick
+[70:45] reminder, the GT tone mapping curve is
+[70:47] already less susceptible to color
+[70:48] distortion in comparison with other tone
+[70:51] mappers like the ASUS curve. There have
+[70:54] been previous attempts at preventing hue
+[70:56] shifts such as Frostbite's 2017 display
+[70:59] mapping, but it doesn't have a contrast
+[71:01] tone by default. This comparison is
+[71:03] meant to show off the main differences
+[71:05] in hue preservation and highlight
+[71:07] compression. GT7 shifts towards white
+[71:10] much faster in comparison with other
+[71:12] tone mappers because when typical tone
+[71:14] mappers hue shift, GT7 keeps that shift
+[71:17] more neutral colored. As you can see in
+[71:19] the red GT7 sphere as we decrease the
+[71:22] exposure, it's a more neutral colored
+[71:24] hue shift because the only neutral
+[71:26] alternative to an orange hue twist is a
+[71:28] white hue twist. The blue sphere doesn't
+[71:31] transition to white as fast because its
+[71:34] base color is a darker hue than the
+[71:35] spheres above it. Display mappers
+[71:38] transition to bright white is more
+[71:40] uniform. But the main issue with display
+[71:42] mapping is its inability to portray
+[71:45] vivid colors as well as GT7 tone mapping
+[71:47] when the exposure is set properly. The
+[71:50] color on display is the orange spheres
+[71:52] material base color. because the
+[71:54] properly exposed result is priority.
+[71:57] This is partly why I continue to
+[71:59] strongly advocate for GT7 tone mapping.
+[72:02] While you might point out that GT7 tone
+[72:04] mapping still has hue shift in
+[72:06] overexposed areas, this is actually more
+[72:09] perceptually correct than display
+[72:10] mapping because display mapping shifts
+[72:13] towards a more washed out appearance.
+[72:16] The high exposure hue shifts in GT7 tone
+[72:19] mapping was specifically kept to mimic
+[72:21] camera footage. And because of this, GT7
+[72:25] tone mapping accidentally mapped
+[72:27] accurate naked eye perception into
+[72:29] display values. If you take a very
+[72:32] vividly colored object, say an orange
+[72:34] object, and decrease and increase the
+[72:37] distance of a small flashlight against
+[72:39] its surface in a completely dark room,
+[72:41] you will find as the surface distance
+[72:44] between the light decreases, the color
+[72:46] becomes more vibrant. That is the
+[72:49] opposite of the wash out effect you see
+[72:51] in display mapping. The most vibrant
+[72:53] orange you can perceive is what the
+[72:55] proper digital exposure represents.
+[72:58] Because it's much harder for your eyes
+[72:59] to be comparably overexposed, to force
+[73:02] your eyes into being in an overexposed
+[73:05] state, you have to lay a bright
+[73:07] flashlight against the orange surface at
+[73:10] such a small distance, the surface
+[73:12] begins to match the blinding luminance
+[73:15] of the light. then you will perceive
+[73:17] what looks like a yellow hue shift that
+[73:20] quickly transitions into blinding white.
+[73:23] If you see a pure transition to white,
+[73:25] you are most likely looking at a surface
+[73:27] that is too smooth and is instead
+[73:29] reflecting the white color of the light.
+[73:32] But that would be digitally represented
+[73:34] by the material shading like an advanced
+[73:36] BRDF etc. So to map it out visually, our
+[73:40] eyes provide a massive range of what you
+[73:42] could call perfect exposure. That gray
+[73:45] line at the end represents dark room
+[73:47] adaption, but that really isn't too
+[73:49] relevant. A tone mapper correctly
+[73:51] modeled after our eyes has to compress
+[73:54] the adaptive naked eye range in a way
+[73:56] that complements the structure of
+[73:58] display values. As you can see here, the
+[74:01] ratios need to be mapped out very
+[74:03] differently because we want to use the
+[74:05] full extent of our display power. If we
+[74:08] increase the remaining RGB values by 50%
+[74:11] at a synchronized rate, we will end up
+[74:14] with washed out orange like you would
+[74:16] get with display mapping. Nowhere on our
+[74:19] naked eye perception map do we ever see
+[74:21] washed out orange as luminance
+[74:24] increases. Now, when we did our analysis
+[74:26] of Dead Space remake, which most likely
+[74:29] uses some form of display mapping, we
+[74:31] didn't really get a chance to encounter
+[74:33] a scene with lighting that wasn't flat,
+[74:35] unlike this shot here. The lighting on
+[74:38] the back of this character looks
+[74:39] particularly excellent. But I do think
+[74:42] the overall result is a little bit
+[74:44] washed out and incorrect looking.
+[74:46] Incorrect in rendering means uncanny. If
+[74:49] you find the result pleasing, I simply
+[74:51] think it's more of a testament to the
+[74:53] importance of hue preservation and
+[74:55] linear like curved design. Now, as said
+[74:58] before, nowhere on our naked eye
+[75:00] perception map do we ever see washed out
+[75:02] orange as luminance increases, but we do
+[75:06] see blinding yellow, which is easy to
+[75:09] shift towards as we progress towards
+[75:11] white if we increase the remaining green
+[75:13] values by 100% first. That is the
+[75:16] behavior GT7 tone mapping matches so
+[75:19] well. I'm not saying it's perfect since
+[75:22] we should look into how quickly we
+[75:23] should transition to yellow, etc. And
+[75:26] look into more advanced phenomenons like
+[75:28] the HK effect and color desaturation
+[75:31] that you can witness an absolute minimum
+[75:33] lighting conditions. That one being a
+[75:35] little bit harder to show on camera, but
+[75:37] that will extend the representation of
+[75:38] underexposed scenery with minimal blue
+[75:40] values. Digital exposure, whether it's
+[75:43] raw photography or digital rendering,
+[75:45] acts almost like depth of field, except
+[75:47] exposure acts as the depth of
+[75:50] perception. And both depth of perception
+[75:52] and depth of field need to be properly
+[75:54] tuned so that our limited mediums such
+[75:57] as paper or displays, which are not
+[75:59] perceptual mediums, look understandable
+[76:02] to our eyes. That's why autoexposure is
+[76:05] so important, and it's something this
+[76:06] pipeline chart needs to document a bit
+[76:08] better. The GT7 tone mapping
+[76:10] presentation presents this great
+[76:12] interconnected system that references
+[76:14] tons of environmental values to
+[76:16] calibrate autoexposure. And this is very
+[76:19] important to implement because as a
+[76:21] player, this is going to help you get
+[76:23] more artistic visuals in your game
+[76:25] because artists are going to have their
+[76:27] technical calibration side reduced which
+[76:29] helps the overall development but will
+[76:31] give artists actual time to produce
+[76:33] unique visuals. The other important
+[76:36] thing to implement is an automated white
+[76:38] balance system, especially since hue
+[76:40] preserving tone mappers can appear a
+[76:42] little more warm than usual. There are
+[76:44] obvious technical reasons why we would
+[76:46] want proper and consistent white
+[76:48] balance, but it's also more accurate to
+[76:50] our naked eye perception since our real
+[76:53] eyes can adapt to different light
+[76:54] temperatures without much issue. This
+[76:56] will make a huge difference, and I think
+[76:58] that's shown pretty well in this tunnel
+[77:00] shot here. Now, you might say you want a
+[77:02] colder look, or maybe you're using
+[77:04] bright red lights in a horror scenario.
+[77:06] We can implement things like a minimum
+[77:09] and maximum autotuning range, and a
+[77:12] scene temperature bias can be
+[77:13] implemented for artists if that's really
+[77:15] needed. We already implement these
+[77:17] mechanics for auto exposure. Now, from
+[77:20] this shot, it makes it look like they
+[77:21] use the base color integrated lighting
+[77:23] buffer instead of the diffuse lighting
+[77:26] only buffer. This is important for
+[77:28] reasons I'll explain in a few moments,
+[77:30] but some might challenge me by pointing
+[77:32] out a diffuse only buffer exists in this
+[77:34] slide. There's a high likelihood that
+[77:36] this is just a limited debug view mode
+[77:38] instead of a readily available pipeline
+[77:40] resource. The only thing that could
+[77:42] potentially indicate that the GT7 engine
+[77:44] provides a usable diffuse only lighting
+[77:46] buffer without material color
+[77:48] integration is this color output that
+[77:51] might be blended in with both the
+[77:52] separated diffuse and specular forward
+[77:54] outputs. But back to the main topic, we
+[77:57] want to utilize the diffuse only
+[77:59] lighting buffer for reasons explained in
+[78:01] this 2013 GDC presentation. I highly
+[78:04] suggest watching the timestamp shown
+[78:06] here since they use a video showcasing
+[78:08] the realworld autoexposure failures that
+[78:11] happen due to darker colored materials.
+[78:13] Fox Engine titles retain extremely
+[78:15] consistent exposure by downsampling the
+[78:18] diffuse only buffer, which isn't tainted
+[78:20] by dark material attributes or
+[78:22] emissives. Adopting this might allow us
+[78:25] to simplify the autoexposure/white
+[78:27] balance pipeline while providing similar
+[78:30] quality to the advanced GT7 system. But
+[78:33] I do want to find a way to exclude
+[78:34] emissives as Fox Engine does and ensure
+[78:37] subsurface scattering, the non-screen
+[78:39] space variant that takes place during
+[78:41] direct lighting by using the opacity
+[78:43] buffer doesn't affect the auto white
+[78:45] balance. Repurposing one of the lighting
+[78:48] buffer RGBA 16 alphas and ID system
+[78:52] might be the best direction for that. As
+[78:54] for ensuring tone mapping is performant,
+[78:56] many pipelines will render information
+[78:58] inside a small L and then use that to
+[79:01] accelerate the full screen tone mapping
+[79:03] pass. Different games use different
+[79:05] formats, but I'm a big fan of Kalista
+[79:07] Protocol's 3D 64 pixel resolution RGBA
+[79:11] 16 L since there are no apparent
+[79:13] performance issues. But testing less
+[79:15] precise formats for better visual to
+[79:17] performance ratios can be easily put
+[79:18] together in the future. Lastly, I want
+[79:20] more focus on some L optimizations that
+[79:23] sample nonlinearly which are implemented
+[79:25] to reduce L banding artifacts. Overall,
+[79:29] that's to mapping for you. There are
+[79:31] more things we need to look into like
+[79:32] changing the color space we render in
+[79:34] specifically BT2020. Again, the results
+[79:37] that that team achieved are too
+[79:38] phenomenal to ignore in terms of total
+[79:40] adoption. The next step is
+[79:42] anti-aliasing. The overall approach is
+[79:45] mostly based on SMA4X and all the other
+[79:48] things discussed in our HalfLife Alex
+[79:50] analysis, but with some modern
+[79:52] touch-ups. Basically, you have to watch
+[79:53] these two videos because they're going
+[79:55] to show you why MSAA is important, why
+[79:58] SMA4X is such a standout solution, etc.
+[80:01] This video has already explained how so
+[80:03] many different things in rendering work,
+[80:05] but these use visuals and context that
+[80:08] perfectly put anti-aliasing into
+[80:09] perspective. Now, SMA4X runs after a
+[80:13] pre-existing SMA S2X pass, which is
+[80:16] basically just running SMA twice, once
+[80:19] for each MSAA subsample layer. Now, the
+[80:22] focus for this pass will be the
+[80:24] morphological quality or MLA as we will
+[80:28] discuss the temporal aspects when we
+[80:30] reach this part. To recap, we are not
+[80:32] using MSAA to resolve jagged edges. We
+[80:35] are using MSAA to super sample
+[80:37] temporally unstable edges. So, our basic
+[80:40] jagged lines need to use a specialized
+[80:43] solution via MLA. This channel has
+[80:46] already explained all the main MLA
+[80:48] options in the past and have already
+[80:49] shown several times that your standard
+[80:51] TAA or temporal upscalers cannot resolve
+[80:54] jagged edges better than MLA. Lots of
+[80:57] evidence on this channel has already
+[80:59] been shown as to why SMAA is the only
+[81:01] viable morphological option, and I'll be
+[81:04] showing more stuff that makes that
+[81:05] conclusion much more concrete. The
+[81:07] original Crisis 3 provides the most
+[81:09] competent SMA, so it will act as our
+[81:11] reference for now. Now, in the worst
+[81:13] case scenario, as triggered by this
+[81:15] grass, SMAA S2X can climb up to almost a
+[81:19] full millisecond cost because of how
+[81:21] many lines and edges it has to blend.
+[81:23] Typically, SMA S2X is much cheaper, as
+[81:26] shown in this shot, because most of the
+[81:29] time large parts of the screen don't
+[81:30] trigger SMA's edge detection. That's why
+[81:33] the timing here is much lower. Grass and
+[81:36] foliage hurt MLA performance in general.
+[81:38] But you see, while this pipeline chart
+[81:40] documents a worst case scenario, it
+[81:42] already allocated millisecond timings
+[81:44] for the visual effect pass. And most
+[81:47] visual effects reduce the amount of
+[81:49] processing SMA needs to handle. So even
+[81:52] if you encounter this worst case
+[81:54] scenario, you will obviously have the
+[81:56] processing budget to handle it since it
+[81:58] cannot exist without you first
+[82:00] underutilizing your visual effect
+[82:02] budget. And then the other reason why
+[82:05] this cost is quite small is because the
+[82:07] creator of SMAA discussed several
+[82:10] different performance optimizations that
+[82:12] led to a 40% increase in SMAA's
+[82:14] performance. Crisis 3 didn't even use
+[82:16] the smallest possible buffer sizes for
+[82:19] the edge calculation mask and lookup
+[82:21] tables. There were no code samples for
+[82:23] the performance optimizations, but many
+[82:25] of them were just common sense. and the
+[82:26] biggest performance optimizations simply
+[82:28] took from pre-existing open-source code
+[82:31] for many engines FXA implementation. But
+[82:34] what I want to bring attention to are
+[82:35] these visual optimizations that this
+[82:37] paper includes. It fixed some of the
+[82:40] biggest issues that only temporal
+[82:41] subpixel jitter and MSAA would tackle.
+[82:44] This being high contrast edges. As a
+[82:47] quick reminder, this is not related to
+[82:48] the issue of missing edge smoothing
+[82:50] found in mainstream implementations like
+[82:53] Nixie's PC ports, Cry Engine 5, and UE5
+[82:57] where those are unable to catch edges in
+[82:59] comparison with a reference
+[83:00] implementation. We need to investigate
+[83:02] what causes this because it unfairly
+[83:04] gives SMA a bad rap and I have seen it
+[83:07] push so many people to combine or stack
+[83:10] different morphological solutions which
+[83:12] is insanely inefficient. I mean,
+[83:14] honestly, look at the difference. This
+[83:17] is a perfect summarization of Epic Games
+[83:19] incompetence. Did this happen because
+[83:21] Epic is lazy or because they're
+[83:23] genuinely too stupid to match graphical
+[83:25] quality from 13 years ago? Pick your
+[83:27] poison. Choose Epic's excuse because the
+[83:29] multi-billion dollar company can't be
+[83:31] held back by both. But anyways, let's
+[83:33] get back to the main topic. Even the
+[83:35] original competent implementation could
+[83:38] not detect these types of jagged edges
+[83:40] because of contrast issues which were
+[83:42] explained and fixed in the presentation
+[83:45] with sample code. It's a huge
+[83:47] improvement that needs to be
+[83:48] standardized along with its improved
+[83:50] line detection which not only helps
+[83:52] keeps textures unaffected, therefore
+[83:55] cleaner. This should reduce the amount
+[83:57] of SMA processing. And as for the final
+[84:00] visual optimization, the handling of
+[84:02] certain patterns are smoothed to help
+[84:04] the temporal stability. The temporal
+[84:06] stability of the spatial component, mind
+[84:08] you, not the temporal variant. In the
+[84:11] past, we've complemented CMA's minimal
+[84:13] image impact. But even if a third
+[84:16] iteration of CMA with diagonal edge
+[84:18] support is released, it will still be so
+[84:21] behind what we know is possible through
+[84:23] a fully modernized SMA. Now, let's
+[84:26] discuss the temporal component. Now,
+[84:28] there's a lot of different
+[84:29] implementations of TAA, and explaining
+[84:31] why all of the few good ones are better
+[84:33] has already been done on this channel
+[84:35] within the span of two years. So, what
+[84:37] we'll do to speed up this chapter is
+[84:39] explain why one of the best TA
+[84:41] implementations look so much better than
+[84:43] most and explain how and what modern
+[84:45] innovations/attributes
+[84:47] included in this pipeline can solve its
+[84:49] remaining issues. The standout
+[84:51] anti-aliasing in question being SMA4X
+[84:54] in which its temporal component is
+[84:56] really just based on SMAA T2X. So let's
+[84:59] cover why this is ahead of most TAA
+[85:02] solutions. The first thing that makes
+[85:03] this technique such a standout is that
+[85:05] it only blends the current frame with
+[85:07] the previous frame, namely the SMAA
+[85:10] output generated in the last frame. It
+[85:13] specifically does not blend with the
+[85:15] last frames temporal output because that
+[85:17] would cause the output to be muddled
+[85:19] with outdated information. Whereas
+[85:21] two-frame blending ensures only the most
+[85:23] relevant information is used for
+[85:25] temporal blending. The majority of
+[85:27] modern temporal techniques blend the
+[85:30] current frame with an accumulation
+[85:32] buffer, which is simply the output of
+[85:34] the last frames temporally blended
+[85:36] output. So, it's blending the current
+[85:38] frame with an infinite amount of data or
+[85:40] an infinite amount of history until a
+[85:42] camera cut or until something vastly
+[85:44] different in the frame triggers a
+[85:46] history rejection where it resets the
+[85:48] pixel with the current frame
+[85:49] information. The whole point of this is
+[85:51] to achieve more samples within a pixel
+[85:54] like MSAA without multi-sampling by
+[85:57] changing the center sample locations as
+[85:59] frames are generated, which is just
+[86:01] jittering the camera in sub pixel
+[86:03] positions. As the camera jitters, the
+[86:05] TAA accumulation smooths the flicker.
+[86:08] This is supposed to resemble MSAA. But
+[86:11] the problem with this is that it falls
+[86:13] apart in motion, causing smudging, blur,
+[86:17] ghosting, as we can see around both
+[86:19] sides of this character. Another problem
+[86:21] is that the jittered positions make it
+[86:23] impossible to consistently sample edges
+[86:26] for proper smoothing, as seen here with
+[86:28] DAA. The latest vendor agnostic
+[86:30] solutions like UEI5.8 ATSR on low to
+[86:34] high scalability suffers from either
+[86:36] flicker, severe blur during basic
+[86:39] motion, terrible ghosting in the form of
+[86:41] ringing as you can see appearing as a
+[86:43] halo around this barrel. And you can
+[86:45] only mitigate these issues by increasing
+[86:48] the accumulation buffer size by 4x,
+[86:50] which will demand a massive 2.2
+[86:53] millisecond cost, which is more than 18
+[86:56] times more expensive than the temporal
+[86:58] reprojection logic used for the original
+[87:00] temporal SMA. All these ghosting issues
+[87:03] persisting in new games is because of
+[87:05] this accumulation buffer. These ghosting
+[87:08] trails, artifacts, and general mass
+[87:10] blurring is impossible to encounter when
+[87:13] you only blend the previous frame,
+[87:15] especially at 60fps where the difference
+[87:18] between such frames are very small. With
+[87:20] two-frame blending, it jitters the
+[87:22] camera to achieve the 2x MSAA pattern
+[87:24] every even and odd frame. 2x MSAA will
+[87:28] provide the same sampling as 2x super
+[87:30] sampling. So after that foundation is
+[87:32] achieved, it lets the morphological
+[87:34] component handle the rest. Now if you
+[87:37] have ever encountered very blurry SMA
+[87:39] T2X or SMA4X,
+[87:42] that is because those games like the
+[87:44] Crisis Remastered series and KCD2 are
+[87:47] using the last frames temporally
+[87:49] resolved output as an accumulation
+[87:52] buffer. Finding a true implementation of
+[87:54] this two-frame blending is extremely
+[87:56] difficult and the newest implementation
+[87:59] of semiorrect temporal SMA is the SMA2TX
+[88:03] and the PC port of Ghost of Sushima. I
+[88:06] say semi because the morphological
+[88:08] component fails to match the reference
+[88:10] demo quality, but otherwise the temporal
+[88:12] component is very clean and has no
+[88:14] ghosting whatsoever at 60 fps. The
+[88:17] original decimate engine TA only blended
+[88:20] two frames as well as some early UE4
+[88:22] mobile TA, but those have some other
+[88:24] issues that introduce ghosting, but
+[88:26] neither one suffer from major smudging
+[88:28] or long ghosting trails like those other
+[88:31] games shown before. The other positive
+[88:33] aspect about the original temporal SMA
+[88:36] component was the narrow resolve, which
+[88:38] I can explain using the still SMAA T2X
+[88:42] frame. Still comparisons for temporal AA
+[88:44] are generally worthless, but using a
+[88:47] still for this topic will allow you to
+[88:49] understand the core blending behavior.
+[88:51] Now, let's look at this frame before the
+[88:52] temporal resolved kicked in. I know the
+[88:55] ghosting looks bad on the grass, but
+[88:57] we'll get to that later. What we want to
+[88:58] analyze are some geometric edges that
+[89:01] SMA wasn't able to catch. Now to refresh
+[89:04] you, without MSA or TA, every pixel has
+[89:07] a sample point in the center and if a
+[89:09] triangle overlaps it, it gets rendered
+[89:12] on screen. MSA8 will increase the sample
+[89:14] count to produce a gradient which gives
+[89:16] our eyes context about the scene density
+[89:19] without any increase in pixel count. In
+[89:21] the case that a triangle overlaps all
+[89:23] the multi-sample points, the GPU will
+[89:26] instead render one sample at the center
+[89:28] like no AA, which saves performance and
+[89:30] helps textures remain completely sharp
+[89:33] and unaffected. This should help you
+[89:35] understand how these gradients are
+[89:36] formed from these increasingly more
+[89:38] complex sample counts. In the context of
+[89:41] SMA4X, it's jittering the 2x MSAA
+[89:44] pattern to achieve a 4x MSAA like
+[89:47] pattern. We want that pattern because it
+[89:49] provides sufficient density context
+[89:51] before we encounter diminishing returns
+[89:53] seen in higher sample counts. Because
+[89:55] it's jittering the whole sample layout,
+[89:58] that means when a triangle overlaps a
+[90:00] pair of samples, the default sample
+[90:02] location will shift in one of these
+[90:03] areas instead of the center. But let's
+[90:06] get back to the non multisampled
+[90:08] scenario. SMA2TX jitters the center of
+[90:11] all pixels, meaning it affects textures,
+[90:14] too, but that's an issue we'll talk
+[90:15] about later. It jitters the center of
+[90:17] all pixels in the pattern of 2x MSAA. So
+[90:21] you should know exactly what the result
+[90:23] should look like. It should be a basic
+[90:26] two-step gradient. With the original SMA
+[90:28] temporal resolve, that is exactly what
+[90:30] you get. A two-step gradient that
+[90:32] resembles the reference of what we're
+[90:34] trying to achieve at a lower cost. Many
+[90:37] engines like UEIE, for instance, use
+[90:39] something called a wider resolve. And
+[90:42] this is easy to show since UEIE allows
+[90:44] you to change the camera jittering
+[90:46] pattern. So in this case, we'll use the
+[90:47] 2x MSAA pattern. This two-step gradient
+[90:50] is what you'd expect from UI's TA. But
+[90:53] this is not what you get unless you turn
+[90:56] the r.temporal AA filter size command
+[90:59] down from 1 to 0.09.
+[91:02] By default, UEIE uses a hideous wide
+[91:05] resolve. And not only does it blur up
+[91:07] the edges into something your brain
+[91:09] can't fully understand, it is super
+[91:11] destructive to texture detail. Just take
+[91:13] a look at the floor and china vase
+[91:15] texture. At this point, your conscious
+[91:17] mind is trained and you don't really
+[91:19] need the labels anymore since you can
+[91:21] tell which one is which. So, combine the
+[91:23] wide filter with an already blurry
+[91:25] accumulation buffer, and well, you end
+[91:28] up with your typical Unreal Engine slop.
+[91:30] The wide resolve is mainly used to
+[91:32] so-called enhance the accumulation
+[91:34] buffer and attempts to solve issues
+[91:37] morphological anti-aliasing can fix a
+[91:39] thousand times better in a single frame.
+[91:42] This is almost comedic because UI's TA
+[91:44] presentation flaunted this very aspect.
+[91:47] I cannot say this enough. Unreal's TA by
+[91:51] Brian Carris is an absolute failure at
+[91:53] what it tries to achieve. It's based on
+[91:55] false information and it's highly
+[91:57] hypocritical as it constantly throws
+[91:59] around the word temporal stability while
+[92:01] pretending major blur and ghosting isn't
+[92:03] a form of instability. Now, I would like
+[92:05] to show one more title that sort of
+[92:07] enhances the reasoning to use a narrow
+[92:10] resolve instead of a wide resolve. This
+[92:12] being Days Gone, which apparently uses a
+[92:15] completely custom TA implementation and
+[92:18] luckily allows the use of UI's legacy
+[92:20] 2xa pattern with certain console
+[92:23] commands. Now, this TA in motion is
+[92:25] extremely poor because it uses an
+[92:27] accumulation buffer and its rejection
+[92:29] logic isn't strict enough. But we've
+[92:31] previously complimented its still image
+[92:33] for matching the late CNN DAA resolve as
+[92:37] the difference between both solutions is
+[92:39] extremely small to the point where it's
+[92:41] highly possible both solutions were
+[92:43] based on the same code. We just haven't
+[92:45] traced it back to the source yet. But
+[92:47] anyways, it turns out it's using a
+[92:49] narrow resolve. This is easy to see as
+[92:52] we zoom in on some edges. Now, you might
+[92:54] say this resolve up close looks a little
+[92:57] odd, as if it's maybe not a totally
+[92:59] narrow resolve. Well, it is a narrow
+[93:01] resolve, but the odd aspect you may have
+[93:03] noticed comes from a slight sharpening
+[93:06] effect put on the temporal
+[93:07] output/accumulation
+[93:09] buffer, as we can clearly detect on the
+[93:12] first TIA frame. Discovering this
+[93:14] sharpening filter was an interesting
+[93:16] bonus find because it's typically very
+[93:18] noticeable when sharpening is added to
+[93:20] TAA, but this might be a good showcase
+[93:22] of the viability for a slight sharpening
+[93:25] option. Though, the open- source NIS
+[93:27] upscaler from Nvidia manages to get
+[93:29] results that don't halo if you ever
+[93:31] consider adding a sharpening slider in
+[93:33] your title. But, you would want to merge
+[93:35] that sharpening with the TA pass as seen
+[93:38] here. Okay, so two-frame blending and a
+[93:40] narrow resolve act as our main
+[93:42] replicatable benefits of SMA4X.
+[93:45] Now, let's talk about the issues of
+[93:46] SMA4X/T2X.
+[93:49] Particle and visual effect ghosting.
+[93:52] This happens because these objects have
+[93:53] no motion information that inform the TA
+[93:56] shader to reject or repro their pixels,
+[93:58] which at 60 fps isn't visible on a whole
+[94:01] lot of screens because the ghosting
+[94:02] effect resets every 16 millisecond. But
+[94:05] we still want to fix this issue. This
+[94:07] problem was present on the comparison
+[94:08] shown earlier too. We already discussed
+[94:11] the solution to this that being the
+[94:13] responsive masks produced by visual
+[94:15] effects. All that requires is an artist
+[94:17] to flag the effect materials with the
+[94:19] responsive mask option just as artists
+[94:22] are required to in many modern engines.
+[94:24] The next issue was the ghosting present
+[94:26] on foliage. If you're having issues
+[94:28] seeing the ghosting, take a look at this
+[94:30] frame before and after the temporal
+[94:32] resolve. Yeah, it's pretty rough. This
+[94:34] is not surprising though because the
+[94:36] foliage does not render motion vectors
+[94:38] unlike animated characters. The temporal
+[94:41] logic here uses something called
+[94:42] velocity waiting which uses motion
+[94:45] vectors to determine how much a past
+[94:47] frame pixel should be blended with the
+[94:49] current frame. And as you can see here,
+[94:51] only the animated hand and gun output
+[94:54] motion vectors, which provide
+[94:56] information about where that pixel was
+[94:58] in the last frame. The lack of motion
+[95:00] vectors for moving foliage was due to a
+[95:02] seventh gen limitation that eighth gen
+[95:05] easily overcame. Do not listen to people
+[95:08] like this, the senior programmer of Path
+[95:11] of Exile 2, who go around lying about
+[95:13] the cost of motion vectors when we have
+[95:15] shown in previous videos that motion
+[95:17] vectors can be provided at a near free
+[95:20] cost if produced in the base pass. Now,
+[95:23] as we were discussing, modern engines
+[95:25] can easily produce accurate motion
+[95:27] vectors for alpha tested content like
+[95:29] foliage. But newer mainstream TAA
+[95:33] implementations don't use velocity
+[95:35] weighting. They use color clamping
+[95:37] instead, which only determines the blend
+[95:39] weight based on color information, which
+[95:42] has some benefits, but is clearly not
+[95:44] good enough. In fact, Filmic SMA had to
+[95:48] utilize the current and previous frame
+[95:49] depth to remove basic ghosting
+[95:52] artifacts. But back to UI's basic color
+[95:54] clamping, this TA still uses motion
+[95:57] vectors, but only for reproing pixels of
+[95:59] the last frame. Mind you, Brian Carris
+[96:02] specifically rejected the use of
+[96:04] velocity waiting because it wouldn't
+[96:06] help with the rejection of animated
+[96:08] materials, which was an issue he
+[96:10] introduced by insisting the use of an
+[96:12] infinite blending history. This is a
+[96:15] custom demonstration of UI's color
+[96:17] clamping combined with 13-year-old
+[96:19] velocity clamping. It still looks bad
+[96:21] because it's blending an infinite amount
+[96:23] of frames, but even then, you can still
+[96:25] pick up on a pretty big difference,
+[96:27] especially in these areas. Now, if we
+[96:29] lower the frame accumulation bias a bit,
+[96:32] we end up with way less ghosting at half
+[96:34] the frame rate as Crisis 3's estimate
+[96:36] A4X. So, disregard 120 fps plus
+[96:40] narratives pushed by Digital Foundry
+[96:42] designed to have you compensate with
+[96:44] hardware you don't need. At the basic
+[96:46] standard of 60 fps, we can get some
+[96:48] pretty good results even when an
+[96:50] infinite accumulation buffer is used
+[96:52] like it is here. Now, honestly, we
+[96:54] already know the ghosting can be fixed
+[96:56] because I just showed the PC port of
+[96:58] Ghost of Sushima in which full scene
+[97:00] motion vectors had to be implemented by
+[97:02] Nixis to ensure all the upscalers and
+[97:04] frame generation worked as intended. So
+[97:07] now you know responsive mask for
+[97:09] preventing visual effect ghosting and
+[97:11] color clamped enhanced velocity waiting
+[97:13] to prevent opaque object ghosting via
+[97:16] proper modern motion vectors. Now let's
+[97:19] talk about the last issue we need to
+[97:21] overcome which tends to exist in almost
+[97:23] every single temporal implementation.
+[97:26] This being texture blurring. Now we had
+[97:28] focused on how much more clear the
+[97:30] narrow resolve was in comparison with
+[97:32] the wide resolve. But when it comes to
+[97:34] texture detail, even the narrow resolve
+[97:36] can't match no AA texture quality, which
+[97:39] is the same as MSAA texture quality.
+[97:42] Because temporal sub pixel sampling is
+[97:44] done on all pixels, unlike MSAA, where
+[97:47] it only subixel samples edges, temporal
+[97:50] sampling over samples textures. Now,
+[97:52] there's a bunch of so-called solutions
+[97:54] out there, but obviously they don't
+[97:55] work. One approach that's typically
+[97:58] never utilized in games is jittering the
+[98:00] textures in a synchronized fashion with
+[98:02] the camera jittering as documented as a
+[98:05] automated feature handled in the base
+[98:07] pass. But as a last precaution to ensure
+[98:10] textures are never affected, we can take
+[98:12] a page out of the TSCMA code which is a
+[98:15] lot more than just being a so-called
+[98:17] CMAA version of SMA2TX.
+[98:21] Unfortunately, Intel has scrubbed all
+[98:22] traces of this technique off the
+[98:24] internet, and nobody thought to preserve
+[98:26] the source code download link on the
+[98:28] Wayback Machine, so showing off its
+[98:30] advantages aren't too easy. Luckily,
+[98:33] Final Fantasy 14 Online implemented
+[98:35] TSCMA with CMA2 code in which we were
+[98:39] able to capture for analysis. We're
+[98:41] going to show what we found in this
+[98:42] video since we're not going to do a full
+[98:44] analysis due to this title not being a
+[98:46] use case scenario. We focus on the green
+[98:49] line. overlays the transition from post
+[98:51] CMA2 frame to the temporally blended
+[98:54] frame. Now, it doesn't use velocity
+[98:56] waiting. I'm not sure how wide the
+[98:57] resolve is, and it does blend with an
+[98:59] infinite temporal history, but the
+[99:01] majority of textures retain their detail
+[99:04] because the blending only happens where
+[99:06] CMAA detected edges. Here we have some
+[99:08] solid patches because it reuses some
+[99:10] information from the sun shadow mask,
+[99:13] but you can see how much texture area
+[99:15] was not affected by the temporal
+[99:17] blending. We can easily adopt this logic
+[99:19] with SMA's edge mask, but we have
+[99:22] something better, the custom MSAA mask
+[99:25] saved in our motion vector buffer. So,
+[99:27] texture jittering in combination with
+[99:29] that isolated temporal edge blending
+[99:32] should keep our image quality 99%
+[99:34] comparable to 4x MSAA. By the way, that
+[99:38] TSCMA B projection pass is crazy
+[99:41] unoptimized as it uses the fattest
+[99:43] possible formats as shown here. Except
+[99:46] as an experiment, we changed the 32-bit
+[99:49] motion vector RG16 to a 64-bit format to
+[99:53] further stress how unoptimized Unreal's
+[99:55] 28% slower.3 misecond TA is. But there
+[100:00] is another aspect we need to take care
+[100:01] of if we want to match our temporal
+[100:04] component with MSAA. We can jitter
+[100:06] textures to rid the texture blur scene
+[100:08] here, but that won't do anything for the
+[100:10] sub pixel shift in the lighting element.
+[100:13] As we can see in this ray traced shadow,
+[100:15] I'm showing this ray trace shadow
+[100:17] because it makes it easier to
+[100:18] consciously recognize the issue. But
+[100:20] your brain is going to subconsciously
+[100:22] recognize something very wrong with the
+[100:25] lighting and shading elements beneath
+[100:27] the textures, especially when we're
+[100:29] using very expressive shading models and
+[100:31] BRDFs, etc. So, in the end, we either
+[100:34] need to find a way to offset our direct
+[100:36] and indirect shading, or we might have
+[100:38] to bite the bullet and sub pixel offset
+[100:40] the geometry with texture jittering
+[100:42] compensation instead of jittering the
+[100:44] camera. But we also have access to
+[100:47] programmable sample locations. You see,
+[100:49] SMA4X was designed to match 4x MSAA as
+[100:53] much as possible since the original
+[100:55] pattern is optimized for super sampling,
+[100:58] but it's not totally accurate. If we use
+[101:01] PSL programmable sample locations, we
+[101:04] can match the 4x MSAA pattern perfectly
+[101:07] and the GPU will sample the center of
+[101:09] the pixel if both samples are covered,
+[101:11] which means we don't have to jitter any
+[101:13] elements like textures or lighting. But
+[101:15] the 4x MSAA pattern was made before
+[101:18] morphological anti-aliasing was invented
+[101:21] and was designed to ensure quality edge
+[101:23] gradients. We don't need that rotated
+[101:26] four sample grid pattern because we rely
+[101:28] on SMA to take care of this. The
+[101:31] developers of Desca Engine render two
+[101:33] different sub pixel positions every even
+[101:35] and odd frame just like SMAA 2TX.
+[101:39] Descend renders the 2x MSAA pattern on
+[101:42] the vertical and horizontal axis of each
+[101:44] pixel center so that neighboring pixels
+[101:47] can provide two extra samples
+[101:49] effectively giving us four samples per
+[101:51] pixel like 4x SSAA and 4x MSAA but in a
+[101:56] pattern optimized for thin detail. Using
+[101:59] this pattern by programming our MSAA
+[102:01] sample locations will look way better
+[102:04] than anything offered in decimate engine
+[102:06] because we won't require any jittering
+[102:08] or frame blending to achieve four
+[102:10] samples and textures will look way
+[102:12] better since sampling non-edges so far
+[102:15] from the pixel center hurts texture
+[102:17] clarity. Here are the promotional
+[102:19] templates to follow. And do note that
+[102:21] the luma edge detection with the lowered
+[102:23] peripheral screen edge contrast should
+[102:25] only be a scalability option, not the
+[102:28] main option. Remember that this is an
+[102:30] early look and eventually this will be
+[102:31] updated, but I want to make a very clear
+[102:33] reminder. Any temporal logic should only
+[102:36] enhance the existing MSAA edges, sort of
+[102:39] like a colored CSAA. We might even want
+[102:41] to store the last frames relevant to SV
+[102:44] coverage data. But moving on, next up is
+[102:47] motion blur. And really, this topic
+[102:49] needs a dedicated video, but let's go
+[102:51] ahead and explain how it's usually
+[102:53] approached in modern engines and start
+[102:55] from there. We're going to take a look
+[102:56] at Days Gone for that. While this title
+[102:59] does use a custom post-processing
+[103:01] pipeline, it uses a motion blur approach
+[103:03] that is honestly terrible looking. So,
+[103:06] this shot contains a capture that used
+[103:08] console commands to reenable the
+[103:10] original UE4.11 default motion blur at
+[103:13] its maximum potential quality. So in
+[103:15] this pipeline, the motion blur path
+[103:17] starts a little before the tone mapping
+[103:19] and auto exposure. And the first thing
+[103:21] it does is combine the native animated
+[103:23] object motion vectors and the native
+[103:25] scene depth and reconstructs the
+[103:27] velocity of every pixel using the camera
+[103:30] movement values to make this native
+[103:32] resolution velocity packed RG11B10.
+[103:36] That way the motion blur pass doesn't
+[103:38] have to sample two resources, that being
+[103:40] the depth and velocity buffer from
+[103:42] before. In our case, since our depth and
+[103:44] velocity are multis-sampled, making this
+[103:46] resource, which will not be
+[103:48] multisampled, will end up being a big
+[103:50] help. And we can implement some special
+[103:52] logic here. An optimization found here
+[103:54] and in Cryen 5 is that this 120x 68 max
+[103:58] tile RGBA 16 is generated in the same
+[104:01] draw. This is related to a technique
+[104:04] introduced in this presentation, and it
+[104:06] basically helps optimize the smoothing
+[104:08] between motion blur edges. As seen in
+[104:10] this comparison, there are some issues
+[104:12] with the approach, but we'll get to that
+[104:14] topic in a moment. The small draw here
+[104:16] dilates that max tile data as indicated
+[104:19] by the inflated appearance, which again
+[104:21] was standardized by that same
+[104:23] presentation. We'll also show a
+[104:25] comparison with and without this
+[104:27] dilation step down the line. This
+[104:29] pipeline needlessly clears the motion
+[104:31] blur output. 7th gen games like Crisis 3
+[104:34] did not waste time doing this. They just
+[104:37] overwrote the buffer. The actual motion
+[104:39] blur draw simply uses the native
+[104:42] resolution scene color, packed velocity
+[104:44] RG11B10,
+[104:46] and that dilated max tile resource to
+[104:48] create the per pixel motion blurred
+[104:50] result. Seeing the before and after sort
+[104:53] of helps you understand what's really
+[104:54] going on. But let's take a look at some
+[104:56] well- definfined lines to get a better
+[104:58] understanding. You can see that it's
+[105:00] basically repeating a pixel by a certain
+[105:02] amount depending on its velocity
+[105:04] direction. And these overlapping steps
+[105:07] or gradients are why you see games
+[105:09] implement noise patterns. Need for Speed
+[105:12] 2015 used white noise, which is one of
+[105:14] the better ones. Later versions of UE4
+[105:16] and now UE5 used interle gradient noise,
+[105:19] which looks awful. Another awful pattern
+[105:22] is blue noise sampling, which was used
+[105:23] in Allen Wake 2. Wicked Engine, I last
+[105:26] checked, and Ghost of Sushima. Those
+[105:28] last two patterns are way more
+[105:30] noticeable than this presentation
+[105:32] suggested approach which is just a
+[105:34] simple checkerboard pattern which is
+[105:36] what early UE4 used as we can see here
+[105:38] in Days Gone. Dead Space Remake and KCD2
+[105:41] apparently use this pattern too as at
+[105:44] the time of our Dead Space remake
+[105:45] analysis we weren't 100% sure but after
+[105:48] some more investigating that got cleared
+[105:50] up. We're going to discuss an
+[105:52] alternative to this checkerboard
+[105:53] pattern. But let's understand our chart
+[105:55] a bit better. So here we have our
+[105:57] velocity packing draw and our main
+[105:59] motion blur draw. But why is the max
+[106:01] tile velocity management missing/
+[106:03] redccooded in this chart? That's because
+[106:05] that tiled resource is responsible for
+[106:08] artifacts. And this shot does a good job
+[106:10] showing that. Notice how there's a thick
+[106:12] motion blur outline around the
+[106:14] character. That's coming from the
+[106:16] dilated max velocity tiles. And once you
+[106:19] notice it, you can't unsee those massive
+[106:21] blocky artifacts. Now, if we prevent the
+[106:24] dilation, we can observe the outline
+[106:26] becoming slimmer and as a result, a
+[106:29] little more natural, but those tiling
+[106:31] shapes are still present and the
+[106:33] accuracy of some motion blur edges get
+[106:35] messed up. This is another reason why
+[106:37] I'm a fan of Need for Speed 2015's
+[106:40] motion blur because it doesn't suffer
+[106:42] from these tiling issues because it
+[106:44] doesn't use a tiled velocity resource.
+[106:47] That's not to say it's perfectly
+[106:48] plausible, as you can see it doing some
+[106:50] odd stuff with these ran over debris.
+[106:53] But then again, these don't output
+[106:55] proper motion vectors. A good example of
+[106:57] its implausible logic is visible on this
+[107:00] barrel where the road velocity behind
+[107:02] the barrel smears on top of it instead
+[107:05] of the barrel oluding the road velocity.
+[107:07] Now, maybe we can keep the tilted
+[107:09] approach for motion blur, but we need a
+[107:11] solution to this long-standing issue
+[107:13] because it introduces an uncanny aspect
+[107:15] that nobody's talking about or trying to
+[107:18] solve. Now, there's something very
+[107:20] specific we can do during the velocity
+[107:22] packing stage. And really, it's pretty
+[107:24] easy to understand just using some
+[107:26] visuals. This is your typical post 2015
+[107:29] solution, which is called per pixel
+[107:32] motion blur. You can see that the whole
+[107:34] scene has motion blur applied as we turn
+[107:36] the camera, which has pushed a lot of
+[107:38] people to call this camera motion blur,
+[107:41] which is not a good description because
+[107:42] it makes it sound like it doesn't
+[107:44] provide moving objects with dedicated
+[107:46] velocity, which is the case here, as
+[107:49] indicated by the motion tile outline
+[107:52] around the moving character when we're
+[107:53] not moving the camera. per object motion
+[107:56] blur is the most demanded solution as of
+[107:58] now because it looks like it only
+[108:00] smooths the animations. Really, it's
+[108:03] just removing the camera movement from
+[108:04] the velocity input. So, in this case,
+[108:07] camera velocity is being removed in the
+[108:09] velocity packing stage. Moving objects
+[108:12] in real life motion trails, but as we
+[108:15] run, ride bikes, or drive, our
+[108:17] peripheral view, or what we're not
+[108:19] focusing on becomes blurred. So, what
+[108:22] you're usually focusing on in a game is
+[108:24] everything beyond five or 10 ft. And
+[108:27] that's about the same for naked eye
+[108:28] perception in general travel. So, to
+[108:31] match your naked eye perception, we
+[108:33] should only allow camera motion blur up
+[108:35] to a certain depth with decreasing
+[108:37] intensity. This will allow your eyes to
+[108:39] focus on distant content as you move the
+[108:42] camera while retaining a natural sense
+[108:44] of movement without the uncanny isolated
+[108:47] look of perobject motion blur. Now, a
+[108:50] production implementation needs to use
+[108:52] more of a U shape. This is just naively
+[108:54] cutting off at a certain depth point. A
+[108:56] low resolution mask will probably act as
+[108:59] the best way to approach such a shape.
+[109:01] And all depth beyond this point should
+[109:03] be blurred under extreme camera motion
+[109:06] because again, you don't want to end up
+[109:08] with an obvious cutff. That covers how
+[109:11] velocity packing should be handled. And
+[109:13] this workflow note here simply documents
+[109:15] the need for an exposed artist variable
+[109:17] for changing the main camera motion blur
+[109:19] cutoff. Now let's talk about the changes
+[109:22] we need in the actual motion blurring
+[109:24] pass. Take a look at this sample scene
+[109:26] where some settings have been changed to
+[109:28] make the issues with modern motion blur
+[109:30] a bit more apparent. The character is
+[109:32] going to run in the direction of this
+[109:34] arrow. And what I want you to focus on
+[109:36] is this white sphere. Because if you
+[109:38] analyze the movement of your own hand or
+[109:41] velocity trailing in real life, it
+[109:43] should only leave a trail in the same
+[109:45] direction.
+[109:48] Just in case you missed the issue, let's
+[109:50] take a closer look. The problem here is
+[109:52] that the object is actually centered in
+[109:54] the blur. Even though it should have
+[109:56] only left a trail in this direction,
+[109:59] modern motion blur samples in the
+[110:00] opposite direction as well. For years,
+[110:03] this is the result graphic programmers
+[110:05] have been aiming for because it
+[110:07] resembles behavior you only see in
+[110:09] camera footage. This same behavior was
+[110:12] present in the days gone shot and it's
+[110:15] pretty uncanny. A game that only samples
+[110:18] in the correct direction like our naked
+[110:20] eye perception is Need for Speed 2015.
+[110:24] Watch all the little lights in the
+[110:26] distance stretch along the screen from a
+[110:28] clear point of origin. Watch these
+[110:30] single pixel car reflection speckles get
+[110:33] these perfect micro velocity shrieks.
+[110:36] Now, if we take a look at these fire
+[110:38] hydrants and overlay the original image,
+[110:40] you might say it still looks like the
+[110:42] motion blur makes them appear in the
+[110:44] center. The problem here is that
+[110:46] implausible velocity streaking from the
+[110:49] background behind it, diluting their
+[110:51] point of origin. This is actually
+[110:53] similar as to why cameras have this
+[110:55] issue and why our eyes don't. Single
+[110:58] direction velocity trailing with
+[110:59] plausible depthaware motion blur is
+[111:02] going to catapult graphics. But there's
+[111:04] one more thing we need to ensure so that
+[111:06] our motion blur pass is handled
+[111:08] correctly. Despite the Phantom Pain's
+[111:10] halfresolution tiled artifact ridden
+[111:13] motion blur, there was always something
+[111:15] about it that looked very pleasing and
+[111:17] smooth. We're going to show why that is
+[111:19] since it was something we missed in our
+[111:21] main Fox Engine analysis. We're going to
+[111:24] analyze this frame because its scene has
+[111:26] better defined lines for motion blur
+[111:29] analysis. And this was captured at 4K to
+[111:32] ensure the halfresolution motion blur is
+[111:34] forced to compute at 1080p, making it
+[111:37] easier for us to compare these timings
+[111:39] to say days gone UE4 motion blur.
+[111:42] Technically, the motion blur pass begins
+[111:44] here as it downsamples and sorts the
+[111:46] native resolution motion vectors into
+[111:48] tiles. Note the cost since this
+[111:51] showcases the performance benefit of
+[111:53] that merged pass via compute shader as
+[111:56] this pipeline was constructed before
+[111:57] those became mainstream. This pass also
+[112:00] doesn't dilate the motion vectors in the
+[112:02] same way. It creates neighborhood tiles
+[112:05] which we won't get into for now. But the
+[112:07] next pass combines the native resolution
+[112:09] depth and the native resolution motion
+[112:11] vectors with that 120x 168 neighborhood
+[112:15] tile resource inside a half resolution,
+[112:18] in this case 1080p RGBA88.
+[112:21] The RG channels pack velocity in a way
+[112:23] that gives closer objects to the camera
+[112:25] higher precision. And the BA channels
+[112:28] contain the max neighborhood tiles in a
+[112:31] bilinearly upscaled fashion. That means
+[112:33] the motion blur pass only samples this
+[112:36] resource and the scene color. We need to
+[112:38] develop a plausible single direction
+[112:40] motion blur before determining if we can
+[112:43] adopt this optimization. The scene color
+[112:45] resource used in the motion blur pass is
+[112:47] down sampled from 4K to 1080p in this
+[112:50] draw, which again is not something we'll
+[112:52] adopt unless we really want a
+[112:54] scalability option for motion blur. The
+[112:56] next draw is when motion blur is
+[112:58] actually processed. And this is where we
+[113:01] need to take a closer look. This is not
+[113:03] using single direction sampling like
+[113:05] Need for Speed 2015. It's more like the
+[113:08] Days Gone's motion blur we showed
+[113:10] before. But what's interesting about
+[113:12] this pass is that no pattern is being
+[113:14] utilized. It's a uniform sampling
+[113:16] pattern. And this pipeline smooths that
+[113:19] uniform sampling pattern by running it
+[113:21] in a separable pass which simply uses
+[113:24] the same velocity packed resource input
+[113:26] as before and the uniformly motion
+[113:28] blurred output as input to produce the
+[113:31] final halfresolution output which again
+[113:34] is 1080p in this case. Now, in all
+[113:36] fairness, the motion blur result is
+[113:38] ultra smooth because it composits the
+[113:40] half resolution result to native
+[113:42] resolution using bilinear filtering, and
+[113:45] that will make a big difference if the
+[113:47] input is going from 540p to 1080p. But
+[113:50] when you're downsampling, like here,
+[113:51] that's not going to make a difference.
+[113:53] Here's some downsampled footage that
+[113:55] sort of gives you an idea of how this
+[113:57] motion blur looks at our target
+[113:58] resolution. The result here is so much
+[114:01] more smooth because of that separable
+[114:03] pass in which most game engines throw in
+[114:06] a noise pattern and call it a day. Now,
+[114:08] you might say you rather have a white
+[114:10] noise or checkerboarded motion blur
+[114:11] instead of a uniform plus separable pass
+[114:13] motion blur because you might not think
+[114:15] it's as effective in ridding the sample
+[114:17] iterations or those motion blur
+[114:19] gradients. But the thing is this motion
+[114:22] blur only samples the original position
+[114:24] three times per direction. Whereas your
+[114:27] so-called superior noisy or dithered
+[114:30] solutions are simply sampling at a
+[114:32] higher count about 10 or 12 times every
+[114:35] other pixel to reduce the motion blur
+[114:37] gradient. That creates a better baseline
+[114:39] for the checkerboarded pattern, but it
+[114:41] will also create a better baseline for a
+[114:44] separable pass. Imagine how good this
+[114:46] separable motion blur would look with a
+[114:48] higher sample count. Well, you don't
+[114:50] have to try too hard imagining because
+[114:52] UEI offers a separable pass through a
+[114:55] console command since the concept has
+[114:57] been around since 2008. This is what
+[115:00] inspired the Fox Engine's motion blur
+[115:02] since Kojima clearly commissioned Fox
+[115:04] Engine's development to resemble Cryine
+[115:07] and Fox Engine's decrypted HSL files
+[115:10] straight up copy this sample code. But
+[115:12] you might be wondering why the sample
+[115:14] steps aren't reduced as much in this
+[115:17] UEIE example. This is simply because
+[115:19] Unreal separable pass is less competent.
+[115:22] Here we can see the separable pass and
+[115:24] draw 9208
+[115:27] is almost half the cost of the motion
+[115:28] blur pass. Whereas in Fox Engine the
+[115:31] motion blur pass itself that being draw
+[115:33] 5717 is less expensive which makes sense
+[115:37] considering it's utilizing less samples.
+[115:39] But notice how the separable pass and
+[115:41] draw 1718 basically costs the same as
+[115:45] the previous motion blur pass and is 40%
+[115:48] more expensive than UI separable pass.
+[115:50] Remember that cheaper does not mean more
+[115:53] optimized if it looks worse. The point
+[115:55] here is that UI separable motion blur is
+[115:58] sort of makeelieve and it only got more
+[116:01] worthless when Epic Games introduced
+[116:03] interled gradient noise which ended up
+[116:05] staying in UEIE5. So what we want is a
+[116:08] competent aggressive separable pass that
+[116:11] builds off a cryc sample code and
+[116:14] iterating on it with a few optimizations
+[116:16] like in fox engine's case. The big
+[116:19] question R&D will answer is how many
+[116:21] motion blur samples do we really need
+[116:24] now that we're using a competent
+[116:25] separable pass and do we want to maybe
+[116:28] experiment with a checkerboard sampling
+[116:30] pattern to get even smoother results?
+[116:33] But chances are you'll want to use
+[116:35] uniform sampling to prevent any chance
+[116:37] of noise. Now, another thing R&D will
+[116:40] help us determine is the length of
+[116:41] velocity trails. The closest digital
+[116:44] term we've been using in the industry is
+[116:46] shutter speed, but we need a constant
+[116:48] value that matches our perception. For
+[116:51] instance, the medium motion blur setting
+[116:53] in the Phantom Pane is much more
+[116:55] believable, whereas the sample footage
+[116:57] we showed all use the high motion blur
+[116:59] setting. We're going to have to find a
+[117:01] proper result by comparing a digital
+[117:03] hand on screen linked to a real hand
+[117:06] with a motion capture glove attached.
+[117:08] I'm not going to go into why the term
+[117:10] velocity compensation is used here, but
+[117:12] long story short, I think it's a more
+[117:14] accurate term that describes what a
+[117:16] monitor can't send to our eyes. It
+[117:18] doesn't matter if your content is at 30
+[117:20] or 500 frames per second. Velocity
+[117:23] trailing has to be simulated properly
+[117:25] for a natural looking result. Again,
+[117:27] this topic needs a dedicated video.
+[117:29] There are common effects that utilize
+[117:31] velocity data like the swirling effect,
+[117:34] but we need to do some more analyzations
+[117:35] to document an optimal approach. Bloom
+[117:38] is another topic that just needs more
+[117:40] work. You can do it post tone mapping if
+[117:42] you store your scene luminance as that's
+[117:45] what the fox engine does, but we might
+[117:47] want to do something a bit more robust
+[117:49] since we want bloom that reacts to the
+[117:51] motion blurred result. That's super
+[117:53] important because it matches naked eye
+[117:55] perception and can make a big difference
+[117:57] in quick moving shiny objects like
+[118:00] metallic weapons or spinning car wheels.
+[118:03] Take some notes on how to market this
+[118:04] and let's move on to the last segment.
+[118:07] Next up are composite effects and the
+[118:09] UI. After 2020 and mass adoption of UE4,
+[118:13] composite effects like certain flares
+[118:15] and light source blooming sort of went
+[118:17] away. So, this documents an
+[118:19] implementation using halfresolution
+[118:21] compositing buffers.
+[118:22] Even in very complicated scenarios,
+[118:25] these can be processed pretty fast as
+[118:27] long as a halfresolution buffer is used.
+[118:29] Like here in Fox Engine, you have to use
+[118:32] a halfresolution buffer, or else you'll
+[118:34] end up like Crisis 3, which uses a
+[118:36] native resolution composite buffer,
+[118:38] which completely chokes performance for
+[118:40] pretty much no noticeable gain in
+[118:42] quality. By using a half resolution
+[118:44] buffer, you cut pixel shader invocations
+[118:46] down by the millions and make it harder
+[118:48] for artists to hurt performance with
+[118:50] over-the-top effects. Need for Speed
+[118:53] 2015 is another title that takes
+[118:55] advantage of a halfresolution
+[118:56] compositing stage, but it uses a high
+[118:59] dynamic range buffer, specifically an
+[119:01] RG11B10,
+[119:02] but our pipeline has readily available
+[119:04] halfresolution RGB A16s. Note this pass
+[119:08] uses a halfresolution hardware depth
+[119:10] resource for depth testing which is also
+[119:13] the case for this halfresolution RGBA
+[119:15] A16 which holds rain and lens drop
+[119:18] effects that is composited on the frame
+[119:21] later with bloom so that those watery
+[119:24] effects look like they're absorbing the
+[119:26] local light. It's a very cool effect
+[119:28] that this pipeline makes possible
+[119:30] because bloom is composited in the same
+[119:32] pass along with other camera effects
+[119:34] like film grain, color grading, and
+[119:36] chromatic aberration effects we've gone
+[119:38] over and discuss the proper uses for in
+[119:40] terms of limited gameplay situations.
+[119:43] It's too early to discuss in-depth UI
+[119:45] rendering. The timing here is based on
+[119:47] reasonable UI budgets we've measured in
+[119:49] games before, and we'll cover more
+[119:51] elaborate/demanding UI soon. It makes
+[119:53] sense to render the UI on another render
+[119:56] target like some pipelines for example
+[119:58] days gone because as we overlay that UI
+[120:01] we can apply gamma correction in the
+[120:02] same draw. Cluster protocol probably has
+[120:05] the best gamma correction UI because the
+[120:07] brightness slider actually scales
+[120:09] instead of say dead space remake where
+[120:11] it just deletes the test image if you
+[120:12] decrease the brightness slider. Both
+[120:15] Alen Wake 2 and Kalista protocol provide
+[120:17] multiple gamma settings to ensure the
+[120:19] output can be optimized for whatever
+[120:21] display the user has.
+[120:23] We're veering off from the graphics
+[120:24] rendering topic since this is a little
+[120:26] more related to UI design, but
+[120:28] programming a UI becomes easier when
+[120:30] fully developed gamma systems are
+[120:32] already present in the engine.

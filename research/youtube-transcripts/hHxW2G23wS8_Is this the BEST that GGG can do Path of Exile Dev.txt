@@ -1,0 +1,784 @@
+# Transcript: hHxW2G23wS8
+# Fetched: 2026-08-07T06:23:14.582556
+# Entries: 779
+# Duration: 3151s
+
+[00:00] hey guys how's it going big ducks here
+[00:01] so this is gonna be a video just about
+[00:03] my reaction that I had on twitch earlier
+[00:06] today about the manifesto that they put
+[00:08] out now keep in mind a lot of this is
+[00:11] really gonna be negative but honestly I
+[00:13] don't really feel bad about that I think
+[00:15] that GGG really needs to take some
+[00:18] criticism here to heart because we've
+[00:21] been getting the same problems over and
+[00:22] over and over again I go pretty in-depth
+[00:25] in my actual reaction to it so take a
+[00:27] look and if you liked what you saw make
+[00:28] sure to subscribe and I'll see you next
+[00:30] time all right so let's talk about this
+[00:32] so what do we got here this is the
+[00:34] development manifesto that Gigi has put
+[00:37] out in response to all of the insane
+[00:40] negative feedback that they've gotten
+[00:42] about the Delirium League and honestly a
+[00:45] lot of its kind of warranted there are
+[00:49] so many problems with this league that
+[00:51] it's just like it's either one of they
+[00:54] are just choosing to do this or two they
+[00:58] don't realize that they're doing it
+[01:00] neither of them are good outcomes like
+[01:02] neither of them are good reasons excuses
+[01:05] whatever you want to call them both of
+[01:06] them have problems but I guess we're
+[01:08] gonna see what what they're gonna tell
+[01:10] us so let's see here
+[01:11] thanks for so much thanks so much for
+[01:13] your valuable feedback since launch oh
+[01:15] yeah this manifests that we'd like to
+[01:17] summarize the changes that we plan to
+[01:19] make in the near future note that these
+[01:20] are still an early discussion and
+[01:22] haven't been implemented test Cydia ants
+[01:24] whatever for speed will likely apply to
+[01:26] each types of changes and patches as
+[01:27] soon as they're ready rather than
+[01:29] delaying them that's good I'm glad that
+[01:31] they're not going to take the Blizzard
+[01:33] route of being like oh let's just update
+[01:35] like once every six months and besides
+[01:38] that we can't do it sorry was delirium
+[01:40] monster damage as you travel deeper into
+[01:42] the mist the life damage and rewards for
+[01:43] monsters become higher yeah
+[01:45] players have commented that they feel
+[01:46] like the monsters become too dangerous
+[01:48] deep in the encounters I mean they do
+[01:51] the monster damage bonus kills up to 30%
+[01:53] increased an absolute most I just feel
+[01:57] like that's either either that's a lie
+[01:59] or I don't know let's keep going we were
+[02:02] reviewing all of the Delirium monsters
+[02:04] and skills to find any that are over
+[02:05] tuned and we'll be making adjustments to
+[02:07] any that might be dealing
+[02:08] disproportionate damage
+[02:10] okay so the problem here specifically
+[02:13] with this is that I don't actually think
+[02:16] that the damage of specifically the
+[02:18] Delirium mobs is the problem right I
+[02:20] think that the damage of all of the mobs
+[02:21] in the game is the problem because the
+[02:23] game is designed right now to just avoid
+[02:26] the one shot every monster can one shot
+[02:28] you the issue here is that the way that
+[02:31] the game is kind of scaled in recent
+[02:33] times has just been well just kill the
+[02:35] monsters before they kill you and in
+[02:37] delirium the the main mechanic of
+[02:40] delirium is the fact that the monsters
+[02:42] health just scales almost infinitely
+[02:44] right so when you get super deep into
+[02:46] these deliriums and the monsters aren't
+[02:49] killable anymore and they just are tanky
+[02:51] and they last for long periods of time
+[02:53] you get into this situation where the
+[02:55] game isn't made to be played like that
+[02:58] so what ends up happening is that you
+[03:01] start noticing oh yes it's actually
+[03:03] super fast dangerous and I can't just
+[03:05] like sit here and face tank everything
+[03:08] because it actually one-shots me this is
+[03:10] something that um is like it's just kind
+[03:13] of a gameplay decision and I mean I sort
+[03:17] of get what they're trying to do but the
+[03:19] problem here is that when you scale
+[03:20] these monsters up so heavily and you
+[03:22] give them all of these crazy mechanics
+[03:24] that slow you down or kill you after
+[03:27] they die I mean do we really need more
+[03:29] on death effects we have monsters that
+[03:31] are designed to be able to one-shot you
+[03:33] constantly and the only way to fight
+[03:34] against that is to one-shot them back
+[03:36] and then you prevent us from being able
+[03:38] to one-shot them I think there's a
+[03:40] problem there right I mean even 30%
+[03:43] increased damage is a lot for monsters
+[03:45] that already one shot you so I don't
+[03:47] know this feels like they don't actually
+[03:50] there they're either being dishonest
+[03:52] here or they just are completely
+[03:55] tone-deaf all right let's keep going
+[03:56] hopefully there's better stuff in here
+[03:58] rewards bar when you touch the mirror of
+[04:00] delirium a random reward type is chosen
+[04:02] for the encounter yeah when you kill a
+[04:03] certain number of monsters you earn an
+[04:05] additional instance of that reward type
+[04:06] yep we know this apparently the rate at
+[04:08] which the reward bar fills up is not
+[04:09] proportional to the depth of the
+[04:11] monsters you are fighting yeah I kind of
+[04:13] figured that out when I started
+[04:14] realizing that like if you do the old
+[04:18] league mechanics like say if you go into
+[04:21] a delirium rate
+[04:22] the mirror and you find a legion stone
+[04:25] you do that legion stone you get like
+[04:28] six or seven items just from clearing
+[04:30] the legion stone as comparison to
+[04:31] pushing through the entire map you might
+[04:33] get the same amount so I kind of already
+[04:35] knew that monsters deeper in the mists
+[04:36] do not fill it up faster yes it's pretty
+[04:38] aware of that we felt this is
+[04:40] appropriate for release because the
+[04:41] other roars at the league's grant
+[04:42] cluster Jules learning more of splinters
+[04:44] whatever it doesn't matter
+[04:45] do all encourage you to kill as many
+[04:46] monsters as possible which promise
+[04:48] clearing as deep as you can't no it
+[04:49] doesn't what this encourages is that you
+[04:51] push as far as you can and then you just
+[04:52] cancel the mechanic and not actually
+[04:54] deal with it because it's just too
+[04:55] difficult it's much better to just move
+[04:57] to the next map and keep going instead
+[04:59] of dealing with monsters that you can't
+[05:01] kill and that it doesn't do that at all
+[05:03] so I don't know what the hell they think
+[05:04] they're talking about we were
+[05:06] considering having the reward bar fill
+[05:08] up more quickly as you kill monsters
+[05:09] deeper but didn't have the change ready
+[05:11] in time for launch we plan to make this
+[05:13] change in the near future we felt this
+[05:15] was appropriate for release because the
+[05:17] other awards that the league grants Bob
+[05:18] a lot do encourage you to kill as many
+[05:20] month so what is it GGG which one is it
+[05:22] you said you felt this was appropriate
+[05:25] but then you said we were considering we
+[05:27] plan to make this change in the near
+[05:28] future but didn't have the change ready
+[05:30] in time for launch
+[05:32] okay well whatever you just don't know
+[05:33] what you're talking about then great I'm
+[05:35] this publishing we found an issue where
+[05:37] in many areas delirium monsters and
+[05:38] spawners do not appear when extremely
+[05:40] deep in the mist I noticed that
+[05:42] paralyzing wasting eroding diluting
+[05:44] touch debuff so this is stupid I hate it
+[05:46] we were reducing the length of these do
+[05:48] so that they were substantially shorter
+[05:50] yeah these debuffs currently I guess the
+[05:52] patch is already out at this point
+[05:54] that's already done this because it says
+[05:55] this change is likely to be in today's
+[05:56] patch I think it's already out but these
+[05:58] d-bus were lasting 12 seconds each 12
+[06:01] seconds for every single one and they
+[06:04] can stack up to 10 the one that was the
+[06:06] worst here that I noticed was I think
+[06:08] it's called I think it's called the
+[06:10] paralyzing one it literally just like
+[06:12] lowers your action speed by 10% and it
+[06:15] stacks up to 10 and there's nothing that
+[06:17] you can do to stop at save being a
+[06:19] juggernaut or having combs roots on this
+[06:21] is just completely tone-deaf I I was
+[06:23] complaining about this a day one if you
+[06:25] guys were watching the stream you
+[06:26] probably heard me complaining about this
+[06:28] I was like dude this action speed slow
+[06:29] is stupid I didn't even notice the rest
+[06:32] of these because the rest of them didn't
+[06:34] affect my build that other people were
+[06:35] saying any
+[06:36] builds were like completely completely
+[06:39] destroyed and RF was just not a thing
+[06:41] like GGG just wants to kill streamers
+[06:43] and the rest of us get dunked on in the
+[06:45] crossfire absolutely that is one of the
+[06:47] major problems with skit with um gearing
+[06:50] your game towards the very hardcore
+[06:52] players there's lots of positives but
+[06:54] there are a few negatives that come
+[06:56] along with that this is one of them so
+[06:58] this is good hopefully this is shorter
+[07:00] they are down to 6 seconds max I still
+[07:03] don't feel like that's short enough
+[07:05] those debuff shouldn't be lasting 6
+[07:07] seconds ok whatever well those are
+[07:09] terrible they should be like two-second
+[07:11] d buffs at most like why are they so
+[07:13] much longer than other d buffs in the
+[07:15] game I can't think of very many d-bus
+[07:17] that lasts more than like two or three
+[07:18] seconds monster on death effects
+[07:20] currently there's a random chance for
+[07:22] individual Delirium monsters to have
+[07:24] mods that cause on death effects are you
+[07:26] kidding me that's how it is it's just a
+[07:29] random chance for all of the Delirium
+[07:31] monsters to do it are you actually
+[07:33] kidding me no that's like that that's
+[07:35] legitimately unacceptable that's
+[07:37] ridiculous I'm pretty sure if I remember
+[07:40] correctly they asked they specifically
+[07:42] asked neon in in the Bakke last thing
+[07:45] when they were talking with him they
+[07:47] were talking about they asked him if the
+[07:49] on death effects were going to be you
+[07:51] know hey hey we've already seen a couple
+[07:52] on death effects are these going to be
+[07:54] toned down and he said yeah it's going
+[07:56] to be you're gonna be able to play
+[07:58] around it this is [ __ ] this right
+[08:00] here random chance for individual
+[08:02] delirium moms have mods that cause on
+[08:04] death effects are you kidding me not
+[08:06] only can you not really see them so I
+[08:09] don't know if you guys have experienced
+[08:10] this but what will happen is that like
+[08:12] there's this one on death effect that
+[08:14] shoots this like thing up into the sky
+[08:16] right it's like black and white and it
+[08:18] gets shot up into the sky and it's just
+[08:20] the perfect height so that if you move
+[08:22] up on the screen a little bit it's like
+[08:24] right in front of your vision you
+[08:26] literally can't see anything
+[08:27] III don't understand right like how are
+[08:31] they are they literally not testing this
+[08:33] is there someone is one of the head devs
+[08:35] just like it I don't want to blame any
+[08:39] specific person for this but I feel like
+[08:41] I feel like these kinds of things can't
+[08:44] just be overlooked like haha oh we
+[08:46] didn't realize sorry like that can't be
+[08:48] a thing it has to be intentional
+[08:50] at this point because if it's not
+[08:52] intentional these people don't know what
+[08:55] they're doing and it's it's honestly
+[08:56] really really not okay but let's let's
+[09:00] move on
+[09:01] we were internally experimenting with
+[09:03] moving needs to be packed based oh you
+[09:04] mean like you had to learn for every did
+[09:06] they not learn from any of the mistakes
+[09:07] of previous leagues like did they
+[09:09] literally not learn from any of their
+[09:11] mistakes they already went through this
+[09:13] almost like five years ago when they
+[09:16] originally made those on death pack
+[09:18] effects they already learned this wire
+[09:22] so that there's more variance than when
+[09:24] you ensure whatever rebalancing them
+[09:25] around this improving how they are
+[09:26] signaled yeah dude
+[09:29] surprise surprise if you make on deck
+[09:31] effects that can just one-shot you you
+[09:33] need to be able to see them like I feel
+[09:35] that the current state of the bearer
+[09:38] effect you know when you kill random
+[09:40] mobs and there's like those blue blue
+[09:42] red and whatever explosions that can
+[09:43] happen
+[09:44] those look fine now the iterations that
+[09:46] they've made to those look fun g-g-gee
+[09:48] never learns look how long look how long
+[09:49] it took them to get volatile though yeah
+[09:51] that's that's what I'm saying it's like
+[09:52] I don't understand they've already went
+[09:55] through these problems before why are
+[09:57] they repeating the same mistakes okay
+[10:00] let's keep going for those interesting
+[10:01] and why we use all yeah I'm interested
+[10:03] in why you use on death effects like
+[10:04] this is because they are a viable way of
+[10:06] making monsters that are killed
+[10:08] instantly have an effect on players and
+[10:10] they aren't trivialized by clear speed
+[10:12] few to no other mods we can put on these
+[10:15] monsters make any difference normally
+[10:17] because they are eradicated by powerful
+[10:19] builds in seconds what who made this
+[10:22] post is this Beck's
+[10:23] Beck's I really hope this was a line
+[10:26] that was fed to you because this is just
+[10:28] stupid this this is not actually true at
+[10:30] all
+[10:31] this is actually the opposite of true I
+[10:33] hope I really really hope that someone
+[10:35] else wrote this because this just
+[10:36] straight-up is a lie so for anybody
+[10:39] that's wondering what I'm talking about
+[10:40] it says it's because they're a viable
+[10:43] way of making monsters that are killed
+[10:44] instantly have an effect on players and
+[10:46] they aren't trivialized by clear speed
+[10:48] literally the only builds that are doing
+[10:50] okay right now with these death effects
+[10:52] are the ones that have insane clear
+[10:54] speed and do you know why because you go
+[10:57] in you clear the entire screen instantly
+[11:00] and by the time that those on death
+[11:01] effects happen you are two screens away
+[11:03] we've learned this
+[11:04] ready anyone that's done deep delving
+[11:06] anyone that's anyone that's played this
+[11:08] game at a high level for like any amount
+[11:10] of time should know that the best way to
+[11:13] deal with on death effects is to just be
+[11:15] off of the screen when it happens the
+[11:18] the builds that this hurts are the
+[11:20] builds that are slower and the builds
+[11:22] that are just like mid-level or mediocre
+[11:24] amounts of speed right the people who
+[11:26] are just trying to do other stuff that
+[11:28] is the builds that down death effect
+[11:29] hurts
+[11:30] it's the builds that can't move fast so
+[11:32] this is just a straight up this is just
+[11:35] a straight up lie we're going to be
+[11:38] toning these down either way okay cool
+[11:39] but like this this actually kind of
+[11:41] obsessed me this this line right here
+[11:42] this this like genuinely upsets me okay
+[11:46] delirium alongside previous content
+[11:48] delirium increases the difficulty and
+[11:49] reward of all paths of Exile content and
+[11:51] it's cool however pay layers have
+[11:52] reported that it doesn't feel worthwhile
+[11:54] to run past content under the effects of
+[11:55] delirium because you lose precious time
+[11:57] dealing with that contents over his yeah
+[11:58] I agree we plan to add bonus time to the
+[12:01] delirium event when you trigger past
+[12:03] content in order to make up for this the
+[12:04] amount of bonus time will vary from
+[12:05] content to content how was this not
+[12:08] obvious like I noticed this instantly
+[12:12] upon the very first time that I ran
+[12:14] through a zone and I got to alva and I
+[12:17] tried to do one of her things it was
+[12:19] like wow why is there not extra time for
+[12:21] me to do this it was literally the first
+[12:23] thought in my head it was in their video
+[12:25] it was in their video like it was
+[12:27] literally the first thought in my head
+[12:28] because I went into the thing and by the
+[12:30] time I finished it the the fog was past
+[12:32] me so then it's like well I just don't
+[12:35] want to do this because what if there's
+[12:36] something better afterwards it's it's
+[12:38] really starting to get upsetting and it
+[12:41] just feels like this is either this is
+[12:44] either one of a few problems right so
+[12:46] it's either they're not learning from
+[12:48] their mistakes
+[12:49] they're purposefully just doing this
+[12:51] because they think it's the only way to
+[12:52] kill high-end players and that's what
+[12:54] they care about or just kill players in
+[12:55] general the third thing is is that they
+[12:57] don't actually realize that this is a
+[12:59] problem all none of those none of those
+[13:01] outcomes end up being like okay yeah so
+[13:05] this will be good the amount of bonus
+[13:06] time will vary from content to content
+[13:08] to content that would be really nice
+[13:10] also they need to make it so that
+[13:12] honestly what what I would do right is
+[13:14] that figure out an average amount of
+[13:17] time that
+[13:17] takes for each individual thing like
+[13:19] allegiance tone add like five seconds
+[13:21] right you don't need to add that much
+[13:22] for allegiance tone maybe ten seconds
+[13:23] whatever the duration of the initial
+[13:25] legion thing is right like 15 20 seconds
+[13:27] maybe much more for an incursian as an
+[13:30] increase it like the whole duration of
+[13:32] an incursion plus like five seconds all
+[13:34] of that bosses they really need like it
+[13:37] pisses me off right because there's so
+[13:39] many bosses that have like phases that
+[13:41] you just can't do anything about like
+[13:42] the Brian King for example he literally
+[13:44] has like almost a solid minute of just
+[13:47] run around and dodge stuff and you can't
+[13:49] actually fight him
+[13:50] I haven't actually gotten to kill the
+[13:52] Brian King with the fog on a single time
+[13:54] yet in maps what I don't get is why did
+[13:56] they care so much about killing you or
+[13:58] Zyzz or mathil like look at Dark Souls
+[13:59] that game is geared to be harbin on
+[14:00] impossible for most players the thing
+[14:02] about that the problem with it is is
+[14:04] that it's almost like it's a design
+[14:06] philosophy at this point right I seem to
+[14:08] think that they don't understand that
+[14:10] they need to gear content incrementally
+[14:13] for players right like I would be more
+[14:16] than fine if well okay let me let me
+[14:20] retract my statement I need to add a
+[14:21] little bit more to that previously most
+[14:25] people didn't make it to endgame content
+[14:27] most people did not make it to maps
+[14:29] right and that was fine Maps just in
+[14:32] general from low tier to high tier were
+[14:34] considered in-game high level content
+[14:36] that only the most hardcore players even
+[14:38] did the vast majority of people did not
+[14:40] do maps nowadays more people are
+[14:43] starting to learn the game and it's
+[14:44] starting to get more popular and many
+[14:46] many more people are doing maps right
+[14:48] what they really need to start just
+[14:50] accepting is that high-end content
+[14:52] should be like tier 10 Maps and beyond
+[14:55] if I was in like tier 15s and getting
+[14:58] absolutely just destroyed by delirium
+[15:01] mobs perfect that's awesome I would love
+[15:04] that but the fact that I get into tier
+[15:06] fours and fives and I'm trying to push
+[15:08] through the mechanic and the mobs are
+[15:10] literally unkillable I can sit there for
+[15:13] 20 seconds attacking them and they don't
+[15:15] take any damage and I'm in a tier 5 map
+[15:18] and my in and then I can get out of the
+[15:21] Delirium and literally kill a unique
+[15:23] boss in that map in under one second why
+[15:26] is it that I can't kill a white mob in
+[15:28] 20 to 30 seconds of constantly
+[15:31] dpsing but then when the Delirium is off
+[15:33] i can actually kill the boss of that
+[15:35] zone in under one second with no
+[15:37] problems whatsoever that amount of
+[15:39] scaling is ridiculous I that would be
+[15:41] fine in like tier 15s right sure that
+[15:44] that would be fine right get more get
+[15:46] more Geary er at the very end of the
+[15:47] game I understand that but tier fives I
+[15:49] have like 200k DPS at t1 and it was
+[15:51] harder than it's exactly right like I
+[15:53] jumped into like a tier 9 map and it's
+[15:56] much much easier to kill random mobs in
+[15:58] like a tier 9 tier 10 map right now than
+[16:01] it is to kill mobs at the end of a tier
+[16:03] 1 Delirium like at the end of the tier 1
+[16:05] Delirium they're like 5 times harder
+[16:07] than a tier 10 map that's ridiculous
+[16:08] alright let's keep going
+[16:10] I'm not very happy with this to be
+[16:11] honest with you almost nothing in here
+[16:13] has made me feel good they've just said
+[16:15] a couple of things but then their
+[16:16] reasoning is just is actually triggering
+[16:18] me delirium item dropped vacuuming this
+[16:20] won't happen we totally understand the
+[16:22] feedback that delirium wants to make you
+[16:23] go fast and not pick up items or crying
+[16:25] you then to backtrack to grab anything
+[16:26] decent the drops yeah whatever
+[16:28] there have been requests to accumulate
+[16:30] all items that would drop and instead
+[16:31] drop them at the end of the encounter
+[16:32] that's just not going to happen this is
+[16:34] not how we want the game to be played we
+[16:35] have only done it in the past when we
+[16:37] would have been impossible to access the
+[16:38] items afterwards if they're in an
+[16:39] incursion area or the darkness during
+[16:41] Adele that's acceptable
+[16:42] while it's attempting to take every
+[16:44] opportunity to vacuum up all the items
+[16:45] that drop and present them to you in one
+[16:47] go that is not how the core game loop of
+[16:49] action RPG should function in addition
+[16:50] even if we wanted to it's not really
+[16:53] even practical to vacuum an entire map
+[16:54] worth of items and drop them in one
+[16:55] place during our internal testing before
+[16:58] release we increase the length of time
+[16:59] the Delirium encounters lasted players
+[17:00] have extra time to pick up items as they
+[17:02] go item filters help alert you to which
+[17:04] items are important to grab and we did
+[17:07] intentionally compensate with extra time
+[17:09] for you to do so just use item filters
+[17:11] bro hey a dude use this third party
+[17:14] thing it'd be ok they need to hire an
+[17:16] item filter dude okay this just what you
+[17:21] don't have item filters exile did this
+[17:24] entire manifesto is upsetting me and
+[17:26] nothing has made me happy about anything
+[17:27] that they've said in here this is
+[17:28] ridiculous
+[17:29] I didn't filters help alert you to which
+[17:31] items are important to grab okay if
+[17:33] you're if you're going to tell me that I
+[17:35] need an item filter to play your game
+[17:37] you need to hire someone to make a base
+[17:39] item filter it is it is unacceptable
+[17:41] that you tell me that I need a third
+[17:42] party
+[17:44] to be able to play your game properly
+[17:47] without you actually hiring someone dude
+[17:49] the never sink dev team has been
+[17:51] spending countless hours working on this
+[17:53] just hire them GGG they make a awesome
+[17:57] filter they do an awesome job and
+[17:58] they're they're great just literally
+[18:00] just hire them there's three people just
+[18:03] hire them or buy their thing and just
+[18:05] pay them to make it I don't care it
+[18:07] contract them whatever just make it that
+[18:10] they already did that in the Xbox
+[18:12] version just officially hire them and
+[18:14] put it on the PC version look what
+[18:15] happened to open RL well the thing is is
+[18:17] that they need to contract them
+[18:18] specifically to do that I don't want
+[18:20] them to hire to make like that well okay
+[18:22] nevermind what if the base filter was
+[18:23] just how never sync has it like that
+[18:26] would be cool I thought they already had
+[18:28] a loot filter what is the default one
+[18:30] the default one is nothing the default
+[18:32] loot filter in the Xbox version they
+[18:34] allow you to use the basic never sink
+[18:36] one but the default loot filter is just
+[18:38] nothing but yeah the the consoles have
+[18:40] the base never sink blue filter which is
+[18:42] interesting that it's just consoles
+[18:44] right like the never sink loot filter is
+[18:46] so good just by itself if you're gonna
+[18:48] post links post them in the discord but
+[18:50] I'm the base item filter by never saying
+[18:52] is so good just by itself that the very
+[18:55] base version of it should just be
+[18:56] included in the game at this point it
+[18:58] doesn't make any sense the other thing
+[18:59] that kind of upsets me here okay so
+[19:01] delirium item drop vacuuming right there
+[19:03] have been requests to accumulate all
+[19:05] items that would drop well why are you
+[19:07] just telling me that yeah well obviously
+[19:10] we can't drop all items in this zone
+[19:13] we'll just take the stuff from delirium
+[19:16] and drop it like that's all that people
+[19:18] care about
+[19:19] just take the cluster jewels the
+[19:22] splinters and that's it right the
+[19:25] cluster jewels the splinters and the
+[19:26] delirium orbs and drop those at the end
+[19:28] of the delirium mechanic like before
+[19:30] that's all you have to do the rest of
+[19:32] the stuff we can pick up like a normal
+[19:33] map right but I see these splinters and
+[19:35] I feel compelled to go back and get them
+[19:37] every time and it's just like well I
+[19:39] don't want them to do currency in
+[19:40] general because that's going towards
+[19:42] against what they what they want as a
+[19:43] game but like just the delirium stuff at
+[19:46] least makes sense def meter because the
+[19:48] distance from the start of the encounter
+[19:49] matters quite a lot for both the
+[19:50] relative difficulty of the monsters
+[19:52] chance that additional monsters
+[19:53] responding the level of increase yeah
+[19:55] yeah we're considering adding an
+[19:57] indicator Oh
+[19:58] really yeah that should have just been a
+[19:59] base thing that came with it I don't
+[20:01] even talk about that performance it
+[20:03] looks like we broke something in three
+[20:04] points in yeah you did my computer
+[20:06] should be able to handle this we don't
+[20:07] know what it is yet we were
+[20:08] investigating we'll fix it this is a
+[20:09] high priority and we're really sorry
+[20:11] that it released like that okay that's
+[20:12] acceptable I get it I know how coding I
+[20:15] know how like this whole environment
+[20:16] works right like that happens I
+[20:18] understand we were unaware of the issue
+[20:20] from our internal testing but quickly
+[20:21] became aware of it upon launch knowingly
+[20:24] it affects some computer such users a
+[20:25] lot more than others as does everything
+[20:27] and have a couple of computers in the
+[20:29] office that reliably reproduce it okay
+[20:30] cool visibility this is all okay I
+[20:32] haven't even read this yet I haven't
+[20:34] read this this is all that they have to
+[20:36] say about visibility is just like two
+[20:38] sentences this is just two sentences for
+[20:40] this that's all that we get about
+[20:42] visibility okay let's read it we have
+[20:44] various ideas to improve visibility such
+[20:46] as investigating improving color grading
+[20:48] really adding clearer effects the
+[20:49] monsters with mods improving scale
+[20:51] effects and so on we don't know exactly
+[20:52] which set of these experiments will be
+[20:54] deployed yet but we do want to make it
+[20:56] easier to see what's going on expect to
+[20:58] see some improvements soon so the
+[21:00] problem I have with that let's talk a
+[21:02] little bit about performance for anyone
+[21:04] that's wondering the issue has to do
+[21:06] with when conquers and deliriums happen
+[21:08] at the same time everything else is fine
+[21:10] I don't have issues with performance
+[21:12] otherwise but the major issue is when
+[21:14] you get a conquer influence map plus
+[21:16] delirium going at the same time and it
+[21:18] just completely chugs your game but this
+[21:20] visibility post this visibility post is
+[21:23] this this part right here the most
+[21:27] upsetting thing about this is that the
+[21:29] way that this is worded makes it seem
+[21:31] like they weren't aware that this was an
+[21:32] issue that's the worst part of this if
+[21:34] they were aware and it's just like they
+[21:36] were intending to do it I would have
+[21:38] been ten times happier if they just told
+[21:40] me oh that's what we intended just get
+[21:42] rekt dude get good I would have
+[21:44] appreciated that a hundred times more
+[21:47] than this this crap that just makes it
+[21:50] seem like they weren't aware that it was
+[21:51] a problem how many okay how many times
+[21:54] has this been an issue for uggg how many
+[21:57] times have people said why is everything
+[21:59] the same color
+[22:00] why is everything gray or everything
+[22:02] green or everything red can we like
+[22:05] there are colors that go with grey
+[22:07] purples and pinks and reds
+[22:10] work with gray greens and blues work
+[22:12] with gray I mean like it sure there are
+[22:15] colors that don't like yellows and
+[22:17] oranges and stuff like that you can't
+[22:19] really see very well but there's bright
+[22:21] ass colors that work with the concept of
+[22:23] this a delirium thing I mean why why
+[22:26] does it all need to be gray white and
+[22:28] black just just use more colors just
+[22:31] just use more colors I it's just it's
+[22:33] just upsetting right
+[22:34] we have various ideas to improve
+[22:36] visibility such as investigating
+[22:37] improved color really investigating
+[22:39] improving color grading I really don't
+[22:42] want to continue because it it it just
+[22:46] it honestly kind of it really upsets me
+[22:49] because this is this is not something
+[22:51] that you should be investigating now
+[22:53] this I I for the longest time I
+[22:55] genuinely thought that this was just a
+[22:57] decision that they were making and I can
+[22:59] accept that right I can accept a
+[23:01] decision to make things visually like
+[23:03] difficult to see as a way to make it
+[23:06] harder but when you tell me oh well we
+[23:09] just weren't aware that this was a
+[23:10] problem well we've been talking about it
+[23:12] for literally years make the end
+[23:14] Delirium button bindable the surprise
+[23:16] that wasn't in the game to begin with
+[23:18] summary TLDR all right here we go
+[23:21] monster damage nerfing on a case-by-case
+[23:23] basis suggesting on death effects yep
+[23:25] rewards monsters deeper in the missile
+[23:27] count more yep on hit debuff
+[23:30] substantially reduced duration yup
+[23:32] investigating pact based mods instead of
+[23:34] individual's balance to be in line with
+[23:35] this improving telegraphing yep ask
+[23:39] content in delirium yep
+[23:40] item drop vacuuming I didn't expect that
+[23:43] to happen depth meter investigating a
+[23:45] way to do this that doesn't seem that
+[23:47] hard performance we already know
+[23:48] visibility yes we're working on
+[23:50] improving this ridiculous yes
+[23:56] I'm really not happy this this manifest
+[24:02] that was honestly just made me more
+[24:03] upset than anything and the problem is
+[24:05] is that there are so many people who are
+[24:08] gonna be like oh thank you for
+[24:09] communicating with us again GGG thank
+[24:11] you for telling us that you're working
+[24:13] on this stuff and while I appreciate the
+[24:15] fact that they are telling us that
+[24:16] they're working on this stuff it's
+[24:18] obvious that there's some kind of flaw
+[24:20] here right it's it's very very obvious
+[24:23] that there's some kind of flaw like okay
+[24:25] yeah it's even worse than synthesis like
+[24:28] synthesis was really cool
+[24:30] synthesis conceptually was amazing but
+[24:33] the implementation had some flaws that
+[24:35] they probably weren't aware of we're
+[24:37] going to be a problem and it's more
+[24:38] realistic to understand how they could
+[24:40] mess it up this is just like from the
+[24:43] very GetGo I'm just like huh why isn't
+[24:46] it like this that doesn't make any sense
+[24:48] like the the thing I saw I saw a post
+[24:50] that somebody said right I saw a post
+[24:52] that someone said that was like why is
+[24:54] the base delirium mechanic not the way
+[24:57] that the orbs work were just the zone
+[24:59] has a thing that you can trigger and
+[25:01] there's no time limit and it just puts a
+[25:03] small amount of delirium on the entire
+[25:05] zone and you just kill things as you
+[25:07] want right make it so that you can
+[25:09] enable it and then you just kill things
+[25:11] as you want to right like walk through
+[25:13] the mirror and then it's just a base
+[25:14] thing that happens right and then the
+[25:16] delirium orbs remove all of the monsters
+[25:19] from the map make them just delirium
+[25:22] monsters and then gives you a time limit
+[25:24] all in the actual delirium orbs
+[25:26] themselves as a way like alright I'm a
+[25:28] well-defined build that can clear fast
+[25:31] and move fast and I want a map that's
+[25:33] just going to be me just going as fast
+[25:34] and as deep and as possible as I can
+[25:36] right but the orb on it remove all other
+[25:39] monsters from it similar to how a
+[25:41] blighted map works make it only delirium
+[25:43] mobs and then just have it be it just a
+[25:45] clear fest all the way to the end and
+[25:47] then just do that only on the orbs right
+[25:49] if you want a time limit put it on the
+[25:51] orbs but why on the major portion of the
+[25:53] map and yeah the thing that also upsets
+[25:55] me is that like they said specifically
+[25:57] oh well we want to slow down the game so
+[26:00] we're going to make it so that there's a
+[26:01] time limit that makes you pressured into
+[26:03] running as fast as you possibly can
+[26:04] through the entire zone it's like dude
+[26:05] this is just an amalgamation of every
+[26:08] thing that GGG has ever done wrong
+[26:10] they've done it wrong all over again
+[26:12] here
+[26:12] [Music]
+[26:13] [Applause]
+[26:24] [Music]
+[26:25] [Applause]

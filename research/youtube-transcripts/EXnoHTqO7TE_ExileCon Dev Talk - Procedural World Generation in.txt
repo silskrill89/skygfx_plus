@@ -1,0 +1,1173 @@
+# Transcript: EXnoHTqO7TE
+# Fetched: 2026-08-07T06:23:07.371919
+# Entries: 809
+# Duration: 2532s
+
+[00:15] Hi everyone, welcome to day two of ExileCon,
+hopefully you were having a good time yesterday,
+[00:20] and seeing all the new things we've finally
+been able to bring to light for you.
+[00:25] My name is Rhys Abraham, I'm one of the senior
+programmers at Grinding Gear Games.
+[00:30] And today I would like to talk to you a little
+bit about the past, present and future of
+[00:34] Path of Exile's procedural world generation
+systems.
+[00:41] Random level generation is actually really
+important for Path of Exile.
+[00:45] It is one of our key design pillars.
+[00:47] It plays a huge role in providing replayability
+and giving people new things to discover and
+[00:53] explore even on multiple playthroughs.
+[00:56] Every good ARPG should have random level generation
+if they expect players to play through  multiple times.
+[01:05] Right from the beginning we knew we needed
+good random level generation.
+[01:09] When I first joined GGG eleven years ago in
+2008, my first task as a junior programmer
+[01:16] was to implement a random dungeon generator.
+[01:19] This is probably not something we would give
+to a junior programmer these days,
+[01:22] but you know back then the team was small.
+[01:25] So after a few short months, we were proud,
+[01:29] we were so proud to show off this.
+[01:32] Version 0.2.0 at our office Christmas party.
+[01:36] This was a huge milestone,
+[01:37] our first playable demo of the game
+[01:39] for our friends and family
+[01:41] in all its inverted normal map glory.
+[01:46] Over time we continued to improve and upgrade
+the game engine and the terrain engine.
+[01:53] Almost every league and expansion we've ever done
+[01:56] has brought some kind of new improvements
+[01:58] to the random level generation systems.
+[02:01] Shrines, Vaal side areas,
+[02:04] the original Forsaken Master missions, the Labyrinth, the Atlas,
+[02:07] Abyss, Bestiary, Incursion,  Delve, Betrayal
+[02:11] Delve,
+[02:13] Synthesis, Blight...
+[02:15] Even the upcoming Metamorph
+[02:16] and Conqueror's of the Atlas expansion
+has a few new things.
+[02:23] And of course in Path of Exile 2 we're going
+even further.
+[02:27] But before we get to that,
+[02:29] we're going to go
+over the basics of the terrain system.
+[02:33] There is a lot of detail we could cover,
+[02:35] but I'm just gonna give you a broad overview.
+[02:41] First of all, we are using tile based environmental
+geometry.
+[02:44] Every beach, every forest, every city,
+[02:48] every twisted demon world is subdivided into square
+[02:51] or occasionally rectangular terrain tiles.
+[02:54] There are some technical reasons for this,
+like performance,
+[02:57] but it also lets us break down the world
+[03:00] into conceptual small pieces,
+[03:02] little puzzle pieces that we assemble together
+[03:04] to bring everything together
+[03:07] and make the worlds that you see.
+[03:13] Here is a river tile, the side of a river.
+[03:17] It's got water, some land.
+[03:19] In the blue you
+can see the connection silhouette,
+[03:24] which is how our environment artists make sure
+[03:25] that adjacent tiles line up correctly
+[03:28] and connect together without any gaps.
+[03:31] Our level designers then take the raw art
+[03:34] and using tile editing tool that this is a screenshot from.
+[03:39] They can mark it up with ground types, edge
+types and connection points.
+[03:44] As well as painting the walkability and height
+grid.
+[03:47] On the right you can see the green, that's
+the walkable area,
+[03:50] the yellow is the unwalkable -
+[03:52] water and part of the embankment there.
+[03:55] And on some tiles we can also paint in red,
+[03:58] places where the terrain is very tall like a tree or a wall
+[04:02] and therefore should block projectiles
+[04:04] or stop players using Leap Slam and that kind of thing.
+[04:10] So tile keys are a very important part of
+our system.
+[04:14] A tile key is an abstract representation of
+the tile
+[04:17] and what it means semantically.
+[04:19] It is defined by the tile's size, edge connections
+[04:22] and what's going on at the corners.
+[04:24] So, again this is a river tile, it connects
+to other river tiles.
+[04:30] The geometry has to line up.
+[04:32] Two of the corners are in the water two corners are on the land.
+[04:35] The tile key is used by the system so we can
+look up a tile we need
+[04:39] to create the geometry we need.
+[04:42] So, for example if we're creating the curve
+of a river,
+[04:46] we can approximate that curve using  square tile keys
+[04:51] and align the connection points
+to approximate the spline.
+[04:54] Then create a tile key from that and look up what
+tiles we have.
+[04:59] We can also create multiple tiles, multiple
+art variations
+[05:04] that have the same tile key
+[05:06] and then we can create micro variation by
+randomizing between those,
+[05:09] because we know that they will all work,
+[05:10] because they all
+have the same connection silhouettes.
+[05:16] But tiles alone are not really flexible enough
+to do everything we need,
+[05:21] so we have 'rooms',
+[05:24] so called because everything started
+from a dungeon generator.
+[05:27] Which basically just a manual arrangement
+of tiles.
+[05:31] We can combine them together, we can create
+literal rooms,
+[05:35] but we can also create things for outdoor areas as well.
+[05:40] The room has connection points similar to
+a tile.
+[05:44] For example, places where doors can go.
+[05:47] Usually we don't actually place door tiles
+manually,
+[05:51] we assign connection points
+[05:52] where doors could spawn as needed.
+[05:58] An important feature here is that the room
+is actually not made of tiles,
+[06:03] the room is made of tile keys.
+[06:06] This is important, as you will see soon.
+[06:11] It does mean though that in the tool,
+[06:13] the room editor which is what we see here.
+[06:17] What you see is not necessarily what you get.
+[06:20] Because there can be micro variation in the
+tiles.
+[06:25] This means that our level designers have to be a
+little bit careful,
+[06:29] because it's very tempting, to take a nice couch, for example,
+[06:34] and put
+it up against a wall.
+[06:36] Looks good right?
+[06:37] But that wall could be randomly turned into
+a pillar
+[06:40] and you have a pillar in the middle of your couch.
+[06:43] We need to avoid that.
+[06:47] The level designers can also decorate rooms
+with blood splashes, decals,
+[06:54] various doodads and things.
+[06:56] As well as monster packs, treasure chests,
+various quest items.
+[07:00] There is a lot we can do, it's very powerful.
+[07:04] Here is an example of an outdoor room.
+[07:07] I think this is the entrance to The Red Vale.
+[07:15] We use rooms everywhere, much as for dungeons,
+[07:18] also for outdoor outer rooms.
+[07:23] Okay so, outdoor areas.
+[07:26] This may look intimidating,
+[07:27] but it's actually
+the simpler part of the system.
+[07:31] We have a special outdoor generation algorithm
+[07:34] that is used for natural formations like rivers,
+[07:38] cliffs, shoreline and that kind of thing.
+[07:42] We start with a graph of node and edges.
+[07:46] We define special locations, things like
+[07:49] the entrance, the exit, boss fights,
+[07:52] quest locations, that kind of thing.
+[07:54] As well as more general points
+[07:57] where edges
+of different types come together and join.
+[08:02] Each edge has its own type.
+[08:03] You can see the blue edge is the river.
+[08:06] The green edge is the forest.
+[08:09] The grey edge is the chopped trees,
+[08:12] and the brown path is the Mud Burrower's trail.
+[08:23] There is quite a complex algorithm we go through
+to go from start to finish.
+[08:31] But I'll just briefly give you an idea, I
+don't want to talk for like four days.
+[08:39] We start with the nodes.
+[08:41] We move them around randomly.
+[08:42] We shuffle them.
+[08:44] And then we pathfind along each edge,
+[08:47] through a weighted grid to create a random path between the nodes.
+[08:51] This path is then turned into a spline,
+[08:54] and as I said before, we approximate the spline
+[08:56] using the square tile keys
+[08:58] and align the connection
+points to fit the spline.
+[09:02] We can then look up all the tiles, perhaps
+with micro variation
+[09:06] and that creates all our edges.
+[09:10] There is often a lot of empty space in between
+the edges.
+[09:13] So we fill it in.
+[09:15] For the forest and chopped forest areas and
+for water and stuff.
+[09:19] It doesn't usually matter too much.
+[09:20] We just fill it in with the same tiles,
+[09:23] for the walkable area we usually create
+[09:26] a bunch of random fill tiles or fill rooms.
+[09:30] With more interesting stuff going on.
+[09:32] For players to walk around and interact with.
+[09:37] So that's the simple stuff.
+[09:41] Dungeons.
+[09:45] So, dungeons use a pretty similar system.
+[09:47] We start with a graph.
+[09:49] We add all the important locations.
+[09:53] But there are some important differences.
+[09:57] Here you can see the crypt area from Path
+of Exile 2.
+[10:02] You can see the black edges are like lines
+of abyss,
+[10:06] and the thick grey edge is the walkable path through the area.
+[10:10] Note that these edges can actually cross over
+each other.
+[10:15] In outdoor areas the edges represent
+a more concrete path of tiles.
+[10:20] So they can't cross.
+[10:22] But in dungeons the paths are a little bit
+more abstract.
+[10:27] The dungeon graph does not actually map straight
+into tiles.
+[10:30] A dungeon is made of rooms.
+[10:33] When we are creating the dungeon edges, we're
+not really
+[10:38] going along the edge adding rooms to it.
+[10:42] We're opening room connections along the edge
+[10:47] and then multiple edges can affect the same
+[10:50] rooms and then we have to find rooms of the
+right combinations.
+[10:59] This particular graph is not super random,
+which is why I chose it.
+[11:04] So you can see the graph next to the
+final result and that it lines up.
+[11:11] But we can do lots of crazy stuff with this.
+[11:14] The edges can pretty much go anywhere if we
+let them.
+[11:23] And so here is the room layout, with in blue
+is the main traverseable path.
+[11:34] Once we have our room layout,
+[11:35] which is where
+all the rooms are, how they connect.
+[11:40] It should be easy, right?
+[11:41] To turn that into tiles, a room is literally
+an arrangement of tiles.
+[11:46] So can't we just convert that into tiles?
+[11:49] Well of course we can.
+[11:52] But that's really simple, we can do better.
+[11:59] Most games that have procedural dungeon generation
+[12:03] will create rooms, stick them next to each other
+[12:06] and then in order to connect them,
+[12:08] they will have to add some kind of door, or have
+[12:11] some kind of standardized connection template,
+or something.
+[12:16] We can do that,
+[12:19] but it makes the room boundaries
+very obvious.
+[12:23] Especially when you're looking from a bird's
+eye view,
+[12:25] but even from the in-game camera
+[12:29] it makes the rooms very, you know, gamey.
+[12:34] So here you can see two rooms that have been merged together.
+[12:41] What we actually do is define our rooms
+[12:45] to overlap
+in space by one tile key.
+[12:50] And because rooms are made of tile keys,
+[12:53] not exact tiles,
+[12:57] we can actually combine the tile keys together,
+[12:59] and we can define
+rules for how they combine.
+[13:03] Then use the combined tile keys to look up
+new tiles
+[13:07] to merge the rooms together seamlessly.
+[13:11] Here for example,
+[13:13] we have this thick wall
+[13:17] between those two rooms that are just adjacent to each other,
+[13:21] but we can create a thin wall
+by overlapping two
+[13:23] back to back thick walls.
+[13:26] Another option is that we can, say, two walls
+combine into nothing.
+[13:32] In this case,
+[13:34] when two rooms are adjacent,
+they overlap,
+[13:36] we put literally just blank space in between them
+[13:39] and effectively this room
+is merged together to form one larger room.
+[13:46] But we can go even further.
+[13:50] We can use custom overlap combinations
+[13:52] and this is a very powerful tool.
+[13:55] Our level designers use this pretty much everywhere
+[13:59] that isn't an outdoor generation level
+[14:01] and you can do some really amazing stuff with
+it.
+[14:04] Like this screenshot here.
+[14:06] This is from the Burning Village from towards
+the end of the demo.
+[14:13] Does that look like a dungeon?
+[14:15] There are trees, there is a forest over
+there, there is fields of wheat in the back
+[14:18] there is a bunch of buildings of various shapes
+on the left there.
+[14:25] Can you even see where the rooms are?
+[14:29] It's not easy.
+[14:34] We use the overlap,
+[14:37] and it's really amazing
+what some of our level designers
+[14:38] can put together with it.
+[14:41] For example, the buildings.
+[14:43] We actually have two or three I think,
+[14:47] building
+edge types that define different
+[14:49] levels destruction on the buildings.
+[14:52] So we can create rooms that have partial building
+structures
+[14:57] and destroyed building connection points,
+[15:01] and they all overlap together to form
+randomly destroyed buildings.
+[15:07] It's actually very elegant because the system
+we use also ensures
+[15:11] there is a guaranteed walkable path through everything.
+[15:16] But this is even just scratching the surface.
+[15:16] The Mines in the old Act Four actually use this a lot,
+[15:26] because the Mines have cart rails,
+[15:31] they have abyss, they have platforms,
+normal ground.
+[15:34] Everything all combines together to make it
+all seamless.
+[15:39] But I'm trying to show you guys new content, so...
+[15:44] Ok, small confession.
+[15:48] The system isn't perfect.
+[15:50] Sometimes things go wrong.
+[15:53] Maybe you've seen a few screenshots on Reddit
+of terrain generation running wild.
+[15:58] That's my fault.
+[16:01] The theory is - the server generates the area
+first.
+[16:06] Because we have server client architecture.
+[16:09] And the server is meant to do all the validation.
+[16:12] It checks that everything connects properly.
+[16:15] That you can walk through the level.
+[16:17] That everything makes sense.
+[16:20] As it goes through the terrain generation
+process, if it finds a problem that cannot
+[16:24] be resolved, it restarts the entire terrain
+generation with a different seed.
+[16:32] That may sound inefficient,
+[16:33] however the algorithm only takes like 20 milliseconds its not really a big deal.
+[16:39] As long as the success rate is reasonable.
+[16:45] By and large, I think the vast majority of
+our levels
+[16:48] have like a ninety percent plus success rate.
+[16:52] This screenshot here is an example of a failed
+generation.
+[16:57] The two rooms in the middle are too close
+[17:00] and so it cannot create the edges
+between them that it needs.
+[17:05] Maybe we could try something to move those
+nodes apart or something,
+[17:10] but also restarting is a good enough solution for now.
+[17:15] This system also means that we can send only
+the successful seed to the client,
+[17:20] so the client's terrain generation never fails.
+[17:24] Unless there's a bug.
+[17:26] It happens.
+[17:29] Then finally we hash the final tile placement
+on server and client,
+[17:34] to make sure that they're in sync.
+[17:38] If you've ever seen error message
+[17:40] where you failed to join an area
+because the terrain generator is out of sync,
+[17:43] that's also me.
+[17:47] Those bugs are really hard to track down, by
+the way.
+[17:50] I need like, lots of logs.
+[17:57] Shall we have a look at some of the
+new stuff we're doing in Path of Exile 2?
+[18:07] So, new world map.
+[18:10] Did you notice it's randomly generated?
+[18:12] Yea.
+[18:14] So, every character gets their own personalized
+randomized world map.
+[18:21] This means, of course, we have to a bit of an
+abstract art style,
+[18:24] but it still looks pretty good.
+[18:29] It means we no longer canonically say
+[18:32] that the Manor is to the north
+of the Village, for example,
+[18:36] because it's different for every
+character now.
+[18:42] In addition,
+[18:44] the direction of the connections
+that you see on your world map
+[18:48] match what you find in the 3D world.
+[18:51] So here you can see my character standing
+in town,
+[18:55] and to the bottom right is the exit to the next area, to Clearfell.
+[19:01] But other characters, they might have a different
+direction.
+[19:05] So those characters will need
+to physically walk
+[19:07] to a different place in town to use the other exits.
+[19:13] If you go to the wrong exit on your character,
+[19:15] you will find it blocked by boxes or whatever.
+[19:21] So generally you can use the world map to
+guide you through the game.
+[19:26] Although I will say there are a few specific
+areas
+[19:28] where we've deliberately made it a little bit harder.
+[19:33] We enjoy suffering.
+[19:42] This might be one of my favorite new features.
+[19:45] Camera facing tile geometry.
+[19:48] Having tall epic tiles is awesome
+[19:51] and the environment artists love doing it as well.
+[19:54] However, they block the camera.
+[20:00] So, we have a new system that lets us
+[20:01] selectively
+hide the top half of terrain tiles,
+[20:04] based on what direction they're facing in regard to the camera.
+[20:08] Tiles facing down screen can be tall.
+[20:11] Tiles facing up screen are much shorter.
+[20:15] This screenshot is from the Mud Burrow,
+[20:18] where we're using this to make the area feel
+more claustrophobic.
+[20:22] But we're also using it in other areas.
+[20:25] This is the Iron Manor, which is the final
+area of Act One in Path of Exile 2.
+[20:32] Also the final area of the demo if you get
+up to it.
+[20:36] Here you can see a screenshot from our planning
+phase.
+[20:41] The geometry in blue will be removed when
+the tiles are facing the wrong direction.
+[20:49] And here's the final tile art.
+[20:54] We also have special diagonal pieces of geometry,
+[20:57] that are used when the tile is facing sideways
+[20:59] to blend between the up screen and the down
+screen.
+[21:09] So we have roads, you've probably seen them.
+[21:12] They're not amazing, to be honest.
+[21:17] You can see the graph there, the road is actually
+two edges, one for each side of it.
+[21:24] We try, I swear.
+[21:26] We really try to keep those edges nicely together.
+[21:29] But its not perfect.
+[21:35] This isn't even the worst screenshot I could
+find.
+[21:40] So for Path of Exile 2 we really want to improve this.
+[21:45] The core problem is basically that the road
+is two edges,
+[21:49] it needs to be a single edge.
+[21:51] Using larger tiles where we have full control over the width of the road.
+[21:57] So in Path of Exile 2 that's what we're doing.
+[22:01] Better, right?
+[22:10] How are we doing this?
+[22:12] We have three by three square tiles, instead
+of one by one tiles.
+[22:16] On the left in the before columns you can
+see what the road looks like
+[22:21] when we make it out of those, and it's a good width
+[22:25] but it's still a bit square and blocky.
+[22:28] So we do a second pass.
+[22:30] We create nicer curve tiles and place them
+over top,
+[22:35] using a pattern matching algorithm.
+[22:38] Here you can see all the road connections for
+these shapes are identical,
+[22:42] but the after ones have a much nicer curve.
+[22:48] And here you can see those highlighted and
+in practice.
+[22:54] I'm pretty happy with the results.
+[22:58] But this pattern matching system is actually
+more general,
+[23:02] we can use it for more things.
+[23:07] Here I've highlighted in the white boxes
+[23:11] how we're using pattern matching overlay rooms
+[23:14] to add new terrain feature adjacent to the
+edges we create with the graph.
+[23:21] There's a lot of potential for this going
+forward.
+[23:24] And we're really just scratching the surface.
+[23:27] I'm pretty interested to see what our level
+designers are capable of
+[23:29] using this new technology.
+[23:34] For example, in an area like the old Riverways
+when you're crossing the rivers.
+[23:42] Currently we place broken bridges and unbroken
+bridges manually in the graph,
+[23:49] but with this system we don't need to do that.
+[23:53] We can just place a single unbroken bridge
+[23:56] to guarantee traversability, and then use overlays
+[23:59] to randomly add other bridges which may or may
+not be broken.
+[24:04] But there's a lot of scope, I really want
+to see what our guys can do.
+[24:13] So another feature is, dynamic footstep sounds.
+[24:17] Previously there was one footstep sound.
+[24:20] Now in Path of Exile 2
+[24:22] the sound will be based
+on what visual material you are stepping on.
+[24:27] This is a screenshot from the first town.
+[24:30] On the left is kind of a rocky, gravely; the entrance,
+[24:34] then there is the wooden bridge,
+[24:35] the town area is like dirt.
+[24:39] So why can't we just play different sounds?
+[24:45] Now we can.
+[24:47] We have a pre-processing step,
+[24:48] where we run a tool on every tile in the game,
+[24:51] and we have about fifteen thousand tiles.
+[24:53] And more coming, so, you know, it takes a while.
+[24:59] Here it you can see a visualization of the
+walkable materials
+[25:01] at every location in the town.
+[25:05] I'm not actually one hundred percent sure
+if this is in the demo,
+[25:08] I was trying so hard to get it in the demo.
+[25:10] Does anyone know if it actually works?
+[25:12] Audience: Yeah
+[25:13] Yes!
+[25:17] I'm glad you noticed.
+[25:25] Slightly more tangentially related to
+the terrain, but
+[25:29] we are trying to
+[25:31] step up our game with the NPCs in Path of Exile 2.
+[25:35] You probably saw when you entered town
+[25:37] Renly was waiting for you at the entrance,
+[25:39] after you finish talking to him,
+[25:41] he walked up to his usual spot in his workshop next
+to the anvil.
+[25:46] And other NPCs are more dynamic as well.
+[25:49] If you do Una's side quest, she gains a lute
+and will play music for you.
+[25:54] And later on in the Act, there are more NPCs
+[25:57] who will help you out during the quests,
+[25:58] follow you around
+[26:00] and it turns out, creating pathfinding
+during random terrain is a bit tricky,
+[26:08] but we're working on it.
+[26:09] You probably saw the Crowbell fight during
+the keynote presentation.
+[26:13] That's an example, but I don't want to spoil
+everything.
+[26:22] That is basically it for today, thank you
+for your attention.
+[26:26] If you want to discuss terrain generation
+algorithms with me, please email me.
+[26:31] I'm very friendly, I promise.
+[26:33] Random audience member: Thank you.
+[26:46] Josh: Alright it's time for some questions,
+[26:48] if you're not familiar,
+[26:50] go to the link above and submit us some questions.
+[26:52] We've already got a ton coming in so we're
+going to get started right now.
+[26:55] Before we do though, have to say , awesome talk!
+[26:58] I've worked on the terrain generation code once
+[27:00] and it absolutely terrified me,
+[27:01] I had to get Rhys to hand hold me the whole way through.
+[27:05] Josh: First question we've got up here is:
+[27:07] 'Can you talk about the root cause of most
+of the unreachable item bugs?'
+[27:12] Rhys: the item bugs? Oh, the loot.
+[27:15] Josh: yes, when they kind of fall outside of the
+pathable terrain
+[27:18] and so you can't click them.
+[27:19] Well, you can click them, but you can't pick them up.
+[27:22] Rhys: okay, there are two main reasons for this.
+[27:25] The first is that sometimes there are little
+pockets of walkable terrain
+[27:32] which are not actually accessible,
+[27:34] and sometimes not even accessible
+with Leap Slam or Blink Arrow or something.
+[27:39] This is generally due to problems with the
+painted walkability in the tiles that you saw earlier,
+[27:46] and so,
+[27:49] if you see it, type /bug and we can look into it.
+[27:55] The other type of problem is when
+[27:58] you kill a monster that is in the middle of a Leap Slam
+[28:02] over an abyss or something.
+[28:05] And then the items drop at the monster's location
+which is unwalkable to the player.
+[28:14] Yea we should fix that.
+[28:17] You're gameplay [programmer], right?
+[28:18] Josh: yeah, all right I'll make a ticket for it on Monday
+[28:20] once I eventually arrive after the after party.
+[28:27] Josh: 'Currently a lot of Path of Exile maps feel
+quite flat.
+[28:29] Are we looking at having more vertical map
+variation for Path of Exile 2?'
+[28:35] Rhys: In Path of Exile 2 we are adding a lot of
+new tilesets.
+[28:44] I guess the Manor has bit of verticality,
+[28:48] there's a few places where you can look down
+[28:51] through the destroyed floor into the areas below.
+[28:57] And there are a few maps,
+[28:58] like maybe the Aqueduct
+and the Waterways tilesets
+[29:04] have a pretty good feeling there.
+[29:07] I'm keen for more.
+[29:08] The terrain generation system supports it.
+[29:11] It's just a matter of getting the environment
+artists on board
+[29:15] and making sure the performance is good.
+[29:19] Josh: awesome.
+[29:20] I'm sure a lot of people will be happy to
+hear that.
+[29:22] 'How does the new world map generation function
+for parties?'
+[29:26] Rhys: parties, yes. That's a good question.
+[29:32] We haven't fully decided, but probably the
+easiest way to do it is just
+[29:37] we use the party leader.
+[29:40] And then they can see where to go and everyone
+else follows the leader.
+[29:44] I think that's probably the simplest and most
+intuitive way to do it.
+[29:51] But, we'll discuss it.
+[29:52] Josh: yeah, for sure.
+[29:53] And actually slightly following on from that: 
+are the world maps generated
+[29:56] per instance, per character, per account?
+[29:59] Rhys: per character, they're seeded based on your
+character ID.
+[30:03] So every new character you make will have
+a different map.
+[30:07] Josh: awesome.
+[30:08] Next up: 'The treasure chests, rocks, barrels
+and other intractable objects
+[30:12] that we put inside of a room.
+[30:13] Are they on spawn points or are they spawned
+through the generation system?'
+[30:21] Rhys: treasure chests and actually monsters are
+kind of spawned in the same way.
+[30:26] We have two ways to do it.
+[30:29] In every room we can place manual spawn markers.
+[30:33] These markers can either be a mandatory chest
+or a potential chest spawn location.
+[30:40] We can also scatter them about randomly during
+the level
+[30:42] just by picking random coordinates.
+[30:47] There are two ways that we spawn chests and
+monsters.
+[30:51] And they both have tradeoffs.
+[30:54] So the first is to have a target number of
+monsters, or a target number of chests,
+[30:58] and then distribute them over the level whatever
+the level may be.
+[31:03] The balance guys love this.
+[31:05] It lets them balance the player progression
+curve
+[31:08] and the amount of loot people are getting very nicely.
+[31:12] The other way is to just use the spawn markers
+[31:16] that we placed in the room to spawn everything
+[31:20] and then the amount of stuff spawned is relative
+to the geometric area of the level.
+[31:31] This means that when the area is small,
+[31:34] it has the same density as when it's big.
+[31:36] But if we do it the other way around, a small
+area is more dense and a large area is more sparse.
+[31:42] So there is tradeoffs.
+[31:46] Typically, I think endgame maps take the more
+balance oriented approach
+[31:51] where we try to spawn a fixed number of monsters per area
+[31:53] and scatter them about as needed.
+[31:55] Then we try to control the geometric area
+to be within a target size,
+[32:01] like plus or minus ten percent or twenty percent or something.
+[32:06] Josh: awesome.
+[32:08] Next up we have: 'Will the new world generation
+tech we've made for Path of Exile 2
+[32:13] also be present in the old campaign?'
+[32:17] Rhys: mostly not.
+[32:21] We have a lot of existing areas in the game.
+[32:24] Over a thousand in fact, and going back
+and adding new tech to them is a lot of work.
+[32:31] Much easier to use it for the new content
+we're producing.
+[32:36] However there are a few things that might
+be back ported for new areas in future 3.x content.
+[32:48] Like the tile overlays.
+[32:50] Josh: awesome.
+[32:51] 'You've been with Grinding Gear Games for a
+very long time,
+[32:54] I believe you remember the garage days?'
+[32:56] Rhys: yep, when I first joined the company we were
+literally in Chris's garage.
+[33:02] There were only like six or seven of us at
+the time and maybe a few people overseas.
+[33:07] So I've been there over eleven years now.
+[33:09] Josh: in those eleven years is there a moment you
+remember as your proudest moment as a developer?
+[33:16] Rhys: I think the initial release of the game
+ in 2013, we had a big party.
+[33:24] It was pretty amazing to be able to say "It's
+out, we made a game!"
+[33:34] That was what, like act 3.x?
+[33:38] Adding Dominus.
+[33:44] Josh: 'If town exits are going to be random, 
+does this mean
+[33:46] every player in the town is going to be running at a wall
+[33:48] and disappearing as
+opposed to leaving at an exit that you can see?'
+[33:52] Rhys: yes.
+[33:56] We have special doodads and decorations at
+all the entrances that we can turn on or off
+[34:03] based on whether that entrance should be available
+to your character.
+[34:09] I said we would block it off with boxes, but
+I mean maybe we should have something else,
+[34:14] maybe we should have something like an NPC
+or...
+[34:20] Josh: currently we're using Erik's new door glow
+tech to indicate the one that's working
+[34:27] as opposed to the one that isn't.
+[34:29] Rhys: yes.
+[34:31] We have new, um...
+[34:34] I can't believe I didn't mention this in the
+talk, but we got rid of those
+[34:38] hard-white area transitions.
+[34:40] Finally.
+[34:44] That's been a long time coming actually.
+[34:46] But now that we're creating new content
+as opposed to revamping old content,
+[34:51] it's much easier to add these kind of things.
+[34:58] Josh: next up we have:
+[35:00] 'How is the lighting done?'
+[35:01] I think Alexander is going to talk about this
+a little bit later, but can you talk about
+[35:04] it in relation to each of the tiles and how
+they get light with the generation system?
+[35:10] Rhys: so, the lighting has actually changed a lot
+especially in the last couple of years.
+[35:17] It used to be that every area had a fixed
+lighting setup.
+[35:21] Which worked for a while.
+[35:23] But we have much better control these days.
+[35:27] We can create custom bounding boxes with different
+environmental settings, different lighting
+[35:32] settings and blend between them as you walk
+in and out of them.
+[35:38] I'm not sure if there is any good examples
+in 4.0.
+[35:43] We use it a lot to change the music and sometimes
+event the lighting when a boss spawns for example.
+[35:48] If you've fought the Rust King, that might
+be a good example of that happening.
+[35:53] Josh: yeah, and if you are interested in lighting,
+Alexander, our lead graphics programmer,
+[35:56] is going to be doing a big old talk about all
+the rendering stuff and there's a ton of stuff
+[36:00] on all the different lighting systems there,
+towards the end of the day.
+[36:05] Let's talk Betrayal briefly, specifically
+the inaccessible Syndicate camps.
+[36:10] Can you talk about why they might happen also,
+what makes them so difficult to fix?
+[36:16] Rhys: Betrayal has some special terrain tech dedicated
+exclusively to Betrayal.
+[36:21] The Fortification encounters often are really
+big.
+[36:25] Much bigger than any other randomly spawning
+terrain feature.
+[36:30] So we added new tech to try to spawn them
+[36:37] without requiring level designers to manually go through every area in the game
+[36:42] and manually
+create places for them to spawn.
+[36:45] And for for the most part it works.
+[36:52] Since Betrayal league we have improved that
+more.
+[36:56] However, in 3.8 specifically,
+[37:02] in that patch we actually regressed a little
+bit on some of the spawning algorithms.
+[37:09] It's actually really hard sometimes to make
+changes to the terrain generation.
+[37:13] Simply because we have so many existing areas
+that rely on various small bits of logic
+[37:19] that even I'm not aware of.
+[37:22] We have four level designers, they build areas.
+[37:25] They don't always tell me every single thing
+they're doing, of course.
+[37:28] But sometimes they end up relying on some
+small quirk of the terrain generation,
+[37:33] that I might regard as a bug.
+[37:36] And then when I fix it, suddenly a bunch of
+areas break.
+[37:41] So that will be fixed in 3.9, or at least
+vastly improved.
+[37:48] Josh: yes, there's definitely sometimes a policy
+between the programmers and the designers
+[37:52] of don't ask and figure it out later.
+[37:56] Rhys: well I don't expect them to be constantly
+bothering me, in fact I prefer they didn't.
+[38:00] Josh: it would be really annoying, right?
+[38:08] Josh: 'What kind of education degree or degree do
+you think would be the best to prepare someone
+[38:12] to do this kind of work?
+[38:13] Or to end up in a role similar to your own?'
+[38:17] Rhys: well, I did a computer science degree at Otago
+University in the South Island.
+[38:23] And then I pretty much moved straight into
+GGG after that.
+[38:29] Certainly having a strong grasp of algorithms
+is very useful.
+[38:35] But probably the single best thing you can
+do if you want to join our company
+[38:43] is to make things yourself.
+[38:45] In your spare time, make like a hobby project.
+[38:49] Make your own game.
+[38:50] There are a lot of tools out there that let
+you using scripting and stuff.
+[38:56] You can create a game just by yourself, it
+doesn't have to have amazing graphics.
+[39:00] It doesn't need sound.
+[39:01] It just has to be playable.
+[39:04] And that is actually the most impressive thing.
+[39:06] A lot of our job applicants have done that.
+[39:08] Myself included.
+[39:09] Josh: definitely, I know that one our environment
+artists rebuilt Lioneye's Watch in Unreal
+[39:14] and that was how he got in despite having
+not done a lot of study on that.
+[39:18] And Fog who redid Coward's Trial and made
+the Devourer boss that you can see in the
+[39:23] Path of Exile 2 demo right now.
+[39:25] He was just doing Diablo II mods, and he happened
+to apply to us and Chris took one look and said
+[39:31] "Yea definitely, you're in."
+[39:34] Rhys: and of course, being a good programmer.
+[39:43] Josh: 'Which zone has the highest 
+generation failure rate?'
+[39:45] Which one is the hardest for us to keep getting?
+[39:50] Rhys: I have a feeling there are a few areas in
+the old Act Three.
+[39:55] We do actually have automated testing of all
+the areas that warns us if any area,
+[40:03] or graph in any area has a success rate below
+like seventy percent, sixty percent or something.
+[40:12] But there's only thirty or forty, out of a
+thousand that actually have that problem.
+[40:21] There are no areas with a success rate below
+thirty percent.
+[40:28] Josh: I can definitely tell you if you look
+at our logs right now and you're looking for
+[40:30] generation issues, they're all Blight generation
+issues.
+[40:34] Rhys: Blighted maps are a challenge.
+Josh: Ooooh yeah.
+[40:41] Josh: 'What kind of languages do you use to develop
+our world and map generation tools
+[40:45] and can you talk about those tools and
+how we go through that process a little bit?'
+[40:49] Rhys: Okay.
+[40:50] The game itself is in C++.
+[40:52] All the tools, well, all the terrain tools
+are also in C++, and I think
+[40:58] I made most of them over the years.
+[41:02] We do have a few other tools in C#.
+[41:07] The environment artists use Maya, I guess
+the high poly guys might use something else
+[41:13] but the low poly comes through Maya and we
+have a custom tile exporter that converts
+[41:18] all the geometry into a special file format
+for the game to load.
+[41:22] And then we basically have a suit of custom tools to
+handle everything else.
+[41:29] We have tools for editing the tiles and marking
+up all the tiles with connection points and stuff.
+[41:34] We have a room editor that lets us assemble
+the rooms together out of the tiles,
+[41:40] add decorations and so on.
+[41:42] Then we have an overall terrain generation
+tool that generates areas,
+[41:50] full areas that you can see from a bird's eye view.
+[41:54] This is what our level designers will use
+[41:57] to generate and test and explore.
+[42:03] It's also integrated into the game
+a little bit.
+[42:07] If you're in-game, well if a dev is in-game
+and they find a problem,
+[42:12] they can press f4, click a button and open
+that exact level in a tool to see more information
+[42:20] and they can recreate the area over and over,
+[42:23] look at the logs, and diagnose problems.
+[42:27] Josh: I believe when players do /bug we
+get the same information for recreating, right?
+[42:32] Rhys: yes, when anyone types /bug, we log the seed
+and any critical information.
+[42:38] I think we actually changed it so that when
+you type /bug we actually store like a literal
+[42:44] cheat script that you can just copy and paste,
+and we can immediately recreate the level.
+[42:50] Josh: yes we definitely do, it's super useful so
+if you find bugs,
+[42:53] please /bug them so I can reproduce them.
+[42:56] Otherwise it's like going around in
+the dark.
+[42:59] Rhys: on that note, actually we recently changed
+the /bug command so you can
+[43:06] type stuff after it, give us some more information.
+[43:09] Please us that, it's really useful actually.
+[43:17] Josh: I think that's been in the game since 3.7.0
+now and we keep telling people to do it
+[43:20] and they keep missing the fact it's there.
+[43:23] Rhys: you know, when we were first implementing this,
+we actually looked at the logs.
+[43:27] We discovered that some people were already
+doing that, even though it didn't work.
+[43:33] So we thought this is actually a good idea.
+[43:36] We should do this.
+[43:38] You can also send us messages that way.
+[43:44] Don't.
+[43:45] Please just useful information, really.
+[43:48] Josh: we have immediate regret.
+[43:51] 'Have you ever considered using the dynamic
+generation system
+[43:54] to handle random destructible objects?
+[43:57] For example, a rhoa charging in a forest and
+knocking down trees and the trampled area
+[44:02] would become traversable.'
+[44:04] Rhys: we do actually support objects that have blocking that can be turned on and off.
+[44:10] For example doors is the most common example.
+[44:16] You know, originally, back in Act Two, the plan
+was for Devourers to emerge from trees
+[44:22] and to destroy the tree as they emerged.
+[44:24] But that proved a little bit too challenging
+for version 1.2 or whatever it was.
+[44:32] But I mean we could.
+[44:33] We have the technology, it's just a matter
+of implementing it and also
+[44:41] desigining the gameplay so that it's actually
+a meaningful thing that happens.
+[44:46] More than one percent of the time.
+[44:48] Having a rhoa randomly shield charge
+into things, I mean
+[44:53] typically they're charging the player.
+[44:56] I guess they do run into trees occasionally.
+[45:02] Yea maybe we should do it.
+[45:05] Josh: I'm game if you're game.
+[45:06] Rhys: again it's gameplay, so it's more your stuff
+actually.
+[45:08] I've already implement the technology, you
+just have to do it.
+[45:11] Josh: alright.
+[45:13] I don't know that is should go confirm anything
+like that without Johnathan here.
+[45:17] In fact, I believe Devourers were previously
+called root spiders
+[45:21] and it's still called a root spider in the code.
+[45:23] Which is very confusing for someone who's
+new to the code.
+[45:26] Rhys: yeah, the number of times we've had an
+initial name for something and then renamed it.
+[45:31] And now everyone talks about the official
+name you see in game and all the art assets
+[45:36] use a completely different name.
+[45:39] Josh: I mentioned earlier when I was chatting
+to some of the players that in-game
+[45:42] Blade Flurry is called Charged Attack and Whirling
+Blades is called Blade Flurry.
+[45:47] Which is very easy to understand.
+[45:50] Rhys: don't forget 'New New New Shield Charge'.
+[45:55] Seriously Shield Charge is the worst.
+[45:57] We've rebuilt it from the ground up like three
+times.
+[46:01] And it still crashes, somehow.
+[46:06] Josh: my favorite is for the Spectral Shield throw,
+the projectiles
+[46:09] because there's a second set of projectiles.
+[46:11] It's called 'Spectral Shield Throw Projectile
+Projectile'.
+[46:16] Rhys: that doesn't surprise me.
+[46:18] Josh: it was also me that did it.
+[46:23] Josh: 'will seamless zone transitions ever be possible
+the current infrastructure?'
+[46:27] This is slightly outside of terrain
+generation, but...
+[46:30] Rhys: that is a tricky one.
+[46:35] I mean of course it would be nice.
+[46:36] But it really is a massive task to put in
+something like that.
+[46:40] We need some sort of streaming asset loading.
+[46:44] I mean you've probably seen games where they
+use an elevator ride
+[46:50] or various switch back turns to hide the fact
+[46:56] that they're removing geometry behind you 
+and adding new stuff in front of you.
+[47:01] Our system really does not support that at
+the moment.
+[47:06] I don't know, maybe Path of Exile 3?
+[47:10] Josh: someone did say, I think it was Erik said
+Path of Exile 3 the other day
+[47:15] and we all cringed back stage.
+[47:19] I don't one hundred percent understand this
+question but maybe you will.
+[47:22] 'Delve.
+[47:23] Is it possible to implement generating new
+instances like we have it in the act zones now?'
+[47:27] Oh I just understood it as I talked about
+it.
+[47:32] Rhys: Delve is a very special snowflake.
+[47:35] It took a bit of effort to bring all that
+together.
+[47:40] Combining different tile sets together that
+were not really designed to fit together
+[47:45] was a bit of a challenge.
+[47:47] So that whole incredibly powerful room overlap
+feature I talked about.
+[47:51] Yea, no.
+[47:52] Not using that for Delve.
+[47:54] We have special connection tiles between all
+the different Biomes.
+[48:02] We actually new generate a new Delve instance
+every time you enter the Mine Encampment.
+[48:11] Well, from town, or from hideout.
+[48:17] One of the features that we talked about for
+Delve was that
+[48:21] players have worked out there's a five
+by five grid, right?
+[48:27] A few leagues after Delve we actually extended
+that so it doesn't have to be a five by five grid.
+[48:32] Because some of the Delve paths are actually
+longer than five cells.
+[48:36] So it can also be eight by four.
+[48:45] It can be a rectangular shape as well if the
+path is especially long.
+[48:48] I mean it's pretty rare.
+[48:52] One other feature is we did talk about for
+Delve is that if you reach the edge of the grid...
+[48:58] What happens?
+[49:00] We wanted to have an entrance that you could
+click on and continue playing.
+[49:04] However in practice you would be in darkness
+at that point.
+[49:13] If there was light, like you're going back
+along the lit path, well.
+[49:16] You can just teleport to place you've been
+in Delve.
+[49:20] It's not really needed for that.
+[49:21] So if you were exploring into the darkness,
+there's kind of a few issues.
+[49:27] Like, how long is your loading screen?
+[49:30] Are you sitting in darkness that whole time?
+[49:33] Like, grace period?
+[49:36] What if you want to go back?
+[49:40] It wasn't an easy thing.
+[49:41] So we decided not to implement that for Delve
+League.
+[49:45] And we would basically listen to player feedback
+and if people really wanted it then maybe
+[49:51] we'd implement it.
+[49:52] But generally people seemed pretty happy with
+Delve.
+[50:01] Josh: let's briefly talk about the way that
+we sustain our quality with all of the
+[50:04] generation tools and the map stuff.
+[50:06] What kind of testing systems do we have
+through the build
+[50:08] and to ensure that nothing nasty gets live?
+[50:13] Rhys: well, we do have automatic testing of all the
+areas to make sure that they successfully
+[50:20] generate and have a reasonable success rate.
+[50:26] We do have lots of metrics, lots of statistics
+about
+[50:30] 'how big is the area?', 'how many monsters spawned?',
+[50:32] 'how many treasure chests spawned?',
+'how many expected loot drops are there in the entire level?'
+[50:37] and these sort of things.
+[50:40] We do try to standardize those from endgame
+maps.
+[50:44] However we changed our ideology a
+little bit there so now, you know, we nerfed Strand.
+[50:51] Sorry.
+[50:52] It's too good.
+[50:53] It was just too good.
+[50:56] So for things like endgame maps,
+[50:57] we have to care about the layout, how linear
+it is.
+[51:03] It's not good if there are two maps that are
+just, the best maps and that's all anyone plays.
+[51:08] We want people to play a variety of maps.
+[51:10] And so sometimes we have to nerf things and
+buff things.
+[51:16] Josh: 'Has there been any consideration to applying
+the procedural generation techniques to hideouts,
+[51:19] to make them a little bit more varied and
+interesting to players?'
+[51:22] Rhys: we specifically do not have any randomization
+of hideouts.
+[51:28] They actually use a fixed seed.
+[51:31] And the reason for this is because players
+customize their hideouts.
+[51:37] People place doodads and they line them
+up very carefully.
+[51:43] If we randomly pull the terrain out from under
+them, what's the point?
+[51:47] The whole system just doesn't work.
+[51:49] So even things like the grass and the ground
+materials,
+[51:54] things that have no effect on gameplay, we're
+very careful not to randomize those for hideouts.
+[52:02] So that people can place all the doodads that
+they want.
+[52:05] They can create hideout templates and share
+them.
+[52:11] We want to make sure that all that stuff works.
+[52:16] Josh: alright, next up.
+[52:17] Have we made any considerations for using
+artificial intelligence in the world generation
+[52:21] process to cut a little bit of the
+human element for it?
+[52:27] Rhys: we don't really use A.I.
+[52:34] It's complex enough as it is.
+[52:37] There are literally tens of thousands of lines
+of code in the terrain generation already.
+[52:42] Making such a big change at this point, well
+I mean it's quite difficult.
+[52:48] There are certain things where you can use
+A.I. techniques to create effects,
+[52:51] and that's more of the visual stuff that Alexander Sannikov is doing I think.
+[52:56] But the core terrain generation, yea I think
+we're good.
+[53:04] Josh: alright let's see what else we can find in
+here.
+[53:07] Have we given more consideration to using
+wider camera angles and what kind of problems
+[53:13] can this cause for you with the generation?
+[53:15] For example the Kitava boss fight is the classic
+example.
+[53:19] Rhys: so I think in Path of Exile 2 we did pull
+the camera out a little bit, and maybe we changed
+[53:24] the field of view?
+[53:25] Josh: yeah we did.
+Rhys: yeah.
+[53:28] This in general is a bit risky for performance,
+the game is designed around the camera angle
+[53:38] in terms of how much stuff we're hiding in the background
+at the sides of the screen and everything.
+[53:44] So adding more geometry on screen does have
+a penalty.
+[53:47] But we did manage to find a good compromise
+for Path of Exile 2,
+[53:51] where every area is designed around the new
+camera angle.
+[53:57] There are a few fixed locations where we specifically
+zoom the camera out.
+[54:03] Like for a boss fight or something.
+[54:05] And we can technically do that anywhere but
+we have to be careful about where we do it
+[54:11] because we need the terrain to support that
+zoomed out perspective.
+[54:17] Josh: for sure, and if you're particularly interested
+in that and you didn't catch the world building
+[54:20] talk with Erik yesterday, we talked a little
+bit more about that at the same time
+[54:23] and how that affected his process.
+[54:26] That's probably about all the time we have
+for questions for the time being though.
+[54:28] If you guys have any other questions feel
+free to come find us around the convention
+[54:31] we're all floating around or there's plenty
+other staff.
+[54:33] Otherwise, have a great convention.
+[54:35] Rhys: thank you.

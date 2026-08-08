@@ -1,0 +1,19 @@
+{
+  "query": "DonXenapo layered 2d global illumination",
+  "results": [
+    {
+      "video_id": "rG2aok2SdbU",
+      "title": "Sparse Radiance Cascades: goodbye screenspace",
+      "channel": "Alexander Sannikov",
+      "url": "https://www.youtube.com/watch?v=rG2aok2SdbU",
+      "duration": 91
+    },
+    {
+      "video_id": "DBRBZ1tZv_U",
+      "title": "Realtime fur rendering based on precomputed raytracing",
+      "channel": "Alexander Sannikov",
+      "url": "https://www.youtube.com/watch?v=DBRBZ1tZv_U",
+      "duration": 57
+    }
+  ]
+}

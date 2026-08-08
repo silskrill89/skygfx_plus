@@ -1,0 +1,32 @@
+{
+  "video_id": "xkJ6i2N32Pc",
+  "title": "Radiance Cascades Rendered Directly",
+  "channel": "Alexander Sannikov",
+  "channel_id": "UCly0QRJAaJ2UGSGycOQoOdA",
+  "upload_date": "20230819",
+  "duration": 324,
+  "view_count": 81207,
+  "like_count": 3241,
+  "tags": [],
+  "categories": [
+    "Science & Technology"
+  ],
+  "chapters": [],
+  "has_manual_subs": false,
+  "has_auto_subs": true,
+  "subtitles_available": [],
+  "auto_subtitles_available": [
+    "ab",
+    "aa",
+    "af",
+    "ak",
+    "sq",
+    "am",
+    "ar",
+    "hy",
+    "as",
+    "ay"
+  ],
+  "desc_timestamps": [],
+  "description_preview": "In this video we explore data stored in radiance cascades by observing it directly. This is equivalent to precalculating a scene, storing a cross-section of its radiance field and then rendering it from any viewpoint and any angle in O(1)."
+}

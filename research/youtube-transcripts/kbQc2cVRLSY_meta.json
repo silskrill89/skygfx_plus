@@ -1,0 +1,183 @@
+{
+  "video_id": "kbQc2cVRLSY",
+  "title": "REAC 2023 DAY 2 Lessons Learned from Far Cry Dunia Engine\u2019s Shader Pipeline",
+  "channel": "Rendering Engine Architecture Conference",
+  "channel_id": "UCWhvzM3b8N_JbmmoM1fkeGg",
+  "upload_date": "20230626",
+  "duration": 3502,
+  "view_count": 2976,
+  "like_count": 55,
+  "tags": [],
+  "categories": [
+    "People & Blogs"
+  ],
+  "chapters": [
+    {
+      "start": 0,
+      "end": 140,
+      "title": "<Untitled Chapter 1>"
+    },
+    {
+      "start": 140,
+      "end": 294,
+      "title": "Presentation Overview"
+    },
+    {
+      "start": 294,
+      "end": 336,
+      "title": "Far Cry Code Challenges"
+    },
+    {
+      "start": 336,
+      "end": 361,
+      "title": "Long-term Technical Vision and Planning"
+    },
+    {
+      "start": 361,
+      "end": 458,
+      "title": "PSO Refresher"
+    },
+    {
+      "start": 458,
+      "end": 476,
+      "title": "Expressing Material connections"
+    },
+    {
+      "start": 476,
+      "end": 511,
+      "title": "FC6 - Shader ID to PSO transition"
+    },
+    {
+      "start": 511,
+      "end": 597,
+      "title": "Shader Pipeline Goal"
+    },
+    {
+      "start": 597,
+      "end": 769,
+      "title": "Identify the challenges to reach the goal"
+    },
+    {
+      "start": 769,
+      "end": 830,
+      "title": "Barrier Work (Overview)"
+    },
+    {
+      "start": 830,
+      "end": 890,
+      "title": "Tech Milestone"
+    },
+    {
+      "start": 890,
+      "end": 963,
+      "title": "FC6 challenges"
+    },
+    {
+      "start": 963,
+      "end": 1093,
+      "title": "High Level Plan"
+    },
+    {
+      "start": 1093,
+      "end": 1353,
+      "title": "FC6 - Transition to Modern APIs"
+    },
+    {
+      "start": 1353,
+      "end": 1401,
+      "title": "Iterative Improvements"
+    },
+    {
+      "start": 1401,
+      "end": 1471,
+      "title": "Improve Shader Variations"
+    },
+    {
+      "start": 1471,
+      "end": 1655,
+      "title": "Essential vs Optional"
+    },
+    {
+      "start": 1655,
+      "end": 1736,
+      "title": "Transition Start"
+    },
+    {
+      "start": 1736,
+      "end": 1890,
+      "title": "Validation System"
+    },
+    {
+      "start": 1890,
+      "end": 1951,
+      "title": "JIRA Generation"
+    },
+    {
+      "start": 1951,
+      "end": 2007,
+      "title": "Test Coverage"
+    },
+    {
+      "start": 2007,
+      "end": 2065,
+      "title": "Automatic Testing"
+    },
+    {
+      "start": 2065,
+      "end": 2098,
+      "title": "Final Testing Process"
+    },
+    {
+      "start": 2098,
+      "end": 2169,
+      "title": "Interesting Edge Cases"
+    },
+    {
+      "start": 2169,
+      "end": 2274,
+      "title": "Custom Vertex Fetch"
+    },
+    {
+      "start": 2274,
+      "end": 2334,
+      "title": "Each ShaderID in the engine maps to a PSO!"
+    },
+    {
+      "start": 2334,
+      "end": 2357,
+      "title": "Shader Pre-compilation Process"
+    },
+    {
+      "start": 2357,
+      "end": 2429,
+      "title": "Collecting PSO Usage"
+    },
+    {
+      "start": 2429,
+      "end": 2519,
+      "title": "Priming during loading screens"
+    },
+    {
+      "start": 2519,
+      "end": 3502,
+      "title": "Lessons Learned"
+    }
+  ],
+  "has_manual_subs": false,
+  "has_auto_subs": true,
+  "subtitles_available": [],
+  "auto_subtitles_available": [
+    "ab",
+    "aa",
+    "af",
+    "ak",
+    "sq",
+    "am",
+    "ar",
+    "hy",
+    "as",
+    "ay"
+  ],
+  "desc_timestamps": [],
+  "description_preview": "Full title: Lessons Learned from Establishing a Long Term Vision for Far Cry Dunia Engine\u2019s Shader Pipeline\n\nIn this talk, the 3D programming team behind Far Cry 6 will discuss the challenges they faced while developing the game, specifically in establishing a long-term technology roadmap to handle major graphics API transitions and implementing a shader pipeline for the latest title in the franchise. The team will provide specific examples of the obstacles they encountered, such as balancing te"
+}

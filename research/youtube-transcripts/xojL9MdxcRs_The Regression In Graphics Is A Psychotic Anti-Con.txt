@@ -1,0 +1,480 @@
+# Transcript: xojL9MdxcRs
+# Fetched: 2026-08-07T06:23:54.095532
+# Entries: 475
+# Duration: 1950s
+
+[00:00] So, Zach's Tech Turf, a PC gaming
+[00:02] channel with almost 2 million followers,
+[00:04] made a super viral video discussing the
+[00:06] recent blind test comparing native
+[00:08] rendering with FSR 4 and the latest DLSS
+[00:10] model. This guy nonchalantly says, "Can
+[00:13] gamers really tell a difference between
+[00:15] native and upscaling?" Well, because in
+[00:17] his words, this proper test favored
+[00:19] DLSS, he ends the video saying, "Well,
+[00:21] that kind of ends the debate." As an
+[00:24] organized effort trying to wake up the
+[00:25] masses to the image quality crisis of
+[00:27] modern gaming, I find that his viral
+[00:29] conclusion requires a pro-consumer
+[00:31] follow-up that will hopefully train your
+[00:33] brain to catch false narratives. If you
+[00:35] use critical thinking and the data shown
+[00:37] on this channel, anyone can predict the
+[00:39] results as I did before making this
+[00:40] video. So, you take the industry's TAA,
+[00:43] which started off as something
+[00:44] conservative, meaning it only used one
+[00:45] or two frames, so it wouldn't distort or
+[00:47] smear the visuals. It's poor-looking by
+[00:49] today's standards because pixel
+[00:51] rejection logic and things like motion
+[00:53] vectors had not progressed enough. The
+[00:55] industry was quickly moving towards
+[00:57] fixing these issues until a graphics
+[00:58] programmer named Brian Karis took Epic
+[01:01] Games pedestal to tell the entire
+[01:03] industry, "Forget making TAA look
+[01:05] better, let's make TAA worse by smearing
+[01:07] an infinite amount of past frames to
+[01:09] pretend we're optimizing unrelated
+[01:11] graphic features." So, as TAA decreased
+[01:14] in quality, so did your basic features
+[01:16] like SSR, ambient occlusion, and really
+[01:18] an entire documentary's worth of
+[01:20] graphics. So, DLSS development starts in
+[01:23] the middle of this mess. And because the
+[01:25] masses were starstruck by the concept of
+[01:27] AI gaming, it became their biggest
+[01:29] selling point, which forced them to
+[01:31] actually research ways to increase its
+[01:32] visual quality. Nvidia for a long time
+[01:35] didn't have any competition. FSR 1
+[01:37] through 3 were more like industry TAA
+[01:39] because it lacked dedicated vendor
+[01:40] exclusive hardware.
+[01:42] Ask yourself this question. Why are
+[01:45] people so marveled when a technique like
+[01:47] DLSS looks better when it has dedicated
+[01:50] hardware to get its results? If it's
+[01:52] using dedicated hardware, the results
+[01:54] should look perfect, but it's never been
+[01:56] perfect, which is why Nvidia keeps
+[01:58] forcing their customers to allocate more
+[02:00] and more computations to the DLSS pass.
+[02:03] Why are people so marveled by techniques
+[02:05] that just use more and more GPU
+[02:07] computations with each update to look
+[02:09] better? Now that AMD has almost
+[02:11] perfectly cloned Nvidia, there's no
+[02:13] logical reason as to why FSR 4 wouldn't
+[02:15] be ahead of industry TAA. But, there's a
+[02:18] very logical reason as to why AMD will
+[02:20] never catch up to Nvidia. Neither AMD or
+[02:23] Intel, if we include XeSS in this
+[02:25] discussion, cannot magically clone
+[02:27] Nvidia's several year head start in
+[02:29] research and development. So, why do
+[02:31] these companies even try?
+[02:33] Because they know channels like Hardware
+[02:35] Unboxed, Gamers Nexus, Digital Foundry,
+[02:37] and all these other mainstream voices
+[02:39] are going to be good little marketing
+[02:40] slaves that are going to dramatize a
+[02:42] non-existent race like some kind of
+[02:44] infinite NASCAR event. XeSS looks like
+[02:47] it's catching up. AMD's just behind
+[02:49] Nvidia. Can they get ahead, everyone?
+[02:51] No. If everyone used common sense, we'd
+[02:54] be able to predict their trajectory.
+[02:55] These dramatized races are distracting
+[02:57] from the true consumer-based reality,
+[02:59] which is horrendous.
+[03:01] I am specifically advising that you view
+[03:03] the industry through a lens that
+[03:05] excludes vendor-dependent aspects,
+[03:07] because it's anti-consumer.
+[03:09] Take The Phantom Pain, for example. That
+[03:11] game is a visual treat, but it shipped
+[03:13] with a very poor screen space ambient
+[03:15] occlusion. And you can't use ReShade to
+[03:17] use different SSAO because of anti-cheat
+[03:19] restrictions. Because it's an Nvidia
+[03:21] sponsored game, it's programmed to allow
+[03:24] Nvidia's driver-based HBAO override, a
+[03:27] vastly better ambient occlusion than the
+[03:29] game's original option.
+[03:31] It's very obvious how this hurts the
+[03:33] non-Nvidia side of consumers who play
+[03:35] the game, because they don't have access
+[03:37] to an allowed driver. They only have
+[03:39] access to the game's poor default SSAO.
+[03:42] But, I'm thinking maybe people need a
+[03:44] refresher on how this hurts the Nvidia
+[03:46] owners.
+[03:47] Let's say they want to upgrade their
+[03:48] hardware to play new generation games at
+[03:50] a console level. And say that the Nvidia
+[03:52] competitors are offering an objectively
+[03:54] better product. Well, that Nvidia owner
+[03:56] will be punished for not staying with
+[03:58] Nvidia because that vendor won't have
+[04:00] compatible driver-based ambient
+[04:02] occlusion for that consumer's existing
+[04:04] catalog. Their hardware purchase is now
+[04:07] being swayed because essentially a
+[04:08] software vendor pimped their product to
+[04:11] a hardware vendor.
+[04:12] Had Kojima Productions implemented HBO
+[04:15] competently, such as the N-engine based
+[04:17] version seen in Need for Speed 2015, all
+[04:20] consumers would have access to quality
+[04:21] graphics and Nvidia owners would have
+[04:23] the ability to solely base their
+[04:25] hardware purchase decisions on vendor
+[04:27] competence.
+[04:28] It's deranged enough that ambient
+[04:30] occlusion would be weaponized like this.
+[04:32] And similar scenarios exist with other
+[04:33] games and other graphic features. It's
+[04:36] nothing less than psychotic when the
+[04:38] basic image quality of our games, or as
+[04:39] developers are engine choices, are
+[04:41] purposely degrading in quality because
+[04:44] distributors expect their customer to
+[04:45] depend on their vendors.
+[04:47] Alan Wake 2 is a perfect example of
+[04:49] this. The image quality of the game is
+[04:51] dependent on how much research that
+[04:52] vendor put into their
+[04:53] upscaling/anti-aliasing.
+[04:55] You're at the mercy of hardware vendors
+[04:57] when studios should bear that
+[04:59] responsibility instead. You might
+[05:01] respond with the fact that AI hardware
+[05:02] is becoming standard, so why continue to
+[05:04] ignore it? Because we've barely tapped
+[05:06] into the potential of high-end non-AI
+[05:09] equipped GPUs. And just because a vendor
+[05:11] offers exclusive tricks, doesn't mean
+[05:13] the consumer will benefit if the
+[05:15] developer of said game or engine takes
+[05:17] advantage of that trick. Crysis 3 is a
+[05:19] perfect example of this. Nvidia's goal
+[05:22] with TXAA 2X was to offer players 4X
+[05:25] MSAA at the cost of 2X MSAA.
+[05:27] To achieve this, subpixel jitter is
+[05:29] applied to the player's camera when 2X
+[05:31] MSAA is enabled, and the frames are
+[05:33] blended using a black box resolve
+[05:35] solution. Meaning the temporal resolve
+[05:37] code is distributed in a similar fashion
+[05:40] as today's DLSS, where no developer can
+[05:42] modify or fully understand how the code
+[05:44] operates. It only works on select GPUs
+[05:47] and it expects predetermined inputs that
+[05:50] the rendering pipeline has to
+[05:51] accommodate for and the output quality
+[05:53] is solely dictated by the vendor. SMAA
+[05:56] 4x also jitters 2x MSAA to achieve a 4x
+[05:59] MSAA like result, but because the studio
+[06:02] developed of the resolve code
+[06:03] themselves, they had code that could be
+[06:06] improved with continuous research such
+[06:08] as morphological fallback. Because the
+[06:10] developers weren't restricted by a black
+[06:12] box solution, they were able to surpass
+[06:14] TXAA in clarity because TXAA accumulates
+[06:18] multiple frames instead of a singular
+[06:19] previous frame, causing a blurrier and
+[06:22] smeared look. SMAA only requires 3% more
+[06:25] GPU utilization than TXAA 2x at 1080p on
+[06:29] a desktop 3060, which makes sense
+[06:31] considering this was long before compute
+[06:33] shader SMAA was developed. We went from
+[06:36] vendor agnostic image quality that would
+[06:38] allow you to upgrade to any vendor
+[06:39] without consequence to being at the
+[06:41] constant mercy of Nvidia because using
+[06:44] common sense we can predict that their
+[06:45] competitors will never catch up. Simply
+[06:48] look at the current situation and
+[06:49] witness how marketing sculpts
+[06:51] everything.
+[06:52] The reason why vendor agnostic image
+[06:54] quality tends to be poor is because
+[06:55] developers and studios marketed a lie.
+[06:58] That blurrier, worse looking TA was
+[07:01] optimizing rendering. That lowered the
+[07:03] value of more competent anti-aliasing
+[07:05] and competent image quality because
+[07:07] complacency was instilled in the
+[07:09] consumer. The consumer excused the drop
+[07:11] in image quality for so-called better
+[07:13] performance. That was the story for
+[07:16] years until our videos showed far worse
+[07:18] optimization issues existed and poor
+[07:20] anti-aliasing was used as a scapegoat to
+[07:23] gaslight consumers into accepting worse
+[07:25] performance. Had the real optimization
+[07:27] issues been fixed, the rendering
+[07:28] pipeline wouldn't have required worse
+[07:31] image quality. Then because of
+[07:32] incompetent MSAA implementations such as
+[07:35] the ones we analyzed in Crysis 3 were
+[07:37] marketed to the public, the demand for
+[07:39] MSAA dropped. Think about it. The demand
+[07:42] for MSAA was reduced because of an
+[07:45] unfaithful representation of the
+[07:46] technique.
+[07:47] This in combination with the
+[07:48] anti-aliasing getting worse because of
+[07:50] fake optimization, people were forced to
+[07:52] compensate with computationally
+[07:55] unsustainable resolutions such as 4K. 4K
+[07:58] with moderate and competent
+[07:59] anti-aliasing is going to have extremely
+[08:01] similar texture and geometric sampling
+[08:03] as 1080p with competent anti-aliasing,
+[08:06] but with much worse performance.
+[08:08] Simply integer scale 2013's Crysis 3 in
+[08:11] some of the more lit jungle scenes with
+[08:13] working SMAA 4x, which isn't even a
+[08:16] fully competent solution at 1080p on a
+[08:18] 4K TV. Then boot up modern Crysis 2
+[08:21] remastered with SMAA 2TX or TAA at
+[08:24] native 4K. Compare the performance and
+[08:26] visual ratio between the two gaming
+[08:28] setups at 60 FPS and judge the results
+[08:31] at a reasonable sitting distance. It
+[08:33] will be painfully apparent that current
+[08:35] consoles and general affordable hardware
+[08:37] should target richer visuals at 1080p
+[08:40] than the 4K messes that are being
+[08:41] marketed to us now as we're seeing with
+[08:43] TSR, Insomniac's temporal injector, and
+[08:46] the new upscaler that's going to be
+[08:47] shipping soon in Nixxes' Death Stranding
+[08:49] 2 PC port.
+[08:51] A lot of people said if competent MSAA
+[08:53] was used instead of TAA for the native
+[08:55] test, the blind test results wouldn't
+[08:57] have favored DLSS so much.
+[08:59] That is another false claim that this
+[09:01] channel is trying to destroy. A fair
+[09:03] test would have included MSAA with
+[09:05] filtered mipmaps and modern specular
+[09:07] anti-aliasing. Cheap techniques
+[09:09] Half-Life Alyx pioneered in to keep MSAA
+[09:12] visuals shimmer free. But nobody talks
+[09:14] about the techniques used in that game
+[09:16] because the mainstream discussion built
+[09:18] by tech influencers create hyper-focused
+[09:20] attention on vendor upscaling
+[09:22] developments. That boosts the market
+[09:24] value of upscalers, which motivates
+[09:26] organizations to continue its research.
+[09:29] Influencers are the reason why large
+[09:31] amounts of consumers will criticize
+[09:32] studios if they don't update their games
+[09:34] with the latest DLL or vendor-produced
+[09:36] software Instead of demanding the tech
+[09:39] mentioned before because it isn't
+[09:41] mainstream enough.
+[09:42] How is depending on a studio to
+[09:44] consistently update their game upscaler
+[09:46] version good for you? How is having to
+[09:48] constantly update your game's upscalers
+[09:50] because of consumer criticism good for
+[09:52] your game studio? How is relying on game
+[09:54] studios to update their upscalers good
+[09:56] for vendors?
+[09:58] So, in the end, there is no debate.
+[10:00] Graphics are being neglected and Nvidia
+[10:02] will solely reap the benefits until
+[10:04] companies focus on developing hardware
+[10:06] agnostic methods that close the quality
+[10:08] gap. That's not going to happen until
+[10:10] influencers stop dramatizing an image
+[10:12] quality race that doesn't exist.
+[10:15] I want to bring attention to another
+[10:17] example of gullible complacency now that
+[10:19] Resident Evil 9 is out. This post was
+[10:21] made during the promotional campaign and
+[10:23] people like this were defending sub-60
+[10:26] FPS gameplay at 4K on a 5090. They
+[10:29] defend path tracing because it provides
+[10:31] movie quality results, except that's a
+[10:33] lie. Nvidia has rebranded the term path
+[10:36] tracing in the same way they've
+[10:38] rebranded performance so that they could
+[10:40] legally lie to you. It's clear as day
+[10:43] that the path tracing option is simply a
+[10:44] compensatory option for the fact that
+[10:47] shadow softening has been completely
+[10:48] botched along with shading models,
+[10:50] ambient occlusion, basic GI propagation,
+[10:53] and even ray-traced reflections are now
+[10:55] suddenly looking worse to further
+[10:57] promote the need the need for path
+[11:00] tracing. You do not get movie quality
+[11:02] results with path tracing in this game.
+[11:05] It's a massively reduced concept of path
+[11:07] tracing, which is why it doesn't look
+[11:08] like a movie. It's why reflections are
+[11:10] so much worse than many ray-traced only
+[11:12] games. But, these people further
+[11:15] downplay the situation by saying just
+[11:17] turn it off.
+[11:18] This is the same stupid method, the same
+[11:21] stupid words and everything, that Unreal
+[11:23] shills used to downplay poor TAA in
+[11:25] Unreal. They simplify a gigantic problem
+[11:28] into an imaginary make things better
+[11:30] menu option because they refuse to
+[11:32] understand an ecosystem of consequences.
+[11:35] Sure, people can turn off path tracing.
+[11:37] That doesn't fix the fact that the
+[11:39] game's visuals are extremely noisy with
+[11:41] ray tracing and the highest end
+[11:43] rasterized graphics offered in the game
+[11:45] are worse looking than basic seventh gen
+[11:48] eighth gen graphics.
+[11:49] Higher quality assets like textures or
+[11:52] poly count is not the same thing as
+[11:53] higher quality graphics like occlusion
+[11:55] tech or shading models.
+[11:57] Whether it was paid incompetence or
+[11:59] actual incompetence, but because Capcom
+[12:01] butchered basic graphics including the
+[12:03] visuals on console, consumers are
+[12:05] punished for not having extremely
+[12:07] high-end GPUs. They are punished for not
+[12:09] having the latest RT cores or not having
+[12:12] the hardware for multi-frame gen AI. But
+[12:14] the studios and Nvidia get away with
+[12:16] this because they spend millions and
+[12:18] millions of dollars hyping up
+[12:19] anti-consumer garbage to get people at
+[12:22] this level of complacency. This is the
+[12:24] same trillion-dollar company that will
+[12:26] pay the biggest game journalism company
+[12:28] to get a fake expert from Digital
+[12:29] Foundry to lie to an unsuspecting
+[12:31] consumer. That is unless the woman in
+[12:33] the video is an actress. But at minute
+[12:35] 8:24, the so-called expert Alex
+[12:37] Battaglia is just reading a script and
+[12:40] taking a Nvidia-sponsored game that
+[12:42] purposely removes grass from the
+[12:44] rasterized shadow path to say how much
+[12:46] better ray-traced plant shadows are.
+[12:48] He lies to this woman's face when he
+[12:50] says the plant shadows are going to move
+[12:52] like the actual plant on screen. But you
+[12:54] can see it in the video that the
+[12:56] ray-traced shadows don't even move with
+[12:58] the plant because of a ray-tracing
+[12:59] limitation I explained in my Alan Wake 2
+[13:01] analysis.
+[13:03] A limitation that would be fixed by the
+[13:05] pro-consumer tech he is paid to
+[13:06] criticize in that video, being shadow
+[13:08] mask. But it's that level of lying that
+[13:11] Nvidia uses in their advertisements.
+[13:14] So let's loop back to square one. Why
+[13:16] would the industry fix anti-aliasing
+[13:18] when it's rewarded with excuses that
+[13:20] claim false performance promises that
+[13:22] distract from actual optimization
+[13:23] issues? Why would the industry continue
+[13:26] MSAA research when it's rejected by
+[13:28] consumers or a false representation of
+[13:30] the technique? Why would studios invest
+[13:33] in basic competent vendor agnostic
+[13:35] graphics when Nvidia has created an army
+[13:37] of brainwashed consumers that refuse to
+[13:39] look at what pre-RTX graphics had
+[13:41] achieved?
+[13:42] Why would non-leading hardware vendors
+[13:44] promote vendor agnostic graphics to
+[13:46] lower Nvidia's market value when tech
+[13:48] influencers were rewarded their
+[13:50] second-rate upscaling developments with
+[13:51] constant attention?
+[13:53] Yet people have the audacity to
+[13:54] criticize my attitude when I'm telling
+[13:56] you right now I'm not angry enough.
+[13:59] Millions of people should be angry over
+[14:00] this, gamers and developers, because
+[14:03] that is the only sane reaction when you
+[14:05] recognize how many lies and blind
+[14:07] actions founded the optimization issues
+[14:09] we currently deal with. If people were
+[14:11] rightfully angry instead of pathetically
+[14:13] bummed out, I wouldn't have to
+[14:15] substitute mass anger that would lead to
+[14:17] inherent action. But because there's a
+[14:18] lack of anger, there's a lack of action.
+[14:21] But I'll tell you what,
+[14:23] there is a reason to fix graphics
+[14:24] because this channel is rebuilding a
+[14:26] market that matters. Nvidia has to pay
+[14:29] millions in order to slowly eat away at
+[14:31] people's basic standards to replace it
+[14:33] with utter complacency because it's
+[14:35] founded on lies. But when this channel
+[14:37] makes a video about tone mapping,
+[14:38] optimized shadow map implementations,
+[14:40] the importance of BRDFs, people like
+[14:43] Markiplier start talking about this
+[14:44] tech.
+[14:45] This channel didn't need to be backed by
+[14:47] a trillion-dollar company to get people
+[14:49] like Markiplier talking about Callisto's
+[14:50] BRDF technologies.
+[14:52] If you're missing why this is important,
+[14:54] let me show you this retweet of someone
+[14:56] asking why studios are purposely stating
+[14:58] their games are not using Nanite or
+[15:00] Lumen. Because the market value of these
+[15:02] technologies are dropping. The entire
+[15:05] market value of Unreal Engine took a
+[15:06] massive hit when directors finally
+[15:08] stepped up from our criticism of
+[15:10] incompetent leaders when they finally
+[15:12] parroted the proof that we showed about
+[15:14] the engine.
+[15:15] We are building market value for
+[15:17] pro-consumer, vendor agnostic, optimized
+[15:19] technologies. A future where BRDFs,
+[15:22] intelligent pre-passing common shadow
+[15:24] maps proper deferred MSA and all these
+[15:26] other standards we defined on this
+[15:27] channel are marketed to people because
+[15:30] we've explained to them why they're
+[15:31] better and why they're more optimized
+[15:33] than whatever mess Nvidia tries to push
+[15:35] instead.
+[15:37] We're building a future that rewards
+[15:38] optimization with marketing.
+[15:41] Thank you so much to the people who
+[15:42] support this channel as your
+[15:43] contribution is a substitution against
+[15:46] years and millions of dollars spent on
+[15:48] propagating lies.
+[15:50] I do want to leave you with a good
+[15:51] thought.
+[15:52] We've been able to analyze 14 different
+[15:54] rendering pipelines at a fidelity in
+[15:56] which important conclusions about
+[15:58] optimization can be gained on a public
+[16:00] level. We've been able to do that in
+[16:01] under only two years while also
+[16:04] discussing industry news and issues. But
+[16:06] there are so many more pipelines that we
+[16:08] need to learn from.
+[16:09] So subscribe and join our patreon to
+[16:11] support what's coming next. Thank you
+[16:13] for watching this video.

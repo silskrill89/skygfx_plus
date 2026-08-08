@@ -1,0 +1,21 @@
+{
+  "video_id": "eS0zd_8nfhk",
+  "title": "2d Full Global Illumination #1 (proof of concept, no denoising, interactive fps)",
+  "channel": "Alexander Sannikov",
+  "channel_id": "UCly0QRJAaJ2UGSGycOQoOdA",
+  "upload_date": "20220825",
+  "duration": 50,
+  "view_count": 3625,
+  "like_count": 88,
+  "tags": [],
+  "categories": [
+    "Science & Technology"
+  ],
+  "chapters": [],
+  "has_manual_subs": false,
+  "has_auto_subs": false,
+  "subtitles_available": [],
+  "auto_subtitles_available": [],
+  "desc_timestamps": [],
+  "description_preview": "In this demo I explore 2d GI. My long-term goal was to find a way to calculate  light from faraway occluders in lower resolution than nearby occluders, this approach naturally produces soft shadows with natural penumbras.\n\nFor Path of Exile I have implemented a point light shadows algorithm that has that property, but making a GI algorithm using the same idea is much harder. That's why I decided to test drive it on a 2d test case first.\n\nEven though it looks like there's only one light in this s"
+}

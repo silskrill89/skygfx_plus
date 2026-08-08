@@ -81,6 +81,23 @@ Screen-space post-processing effects applied after the main scene render. Implem
 - **Pipe Chain**: 4-pass post-processing chain (requires normal buffer)
 - **YCbCr Filter**: YCbCr color space transformation
 
+### Height Fog (Phase F)
+- **Crytek exponential height fog** — world-space position reconstructed from depth buffer
+- Depth linearization via `projInfo` pattern (same as SSAO): `viewPos.z = projInfo.z / (depth - projInfo.w)`
+- World Z = `viewPos.z + camAxisZ * rayLength`
+- Fog formula: `fogFactor = exp(-density * max(worldZ - startY, 0))` (single exp, no bilateral)
+- Config: `heightFogEnable`, `heightFogDensity`, `heightFogHeightFalloff`, `heightFogStartHeight`, `heightFogR/G/B`
+- Shader: `shaders/ps/HeightFog.hlsl` (ps_3_0, IDR=250)
+- Registers: s0=scene, s1=depth, c0=fogParams, c1=fogColor, c2=projInfo, c3=screenSize, c4=camPos, c5=camAxisZ
+
+### God Rays (Phase F)
+- **Screen-space radial blur** toward projected sun position
+- Sun screen pos = `worldToScreen(sunDirection × 1000 + cameraPos)` → NDC → UV
+- Radial blur: 20-sample loop with exponential decay from sun center
+- Config: `godRaysEnable`, `godRaysExposure`, `godRaysDecay`, `godRaysDensity`, `godRaysWeight`, `godRaysNumSamples`
+- Shader: `shaders/ps/GodRays.hlsl` (ps_3_0, IDR=251)
+- Registers: s0=scene, c0=sunScreenPos, c1=rayParams, c2=numSamples
+
 ## Pipeline Order
 
 ```
@@ -93,6 +110,11 @@ Within `ColourFilter_switch`:
 3. Pipe chain (if `pipeChainEnable`)
 4. Config hotkey handling
 5. Color filter (selected by `colorFilter` enum)
+6. Motion Blur
+7. **Height Fog** (if `heightFogEnable`)
+8. **God Rays** (if `godRaysEnable`)
+9. UpdateFrontBuffer
+10. SSS Blur
 
 ## See Also
 

@@ -1,0 +1,19 @@
+# Pending YouTube Transcripts
+# IP block active — retry in 30+ minutes
+# Run: py -3.13 tools/youtube_scraper.py --batch research/youtube-transcripts/pending.txt
+
+# CRITICAL — Path of Exile 2 rendering
+TrHHTQqmAaM   # ExileCon 2023 - Rendering Path of Exile 2 (52:56)
+whyJzrVEgVc   # ExileCon 2019 - Evolving PoE's Renderer (54:37)
+
+# CRITICAL — Threat Interactive optimization
+SnNm7rSSvlg   # How To Optimize Modern Game Rendering (2:01:25)
+
+# SIGGRAPH / Industry
+GOee6lcEbWg   # Ghost of Tsushima - Lighting, Atmosphere, Tonemapping
+kbQc2cVRLSY   # Far Cry Dunia Engine Shader Pipeline
+
+# Already have transcripts (from earlier session):
+# XXT3GZ4dXb0 — SIGGRAPH 2019 Advances in Real-Time Rendering
+# whyJzrVEgVc — ExileCon 2019 (transcript exists)
+# TrHHTQqmAaM — ExileCon 2023 (transcript exists)

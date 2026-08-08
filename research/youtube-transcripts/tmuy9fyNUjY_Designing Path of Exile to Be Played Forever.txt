@@ -1,0 +1,2084 @@
+# Transcript: tmuy9fyNUjY
+# Fetched: 2026-08-07T06:23:10.787694
+# Entries: 2079
+# Duration: 7080s
+
+[00:02] [Music]
+[00:05] reindeer games and today I'm gonna talk
+[00:08] about how we design path of Exile to be
+[00:09] played forever I'd like to thank
+[00:11] Jonathan my co-founder for helping me
+[00:13] extensively with this talk half of it as
+[00:15] him I'm just presenting it I've been
+[00:17] asked to make sure that everyone mutes
+[00:18] their phones so it's quiet and thank you
+[00:21] very much from staying to the last day
+[00:23] of GDC to see the Stork hopefully it's
+[00:24] worthwhile I'm gonna talk very fast so
+[00:27] there's a lot to get through it's like
+[00:28] 90 plus slides and 45 ish minutes so
+[00:30] we'll see how that goes
+[00:33] okay so early on in path of excels
+[00:37] history we discovered the truth here
+[00:39] player versus player games like League
+[00:41] of Legends are endlessly replayable you
+[00:43] can play against different opponents
+[00:44] every time different stuff happens and
+[00:46] they grow over time because of that but
+[00:48] a PvE game like path of Exile is
+[00:50] difficult because it has a clearly
+[00:51] marked like set of content you know a
+[00:53] single-player story you can play through
+[00:55] and because of the some players when
+[00:56] they played the story they did not play
+[00:58] they don't play the game anymore and so
+[01:00] it's very hard to get these PvE games to
+[01:02] grow over time and one could argue there
+[01:04] aren't many good examples of PvE games
+[01:05] that have grown and World of Warcraft is
+[01:08] you know a the type of game I'm talking
+[01:09] about they throw a ton of content at it
+[01:11] for a long time and they got some really
+[01:12] good growth out of that the tricky thing
+[01:14] is how do you do that on a shoestring
+[01:15] budget when you're a few guys in New
+[01:17] Zealand who haven't made a game before
+[01:18] so we found out the reality of this when
+[01:21] we released path of Exile back in 2013
+[01:23] you can see here we had respectable user
+[01:25] numbers a hundred and fifty million
+[01:27] player hours that year and less than
+[01:29] 2014 and less than 2015 and it just
+[01:32] wasn't growing right like you know
+[01:33] people were treating it as a PvE game
+[01:35] and we're doing the best we could and we
+[01:36] couldn't keep the player numbers up so
+[01:38] we changed our strategy we had some hard
+[01:40] learnings to do we change what we were
+[01:42] doing and that's what I want to talk
+[01:43] about today how we managed to achieve
+[01:44] the honestly ridiculous growth that
+[01:47] we've seen since then and there's a lot
+[01:49] to cover it's also worth noting that the
+[01:51] graph here is showing only our PC
+[01:53] Western English server this is meant to
+[01:55] be an apples to apples comparison we're
+[01:57] not cheating by throwing in like China
+[01:58] and Xbox to make the graphs bigger the
+[02:00] the other realms the other platforms are
+[02:02] not included in this graph so I'm going
+[02:05] to briefly show you some footage of path
+[02:07] of excel this might be very loud so
+[02:08] we'll just turn it down if it is
+[02:10] so it's an online action RPG I'm sure
+[02:13] you're all familiar with this game or at
+[02:14] least this type of game it plays a lot
+[02:16] like you know the Diablo series and it's
+[02:18] all about deep character customization
+[02:20] finding awesome items leveling up it's
+[02:22] got a lot of replayability and the
+[02:24] league content where you come back every
+[02:25] 13 weeks to play more path of Exile and
+[02:27] basically it's a game that we're very
+[02:29] proud of entirely made in New Zealand
+[02:31] it's the game with that skill tree the
+[02:32] one that intimidates all the new users
+[02:34] but we're keeping in there and so anyway
+[02:37] that's path of Exile you can google it
+[02:39] if you want more info so back in the
+[02:42] mid-2000s my co-founders and I had
+[02:44] played a ton of Diablo to like like
+[02:46] thousands and thousands and thousands of
+[02:48] hours and as we over time tired of the
+[02:50] game we look to another action RPGs who
+[02:52] we wanted to try out you know we tried
+[02:53] out Dungeon Siege series and Titan Quest
+[02:55] and so on and we played those games too
+[02:57] and enjoyed them but only for dozens of
+[02:59] hours rather than thousands of hours and
+[03:01] so this caused us to ask why did we sink
+[03:03] so much more time into Diablo 2 what was
+[03:05] perfect what made that game the best
+[03:06] action RPG that had ever existed and so
+[03:09] we came up with a bunch of design
+[03:10] pillars that we feel a perfect action
+[03:12] RPG needs that some of the other games
+[03:13] hadn't quite hit in all cases and so
+[03:16] those design pillars are as follows the
+[03:19] first one is a visceral action combat
+[03:20] this goes without saying it's an action
+[03:22] RPG you need to have immediacy you hit a
+[03:24] monster it dies blood goes everywhere it
+[03:26] falls back and you know it's nice and
+[03:28] fast an action based and you have to
+[03:29] remember back in 2006 the atmosphere of
+[03:32] online games like the climate they were
+[03:34] in was World of Warcraft clones the way
+[03:36] compact worked as you walk up to a
+[03:37] monster and you target it and then your
+[03:39] character starts hitting it a long time
+[03:40] and you press you call downs
+[03:41] occasionally and there's no real action
+[03:43] you're not dodging out of the way when
+[03:44] it attacks because it's going to hit you
+[03:45] anyway
+[03:46] and so nowadays of course everyone's
+[03:48] doing a much better job at visceral
+[03:49] action combat even strict in memos that
+[03:51] come out have great combat in them you
+[03:52] know games like up like does it online
+[03:54] for example if you're really good to
+[03:55] play so that's a pillar that everyone
+[03:57] understands there's no particular secret
+[03:58] the unit action in an action RPG second
+[04:01] we have randomly generated levels now
+[04:03] this is secret source for sure there
+[04:05] were games like Titan quests that came
+[04:06] out where I played through it and said
+[04:08] this is amazing this is the new game I'm
+[04:09] gonna play and I started my second
+[04:10] playthrough and didn't get a quarter of
+[04:12] the way through it because I played it
+[04:13] before as far as I was concerned and so
+[04:15] random levels dramatically help people
+[04:17] replay the game and when you want a game
+[04:18] to be played for 10 to 20,000 hours over
+[04:21] the life cycle of your longest users it
+[04:22] needs to
+[04:24] the randomness that enables them to play
+[04:25] each individual tileset two or three or
+[04:27] four hundred hours worth of gameplay and
+[04:30] so I'll be talking a bunch more about
+[04:31] random level generation later on in the
+[04:33] talk I understand that procedural
+[04:35] generation got a bit of a bashing you
+[04:36] know in the last few years because some
+[04:38] games have not used it particularly well
+[04:39] but used carefully with a lot of like
+[04:41] good theming it can work really well so
+[04:44] next we have randomly generated items
+[04:45] now I kind of wanted to just do an items
+[04:47] talk like just focus on this one for an
+[04:48] hour and I I think I could do a good job
+[04:50] of that but I'm gonna briefly say that
+[04:52] if you get your random item system good
+[04:54] it makes your game replayable and the
+[04:55] reason why is because in these kind of
+[04:57] games your items are your progress right
+[04:59] the character level not but doesn't
+[05:00] matter so much no one really cares if
+[05:02] you've got level 97 or 94 what they care
+[05:04] about is the cool items you found out
+[05:05] that you got on the way and the other
+[05:07] nice thing about randomly generated
+[05:08] items is it's not just a linear
+[05:09] progression with a player knows they've
+[05:11] got three items left to go and then I've
+[05:12] finished we're dealing with ones where
+[05:14] the stats are all over the place who
+[05:15] knows what the next best item is how far
+[05:17] it can be pushed and because of that you
+[05:18] get this cool diminishing returns so
+[05:20] that players really appreciate the small
+[05:21] upgrades they find because it's a 1%
+[05:24] power increase for their character but
+[05:25] it makes them so much better than more
+[05:26] of their friends the next one is a
+[05:28] secure online economy now this is one of
+[05:30] the things that sounds obvious clearly
+[05:31] games need a secure online economy but
+[05:33] if it's obvious why does everyone screw
+[05:35] it up so badly like the first thing is
+[05:37] so many games these days just remove
+[05:38] trade they're like oh this gold sellers
+[05:40] we can't deal with that we're just gonna
+[05:41] get rid of trade this is not the right
+[05:43] direction you need to have trade in your
+[05:44] games that are about items because that
+[05:46] way the items have some value if you
+[05:47] find an item and you're the only person
+[05:49] they can ever consume that it's not
+[05:50] really something that you've achieved
+[05:52] that you can actually like feel good
+[05:54] about having it doesn't have any weight
+[05:55] to it if you get a game where you get an
+[05:57] item that you could give to your friends
+[05:59] if you wanted to but you're not going to
+[06:00] because it's your item but you could
+[06:01] give it to them that's something you
+[06:03] feel good about having and the ability
+[06:04] for the item to actually transact with
+[06:06] other players is a critical part in that
+[06:08] item having worth in the economy and
+[06:09] representing your accomplishment the
+[06:11] second part of this is the secure part
+[06:13] which again sounds obvious but so many
+[06:14] games these days often from console
+[06:17] developers who aren't used to proper
+[06:18] secure client or server authoritative
+[06:20] code write their games in such a way
+[06:22] that it's really easy to exploit them
+[06:23] there's dupe methods there's various
+[06:24] dumb stuff that goes on with the PC
+[06:26] versions you know this there's a lot of
+[06:28] horror stories there but the key the key
+[06:30] takeaway is that there are very few
+[06:31] games that actually respect items to the
+[06:33] degree that we try to we want to make
+[06:34] sure this is an online economy where the
+[06:36] items are sacrosanct they are the
+[06:37] program
+[06:37] the players they're going to matter we
+[06:39] don't have validate them too quickly
+[06:40] with new releases of content and is a
+[06:42] big round that you can tell I feel
+[06:43] passionately about but needless to say
+[06:45] get your items right anyway the final
+[06:47] one is deep character customization this
+[06:49] is merely the fact that if you have
+[06:50] thousands and thousands of ways of
+[06:51] playing your game then when someone
+[06:52] comes back to play at the second third
+[06:54] fifth time they have a different way
+[06:56] that they can play it and in some games
+[06:58] where they just have a few simple
+[06:59] character classes and it is pretty
+[07:00] straightforward
+[07:01] you'll play it with the first class then
+[07:02] you'll play it with a second one in the
+[07:03] third and eventually you run out of new
+[07:05] classes you haven't tried path of Exile
+[07:07] tries very hard to make sure the class
+[07:08] doesn't actually matter that much it's
+[07:10] more about what you're doing with it
+[07:11] anyway so there's the preachy 5 design
+[07:14] pillars and we felt that many of those
+[07:15] are the games that were released failed
+[07:17] in a few areas right they didn't have
+[07:19] the secure servers they didn't have the
+[07:20] random levels the items were bad and so
+[07:22] on and so on very fun games to play
+[07:23] through totally worth their money but
+[07:25] not something you can actually sync your
+[07:26] twenties into all right so the next yep
+[07:30] then the next topic is we wanted to run
+[07:33] this as a games as a service this is
+[07:35] something we knew back in 2006 that we
+[07:36] didn't know the buzz words for it but it
+[07:38] was something where we looked at Diablo
+[07:39] 2 and they had tens of thousands of
+[07:41] people coming back her realm for each
+[07:43] one of their ladder resets people were
+[07:45] excited to jump back into that game
+[07:46] because of the fresh economy and keep
+[07:47] playing even though the game was not
+[07:49] being substantially updated during that
+[07:50] time there was a single expansion a few
+[07:52] tiny balance patches no real additions
+[07:54] so we felt if we update our game every
+[07:56] week with new items new Keystone
+[07:58] passives new skills and we keep path of
+[08:00] Exile dated incredibly fast how can we
+[08:02] not grow this was the plan I mean this
+[08:04] is you know 12 years ago now that we're
+[08:05] planning it and this analysis also
+[08:07] helped make us realize that we'd be
+[08:09] economically viable at 10,000 average
+[08:11] concurrent users so that means if you
+[08:12] sample the number of players online and
+[08:14] if there's 10,000 on average we'd be
+[08:16] totally fine we're running a skeleton
+[08:17] crew out of New Zealand very few people
+[08:19] on the team we paid for the game
+[08:21] ourselves we didn't have any investors
+[08:22] or publishers and all that kind of stuff
+[08:23] back then and we felt 10,000 people is
+[08:26] enough to generate from cosmetic
+[08:28] microtransactions enough people to
+[08:30] generate enough money to pay for the
+[08:31] game service to pay for development to
+[08:33] pay for the costs and then have some
+[08:34] money left over for ourselves if the
+[08:36] business goes well and so that was our
+[08:37] target we were aiming low and we tried
+[08:39] to hit it so we scaled up from a team of
+[08:42] three friends of my garage to this
+[08:43] motley crew of 18 guys this is a
+[08:45] terrible photo I got on Google image
+[08:46] search these are the initial partial
+[08:49] path of Exile team that launched the
+[08:50] open beta
+[08:51] we had like one person per department
+[08:53] basically and we spent six years on it
+[08:55] and so when we launched it went really
+[08:57] well we have two key stats there there
+[08:59] was massive internet virality we had
+[09:01] 70,000 peaking current users this is
+[09:03] like pre apex legends kind of numbers um
+[09:04] at one point five million signups we're
+[09:06] on top of the world right like our
+[09:08] random garage game had just suddenly
+[09:09] like hit it big and so we were very keen
+[09:12] to see what happened with the player
+[09:13] numbers so they declined and there's not
+[09:16] unexpected right like you know you
+[09:17] release the game when the everyone knows
+[09:18] the numbers go down eventually and so
+[09:20] they declined from 70,000 concurrent's
+[09:22] to 10,000 which is great because we're
+[09:23] happy with 10,000 that's where we want
+[09:24] to be so this is still good news you
+[09:26] know it was popular and had declined now
+[09:29] point out on the graph where the weekly
+[09:31] patches were well there were every week
+[09:32] all the way through there and they made
+[09:34] no difference like we never and to this
+[09:35] day have never seen a rise and plan
+[09:38] numbers due to changing a small thing
+[09:39] about the game it's all about the big
+[09:40] changes so we switch to doing three
+[09:42] weekly updates cuz one week patches just
+[09:44] completely paralyzed your studio you
+[09:46] dream about the patch cycle every day
+[09:47] and it's bad anyway so at this point
+[09:50] we'd decline from 70,000 to 10,000 users
+[09:53] the business is still going well we're
+[09:54] making some money for once and things
+[09:55] are looking great but we need to get a
+[09:57] user numbers back up we've tasted the
+[09:59] sweet fruit of seventy thousand
+[10:00] concurrent users and being at the top of
+[10:02] the steam charts and all that kind of
+[10:03] stuff and we need to get back up there
+[10:04] and so we figured well we know that
+[10:07] economy resets are important they were
+[10:08] critically important in Diablo 2 so
+[10:10] let's release some leagues and the way
+[10:11] leagues work in path of Exile is that
+[10:13] they are basically economy resets in
+[10:14] this case is the anarchy and onslaught
+[10:16] League the Anarchy one had some rogue X
+[10:18] cells to the game which is some bad guys
+[10:19] you get to find occasionally an
+[10:20] onslaught made the players attack it so
+[10:22] the monsters attack and move more
+[10:23] quickly we also put some challenges in
+[10:25] there and this logo is from the
+[10:26] challenge t-shirt that we gave out to
+[10:28] the top 50 people and those t-shirts are
+[10:29] like $1500 on eBay now I think anyway so
+[10:33] we gave them t-shirts out to the top
+[10:35] players at the start and just motivated
+[10:37] people to perform well in these leagues
+[10:38] and so the result of this was a hefty
+[10:40] 40% increase in player numbers we
+[10:42] released this content 40% extra players
+[10:44] come back it's validated except when you
+[10:47] look at it in the ground context that's
+[10:48] 40% of somewhere near the 10k mark and
+[10:51] then it declined below 10k
+[10:52] so we learned to ourselves we learnt
+[10:54] that Challenge leagues are important
+[10:56] they bring players back people care but
+[10:57] we did a really terrible job of
+[10:59] marketing these right a lot of people
+[11:00] don't even remember the release we put
+[11:01] them in we just turned the leagues on
+[11:02] basically with a thing on our website
+[11:04] and so we learned that you have to
+[11:06] bundle these economy resets with
+[11:08] significantly marketable content like
+[11:09] new characters new acts all that kind of
+[11:11] stuff because then the players and
+[11:12] journalists will want to talk about it
+[11:13] the good news is since we had been since
+[11:16] we entered open beta we've been working
+[11:17] on a new character and a new half of an
+[11:19] action and so that's what path of XR
+[11:21] 1.00 was this is the scion character
+[11:23] class and that's the act 3x as we called
+[11:26] it second half of act 3 in the
+[11:27] background there and this was the
+[11:28] official 1.00 launch and our goal was to
+[11:30] get back up to 70,000 concurrent users
+[11:32] and keep them and so we launched on
+[11:34] Steam we dropped all this content in and
+[11:36] I have to know you can't launch on Steam
+[11:38] in 2013 when actually works really well
+[11:40] for marketing you can't do that every
+[11:41] day and nor can you make this amount of
+[11:43] content every day it took a long time
+[11:44] use the numbers back up to 70 K just
+[11:47] like we wanted holding steady we're
+[11:49] feeling really good this time we know
+[11:51] what we're doing with a lot of
+[11:51] experience the numbers are staying up
+[11:53] there it's awesome ok so they went down
+[11:56] again that's fine we games do this right
+[11:58] like everyone's game goes down and that
+[12:00] bump there is Christmas by the way I
+[12:02] don't have a pointer but the one on the
+[12:03] writers is the effect of Christmas if
+[12:05] you're interested see what that looks
+[12:06] like in a declining game so we realized
+[12:08] here that we needed it's the only thing
+[12:10] that causes player numbers to ever go up
+[12:11] by the way without releasing your
+[12:13] content anyway so we realized we needed
+[12:15] more content so we started work on our
+[12:16] first path of exile expansion called
+[12:18] sacrifice of the vile sacrifice of the
+[12:20] vile introduce new endgame bosses and
+[12:22] introduced side areas and valve skill
+[12:24] gems and a couple of new leagues and all
+[12:25] the things a path of exile expansion
+[12:27] needed roughly and how did it do well
+[12:29] that's the bump on the right there it's
+[12:31] reasonable we got some more users we've
+[12:32] got some more money things are good like
+[12:33] I have to stress morale at the company
+[12:35] is excellent right we control our own
+[12:37] destiny everything's awesome people are
+[12:38] having a good time it's great running
+[12:40] this game as a service for almost every
+[12:41] team member it was their first released
+[12:43] game we're on top of the world and we're
+[12:45] finding that releasing expansions bumps
+[12:46] the player numbers up so now we have a
+[12:47] button we can push that makes the player
+[12:49] numbers go up so let's push it a bunch
+[12:51] more times we decided to scope out the
+[12:53] second expansion to be bigger because
+[12:54] the key question is what is the cadence
+[12:56] and size that we need to hit for these
+[12:57] paths of Exile expansions right we're
+[12:59] all scientists we want to optimize this
+[13:00] so for sake a masters comes along this
+[13:03] is an expansion that augmented the game
+[13:04] thoroughly all the way through with
+[13:05] these master missions and there's like a
+[13:07] customizable player housing and that
+[13:09] kind of stuff it was a good expansion
+[13:11] and it took about five months to make
+[13:12] and during which time the player numbers
+[13:14] are pretty flat on the bottom but the
+[13:16] spike was bigger so bigger expansion
+[13:18] bigger
+[13:18] Spyke this is looking good we have a
+[13:20] bigger button we can press if we want to
+[13:21] but this is tricky because it took a
+[13:23] longer to make so is it even worth while
+[13:24] sitting at 10,000 concurrent users for
+[13:26] so long so we decided that we would try
+[13:28] an even bigger expansion while
+[13:30] interleaving some smaller updates in so
+[13:33] we started work on hope started work
+[13:35] isn't completely correct because the act
+[13:37] content guys have been working on this
+[13:38] since we finished act 3x but we
+[13:40] formalized the path of Exile the
+[13:41] awakening expansion which is path of
+[13:43] Exile 2.00
+[13:44] it adds act 4 to the game it adds a
+[13:46] whole bunch of cool new stuff there's
+[13:47] socketable jewels that go in the passive
+[13:49] tree we completely rewrote on networking
+[13:51] code all sorts of cool stuff that
+[13:53] players were gonna love and we didn't
+[13:54] tell them about it yet because we're
+[13:55] waiting until we can show them something
+[13:56] impressive and so this is going on in
+[13:58] the background and we know it's gonna be
+[13:59] a big spike or at least that's the
+[14:00] theory according to this but let's try
+[14:02] some stuff in the meantime so two more
+[14:04] leagues this is torment and bloodlines
+[14:06] and we released these alongside some
+[14:08] probably pretty misguided PvP stuff that
+[14:10] we did in December of 2014 and they were
+[14:14] ok like the numbers jumped up again kind
+[14:17] of proportional to the size of the
+[14:18] content in this case in this case the
+[14:20] trauma team bloodlines leagues were
+[14:21] worthy of a spike about their big
+[14:23] certainly not as important as the
+[14:24] biggest spikes from the bigger update so
+[14:26] so far this is validating the thing
+[14:27] released bigger content get bigger
+[14:29] spikes but we're able to make them
+[14:31] pretty easily while working on other
+[14:32] stuff so we're pretty happy with us
+[14:34] alright next up is the one-month League
+[14:36] experiment called being really desperate
+[14:38] to get your players back and then
+[14:39] calling it an experiment five years
+[14:40] later retro actively so we decided to
+[14:43] try some more month leagues to see what
+[14:45] would happen the idea is we just put
+[14:46] some cool game modes on there it doesn't
+[14:48] take a lot of development work and we'll
+[14:49] see what happens maybe one month is the
+[14:50] ideal cadence for path of Exile releases
+[14:52] so there's a 2-1 month leagues at the
+[14:54] end there it's hard to tell where the
+[14:56] second one is and this is because your
+[14:57] players quickly get a knock you later to
+[14:58] this kind of stuff 1 month is not enough
+[15:00] time to play path of exile and enjoy all
+[15:02] the stuff especially for the slower
+[15:03] players there wasn't new content there
+[15:05] was no marketing a lot of people here
+[15:06] probably don't know he did them the
+[15:07] second one was dark shrine by the way a
+[15:09] fan favorite would like 10 people I mean
+[15:11] you can see at the bump there anyway um
+[15:13] so this was kind of a failed experiment
+[15:16] as far as we were concerned it was
+[15:17] keeping the players somewhat entertained
+[15:18] like the core audience was good but you
+[15:20] can see the graph there is trending
+[15:21] downwards throughout 2014 this is the
+[15:23] point where we're getting a little bit
+[15:24] concerned we're still over 10k you know
+[15:26] we're still making money and it's
+[15:27] profitable but it's not looking great
+[15:29] like this is the point where we have to
+[15:30] question do we just make another game
+[15:31] and
+[15:32] like what's going on but we had the
+[15:33] awakening coming out that was path of X
+[15:35] or 200 so that was the saving grace we
+[15:37] wanted to see how that performed so we
+[15:39] finished the awakening got it released
+[15:41] and it had a big spike exactly as we had
+[15:43] expected because it was a lot of content
+[15:45] so this is like everything on this graph
+[15:47] says that the more work you do the bed
+[15:48] of the results are which is great that's
+[15:49] a good moral to live by and the problem
+[15:52] was this just wasn't sustainable for us
+[15:53] we had this awful situation where we'd
+[15:56] work really hard to release some stuff
+[15:58] the plenum just would spike up briefly
+[15:59] then they'd back down to the borderline
+[16:01] unprofitable mark and we have to make
+[16:03] more content and we just got to press
+[16:04] the button really and frequently we
+[16:05] wanted to change the whole paradigm so
+[16:07] that's look at what we've learned so far
+[16:08] number one economy resets that's the key
+[16:11] thing here for action ipz you start
+[16:13] afresh server everyone rushes in they
+[16:15] take time off work they want to get to
+[16:16] level 100 the fastest they find all the
+[16:18] good items economy resets are amazing
+[16:20] they're an opportunity - they're an
+[16:23] opportunity to have a fresh start and a
+[16:24] fair playing field for players
+[16:25] if you've disengaged from the game the
+[16:27] economy restart is the perfect time to
+[16:28] get back into it because it lets you
+[16:30] have an equal an equal footing with
+[16:32] other people who are much better than
+[16:34] you you believe you're better than them
+[16:35] and everyone's happy until they're not
+[16:37] so economy resets were great the next
+[16:40] note was about small content patches
+[16:41] they never helped us in any way actually
+[16:43] increase player numbers now don't get me
+[16:44] wrong releasing content is always good
+[16:46] for the game right at the beginning when
+[16:47] we're doing one weekly updates and
+[16:49] adding new items and skills that's
+[16:50] vitally important to have the game
+[16:51] actually have some content for people to
+[16:53] play but it never moved the numbers up
+[16:54] and the reason why is there are two
+[16:56] benefits to content the first one is it
+[16:58] makes your game better and the second
+[16:59] one is marketing and you want marketing
+[17:01] when you're doing this kind of thing and
+[17:02] trying to get your graphs higher and so
+[17:04] it's very important if you batch your
+[17:05] content together you get both the
+[17:06] marketing and making the game better so
+[17:09] it's got to be above a threshold of
+[17:10] people wanting to talk about it when we
+[17:12] release path of exile expansions now
+[17:13] people will message each other excitedly
+[17:15] to say look at this cool stuff and path
+[17:16] of Excel it goes to the top of overall
+[17:18] rate it does all that kind of good stuff
+[17:19] back then no one was calling anyone when
+[17:21] you released a single new skill gem and
+[17:23] journalists were not covering it but
+[17:25] they are now the next thing is balanced
+[17:27] changes during a league if you decide
+[17:29] you want to fix something you know to
+[17:30] make the game better than the people who
+[17:32] are doing that thing will be angry and
+[17:33] if you make something more powerful
+[17:35] because it was too low the people not
+[17:36] doing that thing are angry because they
+[17:38] missed out on choosing that character
+[17:39] built and so basically making any kind
+[17:41] of midseason
+[17:42] tweaks is just a very negative
+[17:44] experience for a lot of players who
+[17:45] care about fairness and so we learn to
+[17:47] push these balance changes to between
+[17:48] the leagues because that's the point
+[17:49] when players are choosing what character
+[17:51] to play they can see what's been reduced
+[17:52] and what's been improved and choose to
+[17:54] play based on that the final story is
+[17:57] one that I did not realize myself I wish
+[17:59] I was smart enough to think of this but
+[18:01] this actually came from kripparrian the
+[18:02] awesome streamer who played a lot of
+[18:04] paths of excel at the time and so
+[18:06] kripparian and I were chatting on skype
+[18:07] as I like to say that we did
+[18:08] occasionally and he said to me you know
+[18:11] what Chris I've got a little lesson for
+[18:12] you that really helped me as my with my
+[18:14] streaming he said every day I will wake
+[18:16] up and I'll stream in a reliable time
+[18:18] I'm there right at that moment and I'm
+[18:19] going to stream until a predictable time
+[18:21] and then I'm gonna work on my highlights
+[18:22] video and I'm gonna post that at a
+[18:23] predictable time and then I'm back
+[18:24] tomorrow doing exactly the same thing
+[18:26] and I will try not to take days off I'm
+[18:27] just going to stream at these times and
+[18:29] the reason he explained was because that
+[18:31] way when someone comes home from work
+[18:33] and they're wanting to watch kripparian
+[18:34] if that's the time of day that he's
+[18:35] streaming and then they'll be able to
+[18:36] watch him and if they want to watch a
+[18:37] video before they go to bed or whatever
+[18:38] the timing is it will be there and the
+[18:41] day that is not there is the day they
+[18:42] look on the internet so what will
+[18:43] entertain me what else is there in the
+[18:44] world and they'll find some other thing
+[18:46] maybe another stream and maybe a TV show
+[18:47] and now that's the thing they're doing
+[18:49] for entertainment and he felt that his
+[18:50] numbers dropped significantly if he
+[18:52] deviated from his very rigid schedule
+[18:54] now you know he's a powerhouse of
+[18:55] streaming right he's amazing and he
+[18:57] recommended that we do a similar
+[18:59] schedule with path of excel because he
+[19:01] said look at your graph of what you've
+[19:03] actually done in 2014 I made this graph
+[19:05] not him but um this is it was all over
+[19:08] the place right we've got medium leagues
+[19:09] at 20 weeks big ones at 16 they
+[19:11] arbitrarily gets small and close
+[19:13] together no path of Excel player is
+[19:14] gonna think anything other than is that
+[19:16] game dying like what's going on with him
+[19:18] getting smaller and what's with the
+[19:19] timing no one can predict anything and
+[19:20] so he strongly suggested we have a rigid
+[19:22] schedule because that way it's more
+[19:24] convenient for him because then you
+[19:25] knows when to stream it but it's also
+[19:26] convenient for everyone else and so we
+[19:28] tried this out so this was our new
+[19:31] schedule the new era of leagues as it's
+[19:33] called and so there every 13 weeks so
+[19:35] this means exactly four of them fit into
+[19:36] a year that means that we know that
+[19:38] they're going to be on the second
+[19:39] weekend of the final month and each
+[19:41] quarter or whatever we do in this
+[19:42] perfectly fits having one a few weeks
+[19:44] before Christmas and a week before GDC
+[19:46] in a week before e3 it just just matches
+[19:48] everything and it's great so we started
+[19:50] doing this and we were initially doing
+[19:51] some pipelining we work on a small one
+[19:53] while working on a bigger one in the
+[19:55] background and then in the second part
+[19:56] of the cycle we released the big one and
+[19:57] then
+[19:58] penis and that enabled us to experiment
+[20:00] with scope and so on because to the at
+[20:01] this point we still weren't a hundred
+[20:03] percent sure how large these had to be
+[20:04] to have the correct effect we were
+[20:06] pretty sure thirteen weeks which is
+[20:07] roughly three months was the right
+[20:09] amount of time so that was the new
+[20:12] schedule
+[20:12] now the key philosophy here is players
+[20:15] will stop playing your game that's
+[20:17] unavoidable at some stage something's
+[20:19] gonna happen that makes them stop
+[20:20] playing they get a new job or whatever
+[20:21] they get burnt out another game comes
+[20:23] along but the key thing is to give them
+[20:25] a lot of opportunity to re-engage and
+[20:26] that means they have to really clearly
+[20:28] know when the next coming back it is
+[20:30] inexcusable for a player to be able to
+[20:32] leave your game without knowing the
+[20:33] dates that they are returning to it as
+[20:34] far as we're concerned with us and so
+[20:36] that's where we want to make sure that
+[20:37] users quit with a plan to come back
+[20:38] because before we clearly signaled when
+[20:41] the next release was players would get
+[20:42] horribly burnt out and then they would
+[20:44] just never play again whereas now they
+[20:45] can quit before they get burnt out they
+[20:47] can say you know what I finished this
+[20:48] league I've seen this stuff I'll just
+[20:50] come back for the next one and that's
+[20:51] amazing for us because then the users
+[20:53] are fresh they get chances to play their
+[20:55] triple-a games or fortnight or whatever
+[20:56] they do and it works really well also we
+[20:59] monetize very heavily towards the start
+[21:01] of our leagues that's where we introduce
+[21:02] new to cosmetic microtransactions and
+[21:04] supporter packs and so on so it honestly
+[21:05] doesn't matter a lot if we lose users
+[21:07] right at the end because they'll come
+[21:09] back and monetize again at the beginning
+[21:10] of the next league so let's have a look
+[21:12] at some results so this tiny little bump
+[21:15] at the bottom is the same size as
+[21:16] roughly forsaken masters was just for
+[21:18] ivory scaled this because it's
+[21:19] foreshadowing anyway so this was
+[21:22] talisman right tells me was a great
+[21:23] league it was a decent size if we could
+[21:25] release tell us when every three weeks
+[21:26] after every three months I'd be pretty
+[21:27] happy and so tell us Minh went well and
+[21:29] that was one of the small ones in our
+[21:31] cycle all right so the next one was the
+[21:33] ascendancy / / andis update this was a
+[21:35] bigger one because as you saw we're
+[21:36] going small big small big so so far
+[21:38] there's no unexpected results right
+[21:39] small big or good next one is a small
+[21:42] one again because it was prophecy which
+[21:43] wasn't as big but you'll notice it was
+[21:45] actually a little bit bigger than
+[21:46] talisman so this is how we rationalize
+[21:47] the numbers went down but in a good way
+[21:49] right because they're bigger than the
+[21:50] previous small one and then sure enough
+[21:52] we release the next big one nothing
+[21:54] surprising this is atlas of worlds and
+[21:55] essence League and at this point we
+[21:57] decided we hated pipelining because
+[21:59] we're getting so much attention split
+[22:01] between these two leagues we wanted to
+[22:02] see what happens if we just focus on one
+[22:04] thing at a time and do it well
+[22:05] so we said if we could make one thing
+[22:06] what would it be so we made breach and
+[22:08] breach is very popular and it was our
+[22:10] best release ever so
+[22:11] we said what are we gonna make next what
+[22:13] about legacy so we made legacy best
+[22:14] release ever and at this point the
+[22:17] background process of making a new acts
+[22:18] that trundles along always in path of
+[22:20] excels background had act 5 almost ready
+[22:23] that's the 300 expansion the fall of our
+[22:25] EF and that was sitting in my back
+[22:26] pocket ready for release so we did and
+[22:28] that was huge definitely our best
+[22:30] release ever and we were feeling really
+[22:33] good at the stage user numbers a big we
+[22:34] just launched in China we've just you
+[22:36] know launched on Xbox you know this is
+[22:37] just PC here and it's already very high
+[22:39] dwarfing all our previous results and so
+[22:41] the question is what would happen with
+[22:43] our 13 weeks like we're going forward
+[22:44] now we knew like and this happened we
+[22:46] knew that the next release would not be
+[22:48] as tall as 300 because it was just a
+[22:50] regular 13-week cycle
+[22:51] it wasn't an entire expansion that took
+[22:53] 18 months and 80 people to put together
+[22:55] and so the at war for the Atlas 1 was
+[22:58] not as big as 300 but it was bigger than
+[23:00] the previous expansion before that and
+[23:02] then beasts tree and then incursion and
+[23:05] it just keeps climbing the 13 week cycle
+[23:06] is working really well and then we
+[23:08] released a delve which was great and
+[23:10] actually down a little bit which we're
+[23:11] not blaming on delve because it's
+[23:13] probably a lack of retention during
+[23:14] incursion or something like that and
+[23:16] we're a little bit disappointed it was
+[23:17] down like this is the point where you're
+[23:18] questioning you know is this parabola
+[23:19] finally like hit the top but betrayal
+[23:22] was really really really big and so when
+[23:25] you look at it in the context of all of
+[23:27] the paths of Exile history you can see
+[23:29] that we were clearly declining there's
+[23:30] no argument about that for the first few
+[23:32] years and then really clearly climbing
+[23:33] and so this is the brunt of what I'm now
+[23:36] going to talk about for the rest of the
+[23:37] talk is what we do to actually make
+[23:39] these and how we scope them out and how
+[23:42] we deliver them fast enough
+[23:43] ok I'm going to go through the marketing
+[23:47] page for path of exile synthesis which
+[23:49] is our most recent release and what I'm
+[23:51] going to focus on specifically here is
+[23:53] the way that we target specific groups
+[23:55] of path of exile users because everyone
+[23:56] likes something about the game that's
+[23:58] why they're playing it and so we've
+[23:59] identified a big set of categories of
+[24:01] things that people enjoy we've broken
+[24:02] all the players into psychographics and
+[24:04] we're going to target each one with a
+[24:05] specific slide and the goal here is when
+[24:07] they're reading through the page they'll
+[24:08] look at the features or say oh this is
+[24:09] cool and then they'll find the thing
+[24:11] that clicks of them they'll find the
+[24:12] reason they're playing and they'll say
+[24:13] well that's good ok time to tell my
+[24:15] friends so first of all we start setting
+[24:17] the scene the setting in the story and
+[24:19] new characters and so on and there were
+[24:20] players who really like discovering
+[24:23] about the story in a league this is the
+[24:25] thing that
+[24:25] someone who makes them want to play and
+[24:26] so we lead with that and at this point
+[24:28] some players are going to say okay cool
+[24:30] this looks really nice it's got this
+[24:31] awesome blue portal and this dude you
+[24:32] can explore memories I'm gonna go and
+[24:34] get excited about it the next thing we
+[24:36] do is we talk about a unique gameplay
+[24:38] mechanic in combat that we've introduced
+[24:40] in this case it's the ability to explore
+[24:41] these decaying memories and run away
+[24:43] from this wall of decay and this is
+[24:44] something that for many players that
+[24:46] changes completely how path of Exile
+[24:47] plays because now they're running away
+[24:48] from the decay wall they've got to use
+[24:50] movement skills differently and this is
+[24:52] the thing which causes them to become
+[24:53] excited because that group of players
+[24:55] loves the idea of combat being slightly
+[24:56] different the next group of players
+[24:58] don't necessarily care about the story
+[25:00] they don't necessarily care about combat
+[25:02] they care about long-term it her
+[25:03] progression within a league the concept
+[25:05] of building something up over time and
+[25:06] so we often implement kind of meta
+[25:08] mechanics and path of Exile which are
+[25:09] like games unto themselves
+[25:11] and this really appeals to types of
+[25:12] players who want a metal layer on top of
+[25:14] the regular gameplay and so for example
+[25:16] in synthesis you could get these are
+[25:18] kind of puzzle pieces that you connect
+[25:19] together a bit like Carcassonne and
+[25:21] explore the memory map with that and
+[25:22] this is entirely a meta mechanic it
+[25:24] doesn't have any impacts on the actual
+[25:25] like momentum and gameplay of the game
+[25:27] this just dictates how you access the
+[25:29] advanced content of the league and that
+[25:30] really appeals to groups of players who
+[25:32] want to make sure they're doing a
+[25:33] different meta thing with each league
+[25:35] next we have what I call endgame
+[25:37] aspirational content so these are like
+[25:39] final boss fights they're really hard to
+[25:41] get to you've got to do a lot of you've
+[25:42] got a lot of meta progression to get
+[25:44] there they're very difficult encounters
+[25:45] they've got good rewards you have to
+[25:46] learn the strategy of a fight they're
+[25:48] big multistage ones and they take a lot
+[25:50] of development time to make and they're
+[25:52] only accessed by maybe 10% of our
+[25:53] players the top players who can get
+[25:55] through to the end of the game get a
+[25:56] chance to see this content and you may
+[25:58] ask yourself why are you guys spending
+[25:59] like 20% of your development effort on
+[26:01] something that affects 10% of players
+[26:02] and the reason why is there are groups
+[26:04] of players in there who want to know
+[26:05] that there is content that only they can
+[26:07] get to stuff that's actually hard and
+[26:08] they're an exclusive club for being able
+[26:10] to do it and so those players will work
+[26:12] incredibly hard to identify the content
+[26:13] work out how to get there rush there as
+[26:15] quickly as possible build characters
+[26:16] custom-made for it do time runs try to
+[26:18] do in a hardcore try to do it without
+[26:19] getting hit all of these things and then
+[26:21] repeat it over and over to get all the
+[26:23] good items and so we found that it's
+[26:25] incredibly useful to have this end game
+[26:26] content even if not everyone gets a
+[26:28] chance to experience it themselves
+[26:29] because there's a good strong overlap
+[26:32] between streamers and these top 10% of
+[26:35] players because streamers are generally
+[26:36] the better players in the game and so
+[26:37] they can consume this content on
+[26:39] and everyone else can watch and think oh
+[26:40] I wish I was that good I wish I could
+[26:42] get characters that strong and be able
+[26:43] to play the top path of exile content
+[26:45] and so we try to appeal to that group
+[26:47] there which has a lot of overlap with
+[26:48] the rest of the player base from an
+[26:50] aspirational point of view next we talk
+[26:52] about league rewards everyone loves
+[26:54] finding items that's why they're playing
+[26:55] these games and so we introduced new
+[26:57] rewards that synthesis that synergize
+[26:59] with existing systems in the game and
+[27:01] this is for players who want to improve
+[27:02] their characters and find out how
+[27:03] they're going to be subtly different in
+[27:05] terms of what items they're getting in
+[27:06] this case it's the the fractured and
+[27:08] synthesized items we talked about
+[27:09] crafting there are paths of Exile
+[27:11] players who love crafting there are ones
+[27:12] who will like be really bored looking at
+[27:14] all the other stuff until we talk about
+[27:15] crafting and then the world opens up
+[27:16] with possibilities of what kind of stuff
+[27:18] they can make using the new systems and
+[27:19] this is also important from a gameplay
+[27:21] point of view as any path of Exile
+[27:23] players know here if you can get a head
+[27:24] start on the crafting and the league and
+[27:25] make the best stuff before other players
+[27:27] you're kind of the source of the best
+[27:28] items and the exalts come rolling in and
+[27:30] so this is actually one of the power
+[27:32] game strategies here is to care about
+[27:33] the crafting for path of exile we like
+[27:37] to do meta and balance changes so for
+[27:39] example we did a spell casting rebalance
+[27:40] and synthesis and one of the reasons we
+[27:42] do this is because there are players who
+[27:44] will play the best character build and
+[27:46] only the best character build and if
+[27:47] that's the same for two leagues in a row
+[27:49] they're playing the same character for
+[27:50] two leagues in a row which might be fine
+[27:51] but it probably is boring to play the
+[27:53] same character for two leaks in a row
+[27:54] and so it's really important that we mix
+[27:56] things up I mean hopefully not
+[27:58] completely arbitrarily we're trying to
+[27:59] solve problems here we're trying to take
+[28:00] the things that are overpowered to make
+[28:01] them a bit worse and take the things
+[28:03] that haven't been used for a while and
+[28:04] make them really exciting but this is
+[28:06] very important because it means that
+[28:07] people will get a chance to see
+[28:08] different aspects of path of Exile from
+[28:11] Little League now an important thing
+[28:13] here is it doesn't require developing
+[28:14] new content we're literally just
+[28:15] rebalancing and so on and that means we
+[28:17] get to leverage all of path of Exile
+[28:19] hundreds of existing skills and systems
+[28:20] when creating win-win and kind of make
+[28:23] pseudo content by bumping it up to be
+[28:24] top tier having said that is very
+[28:27] important that we actually do introduce
+[28:28] new skills in order to appeal to players
+[28:30] who are keen to play a new powerful
+[28:32] character and want to make sure they're
+[28:33] doing something snazzy that hasn't been
+[28:35] released before and so we shine a
+[28:36] spotlight on various new skills and
+[28:38] archetypes of players so that they so
+[28:41] the players who enjoy playing what's new
+[28:43] and hot get a chance to and clearly see
+[28:45] what it is on the marketing page finally
+[28:47] I know I've talked about item rewards
+[28:49] but the items we're talking about here
+[28:50] is subtly different and you can tell
+[28:51] this game's got a lot of item
+[28:52] and this is referring to the items that
+[28:54] regular monsters in the game can drop
+[28:56] just the idea of playing normal part of
+[28:57] Excel content and many people wanting to
+[28:59] know that regular monsters drop more
+[29:01] interesting stuff than before there's
+[29:02] new divination codes as new unique items
+[29:04] as new mods available this is really
+[29:06] important because for some people they
+[29:07] kind of ignore the league we put a bunch
+[29:09] of F in and they just want to play path
+[29:10] of Exile and they kind of ignore it and
+[29:11] it's fine we just have to make sure that
+[29:13] those people understand there is more
+[29:14] regular path of Exile view as well now
+[29:17] there's plenty more sections in our
+[29:18] marketing materials obviously we try to
+[29:19] sell them some stuff as well but that's
+[29:22] completely irrelevant for this talk
+[29:23] here's the checklist of all the things
+[29:25] that for path of Exile we find are
+[29:27] important to push to the players and so
+[29:29] that's basically the scope of what one
+[29:30] of these updates is now if you've been
+[29:33] involved in game production you may ask
+[29:34] that's an awful lot of work to do in 13
+[29:36] weeks how do we do that and so the
+[29:37] remainder of the talk which we have
+[29:39] about 20 minutes the remainder of the
+[29:42] talk is about how we achieve this in a
+[29:43] 13-week cycle so I'm going to give you a
+[29:45] bunch of advice some of it is going to
+[29:47] be a bit weird but bear with me okay so
+[29:49] let's start with the easy stuff fast
+[29:50] prototyping obviously you should do fast
+[29:52] prototyping right why do we even have
+[29:53] the slide because it's actually really
+[29:55] hard and we fail at it all the time like
+[29:57] the fast prototype for synthesis came in
+[29:58] really late I was initially gonna say
+[30:00] how late but that's really embarrassing
+[30:01] so let's just say it was late and that
+[30:03] reduced the amount of iteration we could
+[30:05] do and potentially that affected the
+[30:07] quality of the league we're having - a
+[30:08] lot of catch-up work at the moment
+[30:09] changing some mechanics based on the
+[30:10] fact that our prototype was not ready
+[30:12] early enough thankfully the for a past
+[30:14] prototype for 3700 is already being
+[30:15] completed and thrown away once and
+[30:17] completed again and that's a really good
+[30:19] process and so try to do this right it's
+[30:23] the easy part and now to get onto some
+[30:24] harder stuff
+[30:25] okay procedural level generation this is
+[30:27] a multi hour talk that I'm condensing
+[30:29] down to a few minutes okay procedural
+[30:31] level generation is critical because
+[30:33] you're leagues or whatever is
+[30:34] appropriate for your game need new
+[30:35] content for players to actually play
+[30:37] through and that means making new areas
+[30:39] because you've got to go to new places
+[30:40] but the traditional way of making levels
+[30:42] and games can be slow and involves
+[30:43] placing a bunch of things around in
+[30:44] evolving artists and taking time let's
+[30:46] try to make a level in 60 seconds
+[30:48] so I load up the tool and I draw a line
+[30:50] across horizontally which is a river and
+[30:52] then I draw a path going downwards which
+[30:54] is eight of the white path they and then
+[30:55] they put forests around it and I press
+[30:57] the buttons as they go and it makes a
+[30:58] path of Exile level out of tiles and
+[31:00] there's a river and a path intersecting
+[31:02] and the engine knows it can put a bridge
+[31:03] there and all this fancy stuff and I
+[31:05] click go again and I get it
+[31:06] different one and go again and I get a
+[31:08] different so by default here it's
+[31:10] producing random levels now these are
+[31:12] relatively similar because it's just a
+[31:13] relatively simple one but I'll make it
+[31:15] more complicated so I can then play this
+[31:17] in game and sure enough there's a pretty
+[31:18] bridge over the river and it works out
+[31:20] the direction of the water flow and does
+[31:21] all the fancy foam generation all this
+[31:23] cool stuff just happens because we've
+[31:25] got mature tools for that now and so I
+[31:27] say okay so this is a forest I need some
+[31:29] stuff to fill it with so I make a set of
+[31:31] tiles that can go in there some trees
+[31:32] and some full and over trees and bandit
+[31:34] camps and tents and some rocks and it
+[31:36] puts them throughout the level and then
+[31:37] I generate again and get a different set
+[31:39] of stuff and again and get a different
+[31:40] one and the player story is subtly
+[31:42] different each time the crossing is at a
+[31:44] different place the bandit camp is in a
+[31:45] different place if it's even there at
+[31:46] all
+[31:47] and you have to bear in mind that this
+[31:48] was like literally just a cross in the
+[31:50] editor like the simplest possible graph
+[31:52] that took seconds to do so here's a real
+[31:54] level from path of exile this is the
+[31:57] river crossings it's to the left of act
+[31:58] to town and the way that this all works
+[32:00] is instead of doing levels like this
+[32:02] where you just make one and hope it's
+[32:04] random enough you make like 20 different
+[32:06] variations you have two rivers you have
+[32:08] five rivers you have no rivers you have
+[32:09] it so that there's multiple roads or a
+[32:11] fork in the road you have all of these
+[32:12] crazy things and then when the game is
+[32:14] generating the level it picks which
+[32:16] topology to use first and then it does
+[32:17] the random generation within it and so
+[32:19] you've got two levels of randomness
+[32:20] there and so this is an example topology
+[32:22] from the river crossings and here's some
+[32:24] examples of what it can make so there
+[32:26] are many ways across the rivers there's
+[32:27] paths there's broken paths there's
+[32:29] little stones there are fallen logs and
+[32:30] so on you've got various boss encounters
+[32:32] in here you've got different exits going
+[32:34] off into different levels waterfalls
+[32:35] that kind of stuff here's a completely
+[32:37] different variation of it that's
+[32:38] generated in this case there's like a
+[32:40] different user story as they play
+[32:41] through and get different bosses and so
+[32:43] on this one here has like an island of
+[32:44] the middle with a big like thick cops of
+[32:46] trees there and so this area feels
+[32:49] different every time you play and did
+[32:50] not take the artists very long to do for
+[32:52] synthesis we said oh we need like 50 or
+[32:54] 60 of these areas made that the players
+[32:56] can play through and we kind of need
+[32:57] them right now like today preferably
+[32:59] because we have to actually like use
+[33:01] them to put the monsters in and play
+[33:02] test and so they took minutes to make
+[33:04] each one I think was like 20 minutes but
+[33:05] the point is they did it pretty fast and
+[33:06] that's something we can do because of a
+[33:08] procedural level generation tool suite
+[33:09] that we've made and I should note all of
+[33:11] path of excels tools an engineer
+[33:12] entirely custom not something I
+[33:14] necessarily recommend but it's great
+[33:15] when you've got it okay so I'm now going
+[33:18] to show you why the level generation is
+[33:20] good and
+[33:20] the way it understands about your league
+[33:22] mechanics so this is abyss this is where
+[33:24] when you're playing through the area
+[33:25] there's a crack that you can follow and
+[33:27] monsters come out of it and so when
+[33:29] we're generating the level that
+[33:30] generator can place the abyss cracks
+[33:32] throughout the level in an interesting
+[33:33] way where of the context of where
+[33:35] players can go so that's an Outlaws one
+[33:37] this is an endorsed one it will follow
+[33:38] the paths and go through the doorways
+[33:40] and along that little narrow walkways
+[33:41] and all that kind of stuff because it
+[33:42] understands about the walkability
+[33:44] because it just generated this maze for
+[33:45] you and so because of this abyss is a
+[33:48] fun mechanic it's different every time
+[33:50] you play it because of the level that is
+[33:52] present and it's a completely different
+[33:53] story and this kind of leaves on to the
+[33:56] next topic and this is a topic about
+[33:58] multiple overlapping axes of randomness
+[34:00] not to give an example imagine your path
+[34:01] of Exile designer your job is to make
+[34:03] encounters like fights so you're sitting
+[34:04] at your desk and I come over and say we
+[34:05] need lots of these we have a encounter
+[34:08] that needs a ton of variety because we
+[34:09] expect the players to play it like 500
+[34:10] times and you say wait wow I can't make
+[34:12] 500 variations of this so you try and
+[34:14] you have ten encounter types to start
+[34:16] with you've got the one with the
+[34:17] monsters drop down from the ceiling
+[34:18] you've got the one where they crawl up
+[34:19] the walls you've got the one where they
+[34:20] teleport in you've got the one where
+[34:21] they're in a big sphere that breaks open
+[34:23] you do as many encounters as you can do
+[34:24] and you hit about ten and then I say
+[34:26] look 10 isn't enough I said 500 retries
+[34:28] of this so you make another 10 and now
+[34:30] that you're getting diminishing returns
+[34:31] and it's really hard to think of them so
+[34:33] that's the point where we add another
+[34:34] axis in this case it's like okay well
+[34:35] all of that was with spiders let's make
+[34:37] zombie versions so you make it so it can
+[34:38] spawn zombies and then bats and so on
+[34:40] and so on so that's another axis and
+[34:42] then we're like okay random bosses
+[34:43] randomly some of these are going to be
+[34:44] bosses so sure enough the fights not
+[34:46] different because you get lucky or
+[34:47] unlucky with how many bosses there are
+[34:48] then we're gonna add some random mods to
+[34:50] the fight and so on and so on sage
+[34:51] access increases it and it gets to the
+[34:53] point where you've done five times the
+[34:55] work we've got 10,000 times the amount
+[34:56] of randomness out versus just making 50
+[34:58] encounters and then it gets boring once
+[35:00] they played all 50 which is the prophecy
+[35:02] league okay so I'm gonna show you a
+[35:06] video of breach which is a example of a
+[35:08] league with lots of these axes so you
+[35:09] tagged this pookie hand and it opens up
+[35:12] a breach which is kind of like a
+[35:13] parallel dimension where you fight these
+[35:15] monsters and if you kill them fast
+[35:16] enough the radius keeps on increasing
+[35:18] and it gets harder and harder to keep it
+[35:19] open until it collapses now there are
+[35:21] good and bad things that can occur this
+[35:22] is a great breach because it's outdoors
+[35:24] and so you get a big circle you can kill
+[35:25] a lot of monsters this is an indoors one
+[35:27] where you've got super unlucky and it's
+[35:28] up against the side of the level and
+[35:30] that's a bad breach because now it's
+[35:31] harder to fight all the monsters and
+[35:32] that's okay because I look forward to
+[35:34] the neck
+[35:34] good one but there's way more axes the
+[35:36] monster density can vary you can get
+[35:38] these like special chests that spawn
+[35:40] very rarely within it so you're lucky
+[35:42] like there's some chests up here that
+[35:43] are like clasped hands that you can tag
+[35:45] there are different varieties of flavor
+[35:46] of reach you want to get the chaos ones
+[35:48] rather than the fire ones potentially
+[35:50] because they've got better meta
+[35:51] progression associated you can find
+[35:53] reach lured bosses that maybe you do or
+[35:55] don't want to spawn depending on how
+[35:56] hard they are and so there's so many
+[35:58] things that can happen inside a breach
+[35:59] you're always left feeling that the next
+[36:01] one is going to be better because you've
+[36:03] never seen a perfect one on all axes
+[36:06] alright so let's talk about asset reuse
+[36:09] this is another obvious thing if you're
+[36:11] making a game like this as the games as
+[36:12] a service model where you want to make
+[36:13] content really quickly then it's
+[36:15] important to reuse your assets where you
+[36:16] can it would be criminal to make
+[36:18] entirely new assets the artist would be
+[36:20] really really really put to a lot of
+[36:21] work so let's have a look at how we've
+[36:23] done that in path of X R these are the
+[36:24] same area on the right we have like
+[36:26] calms lava cave and on the Left we have
+[36:28] a plateau area now what we did is we
+[36:30] remove the lava and change the
+[36:32] environment lighting so it looks
+[36:33] different but the tiles are the same I
+[36:34] think many of the textures are the same
+[36:35] as well that was really fast to do now
+[36:38] this is why you shouldn't add a
+[36:39] day/night cycle to your game like this
+[36:40] so many people make action rpgs and it's
+[36:42] easy to add a day/night cycle so they do
+[36:44] because look at how awesome it is on the
+[36:45] trailer to have to show off the
+[36:46] day/night cycle but that means you're
+[36:48] throwing away the ability so like hide
+[36:50] versions of areas that use a different
+[36:52] environment elsewhere in the game as
+[36:53] long as they're far enough away and look
+[36:55] sufficiently different and then people
+[36:56] will not necessarily feel when they're
+[36:58] playing through I mean the players don't
+[36:59] care in principle that you've reused
+[37:00] content they expect it but they care
+[37:02] when they can notice it and so if you
+[37:03] have a day/night cycle for each of your
+[37:05] areas you've thrown away so many
+[37:06] permutations you could use to add actual
+[37:08] meaningful extra content elsewhere in
+[37:09] the game here's another area where we
+[37:12] took the icy glacier area I'd note that
+[37:15] everything this is the ascent area and
+[37:17] we made it yellow and took the snow away
+[37:18] and now we've got a desert and so we do
+[37:20] this extensively throughout the game I
+[37:22] think like acts six through ten show a
+[37:23] lot of examples of both this and actual
+[37:26] new assets mixed together in a way
+[37:28] that's very hard to tell but was
+[37:29] actually you know very very cost
+[37:30] effective for making content here's
+[37:32] another example with monsters so on the
+[37:35] left here you can see a green flying
+[37:36] monster you can see a spike and a bone
+[37:38] wheel skeleton and at the top you can
+[37:40] see a random portal frame made of metal
+[37:41] now we had a sudden and urgent need for
+[37:43] a pile of synthesis monsters that looked
+[37:45] cool so we said that middle stuff looks
+[37:46] cool let's take that and there's
+[37:48] put it on the rigs of the monsters on
+[37:49] the left and so sure enough we
+[37:50] immediately have instantly animated and
+[37:52] rigged monsters we can use and all we
+[37:54] have to do is give them your names give
+[37:55] them your sounds and give new effects
+[37:57] and give them new skills so they have a
+[37:58] meaningful different combat interaction
+[37:59] with the player and then suddenly we had
+[38:01] our synthesis monster sorted out to make
+[38:03] monsters on the Left involved spoiling
+[38:04] upper asset creation pipeline that
+[38:06] evolves concepting and high poly models
+[38:08] and low poly models and texturing and
+[38:10] all that UV stuff and I don't know any
+[38:12] of this animation rigging the whole
+[38:14] works you know getting effects it takes
+[38:16] months to make monsters but if you do
+[38:17] this like cheap approach here you can
+[38:19] make stuff that looks different than
+[38:20] what you have in the game at the moment
+[38:21] or relatively quickly and we often have
+[38:24] to make monsters with days of notice
+[38:25] when we're putting these leaks together
+[38:27] so techniques like this really help and
+[38:28] the best thing is these synthesis
+[38:30] monsters don't feel like risk ins
+[38:32] they've got their own new skills and
+[38:33] stuff it isn't just a blue version of
+[38:35] the flying thing it's like a cool metal
+[38:36] version of the flying thing ok so now
+[38:38] we're going to talk about content reuse
+[38:39] which is different than asset reuse
+[38:41] because I'm talking about taking like a
+[38:42] whole cell block of content and reusing
+[38:44] it so this is breach which I just showed
+[38:47] you and in the regular game you'd find
+[38:49] these hands and fight the monsters and
+[38:50] players understood it and they liked it
+[38:51] and then we turn the breach League off
+[38:53] and had them relatively scarce within
+[38:55] the game but it was available as a
+[38:56] reward for later elsewhere so when we
+[38:58] did incursio and sure enough the vile up
+[39:00] in researching breaches and the temple
+[39:01] of Apso artal and so you find breaches
+[39:03] in there and when the player sees that
+[39:04] purple hand they immediately notice they
+[39:07] know exactly what it means in terms of
+[39:08] the fact thing about to get a big fight
+[39:09] and lots of monsters lots of experience
+[39:11] lots of items they understand the
+[39:12] rewards they understand that if you find
+[39:14] splinters inside the breach it lets you
+[39:15] create breach stones which this you
+[39:17] gotta fight some endgame meta stuff
+[39:18] entirely by saying a purple hand there
+[39:20] this is a breach inside the delve
+[39:23] content so deep underground there's
+[39:24] purple hands and we just chuck it in
+[39:26] there and it's really like it's entirely
+[39:28] positive for players they had a whole
+[39:29] system that they really enjoy engaging
+[39:31] with here we have some Harbinger fight
+[39:33] in the regular game when that was a main
+[39:35] league and sure enough you get the same
+[39:36] fight deep underground in delft where
+[39:38] there's a harbinger portal of the
+[39:39] monsters come out off and it means you
+[39:40] get access to all of the rewards for
+[39:42] that league this gentleman here is
+[39:44] called Cordero he gives you bro deals
+[39:46] for awesome items he's like a traveling
+[39:47] salesman and we used him in apprentice
+[39:49] league and in very little since then but
+[39:51] when we're designing betrayals rewards
+[39:52] of course one of the 200 or 300 outcomes
+[39:54] has to be kadhi rows in a cage and he's
+[39:56] very happy to do a deal with you and
+[39:58] this is cute because of course like wait
+[39:59] why is he in a cage in this area
+[40:01] but it was something the players really
+[40:02] likes because now when they want access
+[40:04] to the kuduro content they know they can
+[40:06] go and find him in this outcome and all
+[40:07] of that stuff is available so we found
+[40:09] that wholesale content reuse has been
+[40:11] incredibly useful at both bolstering the
+[40:13] rewards in the game but also making sure
+[40:15] that players immediately say oh I know
+[40:17] this I know this is gonna be great okay
+[40:18] so now is the time for us to talk about
+[40:20] some more controversial lessons this is
+[40:22] the point where I get labeled crazy
+[40:23] alright so this is the quality curve
+[40:26] this is relatively obvious you have your
+[40:28] workforces quality thing and this has an
+[40:29] asymptote that means that you can never
+[40:31] get to 100% quality it's gonna take
+[40:33] infinitely long in terms of work because
+[40:34] people want more and more and more fixes
+[40:36] that you can get pretty close the
+[40:38] question is how far along the curve do
+[40:40] you go and when you're left with 13
+[40:41] weeks you can't apply there when it's
+[40:43] done philosophy and you have to pick
+[40:44] somewhere so for example here for 50% of
+[40:47] the effort you get 90% of the quality
+[40:48] now I'm not saying to release games that
+[40:50] are only 90% quality but the way you do
+[40:52] it is by putting the quality in the
+[40:53] right places polish the things that
+[40:55] matter and don't care about the stuff
+[40:56] that doesn't matter now this means that
+[40:59] you have to make some very difficult
+[41:00] decisions about what things to pay
+[41:01] attention to and therefore the best
+[41:03] skill for a developer to have on your
+[41:04] team is the ability to know what
+[41:05] actually matters
+[41:06] relatively few people on the path of
+[41:08] exile team are able to actually gauge
+[41:10] that as accurately as we would like and
+[41:12] so it's very important that we do focus
+[41:14] everyone's efforts on the things that
+[41:15] really really pay benefits for the
+[41:18] actual content we're releasing and this
+[41:19] is also why we hire a player base to be
+[41:21] in the QA team and dev team because path
+[41:23] of Exile players will understand what's
+[41:25] important because they played through it
+[41:26] a whole bunch and know how they interact
+[41:28] with it all right pipelining we tried it
+[41:31] we really did we wanted to have to two
+[41:33] or three releases on the go at once and
+[41:35] it just really failed and we found
+[41:36] several problems with us the first one
+[41:38] is that when we're focusing on too many
+[41:40] releases at once we always had an excuse
+[41:42] to go and look at the other one when
+[41:43] things got hard if you assign a
+[41:44] developer do all the stuff for release a
+[41:46] and then maybe do the stuff for release
+[41:48] B later they'll work on a like they
+[41:49] meant to until they get stuck and
+[41:51] instead of then solving the hard problem
+[41:53] they would often say oh well they're
+[41:54] some easy stuff I can do on B so I'll
+[41:56] just work on that for a few hours
+[41:57] instead to clear my mind and that's
+[41:58] great but then a is completely stalled
+[42:00] and when you have precious few weeks in
+[42:02] order to get this stuff done you really
+[42:04] can't handle those stalls the second
+[42:06] thing is if you pipeline releases you do
+[42:09] not have time to react to what the game
+[42:10] actually needs by the time it's apparent
+[42:13] that the game needs a new end game
+[42:15] you like 3/4 of the way through making a
+[42:17] new beginning to it or something like
+[42:18] that because reddit will suddenly decide
+[42:19] there is a thing that needs fixing and
+[42:20] if you have the ability to say yes sir
+[42:22] and get that done in 13 weeks that's not
+[42:24] even good enough some of the time for
+[42:25] them but having to spend like you know
+[42:27] oh wait wait we've got next two
+[42:28] expansions almost finished kind of well
+[42:30] how we'll do this one next year is just
+[42:31] not going to work the game is on fire
+[42:33] until that thing is fixed it's also
+[42:36] important not to stall content for later
+[42:38] we get into a situation where we're like
+[42:39] we finished all the skills we said we're
+[42:41] going to make and we've got two extra
+[42:42] ones that got out of prototyping and
+[42:43] they're kind of finished do we wait do
+[42:45] we leave them for the next expansions we
+[42:46] have less to do no put them in the game
+[42:48] now the game needs to be in its best
+[42:50] form now all the time because you don't
+[42:52] get second chances as much growth as
+[42:53] possible every league otherwise you'll
+[42:55] start to decline people express concern
+[42:57] about creativity here they say look
+[42:59] Chris you've got this plan for like
+[43:01] another ten years of path of Exile with
+[43:02] four releases per year that's 40 more
+[43:04] leagues I can think of two good ones
+[43:06] where are we going to get 40 from and I
+[43:08] always refer them back to Magic the
+[43:09] Gathering they have released new sets
+[43:13] for per year or whatever for so many
+[43:15] decades now like 26 years and or
+[43:17] something hundreds of these things and
+[43:18] there's always new ideas it's amazing
+[43:20] the fact they can go back to the well
+[43:21] and find really cool compelling stuff
+[43:23] and so whenever I hear that we're not
+[43:25] going to come up with another ten or
+[43:26] twenty or thirty of these like evaded a
+[43:28] hundred you know and I'm certain we'll
+[43:30] be able to do the well will refill now
+[43:33] if you're a project manager you're
+[43:34] probably asking how we can make all of
+[43:35] the stuff in 13 weeks because it's not
+[43:37] just we start working in 13 weeks later
+[43:39] we release it consider how the schedule
+[43:41] actually works in reality so we release
+[43:42] the content and now there's problems
+[43:44] with that right right now there's a bit
+[43:46] of a fire where we're fixing some stuff
+[43:47] with synthesis that the community
+[43:48] doesn't like that's cool we'll have that
+[43:49] fixed early next week
+[43:50] but this has taken the first two weeks
+[43:52] of the schedule to do so so there's some
+[43:54] time spent during live ops work on the
+[43:56] existing release you've done then you've
+[43:57] got to prototype the new stuff right
+[43:58] ideally that's a bit pipelined in there
+[44:00] but still it takes time it's gonna be
+[44:02] another week before we really know for
+[44:03] sure about three seven hours so that's
+[44:05] three weeks gone 10 weeks left and
+[44:07] coming from the other end
+[44:08] we like to renounce our content three
+[44:10] weeks before the end we put our page up
+[44:11] we get the players hypes they have time
+[44:13] to tell their friends there's a
+[44:14] countdown you know it makes sense of
+[44:15] people to book time off work so that's
+[44:16] three weeks gone there we then have to
+[44:19] actually do a press tour where we show
+[44:20] all the journalists stuff it's very
+[44:21] important to actually do real marketing
+[44:23] in PR so we spend two weeks showing all
+[44:25] of people's stuff and preparing the
+[44:26] marketing page but in order to do this
+[44:27] we have to actually have con
+[44:28] and ready to show them like a trailer
+[44:30] and slides and this kind of stuff and
+[44:31] that takes a week so now we've got this
+[44:33] like four or five week window in the
+[44:35] middle to actually make all of the stuff
+[44:37] and that's difficult and that's where
+[44:39] the next counterintuitive advice comes
+[44:41] in this is how you get your art so
+[44:43] quickly create content you have no plan
+[44:45] for we have themed assets that we
+[44:48] commissioned because we know one day
+[44:49] we're keen to use them and a great
+[44:51] example of this is with The Betrayal
+[44:52] League we decided we're gonna make this
+[44:54] very complicated evil organization with
+[44:56] 19 members who will have backstories and
+[44:58] they will look different to they feel
+[44:59] different from any path of Excel
+[45:00] characters we've had so far but we're we
+[45:02] gonna get 19 fully modelled rigs
+[45:04] voice-acted fleshed out characters like
+[45:07] a vat and three or four weeks and the
+[45:08] answer was we go to our giant store of
+[45:10] content that we just have because we
+[45:12] made it and we pick a bunch of
+[45:13] characters we like this is a
+[45:14] microtransaction armor set we were going
+[45:16] to sell it but if I put it on a bandit
+[45:17] and like sell it in two years this is a
+[45:19] new character and so we found like we we
+[45:22] have a just a catalog of path of exile
+[45:24] stuff that the team have made because
+[45:25] they can slot it into the out pipeline
+[45:27] which is going to have a place in the
+[45:28] world one day and we just pick some
+[45:29] things for the league and I'll give you
+[45:31] another example so this is not a real
+[45:33] example we are never going to do a path
+[45:35] of exile expansion related to Dragons
+[45:37] because we don't want there to be
+[45:37] dragons in our world however if we
+[45:39] decided one day that dragons were okay
+[45:41] we'd say to the team hey guys make some
+[45:43] dragons and like tell me in a year when
+[45:44] they're finished and then they'll be
+[45:46] dragons sitting there in the library of
+[45:47] stuff and when we're looking at League
+[45:48] ideas well like could we do dragons this
+[45:50] time sure how would that work and when
+[45:51] we hit the prototyping the dragons are
+[45:52] ready to go and so we have so much stuff
+[45:54] being made for the future we have bits
+[45:56] and pieces for expansions next year
+[45:57] where we don't know what that expansion
+[45:59] is but we have an idea of a theme that
+[46:00] we would like to do and maybe it's
+[46:02] finished early maybe we can use that
+[46:03] this year maybe we can take a few of
+[46:04] those assets for this current league
+[46:06] potentially and it's just so good to
+[46:07] have that giant library of stuff okay so
+[46:11] in conclusion we initially initially
+[46:13] release path of exile kind of failed at
+[46:15] getting any growth then we turn things
+[46:16] around with ass aggressive 13 week
+[46:17] schedule and I've talked a lot about how
+[46:19] we actually manage that and various
+[46:20] takeaways that are a bit
+[46:21] counterintuitive to a regular industry
+[46:23] advice there's one last thing I'd like
+[46:24] to end on
+[46:25] so people quit path of Exile while
+[46:28] they're playing the league and come back
+[46:29] in the next one but what's fascinating
+[46:31] is that the graph of people quitting
+[46:33] accessing the community is a lot less
+[46:35] steep so the yellow line there is people
+[46:38] quitting the game it goes from a hundred
+[46:39] percent down to twenty percent by the
+[46:40] end because there really isn't much
+[46:41] point in playing in a lot
+[46:42] week because the new things coming out a
+[46:43] few days later in you're about to
+[46:44] essentially have your progress reset but
+[46:47] people still use the website at no less
+[46:49] than 50% of peak and these are players
+[46:51] who are still engaged in reading the
+[46:53] patch notes telling us we did it wrong
+[46:54] looking at all the changes and buying
+[46:56] stuff people who are not playing the
+[46:58] game will come back and buy my fruit
+[47:00] microtransactions and supporter packs
+[47:01] because they're available for when they
+[47:03] next one to play and this is amazing
+[47:04] because this is actually what we care
+[47:06] about is keeping the community engaged
+[47:07] and that community is never going below
+[47:09] 50% during the quiet periods what's also
+[47:11] interesting is the size of the community
+[47:13] right at the end there in terms of
+[47:14] people accessing the website is a
+[47:16] perfect predictor for server numbers for
+[47:18] the next league so far for like you know
+[47:20] three years in a row we've been able to
+[47:21] predict server capacity for each launch
+[47:23] because of just looking at the website
+[47:24] activity and using some ratios and
+[47:26] that's worked really well so anyway the
+[47:29] the vindication we have with this whole
+[47:31] plan is the fact that the fact that year
+[47:34] after year we've managed to both grow
+[47:36] our player numbers but also get to the
+[47:37] point where people never really leave
+[47:38] path of exile they're still playing it
+[47:40] even if they say I'm done with this
+[47:41] league I'll see you guys in a few months
+[47:42] we know they're coming back and they
+[47:43] reliably do they reliably keep spending
+[47:45] and having a good time and this is the
+[47:46] motivation we need to keep releasing
+[47:48] quality content
+[47:49] alright so slight plug we're hiring we
+[47:52] were in New Zealand so that's hard it's
+[47:54] hard to get work visas and we don't pay
+[47:56] as much as the Bay Area but if that's no
+[47:58] problem and you want to work on path of
+[47:59] Exile like everything you saw it there's
+[48:01] the contact details and also please fill
+[48:03] out the speaker survey it's very
+[48:04] important to GDC so they can get high
+[48:06] quality speakers and of course I would
+[48:07] love to answer any questions
+[48:09] timeline wise it looks like we have like
+[48:11] five or ten minutes so use the
+[48:13] microphone if you would like to ask
+[48:15] something
+[48:18] [Music]
+[48:27] so first let's want to say thanks for
+[48:29] making the game I've been playing since
+[48:30] open beta and every league since is just
+[48:32] incredible and kind of inspired me to
+[48:34] enter this industry but a question is
+[48:36] that you talk about reusing content and
+[48:38] path of Exile now there's so many
+[48:40] options in endgame right it used to be
+[48:42] just grinding Maps but now we have lots
+[48:44] of these meta systems that we can engage
+[48:45] in and I'm curious with player of
+[48:48] attention games like warframe allow
+[48:50] players to very specifically choose what
+[48:52] they go into right they're like I want
+[48:53] to grind out this meta system and make a
+[48:55] lot of progress there but in path of
+[48:56] Exile feels widespread like you kind of
+[48:58] progress in all things slowly as you
+[49:00] work the endgame map system so I'm
+[49:02] wondering if you have any opinions on
+[49:03] path of exile going forward in regards
+[49:05] to allowing more player choice in what
+[49:07] types of previously content they engage
+[49:09] in throughout their experience in the
+[49:11] endgame right ok to repeat the question
+[49:14] just for the recording so you're
+[49:15] basically asking in path of Exile
+[49:17] there's a lot of content in the endgame
+[49:18] and you get access to it as you find it
+[49:20] it's very hard to actually focus on fine
+[49:22] on on narrowing down to specific content
+[49:24] you want to engage in so this is
+[49:25] something we've been experimenting with
+[49:27] in the last few leagues we introduced
+[49:28] scarabs and their betrayal League which
+[49:30] is something that's a tradable way of
+[49:31] augmenting the amount of a specific type
+[49:33] of content that you find and this is
+[49:34] something we are planning to work on
+[49:36] more because we do think that someone be
+[49:37] able to specialize is an important thing
+[49:38] it guy is kinda like a trade skill or a
+[49:40] profession in another game if you're
+[49:41] just a really good person and playing
+[49:43] delve content or synthesis content
+[49:44] that's something that's good for you to
+[49:46] have a specialization and so this is a
+[49:47] direction I would like us to go further
+[49:48] but we are very careful because
+[49:50] everything here is tradable if we go
+[49:52] slightly over the line suddenly everyone
+[49:53] is doing exactly that and farming the
+[49:54] optimal thing and it's hard to get items
+[49:56] out of the economy once you put them
+[49:57] there so we're probably too cautious
+[49:59] with addressing that hey thank you so
+[50:02] much for the talk how do you keep your
+[50:03] team engaged with working on a game this
+[50:05] long so the question is how we keep our
+[50:07] team engaged for working on a game this
+[50:08] long it helps to be the only big game
+[50:10] development company in New Zealand I'm
+[50:11] getting our team our team have amazing
+[50:15] amazing staff retention we love working
+[50:17] with them we treat them as well as we
+[50:18] can and that it really helps to them
+[50:21] we're not necessarily working on path of
+[50:23] exile for this long but we're working on
+[50:24] these 13-week game jams we're releasing
+[50:26] new things last year we said who likes
+[50:27] Pokemon we like Pokemon let's do be
+[50:29] straight and we made a league based on
+[50:30] that and the team we're engaging they're
+[50:32] drawing the art for the little book that
+[50:33] you can take them all off and everyone's
+[50:34] having a great time and it's the
+[50:36] frequent release cycles which
+[50:38] letters actually like kind of everyone
+[50:39] when you joined the path of exile team
+[50:40] you get an experience of designing and
+[50:42] working on and releasing and in
+[50:44] maintaining a complete game four times a
+[50:46] year basically all right so you have
+[50:49] told us about your numbers and how did
+[50:51] you manage them on your own earth earth
+[50:53] right but I subjectively think that it's
+[50:57] because of yours good decisions while
+[51:01] your competition was not doing really
+[51:03] well so I feel obligated to ask the
+[51:05] question how did how did out of season
+[51:09] up with full joke actually that happened
+[51:12] in Greece can actually affected path of
+[51:14] exile I have a graph and you've seen it
+[51:17] so that was the spike there at the end
+[51:21] and I do think that the spike was larger
+[51:23] because of what you're referring to for
+[51:25] the for the recording he's referring to
+[51:27] the UM yeah blow immortal announcement
+[51:30] at Blizzcon last year this did drive
+[51:31] traffic to path of exile having said
+[51:33] that betrayal was still our best release
+[51:34] from a Content point of view and we
+[51:35] believe it still would have been our
+[51:37] best release and even without the
+[51:38] additional traffic we can tell who the
+[51:39] new users are it was certainly helpful
+[51:41] but um yeah it is useful when fortuitous
+[51:44] events happen having said that you know
+[51:46] it still means we have to stay vigilant
+[51:48] they're gonna be a lot more competitors
+[51:49] this year there are a lot of action RPGs
+[51:51] that look really good that it being
+[51:52] developed hey Chris thank you for
+[51:55] talking so fast and covering so much my
+[51:58] question is about one of the pillars you
+[52:00] talked about in the beginning about a
+[52:01] good RNG item system mm-hmm could you
+[52:04] talk about some common problems or
+[52:06] things not to do that maybe you've seen
+[52:07] in the industry or that you guys
+[52:08] encountered with these item systems so
+[52:10] you're wanting to hear about some
+[52:11] problems without end systems that other
+[52:13] games do this is like getting to know me
+[52:15] in person is hearing about the stuff
+[52:16] forever um okay so in my opinion the
+[52:20] biggest mistake that games make with our
+[52:21] item systems as they have item mods that
+[52:23] are individually hard to feel like a go
+[52:25] with path of Excel is you strip your
+[52:26] carrots down to be pretty simple and you
+[52:28] put an item on without looking at the
+[52:29] mods you should be able to play and say
+[52:31] what the mods do based on how the game
+[52:32] feels now this isn't something we always
+[52:34] meet obviously there's eleven thousand
+[52:35] stats in the game so it's hard to meet
+[52:37] it with all of them but the core thing
+[52:38] is we wanted to individually be an
+[52:40] impactful there's none of us like +1
+[52:42] strengths what does that even mean you
+[52:44] know we we make sure the amount of
+[52:45] strength is actually meaningfully
+[52:46] increasing your life meaningfully making
+[52:47] it at least you know 5% boost to damage
+[52:50] so you can feel the difference that's
+[52:51] one example there
+[52:52] another example of what people do with
+[52:53] their item systems is they'll come up
+[52:55] with a basically set of sequential items
+[52:56] where you can get this one then you get
+[52:58] this one then you get this one and this
+[52:59] is setting up a content train that
+[53:01] players when they get the top item
+[53:02] they're then saying well what is there
+[53:04] to find now and you as a developer have
+[53:05] to go and add more items on the end in
+[53:06] path of Exile we go there there's a
+[53:08] random mods you'll get a top 10% item
+[53:10] you get a top 8% maybe a top 5% but we
+[53:12] believe that there are not like the best
+[53:14] items that were possible in 2013 have
+[53:17] not necessarily been found yet in any
+[53:18] reasonable numbers just cuz of the harsh
+[53:20] diminishing returns so to some extent
+[53:22] the initial levels and mods that we set
+[53:24] up six years ago are still working and
+[53:26] we haven't had to go and pile on
+[53:28] additional higher mods in path of Exile
+[53:29] at least not to any large degree hello
+[53:33] and thank you for the talk so you guys
+[53:35] mentioned that your motivation from
+[53:37] making this game was traditional box
+[53:39] games like Diablo XIV and so on
+[53:41] they're the monetization model is well
+[53:43] you like the game you buy it and you
+[53:45] enjoy it but for you guys it was not
+[53:48] that sort of model I was mostly external
+[53:52] visual updates and so on were over a
+[53:54] point of innovation I believe was your
+[53:56] support packs can you tell us a little
+[53:58] bit about how you derived that that's a
+[54:01] great question so the question was given
+[54:03] that the other action RPGs were premium
+[54:05] paid games why did we go free-to-play
+[54:07] have cosmetic microtransactions and
+[54:08] supporter packs it was our plan to go
+[54:10] free-to-play before that was a thing we
+[54:12] wanted to be the first free game it
+[54:13] sounds silly but that was 2006 we'd seen
+[54:15] maplestory they were making a lot of
+[54:16] money in Korea and we thought we'd
+[54:18] revolutionize the Western gaming market
+[54:19] now we're trying to say this because
+[54:20] it's dumb because then if you spent 7
+[54:21] years making the game everyone's free to
+[54:23] play by the time you release in fact
+[54:24] mummy did release free-to-play was a bad
+[54:26] phrase let you say free-to-play they
+[54:27] assume bad monetization we lost users by
+[54:29] saying we were free we tried very hard
+[54:31] to make it seem you've got to pay for it
+[54:32] anyway so the ethical cosmetic
+[54:36] microtransactions thing was because when
+[54:37] we initially scoped the game out that
+[54:38] was the only thing that made sense we
+[54:40] didn't realize that selling power was
+[54:41] even as possible strategy right so we
+[54:44] scoped this out because it's a
+[54:46] competitive game people want to play a
+[54:47] feint a fair playing field and that was
+[54:49] the way to design games and thankfully
+[54:50] this is now you know the tide has turned
+[54:52] on this to the point where most new
+[54:54] games coming out these days are doing
+[54:55] proper ethical microtransactions and a
+[54:57] good way if they're competitive the
+[54:58] supporter packs thing was we needed to
+[55:00] we're about to start selling better
+[55:01] access in 2012 because we wanted to
+[55:03] trickle a few more people in and they
+[55:04] were spamming
+[55:05] with threats if we didn't let them in so
+[55:07] we figure may as well take $10 and so we
+[55:09] made a page where you can spend $10 to
+[55:10] get better access and then we realized
+[55:12] considering Kickstarter was so big why
+[55:14] not model it like what they were doing
+[55:15] and so we added the $20 pack and the $50
+[55:17] pack and the hundred ala pack and we
+[55:19] just kept going to a thousand and then
+[55:21] that sold a lot of copies and gave us a
+[55:22] lot of obligations that we had to
+[55:24] fulfill for many years so we've iterated
+[55:27] now I think we're on our 12th or 13th
+[55:28] set of these supporter pacts and it's
+[55:30] something I also care a lot about it is
+[55:32] supporter PAC design so if you're doing
+[55:33] anything on Kickstarter or other games
+[55:35] where you're doing like a founder PAC or
+[55:37] so what about modeling what advice I
+[55:38] would love to give advice on that I have
+[55:39] opinions there anyway there's the
+[55:41] there's a summary of that thank you cool
+[55:45] so thanks again for making this game and
+[55:48] this talk it's all amazing I played this
+[55:51] game a lot and I've been the guy who is
+[55:54] like I'm done but I'll play next League
+[55:55] a lot and and and the question I have is
+[55:57] how do you think about burnout burnout
+[56:00] in this like you have these four
+[56:02] releases a year you you people are ready
+[56:05] to like come back and they're ready to
+[56:07] come back but have you thought like
+[56:09] what's the what's the take on is like
+[56:11] what if people run out of wanting to
+[56:14] come back like how do you how do you
+[56:17] deal with the like like over time people
+[56:20] getting bored of restarting over again
+[56:23] even though it's it's something new it's
+[56:25] the same new thing yeah so the question
+[56:29] was how do we do with meta burnout which
+[56:31] is basically the next level above of you
+[56:33] know happy to come back every league
+[56:34] until eventually you come back so many
+[56:36] times this is partly what our big big
+[56:38] expansions are for that's the next meta
+[56:40] level above there the to over 300 next
+[56:42] years for rows gonna be nuts anyway
+[56:44] those are the things that really drag
+[56:46] people back and like I mean I was
+[56:47] talking to a good friend of mine who's a
+[56:49] who works at Jenks and he actually said
+[56:51] a plane path of Exile way back in the
+[56:53] early alpha and he was saying he'd
+[56:54] recently returned to it has been having
+[56:55] a blast and this is something where he
+[56:57] took several years off but now he's back
+[56:59] spending money and playing characters
+[57:01] and it's all good thanks thanks hi great
+[57:08] talk you mentioned that you generate
+[57:12] content in the background so that it's
+[57:14] just really for you some expansion
+[57:16] because that's the only way to do it
+[57:17] what about
+[57:18] tools engineering and things like that
+[57:20] how'd you handle that the tools you were
+[57:22] saying yeah we have a tools team
+[57:24] internally so the question was what do
+[57:26] we do about tools in terms of um you
+[57:27] know content generations on we have a
+[57:28] tools team internally probably not as
+[57:30] large as we should have is obviously an
+[57:31] evolution over many years and they're
+[57:33] trying to stay abreast of the tools we
+[57:35] made a decision a few years ago that
+[57:37] instead of replacing our engine we were
+[57:38] just going to make it as modern as we
+[57:39] can so we have a lot of advanced stuff
+[57:41] there now which is which is beginning to
+[57:43] be used in the game and therefore the
+[57:44] tools team really got scaled up a bit
+[57:46] now it's kind of the heart of things
+[57:48] like procedural generation when we do
+[57:50] our I don't know we revamp the atlas of
+[57:52] worlds occasionally and that now has a
+[57:53] complicated tool the list people move
+[57:54] all the stuff around and it really is
+[57:56] paying off in terms of in terms of time
+[57:59] and F and invested and install stuff
+[58:00] it's kind of completely separate from
+[58:02] the concept of making RSS so for the
+[58:04] most part I mean the tool we're using to
+[58:05] make this you know endless supply of
+[58:07] content is Maya for the most part but
+[58:09] all of the stuff we use to actually hook
+[58:10] it up into the game as I ever evolving
+[58:12] set of tools which certainly pays off
+[58:14] when we improve it one more question
+[58:16] hi thanks for the talk love the
+[58:19] entertainment from it - so a question
+[58:21] was for the economy part of it you said
+[58:22] you thought the economy each time you do
+[58:24] a release yes how you do that without
+[58:25] upsetting users who have spent for like
+[58:27] all this effort and put into it this is
+[58:29] a great question and something that I
+[58:31] did gloss over so we reset the economy
+[58:32] with release but who wants to be reset
+[58:34] that sounds really bad the way we do it
+[58:36] is we make a new economy and we say you
+[58:38] should play the release in that one and
+[58:40] you've still got your old characters so
+[58:41] we have what's called standard league
+[58:43] where you're where all the characters
+[58:44] from the past economies get moved you're
+[58:46] welcome to play there maybe fifteen ten
+[58:47] percent of players do play there and
+[58:49] you've still got all the characters
+[58:50] you've even played in path of Exile but
+[58:52] the exciting place where the you know
+[58:54] economy isn't trashed with all the old
+[58:55] items is the new league and so we make
+[58:57] sure that the new league contents is
+[58:58] generally only available in the new
+[59:00] economy so that's kind of your reward
+[59:01] for starting a new character and this
+[59:03] took a little while to train players but
+[59:04] it really works well it's the lifeblood
+[59:06] I wouldn't be here if it wasn't for the
+[59:07] fact that this works well thank you very
+[59:09] much everyone
+[59:13] you

@@ -35,6 +35,8 @@
 
 ## Post-Processing
 - **Motion Blur** — Burnout Paradise-style speed blur
+- **Height Fog** — Crytek exponential height fog with depth-based world reconstruction (Phase F)
+- **God Rays** — Screen-space radial blur toward sun (Phase F)
 - **SSS Post-Process** — Screen-space skin translucency blur
 - **Skin Enhancement** — Wrap lighting for SSS approximation
 - **Hair Enhancement** — Anisotropic Kajiya-Kay highlights

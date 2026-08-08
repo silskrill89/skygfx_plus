@@ -1,0 +1,2929 @@
+# Transcript: e6pNYHDOSAs
+# Fetched: 2026-08-07T06:23:10.801697
+# Entries: 2924
+# Duration: 16686s
+
+[00:00] Moving to Cisco required me to uh to
+[00:02] commute which is kind of funny for
+[00:04] people from other countries they would
+[00:07] say what an hour it's like 10 minutes
+[00:10] but uh for me I didn't like it what I've
+[00:14] learned over the years that if you are
+[00:15] able to uh explain something to someone
+[00:18] else then you understand it and so I
+[00:21] simply started making OpenGL tutorials
+[00:24] why not DirectX simply because I was
+[00:26] using Linux then and so on Linux that
+[00:29] was the only option. So it was DirectX
+[00:32] at work and then OpenGL uh at home.
+[00:36] >> Tell me a little bit about yourself and
+[00:39] your background and how did you got into
+[00:41] graphics programming?
+[00:42] >> Mhm. Okay. So I've been working at Intel
+[00:45] for the past uh 20 years and uh before
+[00:49] that I worked uh in a couple of
+[00:52] startups. One of them was uh shut down
+[00:54] and the other one was bought by Cisco.
+[00:58] But um moving to Cisco required me to uh
+[01:02] to commute for um a little over an hour
+[01:06] each morning which is kind of funny for
+[01:09] people from other countries. They would
+[01:11] say what an hour it's like 10 minutes
+[01:14] but uh for me I didn't like it. So I
+[01:17] stayed at at Cisco for a little over a
+[01:20] year and then um I moved to uh Intel.
+[01:24] And so the first um the first project
+[01:27] that I did was uh um on the
+[01:30] virtualization technology VT if you
+[01:33] heard about it back then it was uh it
+[01:36] was a big thing. There were companies
+[01:38] like VMware
+[01:40] >> and all that kind of stuff. people were
+[01:42] very enthusiastic about it and um
+[01:45] however this project um I mean the
+[01:49] technology I think was successful but uh
+[01:51] this specific project for Intel as a
+[01:54] product didn't so after almost two years
+[01:58] there uh they decided to uh shut down
+[02:02] the project and everybody you know
+[02:04] started searching for other stuff to do.
+[02:07] Uh it's very common in in large
+[02:10] companies like that. And so I heard a
+[02:12] rumor that uh on the sixth floor uh we
+[02:16] were on the second floor on the sixth
+[02:18] floor there were a few guys were
+[02:20] involved in graphics
+[02:23] and um you know as a as a as a gamer or
+[02:28] ex gamer let's say I played a lot when
+[02:30] uh video games when I was a kid. Um I
+[02:34] thought it was very cool. So me and a
+[02:36] couple of other guys went uh to the
+[02:39] manager of this team to to talk to them
+[02:41] and he picked up all the three of us and
+[02:44] we started working there. And um back
+[02:48] then um the GPU of Intel which has been
+[02:53] an integrated GPU up until very
+[02:56] recently. If you heard about what they
+[02:59] call it the arc or something like that
+[03:01] um I think they have there there is now
+[03:04] a discrete GPU from Intel which I think
+[03:06] is very successful. I heard good thing
+[03:09] things about it. Um but I don't have it
+[03:12] here unfortunately.
+[03:14] So I use Nvidia for some reason. But uh
+[03:17] anyway, for many years, the graphics
+[03:20] that Intel provided as part of the the
+[03:24] CPU or the SRC or whatever you want to
+[03:27] call it was an integrated graphics. And
+[03:29] so it wasn't good enough. And the idea
+[03:33] of this team was to uh take advantage of
+[03:36] the CPU in order to offload
+[03:40] uh parts of the graphics pipeline. We'll
+[03:42] talk about it later, but in general, the
+[03:45] graphics pipeline includes two main
+[03:49] stages like the the vertex shader and
+[03:51] the fragment shader. So the idea was to
+[03:54] to take the vertex shading work, do it
+[03:57] on the on the CPU and then do the
+[04:01] rasterization and the shading on the
+[04:05] on the GPU itself. And so this was um
+[04:09] very success successful I think for uh
+[04:12] back then it was DirectX9.
+[04:14] So we had a bunch of DirectX games um in
+[04:19] the office that we would test and
+[04:21] benchmark the performance and stuff like
+[04:23] that. So it was always about performance
+[04:26] but not graphics. Even today I'm still
+[04:28] on performance. the the the idea of um
+[04:30] the notion of performance is very
+[04:32] important important in the at Intel and
+[04:35] you can find it in many teams.
+[04:37] >> What what year what year was this?
+[04:40] >> This was 2007.
+[04:42] >> Okay.
+[04:43] >> And so this was when we started this was
+[04:47] uh DX9
+[04:49] and then we moved on. Um I mean we had a
+[04:53] few projects over the years in that
+[04:55] team. I was on that team from 2007
+[05:01] to 10 years I think. Yeah. I mean the
+[05:04] the team changed a lot. I mean we had
+[05:06] several projects over the years but
+[05:08] until until 2017
+[05:12] which was when I I joined the current um
+[05:16] team which involves in uh which works on
+[05:19] performance for AI workloads deep
+[05:23] learning mainly
+[05:25] um
+[05:28] yeah so um where were we and so we we're
+[05:32] talking about how you got into graphics
+[05:34] programming so This is you joined the
+[05:36] team because of the other project in the
+[05:38] past didn't pan out and you spent
+[05:41] >> well over a decade
+[05:43] >> working on on this team on the stuff.
+[05:45] >> Yeah. But it it was never about graphics
+[05:47] development. It was always about uh
+[05:50] performance. That's was the uh the whole
+[05:52] idea. I mean working on the hardware uh
+[05:55] in order to improve performance. So this
+[05:57] can be like uh all kinds of performance
+[06:00] optimizations
+[06:01] and stuff like that. So the first
+[06:03] project that we had was this one, the
+[06:06] the the offload mechanism which was part
+[06:09] of the driver. So if you had an Intel um
+[06:13] CPU with an Intel integrated graphics
+[06:16] and you installed the DX9 and later on
+[06:19] the DX10 driver, then our code would
+[06:22] kick in and uh improve the performance
+[06:26] of of the game. So it can be like
+[06:29] between I think it was like between a
+[06:32] few percent up to
+[06:35] 10 15%.
+[06:37] But it was still considered like
+[06:38] something that you want to to do because
+[06:41] um it's at least sometimes it would give
+[06:44] you a few more frames per second and
+[06:47] people thought that it was worth it. I
+[06:49] mean uh most of most of the the graph
+[06:53] most of the overhead is on the shading
+[06:56] side on the fragment shader but uh in
+[07:00] some games there was a lot of work on
+[07:02] the vertex shader and in those games
+[07:04] when you did the load balancing between
+[07:07] the CPU and the GPU then you would see
+[07:09] the benefit
+[07:11] of u our code project.
+[07:14] >> This was for the for the setup where you
+[07:16] don't have a dedicated GPU. Yeah, mostly
+[07:20] for mobile de laptops. When I say
+[07:23] mobile, sometime people think about
+[07:26] Android or No, but uh I'm talking about
+[07:28] laptops. many people um a lot of
+[07:32] students, people on the go. There are a
+[07:35] lot of profiles of people that have a
+[07:37] laptop
+[07:38] and um they didn't invest in uh in some
+[07:42] discrete GPU uh on their laptops, but
+[07:45] they still want or expect to be able to
+[07:49] play uh a AAA game at lower settings
+[07:53] when they're on the train or flying or
+[07:56] whatever. And so
+[07:59] um this was the solution that we
+[08:02] provided them.
+[08:04] >> Okay. Uh how did you start your YouTube
+[08:08] channel?
+[08:09] >> Okay. So while when I joined the the the
+[08:13] team
+[08:14] um there wasn't um like an an organized
+[08:19] training. I mean I think it's usually
+[08:22] like that you you go into some team and
+[08:25] they I don't know they work on
+[08:27] networking okay and so they tell you
+[08:30] okay read these books or watch those
+[08:33] videos and you start fixing some problem
+[08:36] and then you understand something about
+[08:38] the first you understand the T and then
+[08:40] you understand the C and then you
+[08:42] understand the P and eventually you know
+[08:43] TCP IP okay stuff like that it's never
+[08:46] organized and so the same was was here
+[08:48] there was a lot of material but you had
+[08:49] to figure it out yourself and um since
+[08:53] we were working on performance
+[08:55] a lot of the time we didn't really
+[08:58] understand we didn't really understand
+[09:00] the entire picture of how the the
+[09:03] pipeline works. Sometimes you just
+[09:05] meddle around with some you know some
+[09:08] instruction or some small kernel that
+[09:10] runs uh try to measure it and try to
+[09:13] improve to to extract some cycles from
+[09:15] it but you don't understand the entire
+[09:17] picture and for me it's always
+[09:20] uh critical for me to understand the
+[09:21] entire picture. I'm still struggling
+[09:23] with it today on AI. Maybe we'll talk
+[09:25] about it uh later. But yeah, so I
+[09:28] decided to start learning uh on my own.
+[09:33] And um and and so the best way to learn
+[09:37] is to teach others. If you can uh what
+[09:40] I've learned over the years that if you
+[09:42] are able to uh explain something to
+[09:45] someone else without
+[09:48] um trying getting into all kinds of
+[09:52] corners when where you say you know I'm
+[09:55] not sure about this point or or this
+[09:57] means that you're not you don't
+[09:58] understand it yourself. So if you can
+[10:00] under if you can explain it fully then
+[10:02] you understand it. And so I started the
+[10:05] website back, this was in 2010,
+[10:09] I started the oglddev website and I
+[10:12] simply started making um OpenGL
+[10:14] tutorials.
+[10:16] Why not DirectX? Um simply because I was
+[10:20] using Linux then and so on Linux that
+[10:23] was the only option. So it was DirectX
+[10:26] at work and then OpenGL uh at home. And
+[10:30] so I started the website
+[10:32] um which I think was was very success
+[10:37] some somewhat very successful I think it
+[10:39] was because I got many messages over the
+[10:41] years but you know when you have a
+[10:44] website you don't really interact a lot
+[10:46] with people
+[10:48] um not as much as YouTube
+[10:51] you can build a community on YouTube but
+[10:53] it's very difficult to to create one on
+[10:56] um on um on a website and so yeah I
+[11:01] continued like that for many years and
+[11:04] then on 20
+[11:08] 2021 it was I think yeah 2021
+[11:13] um it was the back in the COVID 19 uh
+[11:17] days and I was I I remember how how it
+[11:20] happened. I was in the living room and I
+[11:23] opened some drawer um in in the living
+[11:26] room and I found my wife's uh tripod
+[11:29] because she was interested in um still
+[11:32] at least interested in photography and
+[11:35] she had a course a beginner's course to
+[11:38] for to for photography um couple of
+[11:41] years before that and we bought her a
+[11:44] simple tripod and and I just took out
+[11:47] the tripod and I set it uh in the living
+[11:50] room and put her camera on it and then
+[11:52] it clicked and and I I I I had like a
+[11:57] um a revelation that uh I need to start
+[12:00] I need to do something on YouTube and I
+[12:03] I was I always regretted that I didn't
+[12:05] start earlier because other people uh
+[12:09] that that do the same thing were way
+[12:12] ahead of me. Um, but you know that's
+[12:15] water under the bridge. But yeah, it was
+[12:17] that moment setting up the the camera
+[12:20] and started talking to it. But it was
+[12:23] still I think it was in August. You know
+[12:25] what it maybe maybe it was August 2020
+[12:29] and then I started the channel on March
+[12:32] uh 2021. It took me a few months. I I
+[12:36] remember just starting out by watching a
+[12:40] lot of videos about how to start a
+[12:42] YouTube channel. And I think that many
+[12:45] people who start on YouTube,
+[12:47] >> sometimes it takes them years. I mean,
+[12:50] they they they roll up this uh idea in
+[12:53] their minds and until they reach the
+[12:56] point. This is why they always tell you
+[12:58] start now. Start before you're ready
+[13:01] because you'll never be ready. You have
+[13:02] to just start. So it was the same for me
+[13:05] and then I I it took me a few a few
+[13:08] months to to figure it out what I need
+[13:10] to do and then and then I started.
+[13:13] >> Okay. Okay. Um
+[13:17] maybe we will come back to to this later
+[13:20] in sort of like what was the impact of
+[13:23] the of the YouTube channel. But I want
+[13:25] to do the segue into the graphics itself
+[13:29] because a lot of people that will be
+[13:31] listening uh who will be listening might
+[13:34] be familiar with programming. They might
+[13:36] be technical but graphics is sort of
+[13:40] this weird arcane world.
+[13:43] >> And to me learning about it how it works
+[13:46] opened so many cupboards in my brain and
+[13:50] so many things clicked. And can you lay
+[13:55] the picture for everybody who is
+[13:57] listening? What is graphics? What is the
+[14:00] rendering pipeline? How this all works
+[14:02] and connects together?
+[14:05] >> Yeah. Okay. So,
+[14:08] there were there were a few like major
+[14:12] revolutions on on this field of
+[14:16] graphics. I mean the the earlier the
+[14:19] earliest uh computer games like let's
+[14:22] say the the the 1980s because the the
+[14:25] the the
+[14:27] few let's connect the the the end of the
+[14:29] 70s with the beginning of uh with the
+[14:32] 80s because at the end of the 70s you
+[14:34] already had stuff like arcade machines
+[14:38] you know with the Pac-Man and all all
+[14:40] that stuff but everything back then was
+[14:43] two-dimensional. Okay. And then you can
+[14:46] I think it's it's very intuitive to
+[14:49] understand that you have a window with
+[14:52] so many pixels uh on the x and the y you
+[14:56] multiply them together. You have the
+[14:58] number of pixels that that are available
+[15:00] to you. There is some kind there is an
+[15:02] amount of colors that you can work with.
+[15:06] And then if you want to to create a 2D
+[15:08] game then there are all sort sorts of um
+[15:12] techniques and algorithms
+[15:14] in order to to render a sprite and to
+[15:18] handle um various cases of collision
+[15:21] detections. And I think it's pretty
+[15:23] intuitive. I mean it's not so simple to
+[15:26] uh to implement back then because it was
+[15:28] all assembly language but uh even that
+[15:31] was eventually moved on to C and and
+[15:34] then I think the first major
+[15:36] um revolution was at the beginning of
+[15:40] the ' 90s when when Doom came out. I
+[15:44] mean it was in a few stages. First you
+[15:46] had Castle, the return to Castle Wolfen,
+[15:48] Wolfenstein and then Doom and then Quake
+[15:51] and then everything, all of these came
+[15:54] from the same company, right? ID
+[15:56] Software. And so they were able to take
+[16:01] the the same capabilities, nothing new
+[16:05] except a bit a bit more performance.
+[16:07] There were pentiums back back then, but
+[16:10] it was still the same technology. and
+[16:12] then generate
+[16:14] a 3D image. And a 3D image mainly
+[16:18] includes uh perspective projection. So
+[16:21] when stuff gets further away from the
+[16:23] camera, it becomes smaller. And so I
+[16:28] think that what um John Carmarmac said
+[16:32] that he had a book which I think I even
+[16:35] have it myself here which was a very
+[16:37] famous book by I think it's called um
+[16:40] one of a few authors. One of them is
+[16:41] Foley Foley at and and the gangs of g a
+[16:46] few other guys. And this was um a
+[16:50] university book. So it was very academic
+[16:52] but you can you could still learn it and
+[16:55] understand
+[16:56] uh the mathematics behind it. And so
+[16:59] their breakthrough was the the the fact
+[17:01] that they were able to bring it to the
+[17:03] PC and to do it in real time. And also
+[17:08] the idea that you can separate uh the
+[17:11] game from the game engine because before
+[17:14] that most of the games I think were just
+[17:18] a lump of code which would um simply be
+[17:23] good for for one specific game. I mean,
+[17:26] if you if you the type of person that
+[17:28] generates very similar games that I'm
+[17:30] pretty sure that you could pick some
+[17:32] routines from an uh from a previous book
+[17:34] uh from previous project and then reuse
+[17:37] them. But there was no notion of
+[17:39] separating of the game of the game play
+[17:42] and the logic and everything that goes
+[17:44] into the game separated from what drives
+[17:47] the game. And so they were able to, you
+[17:49] know, like creating maps and uh stuff
+[17:52] like that. And then you could take the
+[17:55] game engine, create a new map with their
+[17:57] tools, the editor and everything else,
+[18:00] and then create an entirely new game
+[18:02] which looks entirely different but feels
+[18:04] similar because the game engine
+[18:07] is the same. So that was the the first
+[18:10] major breakthrough
+[18:12] um being able to generate uh a 3D image
+[18:16] and I'll I'll talk about that in a in a
+[18:18] second. And then the second u
+[18:21] breakthrough came at the beginning of
+[18:24] two of the 2000s I think with the
+[18:27] programmable pipeline. You know there
+[18:30] were actually there the first there was
+[18:32] the GPU. Okay. Before before that before
+[18:36] the the GPU that we have today they had
+[18:39] they had like GPUs that were able to
+[18:42] rasterize faster. Okay. So they were a
+[18:45] they were able to
+[18:47] like create lines faster on the screen
+[18:50] or or write stuff faster to the screen
+[18:52] and then increase the performance of the
+[18:54] game and you could do more more with
+[18:56] that. But when the the GPUs that are
+[18:59] similar to what we have today came came
+[19:02] along um they came with uh a set of
+[19:06] capabilities for like uh lighting uh the
+[19:11] scene and doing transformations
+[19:13] inside the GPU. So previously everything
+[19:16] was on the on the CPU but the first GPU
+[19:19] provided you with the ability to to do
+[19:22] transformations and to do lighting on
+[19:24] the on the GPU. And so it was stuff like
+[19:28] this is how it work worked for a few
+[19:31] years where the API was very monolytic.
+[19:35] So what was available to you was only
+[19:38] what was um provided by the API.
+[19:42] And then when it came to the point where
+[19:45] people uh felt that it was very limited
+[19:49] or too limited then the idea was to
+[19:52] simply release it release all the
+[19:54] barriers and make it programmable. And
+[19:57] so we switched from the fixed function
+[19:59] pipeline to a programmable pipeline. So
+[20:02] the idea was simply that you don't tell
+[20:04] the hardware this is the position of the
+[20:07] light, this is the color, this is the
+[20:09] angle and you do what you need to do
+[20:11] with it. Instead the GPU tells you kind
+[20:15] of like tells you you can write your
+[20:18] program. You can do what whatever you
+[20:20] want in that program. I will run it for
+[20:23] you very fast and the result will be a
+[20:26] color of a pixel or the movement of an
+[20:31] object.
+[20:32] >> Yeah. Let me let me stop you right there
+[20:34] so that make sure that I understand also
+[20:36] the status properly.
+[20:38] >> In the beginning it was just CPU.
+[20:41] >> Yeah.
+[20:41] >> And you did have done everything. And
+[20:43] this is what people sometimes refer to
+[20:45] as like software renderer, right? It it
+[20:48] happens on the CPU. And when people say
+[20:51] about hardware render, it's mean it
+[20:53] means it's running on GPU.
+[20:56] >> Yeah.
+[20:56] >> People realize that tasks that are done
+[21:00] needed for graphics kind of need a
+[21:04] little bit different architecture.
+[21:05] >> Yeah.
+[21:06] >> And they separated the parts from the
+[21:08] CPU for the GPU. And now you had like a
+[21:11] standalone units on your motherboard and
+[21:14] you're outlining CPU part uh with the
+[21:19] ray casting engine and it software right
+[21:23] like uh Wolfenstein
+[21:26] >> Quake Wolfenstein Doom Quake.
+[21:30] >> Yeah. Um then GPU with a very limited
+[21:36] like not programmable. So the stuff
+[21:39] would happen on GPU but in a very
+[21:42] restricted and rigid way and you needed
+[21:44] to comply with it and that's it.
+[21:46] >> Yeah.
+[21:46] >> Right.
+[21:47] >> Mhm.
+[21:47] >> And then the opening up of the GPU API
+[21:52] uh for programmable
+[21:56] needs.
+[21:56] >> Mhm.
+[21:58] >> I have a question here.
+[22:00] Why on the CPU we start from the
+[22:03] programmable
+[22:04] world and then the first GPU is not
+[22:08] programmable?
+[22:09] Like to me it kind of like if you're
+[22:12] doing something that you're extracting
+[22:14] things from CPU and putting it out there
+[22:17] does it it seems like it's would make
+[22:20] more sense for it to be sort of open as
+[22:23] well because you start from this CPU
+[22:26] that is a little bit open
+[22:27] >> and with GPU it wasn't the case. Do you
+[22:30] know why was it?
+[22:31] >> Yeah. So, if you think about how the
+[22:34] earliest earliest CPU came along like
+[22:38] you know for for the Spectrum and the
+[22:41] Commodore and also the PC with the
+[22:44] earlier earliest Intel CPUs they had
+[22:48] like uh a single core with a set of
+[22:51] instructions.
+[22:52] So, you had a set of instructions you
+[22:54] had memory and that was basically it.
+[22:57] And then you started writing code in
+[22:59] assembly language and um you can create
+[23:04] like anything right. So you you had all
+[23:06] sorts of programs from spreadsheets and
+[23:09] word processing to to games. People
+[23:12] realized that they can create games even
+[23:14] on a screen which was sometimes only
+[23:17] white and black or or or green, you
+[23:20] know, all the the oldest monochrome. And
+[23:23] so you can write a program that would
+[23:25] color the screen, creates all sorts of
+[23:27] uh animations on the screen, create the
+[23:30] load sprites from from a file and put
+[23:33] them on the screen and then move them
+[23:35] and create a sort of an animation and do
+[23:39] calculations when the sprite hits
+[23:41] something and do collision detection.
+[23:44] Um, and so all of this is like just
+[23:47] regular programming. you have a lot of
+[23:51] loops and decision trees and all all
+[23:54] that kind of stuff. And then um when you
+[23:57] try to create a more complex uh image,
+[24:01] you end up realizing that what you're
+[24:04] doing is running basically the same type
+[24:08] of calculation
+[24:10] on every pixel on the screen.
+[24:13] It's just that the the result will be a
+[24:15] bit different because of the position of
+[24:17] the pixel. Let's say it like that. Okay.
+[24:19] So, let's say that you want to create an
+[24:22] image as like um um a nested loop over
+[24:26] the first the the width of the of the
+[24:29] image and then the height in order to
+[24:31] color the entire screen. You may end up
+[24:35] um running a program which is uh too
+[24:38] slow because because the CPU is not fast
+[24:41] enough and you're doing a lot of
+[24:43] calculations and then you start banging
+[24:45] your head and you say, "Okay, I'm going
+[24:47] to write some of this. Let's say that
+[24:48] you started with the C language but it
+[24:51] doesn't work fast enough. So you say
+[24:52] okay I'm going to write I'm going to
+[24:54] identify the points where which are um
+[24:58] very um performance intensive and I'm
+[25:01] going to write those pieces in assembly
+[25:04] language and then I'm going to read like
+[25:07] a book from um from Michael Abbrash the
+[25:09] the the graphics programming the black
+[25:12] book of graphics programming which was
+[25:14] very popular back then. He he worked
+[25:17] with John Carmagen. He would tell you
+[25:19] that you can use this instruction and
+[25:21] not that one and then you would can
+[25:23] extract another cycle and when that
+[25:26] cycle is for every pixel then you can
+[25:29] get more performance. But the idea is
+[25:30] that you're basically running a small
+[25:33] piece of code which is the same piece of
+[25:36] code on different data. Okay, sometimes
+[25:40] it's the position of the pixel on the
+[25:42] screen, something it's something else in
+[25:44] the in the like the scene, but
+[25:46] eventually it's the same thing. It's
+[25:48] like a loop over everything, but you do
+[25:50] the same thing and you get different
+[25:51] results depending on all s sorts of
+[25:54] circumstances. And so people realize
+[25:57] that what you need to do is to um use
+[26:02] maybe a different type of architecture.
+[26:06] One which was not
+[26:08] um
+[26:10] um designed for classic programming with
+[26:14] a lot of jumps and decision trees. You
+[26:18] know how a normal program works but
+[26:21] simply parallel. So you can have
+[26:25] multiple cores uh running the same
+[26:28] thing. It can be small smaller cores
+[26:30] very small small cores and have a lot of
+[26:34] them
+[26:35] and um they are more limited in terms of
+[26:38] what you can do with them. They can, but
+[26:41] what they can do is do the sort of
+[26:43] things that you would do in those little
+[26:46] pieces of assembly language code that
+[26:48] you would write in order to optimize in
+[26:51] order to get more performance
+[26:54] uh for a game which is running on a
+[26:56] single core CPU.
+[26:59] And that's basically the main difference
+[27:01] between the architecture of the CPU and
+[27:04] the GPU.
+[27:05] Now eventually when the CPUs hit u some
+[27:10] level of um of a frequency
+[27:13] which they couldn't surpass because of
+[27:15] all kinds of physical limitations then
+[27:18] the CPU started doing the same thing and
+[27:20] just dividing itself into multiple
+[27:23] cores. So you have like uh eight and 16
+[27:26] cores on desktops uh today and and more
+[27:30] on uh on servers even though they
+[27:33] they're still doing different work than
+[27:34] GPUs but the for the GPUs it was I think
+[27:40] maybe guessing here a bit because I'm
+[27:42] not too familiar with the architecture
+[27:46] of GPUs from
+[27:48] 20 years ago. I'm more more familiar
+[27:50] with the the the like the last 10, let's
+[27:53] say, but I think from the earliest days
+[27:56] that was the main that was like the the
+[27:58] architecture. Yeah, I think it's safe to
+[28:01] say that it was like that.
+[28:03] And um
+[28:04] >> yeah but it started it started as a sort
+[28:08] of accelerator for a very particular set
+[28:12] of operations and only later on was
+[28:15] opened up opened up to more like
+[28:20] aspects.
+[28:20] >> Yeah. But it was not so much of the soft
+[28:23] of the hardware as much as the software.
+[28:26] So the the the software had to go uh a
+[28:29] sort of evolution in order to expose the
+[28:33] capabilities of the GPUs because um uh
+[28:38] OpenGL was created in ' 91 or '92
+[28:42] something like that. Uh because back
+[28:44] then
+[28:46] um there were not there were not a lot
+[28:48] of graphics APIs like formal graphics
+[28:51] API. So if you wanted to do something in
+[28:54] graphics like what the Doom guys did,
+[28:57] what John Carmarmac did did, you had to
+[29:00] basically design the API yourself from
+[29:04] the ground up. Okay? You had to be an
+[29:07] expert on both the the the math of um of
+[29:12] of 3D graphics as well as
+[29:16] um the programming side in order to
+[29:19] optimize it. And then you simply
+[29:23] um
+[29:25] created everything inside the uh the
+[29:28] game itself. Okay. So the game would
+[29:30] work directly with the VGA. There was um
+[29:34] you could on on the DOS back then it was
+[29:37] the DOS the DOS operating system the
+[29:40] disk operating system before Windows. So
+[29:43] you had access to the VGA. You just need
+[29:45] to to know how to program it and it and
+[29:48] it was documented
+[29:50] and there were a lot of tricks then that
+[29:53] you had to master in order to to get
+[29:55] good performance from the VGA but
+[29:57] basically you could do whatever you want
+[30:00] and um
+[30:02] in modern GPU GPU so so well that that's
+[30:07] the main point that I'm trying to stress
+[30:09] here that there wasn't like a formal way
+[30:11] there was just the API of the um of the
+[30:16] VGA and then do whatever you want with
+[30:19] it. And so people would do different
+[30:21] things. It it was just how they thought
+[30:23] that that they should work with the VGA.
+[30:26] And um later on at the beginning of the
+[30:28] '90s um in parallel to what was
+[30:31] happening on like the home side of of
+[30:34] things you had there was a company
+[30:37] called Silicon Graphics which was
+[30:39] creating um high performance graphics
+[30:43] workstations
+[30:45] which I'm not sure what their hardware
+[30:48] was. I'm not sure um in terms of the
+[30:51] hardware why it was high performance.
+[30:54] Uh, I'm not even sure if it had like uh
+[30:58] what you would think of a GPU. Maybe it
+[31:00] did for them, but it was very um it was
+[31:04] very expensive, not available to most
+[31:07] people. So, people at home would just
+[31:09] use the CPU like the guys from ID
+[31:12] Software. And then people on the cor the
+[31:16] corporate world that had to do stuff
+[31:18] with graphics like like for commercial
+[31:20] TV and they they had access to uh uh
+[31:23] workstations like silicon graphics and
+[31:26] they defined for the first first time
+[31:30] maybe kind of like maybe the first
+[31:32] successful time a graphics API for other
+[31:36] people to use which was uh OpenGL.
+[31:40] And then
+[31:42] um suddenly
+[31:44] um you you could create
+[31:48] um a program a graphic a 3D program
+[31:52] um without so much understanding of the
+[31:55] GPU but more f focus on the on the
+[32:00] software side of the on of the
+[32:02] application. Okay. So you had a certain
+[32:05] types of capabilities. So for example,
+[32:09] you could create a buffer and place um
+[32:14] you know
+[32:16] actually it was even before you had
+[32:18] buffers. Okay. So the first version of
+[32:21] of OpenG of OpenGL
+[32:25] worked like that. You would specify a
+[32:27] vertex to the program. There was an API
+[32:31] um for specifying a vertex in 3D space.
+[32:34] Okay. and uh and then you would write
+[32:37] your program like that. Here's a bunch
+[32:39] of vertices and I'm I'm I'm specifying
+[32:42] them like manually. Okay, so you can
+[32:45] write them in uh in some C C++ array and
+[32:50] just call the the function of the vertex
+[32:52] function on each of them. And here are
+[32:55] the colors.
+[32:57] And here is a matrix which will do all
+[33:01] the math magic to make this uh 3D. Maybe
+[33:06] we'll talk about it later.
+[33:08] And then the a few other stuff like
+[33:12] lighting parameters and then everything
+[33:14] else was taken care of by the GPU. Okay.
+[33:17] So you didn't have to understand whether
+[33:20] it was VGA underneath or anything like
+[33:23] that. So this was like a software
+[33:25] interface for specifying
+[33:28] um 3D constructs like uh points,
+[33:32] vertices, lines, triangles with a bunch
+[33:35] of lighting parameters and other stuff
+[33:38] even fog
+[33:40] uh parameters. Oh really?
+[33:41] >> Yeah. And um and then the OpenGL had
+[33:46] like a driver which would take all this
+[33:49] information upload it into the system.
+[33:52] Let's say it was a GPU. and GPU and then
+[33:55] an image would be created on the screen
+[33:59] and uh I think there was uh even a
+[34:03] version of Quake which was called
+[34:06] Jillquake because eventually John
+[34:08] Carmarmac had had gained some access to
+[34:11] it and understood how to use the OpenGL
+[34:14] and basically replaced all his
+[34:18] rasterization routines with OpenGL calls
+[34:23] Uh so so all the uh all the
+[34:25] optimizations had to move from what you
+[34:27] would do on the uh on the VGA to what
+[34:30] you do on top of OpenGL.
+[34:33] And so this type of functionality was
+[34:36] called fixed function because you
+[34:39] couldn't um use constructs which were
+[34:43] not defined by the uh by the API. So you
+[34:47] had a vertex, color, texture coordinate,
+[34:52] another texture coordinate, a few other
+[34:55] stuff which I can't remember, a few
+[34:57] other attri attributes and that's it.
+[34:59] But if you wanted to add something else
+[35:02] then
+[35:03] it was just not part of the API. So so
+[35:07] you're very limited. But the
+[35:11] and then the the the programmable
+[35:14] pipeline came along. I think it came
+[35:16] from probably some combination between
+[35:19] what was happening on the academic side
+[35:23] of things on the research side along
+[35:25] with the business world but they came to
+[35:29] realize that
+[35:31] um what the GPU is doing when it when
+[35:35] it's taking the vertices from you and it
+[35:38] is coloring them obviously it is running
+[35:41] a few functions underneath the uh the
+[35:45] API it's doing something with the
+[35:46] parameters that you provided. So you can
+[35:49] actually
+[35:51] take this functionality and allow the
+[35:55] programmer to write it.
+[35:58] Okay? Because as I said you provide a
+[36:00] list of vertices and you provide a
+[36:03] transformation matrix matrix and then
+[36:06] the GPU multiplies all the vertices by
+[36:09] this transformation. Why not let the
+[36:12] programmer write a program that says,
+[36:15] "Hey, this is the matrix and here here
+[36:19] is the vertex that you created and you
+[36:21] define the the vertex. We we will we
+[36:24] will not tell you anything about it. You
+[36:25] can do whatever you want. Create as many
+[36:27] attributes. If you need five texture
+[36:30] coordinates, that's fine. Uh you need
+[36:33] the you need the lighting position and
+[36:35] the world position, whatever. Here are
+[36:37] all the attributes and you write a
+[36:40] program in a language which is very
+[36:42] similar to C. It's called GLSL in OpenGL
+[36:46] HLSL in um in DirectX but everything but
+[36:51] the idea is highlevel shading language
+[36:54] and you write the code that multiplies
+[36:56] the matrix by the vertex and send it on
+[37:00] its way.
+[37:02] Maybe maybe here we can also take a step
+[37:06] back a little bit because some people
+[37:08] will be hearing like transformation
+[37:10] matric matrix and
+[37:12] >> how did we come here you know what about
+[37:16] like how how how this algebra uh uh
+[37:18] linear algebra came in
+[37:20] >> uh without like sneaking up on us. So
+[37:23] maybe we can take a little bit of a step
+[37:25] back and from talk a little bit about
+[37:28] the concepts from
+[37:30] >> what is a 3D model. Mhm.
+[37:32] >> How do you get this in a 2D fashion on
+[37:35] the screen?
+[37:35] >> Yeah.
+[37:36] >> With the uh with this process and then
+[37:39] maybe we can map this back into the
+[37:42] OpenGL
+[37:43] >> with its API.
+[37:44] >> Yeah, sure. So,
+[37:47] when you want to create um a 3D image
+[37:52] which includes all sorts of objects,
+[37:55] um first you need to think about how
+[37:57] you're going to to represent the
+[37:59] objects. Okay. And so um the most um
+[38:05] common way is kind of like define a set
+[38:09] of control points. So for example
+[38:13] um if if you want if this is the object
+[38:16] um okay can see this.
+[38:19] >> Yeah.
+[38:19] >> Okay. And you want to model it into your
+[38:22] program in some software. So you can
+[38:25] create a set of points around here.
+[38:28] Okay. and below and connect them in some
+[38:33] way like for example triangles you can
+[38:36] see it okay but if you if you think
+[38:39] about a box let's take a simpler example
+[38:41] take a take a a cube a box which has um
+[38:46] six faces right four around and one on
+[38:50] the top and one below and it has eight
+[38:54] um vertices which define
+[38:56] um the structure
+[38:58] Okay, so this is the all the information
+[39:01] that you need in order to render a box
+[39:04] and make it spin and make it look 3D.
+[39:07] Okay, take the eight vertices vertices,
+[39:11] connect them together and create um 12
+[39:15] triangles and maybe I'll say why why we
+[39:18] like to use um uh triangles. Um it's
+[39:22] because it is the smallest polygon uh
+[39:26] which is entirely on the same plane.
+[39:30] Okay.
+[39:31] >> Yeah. Yeah. Whatever you do to a
+[39:32] triangle, it will remain a triangle.
+[39:35] >> Yeah. It will always be a triangle will
+[39:37] always be on the same plane. But if you
+[39:39] add another tri another vertex, make it
+[39:42] like a four uh corner uh a quad
+[39:46] basically, then it's not guaranteed to
+[39:48] be on the same plane. Now having said
+[39:52] that, it is still weird for me to think
+[39:56] about why Blender, which is a very
+[39:58] popular 3D modeling tool, a free
+[40:01] modeling tool, uses quads as the basic
+[40:05] element. But when we uh export stuff
+[40:08] from uh or when we import stuff from
+[40:10] Blender into OpenGL, what we do is we
+[40:13] triangulate all the quads. So for some
+[40:16] reason they work with quads but we have
+[40:19] the capability of triangulating those uh
+[40:22] um quads into triangles. And so we have
+[40:24] the box with eight vertices four on top
+[40:27] four below and we connect them. So we
+[40:29] have six faces and 12 triangles. Okay.
+[40:32] And this is what you need in order to
+[40:35] represent a box. Just those end points
+[40:38] and the connectivity information between
+[40:41] them. And so if you um want to represent
+[40:46] a more complex image like like this guy,
+[40:50] you just need to have more control
+[40:52] points, right? But I think that even for
+[40:55] this thing, you can do with like 20 or
+[41:00] 30 control points and and then you
+[41:02] basically have a representation of the
+[41:04] entire object and then it becomes more
+[41:07] complex as the object is more complex.
+[41:09] So if you want to model the face of a
+[41:11] person,
+[41:12] then
+[41:14] you'll need something like a few
+[41:16] thousands of tens of thousands depending
+[41:18] on on how accurate you want your
+[41:22] representation to be. But at the end,
+[41:25] each model uh in real-time graphics is
+[41:28] represented by a set of vertices in a 3D
+[41:32] space and the connectivity between the
+[41:34] vertices. So each vertex is connected to
+[41:37] usually several uh vertices other ver
+[41:40] vertices in order to create a set of uh
+[41:43] triangles which kind of like tessillate
+[41:47] the outer figure of the of the model. So
+[41:51] this is like the the the
+[41:53] meat of the of of 3D. This is where you
+[41:56] start with what what do you do with it?
+[42:00] You ask. Okay. So that's the next
+[42:03] question like so um the 3D points they
+[42:09] have they are represent they have um a
+[42:12] value they are represented in a 3D space
+[42:15] okay a 3D space is very intuitive
+[42:18] because this is the space that we this
+[42:20] is the world that we know it has a width
+[42:22] a height and a depth and in mathematical
+[42:24] terms we know it's called x y and z but
+[42:28] the screen is only two-dimensional
+[42:31] So how do you make it work on the
+[42:35] screen? Okay, how do you make the image
+[42:38] uh real? So here is what we have uh the
+[42:41] term is called perspective projection.
+[42:44] As I said, stuff which is further away
+[42:48] um has to look smaller in order to make
+[42:51] it 3D for for a human which is watching
+[42:54] it. And so
+[42:58] um you need um I think you need a piece
+[43:01] of paper to to understand it. But but
+[43:04] basically
+[43:05] um it's it's just a matter of dividing
+[43:10] the x and y by the zed.
+[43:14] Okay. So if you think about
+[43:18] like um a triangle,
+[43:21] imagine a triangle and uh you are the
+[43:25] you are the viewer. You are sitting at
+[43:28] one of the corners
+[43:30] and looking along one of the edges
+[43:33] towards one of the uh the one of the
+[43:37] other two points. Um in order to
+[43:40] calculate where it will be on the
+[43:42] screen, you just need to divide um
+[43:47] this position by its Z uh coordinate.
+[43:52] And this kind of like on a nutshell, I
+[43:55] mean it's it's a bit more complex than
+[43:57] that and it requires a few diagrams, but
+[44:01] I have videos on that and it's not that
+[44:04] uh not complex. It's it's not that
+[44:06] complex.
+[44:08] basically divide by the zed in order to
+[44:11] project a point from 3D space to to 2D
+[44:19] and um trying to make an intuitive
+[44:22] example for that
+[44:25] like
+[44:27] yeah let's take take any pixel on the
+[44:30] screen okay and divide it by some
+[44:35] imaginary zed
+[44:37] uh the the larger the zed the smaller
+[44:40] the result right so this will kind of
+[44:44] like make the image smaller. Okay, if
+[44:48] you can imagine a rectangle on the
+[44:51] screen right now
+[44:53] and um you know the the x and y of the
+[44:57] four corners and now divide them by by
+[45:01] five by 10 by 100 the x and y become
+[45:06] smaller. So the so the the the rectangle
+[45:10] becomes smaller. So that's that's 3D
+[45:14] basically that's the entire math on a
+[45:17] nutshell on on one leg as we say
+[45:20] >> on a single
+[45:21] >> and often because we shape things in uh
+[45:25] triangles if we put three things
+[45:28] together we have a vector so you can
+[45:31] describe any given transformation in a
+[45:34] 3D space by a matrix and then multiply
+[45:40] vector by this matrix and you will have
+[45:42] a another vector that will be for
+[45:45] example a moved one right so you have a
+[45:48] point point for example and then you
+[45:50] move this point x y and z
+[45:52] >> to the left or to the right or you want
+[45:55] to scale so make the 3D object twice as
+[46:01] big
+[46:02] >> so you prepare a different matrix and if
+[46:05] you turn through all the points and uh
+[46:08] multiply them by the matrix you will
+[46:11] have a modified 3D model. So this is a
+[46:14] lot of like back uh math that is needed
+[46:20] to handle the transformations in 3D
+[46:23] space.
+[46:24] Yeah. So the the reason why we're going
+[46:27] from why not simply divide by zed. Okay.
+[46:31] Okay. And so if if you're if you're
+[46:33] writing a software rasterizer which was
+[46:36] basically
+[46:37] uh the technology behind uh Doom and
+[46:41] Quake and if you can see just behind
+[46:44] you can see over there there's this book
+[46:47] over there the second one from the from
+[46:50] the left that I have a video about about
+[46:53] it um created it was written by Andre
+[46:56] Lamoth and um this book came out I think
+[47:01] it was 2002 and this is a book about
+[47:04] software rasterization. So no GPU, you
+[47:07] do everything yourself and he explains
+[47:11] how explains all the the stuff about 3D
+[47:13] math and um
+[47:16] uh what you do there there is to
+[47:18] actually divide by by the zed.
+[47:22] So it's even before matrices
+[47:25] >> but eventually
+[47:26] >> you end up realizing that just
+[47:29] projecting the point. Okay. So this is
+[47:31] 3D projection
+[47:33] is not is not enough because there are a
+[47:35] few more u transformation that you will
+[47:39] need to do in order to to actually get
+[47:41] the image on the screen. And so it is
+[47:45] very um um efficient
+[47:50] and
+[47:52] um
+[47:53] I I guess I would say comfortable to to
+[47:56] use linear uh algebra to represent a
+[47:59] transformation that you want to do on a
+[48:01] vertex inside as a matrix. Okay. So you
+[48:04] have basically the the three main
+[48:08] uh types of movements. Let's call them
+[48:12] movement.
+[48:14] Okay, let's let's spell them out and
+[48:16] find a word a descriptive descriptive
+[48:19] better descriptive word for that. You
+[48:21] have translation where you want to move
+[48:24] a vertex all around where wherever uh
+[48:28] you have rotation
+[48:30] when you want to rotate it in a circle
+[48:33] around a point or a vector. And you have
+[48:35] scaling when you want to uh make it
+[48:38] larger or smaller which is kind of like
+[48:41] also a movement. If you think about it
+[48:45] scaling something up kind of like it
+[48:48] moves it basically if it
+[48:51] moves it from from a starting position
+[48:54] to an end position. So it's all all
+[48:56] sorts of movements that you want to do
+[48:58] on the vertex.
+[49:00] All of them are are very uh simple to
+[49:03] represent as a matrix and there are um
+[49:08] well-known
+[49:09] matrices for doing that. So for example,
+[49:12] the simplest one is to scale. If you
+[49:15] think about it, take a 3D vector, take a
+[49:19] m a 3D
+[49:21] uh matrix, a 3x3 matrix, which is all
+[49:25] zeros but one along the diagonal. And if
+[49:29] you multiply the vector by the matrix,
+[49:33] you get the vector back.
+[49:36] Okay,
+[49:37] >> nothing's changed.
+[49:38] >> But if you change the diagonal to two,
+[49:42] then you're multiplying the three
+[49:44] components of the vector by two.
+[49:47] So you've multiply the entire vector by
+[49:50] two. So instead of simply saying I'm
+[49:52] going to multiply I'm I want to scale
+[49:54] this image this model and so I want to
+[49:57] scale it by 10. How I how do I do that?
+[50:00] I'm going to go over all the vertices
+[50:02] and just multiply them by 10 and then
+[50:05] the entire model will be increased by a
+[50:08] factor of 10. Instead of doing that you
+[50:11] can create a matrix put 10 along the
+[50:14] diagonal. Put zeros on all the other six
+[50:17] places. And this is a a factor of 10
+[50:21] scaling matrix. But it doesn't end
+[50:24] there. You also want to place the object
+[50:28] in the 3D world. Okay? you've you've set
+[50:31] for hours with um Blender, Maya, 3DX Max
+[50:35] or whatever any other modeling software
+[50:38] and you created a model with a million
+[50:41] vertices which looks amazing but it is
+[50:45] created you know around like the the
+[50:48] origin of the 3D space but in the in the
+[50:52] actual game where this model will be
+[50:54] used
+[50:57] multiple versions of the same uh of the
+[51:00] same model. Okay, it's like a if it's if
+[51:03] it's a monster and you're going to
+[51:05] render a thousand monsters, then each
+[51:07] individual monster is going to be each
+[51:09] instance is going to be in a different
+[51:11] location in the world. So this is
+[51:14] another transformation for you which is
+[51:16] called the wall transformation moving
+[51:20] the uh the model or the vertex from it
+[51:24] from its original position
+[51:27] uh to its place in the world. So this is
+[51:30] like this is a translation which is also
+[51:33] very simpler to uh to represent as a 3D
+[51:36] m actually a 4D matrix because of the
+[51:39] because of the translations we're
+[51:41] actually using uh for 4D matrices
+[51:45] instead of three. So for for rotations
+[51:48] and for scaling
+[51:51] um if what you're you're working with
+[51:53] are just 3D vectors then a 3x3 matrix is
+[51:57] enough. But if you also want to move it
+[51:59] to translate it, then you have to use uh
+[52:03] a 4D matrix.
+[52:06] And this blew my mind when I learned
+[52:08] about it
+[52:09] >> like that you can do this in order to
+[52:11] still multiply matrices instead of
+[52:13] avoiding like a plus sign and summing
+[52:16] this up that you can do like hack this
+[52:19] and encode a translation vector in the
+[52:21] fourth column. This was such a crazy
+[52:24] thing. Uh I think it would best be um I
+[52:30] mean you can try you can put a challenge
+[52:32] to yourself. Take any 3D uh vector.
+[52:36] Let's say you have a vector 1 2 3 and
+[52:40] you wanted to move to uh 11 uh 11 12 and
+[52:46] 13. So ju just adding 10 to each
+[52:49] component and try to do that with a 3x3
+[52:52] matrix.
+[52:54] Yeah.
+[52:54] >> Okay. So, if you want to scale it by 10,
+[52:56] no problem. We we saw this. We saw them
+[52:59] the matrix for that. But if you just
+[53:01] want to add
+[53:03] any number to those components,
+[53:06] then you you I mean you can do that, but
+[53:10] this matrix will work well for um for
+[53:14] only um this specific vector. It will
+[53:18] not work for all the other vertices that
+[53:20] you have. But you want to move the
+[53:22] entire model by 10 along the x y and
+[53:26] zed. And so this will not you cannot you
+[53:28] you can create diff if you have a
+[53:30] million vertices you can create million
+[53:32] matrices but this is not this will not
+[53:35] work. We want a single matrix to move
+[53:38] all the vertices
+[53:40] by whatever uh and and for that you you
+[53:43] need to increase the number of
+[53:45] components from three to four. place one
+[53:49] in the fourth component which is W and
+[53:53] then it's very easy to show that you can
+[53:57] create a 4D matrix that does that and
+[54:00] it's very simple it's very simple
+[54:03] um yeah so this is why we're we're using
+[54:07] 4D uh matrices
+[54:11] um you can still provide your model in
+[54:14] 3D space with 3D vectors But inside the
+[54:18] shader you would add one in the W and
+[54:22] then multiply by the 4D uh matrix
+[54:28] and so so scaling translation and also
+[54:33] rotation because um maybe the object is
+[54:37] not directly in front of you. You may
+[54:40] want to to turn the the monster around.
+[54:42] you're going to hit it on on its back.
+[54:45] And so you need to uh rotate uh all the
+[54:48] vertices of the monster around some
+[54:51] center point. And this is also very
+[54:53] simple to represent using uh using a
+[54:56] matrix. And so you have all those and
+[54:59] you want to do all those transformation.
+[55:01] You want to scale the monster up or
+[55:04] down. Maybe you have the same model but
+[55:06] the monsters have different uh sizes.
+[55:10] Okay. So you create a different
+[55:12] transformation, a different scaling
+[55:14] matrix for each instance of the monster
+[55:17] and you want to move it in the world to
+[55:18] its proper location and you want to
+[55:20] rotate it. So they're not like just, you
+[55:23] know, facing the the same direction.
+[55:26] Each one is facing a different
+[55:28] direction. So this is rotation. And then
+[55:31] what linear algebra provides you is the
+[55:34] ability to combine all the three
+[55:37] matrices together by multiplying them.
+[55:40] You multiply the matrices together you
+[55:42] get some matrix which you cannot
+[55:45] comprehend. You don't if you just look
+[55:47] at it you know just the numbers you
+[55:49] don't understand why it would do what it
+[55:52] what it will eventually do. But
+[55:54] depending on the order of of applying
+[55:57] the transformations,
+[55:59] it will do the same as applying the
+[56:01] transformations one by one. And this is
+[56:04] important for performance of course
+[56:06] because multiplying a vector by matrix
+[56:09] takes so many um calculations
+[56:13] operations. And so instead of
+[56:15] multiplying the vector by the three
+[56:18] matrices, you just multiply it by one.
+[56:22] So this is why we usually combine
+[56:24] transformations together.
+[56:27] And um this is also part of what shader
+[56:32] programming allows you to do because
+[56:35] you're not limited to specifying some uh
+[56:40] some hardcoded transformation
+[56:43] or transformations through a fixed
+[56:45] function API and then it will do
+[56:48] whatever it needs to do with it. You can
+[56:51] it it basically the shader is like um or
+[56:54] the GPU is like um a matrix multiplying
+[56:58] machine. What it does best is
+[57:01] multiplying uh 4D vectors by 4D
+[57:05] matrices. That that's the core of the
+[57:08] GPU
+[57:10] and it's not the core of the CPU.
+[57:16] Uh, and I think it's useful to note that
+[57:19] all of these transformations and
+[57:22] computations are present in every 3D
+[57:26] engine. They're just hidden from you.
+[57:29] They happen every time when you have a
+[57:31] Unity and a preview window. Like even in
+[57:34] the preview window when you have your
+[57:36] model and you can you know you have like
+[57:39] X Y and Z coordinates for where it is in
+[57:42] the map or in the scene and you change
+[57:45] from X0 to X6 and it suddenly moves to
+[57:49] the right
+[57:50] >> like what happens underneath is that you
+[57:53] defined a modified the matrix and the
+[57:56] matrix that is being run every frame now
+[57:59] >> uh is different and you know Like my
+[58:03] mind was blown when I realized that this
+[58:06] is happening because I learned this
+[58:08] first through the engines and then I
+[58:12] discovered what is happening underneath
+[58:14] and it's like how is this possible? How
+[58:18] how was this hidden for all this time
+[58:21] from me and I needed to rediscover this
+[58:23] like weird tutorials about OpenGL and
+[58:26] graphics, you know? That's that's wild
+[58:30] that this is this can be so neatly
+[58:32] covered and hidden from you. But on the
+[58:35] same note, it's a bit sad that you're
+[58:38] exposed to it so late in the process if
+[58:41] you don't make an effort.
+[58:43] >> Yeah. So if you think about it,
+[58:46] basically working with Unity um or
+[58:49] Unreal or whatever engine kind of like
+[58:53] brings you back into uh a limited set of
+[58:58] um capabilities
+[59:00] because they define the interface for
+[59:03] you. what you can do at least on the GUI
+[59:06] side
+[59:08] it's half accurate because they also
+[59:10] provide you with the ability to write
+[59:12] shaders but they need to work inside
+[59:14] their uh framework I think you're pretty
+[59:17] free inside their framework to do
+[59:19] whatever but what what you people use
+[59:23] who start with 3D graphics
+[59:26] they usually the first few stages is
+[59:28] like getting the correct image on the
+[59:32] screen So they can um they can fail in
+[59:37] so many places from the way they specify
+[59:41] the vertices where they whether they
+[59:44] upload them correctly into a a vertex
+[59:48] buffer the transformations they have a
+[59:51] lot of places to fail and it's very um
+[59:54] difficult to to debug because the GPU is
+[59:58] not as exposed as the CPU cannot simply
+[60:01] place a break point uh inside the
+[60:05] pipeline and just debug it step by step
+[60:07] as you can on any other uh program on a
+[60:11] normal program CPU program. So this is
+[60:15] usually where many people, many
+[60:17] beginners uh spend a lot of time. But if
+[60:21] you use Unity, then it's kind of like it
+[60:24] works, right? You open the 3D view, you
+[60:26] have a grid and you have a kind of like
+[60:30] a sky box and you have some shape or
+[60:34] like a box or whatever they have there
+[60:36] and you can move it those transformation
+[60:39] that you said. So they already provide
+[60:40] you with something that works and um you
+[60:45] can modify sorry
+[60:48] those transformations.
+[60:50] Um but it comes down to
+[60:54] um basically they take your input create
+[60:57] a transformation from it and they send
+[61:00] it inside their game engine underneath.
+[61:04] So then so that it will work as
+[61:06] expected. But you can
+[61:09] basically create the same thing in terms
+[61:12] of um the core technology of what
+[61:15] they're doing. You can create it
+[61:17] yourself. You cannot create as um as a
+[61:21] complex software as they did because
+[61:23] they have hundreds of people with
+[61:25] thousands of man years working on it. So
+[61:28] have they have a lot of capabilities but
+[61:30] the basic technology is something that
+[61:32] you can create on your own with OpenGL,
+[61:34] DirectX or whatever.
+[61:37] Yeah. Uh we stopped at the world matrix.
+[61:42] So we went through the model and then
+[61:45] the model matrix and then world matrix
+[61:48] and the basic transformations. So we
+[61:50] still have couple of steps until we have
+[61:54] a 2D image on the screen.
+[61:56] >> Yeah.
+[61:56] >> So what happens next?
+[61:58] >> Okay. So after you've placed the images
+[62:03] uh the the objects in the world, you
+[62:06] need to place uh the viewer or or the
+[62:09] camera. So you place the camera in the
+[62:12] world and then you need to orient it in
+[62:15] the correct direction which is basically
+[62:17] where the eyes of the viewer are
+[62:21] pointing at.
+[62:23] uh which means that uh some part of the
+[62:27] world will be visible like the way your
+[62:31] eyes work but actually most of the world
+[62:33] will not be visible because it will be
+[62:35] too much to the side or up or exactly
+[62:38] behind you. And so you understand that
+[62:42] there is some um limit or extent to what
+[62:46] you can um uh you can see. And we call
+[62:50] this the view frost them because if you
+[62:53] try to define
+[62:55] what is the limit to your actual eyes,
+[62:58] it's kind of like weird. I mean it's
+[62:59] it's kind it's like a it's it's a
+[63:03] rounded um shape, right? our eyes are
+[63:06] around and then you can kind of like see
+[63:08] it round on the side and over there and
+[63:11] from there it's kind of like um
+[63:13] something like that and it's not it's
+[63:15] not very friendly to computers and we
+[63:19] have uh we have a rectangle window so
+[63:22] what we do is to use a chopped off
+[63:25] pyramid
+[63:27] which is called the view frostm so you
+[63:30] take a a 4D pyramid um um a pyramid with
+[63:34] a with the rectangle on the bottom and
+[63:38] there is a top and you chop it off to
+[63:40] have rectangle on on the far side and
+[63:43] rectangle on the um on the near side.
+[63:47] Yeah. And then
+[63:49] this what limits your your um
+[63:54] um your view of the world. And then you
+[63:56] say okay no problem. What's inside can
+[63:59] be viewed. What's outside cannot be
+[64:01] viewed. And let's now use the trick with
+[64:05] the division by zed in order to project
+[64:10] the
+[64:12] um the object on the on the screen which
+[64:14] is kind of like let's say the the near
+[64:16] side. So, um, it's it's it's a bit more
+[64:21] complex because the way that, uh, the
+[64:26] the camera is oriented, it may it may be
+[64:29] like tilted in what or or like that
+[64:32] you're looking up, you're looking down.
+[64:35] The the math, if you try it like that,
+[64:37] the math will be very uh very difficult.
+[64:41] You can do that, but it's very
+[64:42] difficult. So people realize that the
+[64:45] math will become uh much simpler
+[64:48] if they can get um the world the world
+[64:53] to look as if the camera is always
+[64:56] pointing along the Z direction
+[65:00] and the camera is always located in the
+[65:03] origin.
+[65:05] Okay, on the 00 0 location. Move the
+[65:08] camera to the 0000 location. the origin
+[65:12] of the 3D world and rotate it so it is
+[65:17] upright. Okay, pointing like the head
+[65:19] points directly up along the Y- axis.
+[65:21] You're looking straight ahead and it is
+[65:24] and the direction is the Z axis. Whether
+[65:27] it is the positive zed or the negative
+[65:29] zed is a different story. But if you do
+[65:33] that then all the uh the 3D projection
+[65:37] becomes uh very simple at this point and
+[65:40] then it is really division by by zed
+[65:43] once once we're at this um orientation
+[65:46] and so to do that it basically means
+[65:50] move like the entire world
+[65:53] along with the camera. Okay. So there is
+[65:57] some uh some orientation some
+[65:59] relationship between you and the object.
+[66:02] Okay, if the object
+[66:05] is right right behind you or you know
+[66:09] let's just in front of you. It's simpler
+[66:11] to think about it just in front of you
+[66:13] and it is like 10 m in front of you. But
+[66:16] the camera is located at location 100 on
+[66:20] the x-axis. Okay, 100 on the x and 100
+[66:24] and 0 0 on the y and and zed. So let's
+[66:29] move the camera by minus 100 which will
+[66:32] move it to the zero and then everything
+[66:34] else also needs to move by minus 100 on
+[66:38] their respective x axis. Okay. So this
+[66:43] is uh the first transformation. Um what
+[66:45] we're doing right now is moving from the
+[66:48] world space to a view space. The view
+[66:51] space is when the camera is at the
+[66:53] origin looking along the Z axis. So
+[66:56] first of all we calculate the
+[66:59] transformation to move the camera to the
+[67:01] origin which is actually very simple
+[67:04] because if the camera is at some x y and
+[67:08] zed then you simply translate it by
+[67:11] minus x minus y minus zed and when you
+[67:16] apply that to x y and zed you get zero.
+[67:19] So the camera has moved to the to the
+[67:21] origin. You apply the same
+[67:24] transformation on all the objects and
+[67:27] now they have moved like whatever but um
+[67:32] the world seems like it is the same. The
+[67:34] orientation between the camera and all
+[67:36] the other objects it seems like it they
+[67:39] they've never moved. Okay, it's the same
+[67:41] thing. And then what you do is you
+[67:44] handle the orient the the looking at
+[67:46] along the Z direction. And you calculate
+[67:49] the rotation to the camera
+[67:52] to fix all those uh roll you know
+[67:56] changing along moving the head to to to
+[67:59] point to a different location. You you
+[68:01] you apply a rotation so that the camera
+[68:03] is looking straight ahead along the the
+[68:06] Z and then the camera is rotated to that
+[68:09] and then you apply the same rotation to
+[68:11] all the the other objects. So if
+[68:14] something was um in front of the c just
+[68:17] in front of the camera but the camera
+[68:20] was not pointing along the Z uh
+[68:23] direction. Now when you rotate the
+[68:26] camera this object will end up if you do
+[68:30] the calculation correctly you this
+[68:32] object will will end up uh sitting on
+[68:35] the Z axis right because the camera is
+[68:38] looking at the zed and the camera was
+[68:40] previously pointing at this object. So
+[68:42] it still needs to point to the object.
+[68:44] So so this rotation will take the object
+[68:47] directly to the Z axis.
+[68:50] That's the uh that's the idea. So this
+[68:52] is like rotating the entire world around
+[68:55] the camera to to follow the the change
+[68:59] in direction of the camera to the Z
+[69:01] axis.
+[69:02] And now we are in view space. Basically
+[69:05] nothing has changed. But now everything
+[69:07] is set up um um much um um easier to do
+[69:15] a projection. And the reason is that
+[69:19] if you try to do projection inside world
+[69:22] space without all this hoopla of the
+[69:25] camera, then you will need a different
+[69:27] projection matrix for each position and
+[69:31] orientation of the camera.
+[69:34] But moving everything like that means
+[69:36] that you can use the same projection
+[69:38] matrix
+[69:40] uh for whatever position and orientation
+[69:44] of the camera. You've separated the two
+[69:46] stages together and then in many cases
+[69:49] you will see that the projection matrix
+[69:51] is is calculated uh once at the
+[69:55] beginning and then you don't need to
+[69:56] change it.
+[69:59] And so
+[70:01] now after moving to view space we do um
+[70:05] projection
+[70:08] um which will project the points um to
+[70:11] um to 3D to u to a 2D space. We kind of
+[70:15] like divide by zed. There are a few
+[70:17] other stuff there. The projection matrix
+[70:20] includes
+[70:22] all or also handles stuff like
+[70:26] uh transforming the Z coordinate because
+[70:31] in a when you define a camera
+[70:35] um what we usually do is to define
+[70:40] uh a near and far zed like the the
+[70:44] closest uh zed position which is
+[70:47] visible. It's like if it's too close to
+[70:49] your eye, then it will be clipped. If
+[70:52] you're like standing next to a wall and
+[70:55] it is too too close to you, you can
+[70:58] actually it might clipped. It might be
+[71:01] clipped might be clipped away. Sometimes
+[71:02] the problem when you can see in in all
+[71:05] kinds of games, but the idea is that
+[71:08] you can't you you don't see everything
+[71:11] from like position zero. Usually, it's a
+[71:15] bit further away. And then there is also
+[71:17] a far zed which defines the the end of
+[71:21] what you can see.
+[71:23] And actually
+[71:25] making them close together even
+[71:29] helps you increase
+[71:31] them or helps you get over all sorts of
+[71:35] anomalies. One of the anomalies which is
+[71:38] very uh common is called Z fighting. If
+[71:42] you take two objects
+[71:44] and um you have very close um Z values
+[71:50] when you rasterize them they look like
+[71:52] they are interlaced because of numerical
+[71:55] issues.
+[71:57] Um this tends to happen. So one one of
+[72:00] the fixes for that would be to have to
+[72:04] use a smaller uh zed range. And this is
+[72:07] also part of the of the projection
+[72:10] matrix. The projection matrix is also
+[72:12] also takes care of the aspect ratio
+[72:15] because rarely the window is a square.
+[72:19] It is usually a rectangle and so there
+[72:22] is I mean you can actually see like more
+[72:26] on on between the the left and right
+[72:29] then from the top and bottom. So these
+[72:32] are are like the three major
+[72:35] responsibilities or capabilities of the
+[72:37] projection matrix. everything is like uh
+[72:40] pushed in into this slump together into
+[72:43] the same matrix. The the projection
+[72:47] or at least half of the projection to be
+[72:49] honest and the aspect ratio and handling
+[72:52] the Z range. Um
+[72:56] and then but there is a problem with
+[72:59] linear algebra. We said that you need to
+[73:01] divide by zed, right? But actually um
+[73:06] you cannot really divide using uh uh a
+[73:10] matrix. And so uh what we we do the the
+[73:14] projection matrix
+[73:17] moves copies the z value from the z
+[73:21] coordinate into the w coordinate. And
+[73:25] then the hardware has a fixed function
+[73:27] stage in order which divides by the W
+[73:33] which is actually the zed.
+[73:34] >> Oh this is called perspective
+[73:38] perspective division.
+[73:40] >> This is this is like a fixed function on
+[73:45] hardware.
+[73:46] >> Yeah. So so the GPU is not entirely
+[73:49] programmable. It's it has programmable
+[73:52] stages which we may want to go over them
+[73:55] also if you want to like complete the
+[73:57] picture of what is the programmable
+[73:59] pipeline how everything works but the
+[74:01] idea is that you have programmable
+[74:03] stages where you can plug programs into
+[74:07] and they will be executed by the by the
+[74:10] GPU they will be written by GLSL which
+[74:12] as I said is very similar to C language
+[74:16] >> but it also contains fixed function uh
+[74:19] operations So the the major um fixed
+[74:24] function stage is the rasterizer.
+[74:27] >> Yeah.
+[74:28] >> Which takes the the points that are
+[74:29] coming out of the vertex shader
+[74:32] >> and finds all the the three three points
+[74:36] which represent a triangle. You need to
+[74:38] find all the points inside the inside
+[74:41] and then execute the fragment shader. So
+[74:43] this is what is called rasterization.
+[74:45] The rasterization is still a fixed
+[74:47] function uh mechanism. So in addition to
+[74:50] that
+[74:52] and of course in modern version of of
+[74:56] OpenGL and DirectX you also have the
+[74:58] tessillator which also includes
+[75:00] programmable stages and the fixed
+[75:02] function
+[75:04] um stage. So I think from from an
+[75:07] architecture point of view what they did
+[75:10] the designers of the hardware and the uh
+[75:13] the software APIs they identified the
+[75:17] places which should be programmable as
+[75:20] well as stuff which is still better
+[75:23] executed as a fixed function hardware
+[75:25] because when you have a fixed function
+[75:27] hardware which is good for one thing you
+[75:30] can create a smaller
+[75:34] mechanism or device inside the entire
+[75:37] GPU to take care of that compared to
+[75:40] like a programmable
+[75:42] uh part which knows how to execute
+[75:44] instructions and you know it's very very
+[75:47] complex
+[75:49] and so what we have after the vertex
+[75:52] shader you multiply by the projection
+[75:54] matrix which is set up in a way which is
+[75:58] ready for perspective division and then
+[76:01] after the um the vertex shader a certain
+[76:05] type a certain type of variable inside
+[76:08] the shader an output variable from the
+[76:11] vertx shader called gel pososition it's
+[76:14] a 4D vector the hardware will divide by
+[76:19] its w component
+[76:23] >> I didn't realize that
+[76:25] >> I always thought that it's going to be
+[76:27] just passed
+[76:29] further along
+[76:32] >> yeah and because it is it because it
+[76:35] divides by the w and you know that
+[76:39] um you have you have to divide by zed
+[76:43] from from from a mathematical point of
+[76:45] view. What your projection matrix needs
+[76:47] to do is to move or copy the zed
+[76:52] um to the to the w.
+[76:55] And so when you divide by w, you divide
+[76:58] x and y by by the zed. So everything was
+[77:02] it's not it's not by chance. Everything
+[77:04] was designed
+[77:06] uh like that from from the beginning. So
+[77:09] they kind of like they are funneling you
+[77:12] towards a a certain type of behavior. If
+[77:16] you don't follow correctly then you will
+[77:18] end up with a black screen. So you need
+[77:22] to have all all the transformation uh
+[77:25] correctly.
+[77:28] And this is very much different from CPU
+[77:32] style of programming where you're kind
+[77:33] of free to do whatever right like here
+[77:36] you have a set of uh things that should
+[77:39] happen and only in this programmable
+[77:42] stages you can actually influence
+[77:45] uh things so that you have maybe some
+[77:48] style of rendering right
+[77:51] >> we we talked about the math how to do
+[77:57] how to adapt
+[77:58] uh your vertices so that they are there.
+[78:02] But we didn't really talk about shaders.
+[78:05] >> Yeah.
+[78:06] >> And how this looks like from your from
+[78:08] scratch C++ stuff because we talked
+[78:11] about loading the model. You have a
+[78:13] model, you have 3D information and you
+[78:15] provide these you create these matrices
+[78:18] that will be then happening uh on vertex
+[78:22] shader. But we didn't talk a lot about
+[78:24] shaders themselves, how they happen
+[78:27] because you also need to set them up. So
+[78:30] maybe we can spend some time discussing
+[78:31] that.
+[78:32] >> Sure. So if you've created a model
+[78:34] inside the 3D modeling software,
+[78:36] Blender, Maya, whatever, uh you export
+[78:40] it to a file and then you have a file
+[78:42] which which contains all the information
+[78:45] about the model, the vertices, the
+[78:47] connectivity of the vertices to
+[78:49] triangles and all the additional
+[78:51] information such as texture coordinates,
+[78:54] colors, textures, whatever texture
+[78:56] coordinates and textures. Okay, those
+[78:58] are different of course. texture
+[79:00] cextures are the actual image which
+[79:04] provides the color of the of the
+[79:08] triangle. So if you think about the the
+[79:10] original simple example of the box you
+[79:13] want to put some texture there then you
+[79:16] have
+[79:18] some image but uh in order to render it
+[79:21] correctly the vertex needs to know how
+[79:24] to map into the into the image. So in
+[79:27] the case of the box, let's say you want
+[79:28] to place the entire image directly on
+[79:32] the box, whatever the size of the box
+[79:33] is, then um you provide texture
+[79:37] coordinates
+[79:38] uh to each vertex that go from like 0 0
+[79:43] to one by one on the other side of the
+[79:47] of the face. And then this basically
+[79:50] tells us to put the entire image. Okay,
+[79:52] so texture coordinates are the represent
+[79:56] the position of the vertex inside the
+[79:59] image going from 0 0 on the bottom left
+[80:01] to one by one on the top right. And so
+[80:06] all this information is now sitting in a
+[80:08] file. Your OpenGL application loads the
+[80:11] file, parses everything and then creates
+[80:16] a buffer with all the information. Okay.
+[80:19] So, um you create a GPU buff kind of
+[80:23] like a GPU vertex buffer which will
+[80:25] eventually go into the GPU. The the
+[80:27] system will take care of moving the
+[80:29] information from CPU memory where the
+[80:32] loaded file is into the GPU later on.
+[80:35] Let's say that this is this is a
+[80:37] discrete GPU that has like know 8 12 16
+[80:40] gigabytes. You want to run everything
+[80:42] from the GPU. So, the system will take
+[80:44] care of that. And what you need to do is
+[80:48] to lay out
+[80:50] um the the uh to to provide the format
+[80:55] or the layout or of the vertex. So you
+[80:57] need to say my position the position of
+[81:00] the vertex in my vertex the position the
+[81:04] the position of the vertex
+[81:06] um is at the fir first four floating
+[81:10] points or three actually three and then
+[81:13] we have a textural coordinate and then
+[81:16] and then color or whatever but you can
+[81:18] also change the order let's say that you
+[81:20] want the color to come first for some
+[81:22] reason you can do that and OpenGL gives
+[81:25] you just a
+[81:27] gives you the the ability
+[81:31] to to specify different locations. So
+[81:33] this is all free for you to decide. You
+[81:36] can even separate
+[81:38] the attributes into different um buffers
+[81:42] uh which is called AOS versus S SOA. AOS
+[81:45] is array of structures versus structure
+[81:48] of array. So you can place all the
+[81:50] positions in one buffer and then um the
+[81:55] texture coordinates in another buffer
+[81:57] and then the colors in a third buffer.
+[81:59] So you can do that as well. And um this
+[82:02] defines the structure of the of the
+[82:04] vertex um to the to the open to OpenGL.
+[82:08] And then what you need to do is to write
+[82:11] a program in uh in GLSL the high level
+[82:16] shading language
+[82:18] which takes this
+[82:21] vertex and do some transformation with
+[82:24] it with it. So you can think about the
+[82:27] GPU as kind of like
+[82:30] um a factory you know the the idea of a
+[82:33] factory where you have different stages
+[82:36] like um they uh an auto factory they
+[82:40] they start with I don't know I don't
+[82:42] know how they create automobiles but you
+[82:45] know they start with something inside
+[82:47] the very structure in you have um a
+[82:50] stage that does that and then it moves
+[82:52] to the next stage and they put something
+[82:54] on top of that and eventually they put
+[82:56] on the the wheels and at the end of the
+[82:58] factory it goes out and it is ready. So
+[83:01] on on every stage they do the same thing
+[83:05] on the incoming input and they they
+[83:07] output something else. So it's kind of
+[83:10] like the same with the G with the GPU.
+[83:13] The you have vertices. You can have a
+[83:15] single vertex or a million vertices. It
+[83:18] doesn't matter. And you have a kernel
+[83:21] which is the this program. This this is
+[83:23] what we call the kernel or or shader
+[83:26] shader program which will be executed on
+[83:30] every vertex.
+[83:32] So this is the first stage in the
+[83:34] pipeline executing the vertex shader on
+[83:37] every vertex. And um one of the charact
+[83:41] characteristics of the vertex shader is
+[83:43] that it cannot create new vertices and
+[83:46] it cannot drop a vertex. So let's say
+[83:48] you want you your program says I want to
+[83:50] get rid of of this vertex. I don't like
+[83:52] it for for whatever reason. It's not it
+[83:55] doesn't work for me. It cannot it cannot
+[83:58] get rid of it. Okay, this is some of the
+[84:00] limitations of how the system works.
+[84:02] Single input, single output. And so the
+[84:06] way that the the the structure of the
+[84:09] vertex looks like is that you define the
+[84:13] input attributes of the vertex. You have
+[84:16] a position which can be it can also be
+[84:20] 2D. If you're doing something with 2D,
+[84:23] for example, you can define a 2D vector
+[84:25] as a position. You don't need the zed
+[84:27] for for for whatever reason. So you're
+[84:29] you're you're free here. Again, you can
+[84:31] have a a position which is 2D, 3D, 4D,
+[84:35] whatever, texture coordinates, colors,
+[84:38] everything else. These are your inputs.
+[84:40] And so the system for each execution of
+[84:43] the vertex shader will plug in a
+[84:46] different vertex, the next one. Okay? So
+[84:48] it goes over all the vertices
+[84:51] in your vertex buffer, takes the data
+[84:55] from the current vertex, puts it into
+[84:58] the vertex shader and then execute the
+[85:00] code on this data. And so this is how it
+[85:03] looks like. You have like kind of like
+[85:05] global variable. People coming from C
+[85:09] are sometimes
+[85:12] feel there are a bit mystified by it
+[85:15] because it looks like global information
+[85:17] but in fact on every execution of the
+[85:20] vertex shader you will get a different
+[85:22] vertex there. So you have a different
+[85:24] data and then it executes the vertex
+[85:26] shader which is just some kind of a C
+[85:29] code. In addition to the input
+[85:31] attributes you also add uniform
+[85:34] variables. So like all the matrix
+[85:36] matrices that we talked about, you plug
+[85:38] them into uh uniform variables. The the
+[85:42] difference between a uniform variable
+[85:44] and the vertex attributes is that the
+[85:46] vertex attributes vertex attribute
+[85:49] changes from one vertex to the next. But
+[85:52] the uniform stays the same throughout
+[85:55] the entire what we call a draw call. In
+[85:58] order to execute this entire machine,
+[86:02] you put out uh a call to glraw arrays,
+[86:05] glow elements or any other a few types
+[86:08] of of u of OpenGL function calls. You
+[86:11] tell it I'm going to I'm going to I'm
+[86:14] going to refer to this uh information as
+[86:17] points or lines or triangles depending
+[86:21] on how your what your modeling software
+[86:24] created. And I want to execute from this
+[86:28] vertex to from zero to million from
+[86:31] 5,000 to 6,000 6,000 6,000 whatever
+[86:36] number of vertices you want to execute
+[86:38] and from whatever offset you can do that
+[86:41] and once you do that the kind of like
+[86:43] the m the the the system takes over and
+[86:45] it will execute the vertex shader for
+[86:47] you on the specified vertices.
+[86:51] And so what you do in the main body of
+[86:54] code in the vertex shader is the
+[86:56] transformation takes the matrices from
+[87:00] the uniform variables multiply them.
+[87:04] They can include
+[87:06] um usually the vertex shader is is
+[87:09] responsible for like moving all the all
+[87:13] the movement and rotation and scaling of
+[87:16] the object but also on stuff that
+[87:19] prepares it for like um shadow mapping
+[87:23] the way that uh I'll just say one word
+[87:26] about it because it's it's an entire
+[87:28] entire topic by itself but when you want
+[87:31] to uh create a shadow It means that you
+[87:34] need to um render the scene from both
+[87:37] the the camera point of view which is
+[87:40] like the regular the default point of
+[87:41] view but also from the point of view of
+[87:43] the light. So to do that you need to
+[87:46] provide yet another transformation
+[87:49] matrix which is kind of like placing the
+[87:52] camera at the position of the light and
+[87:55] then um you will multiply the same
+[87:58] vertex by the two matrices.
+[88:01] One will be used as like the regular
+[88:05] transformed vertex for the continuation
+[88:08] of the pipeline and another will make it
+[88:11] look like as if the camera is actually
+[88:13] at the position of the light.
+[88:16] Okay. And then you have
+[88:17] >> it's so cool.
+[88:18] >> Yeah. You have like a a regular position
+[88:21] which you will use for rendering
+[88:24] but also a light point light position
+[88:28] in order to render it correctly into the
+[88:31] shadow map which will later on be used
+[88:35] uh in order to identify whether the
+[88:38] pixel is in shadow or light. So all this
+[88:40] stuff is classic vertex shader um work,
+[88:47] but it's actually very limited compared
+[88:50] to the fragment shader, which we will
+[88:52] get to in a in a minute, which is why um
+[88:56] vertex shaders are usually shorter
+[88:58] because there there's not so much that
+[89:01] you can do with them. Um what we usually
+[89:05] do in the vert in vertex shaders also is
+[89:08] to take care of uh skeletal animation.
+[89:12] Okay, we haven't talked about animation,
+[89:15] but what you can do with modeling
+[89:17] software is to create a model of
+[89:21] something which needs to move like a
+[89:23] person or monster or whatever or robot
+[89:27] and then you start moving the the arms
+[89:31] and the legs and you record uh different
+[89:36] locations
+[89:38] in time like your your hand moves like
+[89:41] that and like that and like that and and
+[89:43] you record the transformations for those
+[89:46] a few stages along the way and then you
+[89:50] can do like a smooth movement of the
+[89:53] hand. This is called skeletal animation.
+[89:56] It's a bunch of transformation. It
+[89:58] generates a bunch of transformations on
+[90:00] its own usually provided also to the
+[90:03] vertex shader. So this this these
+[90:05] transformations are also the
+[90:08] responsibility of the vertex shader.
+[90:11] Sorry. So,
+[90:13] so the animations are not done
+[90:17] just by changing the model matrix
+[90:21] of a given part like bone.
+[90:25] Yeah. So regular movement, I mean
+[90:29] you can
+[90:31] um if you just want to move the box from
+[90:35] one place to another,
+[90:37] >> what you would do is to um change the
+[90:43] the transformation matrix like the
+[90:45] position slightly on each frame and then
+[90:49] it will be rendered in a different
+[90:51] location.
+[90:53] And um if you make sure it is smooth
+[90:56] enough you you match it to the frame
+[90:59] rate it will look like it is moving. So
+[91:01] this is animation. This is this is the
+[91:04] very simplest animation that you can
+[91:06] think of. Skeletal animation is when
+[91:09] inside the not the box because the box
+[91:12] is is too limited but inside the body of
+[91:14] of a person you identify the the main
+[91:18] bones
+[91:20] and you um move them in a way which will
+[91:24] look um believable to you as the person
+[91:28] who is doing the modeling
+[91:30] and you will record key locations along
+[91:34] the movement. So if you think about you
+[91:36] want to make it like it's walking. You
+[91:38] can create like an artist can create a
+[91:41] set of u 10 20 images of the the legs in
+[91:48] different positions. And if you just
+[91:50] look at the images you will see that
+[91:53] what he's doing is is create mimicking
+[91:56] an an animation. Okay. So you can do it
+[91:59] by hand with a penc with a pen or pencil
+[92:03] on a piece of paper and you can also do
+[92:05] it inside the modeling software just the
+[92:09] mechanics are a bit more complex but
+[92:11] what you will end up is with a set of
+[92:14] locations and rotations for each joint
+[92:18] and each bone. And so all those this
+[92:21] information all is also outputed into
+[92:24] into the file into the file of the of
+[92:26] the model and can be loaded
+[92:30] um and then you can generate um what
+[92:33] what you usually need to do is to create
+[92:37] um to interpolate between the different
+[92:40] locations based on the point in time.
+[92:44] Okay. So if your game is running at a
+[92:47] faster frame rate 60fps, 100, 120, the
+[92:52] faster it goes, you will create more
+[92:56] key uh key points between the different
+[92:59] transformations. If it's going uh if the
+[93:02] game is running on a weaker machine like
+[93:04] 30 fps, then the distances will be uh
+[93:08] greater. But all this interpolation
+[93:10] needs to happen. it is the
+[93:12] responsibility of the application
+[93:16] but eventually it's just another set of
+[93:19] transformation matrices which are
+[93:21] provided to the um um to the vertex
+[93:25] shader and the vertex shader again will
+[93:28] need to multiply usually what happens is
+[93:31] that on each point in the body
+[93:35] is usually affected by more than one
+[93:39] bone. So if you think about uh an area
+[93:42] in your hand which is exactly between
+[93:44] the two joints
+[93:47] then like between the hand and the elbow
+[93:49] then you would say that this point will
+[93:52] only be affected by the movement of the
+[93:55] hand. But if you have something which is
+[93:57] like like here in order to make this
+[94:00] believable you would want this point to
+[94:02] be affected by both the the hand and
+[94:04] this part. Otherwise it will look like a
+[94:08] robot and you want to make it smooth.
+[94:11] Then this is another thing which is
+[94:13] calculated by the modeling software that
+[94:15] the it gives what is called a different
+[94:18] weight to each bone. So each uh
+[94:22] pixel can be affected by multiple or
+[94:24] vertex can be affected by multiple bo
+[94:26] bones with a different weight to each
+[94:28] one. And so what the vertx shader needs
+[94:31] to do is to get all those matrices and
+[94:34] to do uh an average of the of the
+[94:36] different matrices.
+[94:38] So we have you have one matrix which you
+[94:42] multiply and give it like 80% and then a
+[94:46] different matrix will only affect by
+[94:48] 20%.
+[94:50] Okay. Again classical vertex shader
+[94:54] >> stuff.
+[94:56] And so um okay so you you do all those
+[95:00] transformations
+[95:02] and um you output some of the or all of
+[95:06] the input attributes out sometimes
+[95:10] sometimes you can simply um move them
+[95:13] along unchanged but sometimes you may
+[95:16] want to apply some calculation on them.
+[95:19] So for example, if you have a texture
+[95:21] coordinate,
+[95:23] you may want to multiply it by a value
+[95:27] in order to stretch the texture or make
+[95:31] it more dense. So this is also a type of
+[95:35] um
+[95:37] calculation which the vertex shader does
+[95:39] and then you output the texture
+[95:43] coordinate, the colors
+[95:45] out out as an as an output attribute. So
+[95:48] you have an input attribute and an
+[95:50] output attribute and the minimum you
+[95:52] need to do is to copy from the input to
+[95:53] the output but in many cases you will
+[95:56] also do some transformation on the on
+[95:59] the data but the most important thing is
+[96:02] the position right because you want to
+[96:04] see it and so as I said before you have
+[96:08] um a dedicated like system
+[96:12] um variable
+[96:13] which is called gel position that you
+[96:15] need to put the position there. Okay. So
+[96:18] you have you have an input position you
+[96:21] have all the sorts of all all matrices
+[96:23] few matrices you do some calculation and
+[96:26] the result eventually needs to go into
+[96:29] the gill position because this is what
+[96:31] is going to be used for raster
+[96:32] asterization and this is what will be
+[96:34] used for the perspective division. So
+[96:37] it's very important to write the
+[96:38] position the final position into the geo
+[96:41] position which is a 4D vector
+[96:44] and then you have um perspective
+[96:47] division and then we get to the rest
+[96:50] rasterizer and the first thing we do
+[96:53] kind of like is the is the clipping
+[96:56] because basically what we did in the
+[96:59] vertex shader is that we applied all the
+[97:01] transformations
+[97:03] to all the vertices but of course some
+[97:06] some of the models were behind you.
+[97:09] Okay, so the the clipper clips the um uh
+[97:16] the image to be between um minus w and w
+[97:22] along the x, y, and z
+[97:25] um components. And um the it's a bit
+[97:29] more complex, but this will eventually
+[97:30] throw out everything which is too much
+[97:33] to the side or behind you or too further
+[97:36] away.
+[97:38] And um then
+[97:42] um we will um
+[97:46] um basically take the coordinates and um
+[97:49] map them to the screen.
+[97:52] And now the rasterizer can start
+[97:54] working. It has it it you render it ran
+[97:58] a vertex shader on three triang on on
+[98:01] the position of three corners of a
+[98:04] triangle. It can now identify
+[98:07] all the pixels inside this triangle. It
+[98:10] interpolates okay
+[98:13] along the u the face of the triangle.
+[98:16] And what it does next is to execute a
+[98:19] fragment shader because basically now we
+[98:21] have we know which pixel is is going to
+[98:25] be visible but we don't know the color.
+[98:27] The the job of the fragment shader is to
+[98:31] uh to calculate the color the final
+[98:34] color which will go on screen and this
+[98:38] is where most of the work takes place
+[98:40] because of the algorithms which are
+[98:42] becoming more and more complex. So
+[98:44] initially
+[98:46] um up until I know maybe 10 years ago
+[98:51] some 15 years ago you had very simple
+[98:54] lighting models. So what is known as the
+[98:58] fun model you have uh an ambient and
+[99:00] diffuse and specular light and ambient
+[99:03] is like just
+[99:05] um apply some some you have a color of
+[99:10] the light and regardless of the position
+[99:13] it's like the the sunlight without
+[99:15] thinking about thinking about the the
+[99:17] position of the sun you have you have
+[99:19] light all over right you can kind of
+[99:20] like give model it by giving it some
+[99:23] value and then applying it on a on a
+[99:25] pixel
+[99:27] And this is ambient light. And then you
+[99:29] have diffused light where you uh um take
+[99:34] into consideration the angle between the
+[99:37] the ray of light and the position of the
+[99:40] and the face of the triangle. So you
+[99:42] need to do some calculation there. If if
+[99:44] it's pointing directly at the triangle,
+[99:47] then it it is on the maximum level or
+[99:51] effect of the light. If it's more like
+[99:54] to the um to the side then it become
+[99:58] becomes weaker and weaker and then
+[100:00] specular which is for um stuff which is
+[100:03] sparkling or or flashy
+[100:06] and um this this is one type of
+[100:10] calculations we which go calculation
+[100:12] which goes into the fragment shader
+[100:15] but this is a very simple lighting
+[100:16] model. Um today we have physically based
+[100:20] rendering which is way way more complex.
+[100:24] So this is all of these calculations
+[100:26] needs to go go into the the fragment
+[100:29] shader. Also you may have multiple
+[100:32] lights. What you do what do you do then?
+[100:34] You need to um basically sum them up. So
+[100:37] you need to provide all the lighting
+[100:39] information to the fragment shader
+[100:42] and uh sum up all the all the the
+[100:46] effects from all the lights until you
+[100:48] get a single value. So usually the the
+[100:51] output from the fragment shader is very
+[100:53] simple. It's just the color of the light
+[100:58] >> of the pixel
+[101:00] >> sorry color of the pixel or fragment as
+[101:02] they call it in in OpenGL world.
+[101:04] fragment shader, pixel shader, direct
+[101:07] text, but it's actually a pixel.
+[101:10] >> Yeah. What is the difference? I I I knew
+[101:13] this, but I forgot. What's the
+[101:15] difference between fragment and pixel in
+[101:17] OpenGL?
+[101:19] >> Well, well, in OpenGL, they don't talk
+[101:21] about the pixel and fragment is kind of
+[101:24] like I don't know, an atom or whatever.
+[101:27] I don't know why they call it uh
+[101:29] >> but I think I I think that Microsoft
+[101:32] came later and they needed to to change
+[101:35] it to to have a different name. So they
+[101:36] said well fragment you know what pixel
+[101:39] let's take we're going to go with pixel.
+[101:41] Yeah it's free for us.
+[101:44] >> Okay. Now if you look at the OpenGL API
+[101:51] and you sum up all the stuff that we're
+[101:53] doing uh we were doing things like uh
+[101:57] generate buffer so reserve some memory
+[102:00] right and then
+[102:04] GL vertex at trip pointer which is like
+[102:07] defining the layout for the vertex
+[102:10] >> um bind some buffers create program use
+[102:13] program couple of calls for draw drawing
+[102:18] uh if I were to sum up it's probably
+[102:20] like 20 to 40 function calls
+[102:24] >> right
+[102:25] >> and
+[102:27] this I can wrap my head around but
+[102:30] OpenGL spec has like 800 functions
+[102:33] >> what is happening in those other like
+[102:37] 750
+[102:39] something
+[102:39] >> yeah I think functions
+[102:40] >> I think many of them are not really used
+[102:44] and um
+[102:45] >> okay First of all, you have a lot lot of
+[102:47] variations. So for example, just to to
+[102:50] execute a draw call, as I said, the
+[102:53] basic uh the basic tools are gill draw
+[102:56] arrays when you simply have a ver a set
+[103:00] of vertices in a single buffer and you
+[103:02] each like the first three are a
+[103:05] triangle, the next three are another
+[103:08] triangle and and so on. But you also
+[103:10] have index draws where you have like
+[103:13] kind of like a redirection. you have an
+[103:15] index buffer and each index points to to
+[103:19] a to a vertex and then if you want to
+[103:21] share vertices between triangles you can
+[103:24] simply reuse the same index. So that's
+[103:27] gel draw elements but also you have
+[103:30] instancing where you um render the same
+[103:35] vertex buffer with different
+[103:39] uh with changing attributes or changing
+[103:41] matrices. Instead of out multiple draw
+[103:44] calls and changing some matrices uh
+[103:47] between draw calls, you can do a single
+[103:49] draw call with a with uh all the
+[103:53] matrices, all the different matrices in
+[103:55] yet another uh vertex buffer and then
+[104:00] tell the system to uh render a thousand
+[104:03] instances
+[104:04] which will do which will work faster
+[104:06] because it's all wrapped in a single um
+[104:10] draw operation.
+[104:11] Um often you would see that in OpenGL
+[104:15] optimizations they try to decrease the
+[104:18] number of draw calls because uh usually
+[104:21] the OpenGL drivers are very big and
+[104:24] complex and they incur a lot of overhead
+[104:28] on the CPU and so uh to optimize with
+[104:32] OpenGL is to try to minimize the number
+[104:34] of uh of OpenGL calls and they help you
+[104:37] in some respects by providing you with
+[104:41] APIs that do more or hide some of the um
+[104:45] loops inside them. Instead of doing a
+[104:48] loop on the application side, they do
+[104:49] the loop for you and change and tweak
+[104:51] stuff in between according to the
+[104:54] specification. And so we have multiple
+[104:57] draw calls
+[104:59] and um
+[105:03] there's also a lot of explanations there
+[105:06] about the way it works the the way it
+[105:10] should work and so not everything is
+[105:12] just specification of functions but um
+[105:17] I think you end up with with a few more
+[105:20] than 20 40
+[105:22] I need to to to count the number of of
+[105:26] OpenGL calls in my tutorials and then I
+[105:29] can tell you if it's but it's not a lot.
+[105:32] It's true. It's not a lot
+[105:34] >> and
+[105:35] >> it's not like there's like a you know a
+[105:38] lot more functionality to it, right?
+[105:41] like in terms of what GPU what OpenGL
+[105:44] provides as an API.
+[105:46] >> It's just that you can do more in terms
+[105:48] of math
+[105:49] >> but within the same functions for
+[105:52] example to do like more sophisticated
+[105:53] shadows or lighting or something like
+[105:56] that. Is this correct?
+[105:57] >> Yeah. I mean everything eventually is in
+[105:59] the shaders and the the shaders have
+[106:02] their own GLSL has its own uh
+[106:05] specification which is not part of the
+[106:07] OpenGL specification. So you can
+[106:09] actually do very well without reading
+[106:12] the entire OpenGL spec uh once or or
+[106:16] even parts of it. You I mean you don't
+[106:18] really need to go to the spec a lot. You
+[106:21] can get by with just reading the um the
+[106:24] man pages of the functions.
+[106:27] So the specification is more for the for
+[106:31] the the hardware developers, the people
+[106:33] who are writing the um uh the drivers
+[106:38] and they need to adhere to a
+[106:40] specification so that each OpenGL
+[106:41] application will hopefully work the same
+[106:45] on each platform which is rarely the
+[106:48] case. But uh
+[106:52] they I mean it includes all the
+[106:54] different error codes for each function
+[106:57] and what it needs to
+[107:00] where do errors happen, why do they
+[107:02] happen, where where where and when
+[107:05] should they be triggered.
+[107:07] So uh it's also okay
+[107:09] >> part of the spec. But yeah, it's it's
+[107:11] big.
+[107:13] when you said about minimizing draw cost
+[107:15] uh this is true for every graphics API
+[107:19] right this is not only for OpenGL so
+[107:22] each driver will be have the same sort
+[107:24] of issue that the less draw calls you
+[107:27] can issue with the data already being
+[107:30] there in GPU the faster will be the your
+[107:33] program in general
+[107:34] >> yeah so if if you if you have the same
+[107:38] um basically this um
+[107:42] two different implementation
+[107:44] implementations of like the same
+[107:47] algorithms
+[107:49] algorithm but uh one has half the number
+[107:53] of uh OpenGL calls then it has a greater
+[107:58] chance of running faster than the than
+[108:00] its counterpart.
+[108:03] Again, depending on how much overhead,
+[108:05] if if this is a very efficient driver,
+[108:08] then you may not notice it, but usually
+[108:10] you try to to reduce the number of draw
+[108:13] calls. And this is one of the reasons
+[108:16] why Vulcan came along.
+[108:20] >> And this is I wanted to ask like is
+[108:21] there something on OpenGL that we
+[108:23] skipped before we enter the Vulcan
+[108:26] world?
+[108:28] But I think we can we can we we wrapped
+[108:31] the OpenGL part and start talking about
+[108:34] Vulcan.
+[108:34] >> Pretty much uh covered most of the
+[108:37] interesting stuff. Yeah.
+[108:40] >> Okay. So tell me about Vulcan. Tell me
+[108:42] why this API is I don't wouldn't say
+[108:47] hate it but it's complex and the
+[108:50] complexity is quite visible.
+[108:52] >> Yeah. and a a lot of like internet
+[108:56] voices would be sort of uh I don't know
+[109:00] flooded with the complexity a little bit
+[109:02] like uh annoyed
+[109:04] >> and vocal about it. Uh so what why
+[109:08] OpenGL was limiting
+[109:11] >> Mhm. to the the to the point where
+[109:13] Vulcan came along and because for
+[109:16] everybody who is listening Vulcan is
+[109:17] being created by Kronos group which is
+[109:20] the same group that is was doing OpenGL.
+[109:23] So OpenGL is discontinued now. It still
+[109:26] works. Uh but the Vulcan is the main uh
+[109:30] place where innovation happens and
+[109:33] things are being added. So what Vulcan
+[109:35] brings to the picture?
+[109:36] >> Yeah. So let's say that you start
+[109:38] working, you start learning OpenGL,
+[109:41] you set up the basic window and then you
+[109:44] create your first uh render loop. Okay,
+[109:47] the the the main loop of of each which
+[109:50] each which which generates the frame.
+[109:53] And so the first thing you do is you put
+[109:56] a clear operation. Okay, so you clear
+[109:58] the window to some color and then you um
+[110:04] you start adding stuff. you have your
+[110:06] first draw call. Okay, you you render
+[110:09] your first triangle, you need to bind
+[110:13] um you you need to bind um a vertex
+[110:16] buffer. And so basically, if you if you
+[110:20] have just a single vertex buffer in your
+[110:22] program, you can actually bind it
+[110:25] outside of the outside of the render
+[110:28] loop. But let's let's say that you have
+[110:31] a few vertex buffers for whatever
+[110:34] reason. vertx buffers. You bind one
+[110:36] buffer, you issue a a draw call, you
+[110:39] bind another buffer, you issue another
+[110:42] render
+[110:43] draw call and and so on. You get to a
+[110:46] few quite a few draw calls eventually
+[110:49] because the image becomes more and more
+[110:50] complex and then you have uh textures of
+[110:54] course you have different textures. Each
+[110:56] all of your models have a lot of
+[110:58] textures. So in addition to binding the
+[111:00] vertex buffer, you also need to uh uh
+[111:04] change between textures. So you do that
+[111:06] as well. And you end up with kind of
+[111:08] like a recipe
+[111:10] of changing all the state
+[111:14] and issuing draw calls. And you also
+[111:18] change stuff like in some cases you want
+[111:21] to enable or disable the depth test.
+[111:25] um you want to change coloring, you
+[111:28] change blending, there's tons of other
+[111:30] stuff which is not draw calls and is not
+[111:33] buffers and textures. All kinds of knobs
+[111:36] that you can play with and you you
+[111:38] change them as well. And then you say
+[111:40] okay but
+[111:42] what I'm actually doing is is I'm
+[111:44] running the same recipe the same
+[111:46] procedure the same sequence of
+[111:49] operations and what I'm actually changes
+[111:52] is just a bunch of matrices because it's
+[111:55] always for for this set of draw calls
+[111:58] it's always always this this set of uh
+[112:01] matric of textures the same textures all
+[112:03] the time it's the same model and I'm
+[112:05] just changing the the matrices. So what
+[112:09] if I can
+[112:11] create
+[112:13] um
+[112:14] some mechanism a command buffer let's
+[112:18] call it which is what is actually the
+[112:20] the actual name in in Vulcan. Let's
+[112:23] create a command buffer which is going
+[112:25] to wrap all all all of the state changes
+[112:29] and draw calls that we we know that we
+[112:32] need to do and we we're going to record
+[112:36] them. all the operations we're going to
+[112:38] all the commands we're going to record
+[112:40] them in into a command buffer
+[112:43] and then we'll issue this command buffer
+[112:47] and then just change the uh the
+[112:50] matrices. We'll we'll provide the user
+[112:53] with some uh mechanism that will allow
+[112:56] him to to to update the matrices in each
+[112:59] frame because this is really the dynamic
+[113:02] um data which you cannot predict.
+[113:05] But you can't predict as as a developer
+[113:07] of the game engine, you know exactly
+[113:09] what you're going to do. So you can
+[113:12] record it beforehand and then you just
+[113:15] submit those command buffers and then
+[113:17] those command buffers will include all
+[113:19] the information that they need. They
+[113:21] will already be baked into the layout
+[113:24] that the the GPU expects in terms of the
+[113:28] communication between the driver and the
+[113:31] GPU.
+[113:33] And then that's that's basically Vulcan.
+[113:36] That's the old the old idea of of doing
+[113:39] stuff beforehand and then doing as
+[113:43] little stuff as possible
+[113:45] uh during uh runtime. Everything is
+[113:48] already ready for you by the time you
+[113:51] get to the render loop. Kind of like
+[113:53] it's it's a bit more uh it's never that
+[113:56] easy. It's it's never like zero work.
+[113:59] It's not zero work because you still
+[114:00] have lots of um dynamic decisions that
+[114:05] you need to make. Like for example, if
+[114:06] you do culling, if you identify that
+[114:09] some object is uh entirely out of the of
+[114:14] the visible um area of the of the
+[114:18] camera, then you want to to drop it, not
+[114:21] provide it to the GPU at all. So this is
+[114:23] one of the calculations that you may
+[114:25] want to do and then decide whether to
+[114:27] submit this command buffer. So it's not
+[114:29] like you can create one command unless
+[114:31] it is very simple application. It's not
+[114:33] going to be just a single command buffer
+[114:35] but a few command buffers are going to
+[114:38] wrap like I don't know 80 90% of what
+[114:41] was previously done by
+[114:44] a few hundreds of of OpenGL calls and
+[114:48] then you just need to submit it.
+[114:53] But you still have a lot of
+[114:55] initialization work like on swap chain.
+[114:58] What is a swap chain?
+[115:00] >> So um
+[115:02] back then when if you go back to the
+[115:04] software rasterization days
+[115:08] um the way that the VGA worked is that
+[115:12] it would literally scan the entire
+[115:15] window from like top left to bottom
+[115:18] right.
+[115:19] Um it will do that like 60 60 times per
+[115:23] second and then it will take the
+[115:25] information from some uh memory buffer
+[115:28] the color and then put the color on the
+[115:32] screen and then if you change the image
+[115:36] while it is scanning then you would see
+[115:40] some kind of a nasty flicker. And so
+[115:43] what they did
+[115:45] um that they identified the I forgot the
+[115:50] name retrace or vertical vertical
+[115:53] retrace or something like that like
+[115:55] that. Um the the the little pause that
+[115:59] there is between getting from to the to
+[116:02] the end to the bottom to the bottom
+[116:04] right the the the ray needs to go back
+[116:08] to the beginning. There is a little
+[116:09] pause there. So if you change
+[116:13] the the pointer for the rasterization
+[116:16] for the presentation engine. You change
+[116:19] it to point to a different image then it
+[116:22] will start on that image and then if you
+[116:24] don't touch it while it is scanning
+[116:28] um then the image will be stable.
+[116:32] Okay. So what what you do is double
+[116:33] buffering. You modify one image the back
+[116:37] buffer while it's rather sibling is
+[116:42] being displayed and then when the uh the
+[116:45] rest the presentation engine the ray
+[116:47] goes back to the beginning
+[116:50] um you flip the buffers
+[116:53] and then front becomes back back becomes
+[116:55] front and then the new one is being
+[116:57] displayed and the next one is being
+[116:59] rasterized. So this was the case in very
+[117:01] old
+[117:03] uh TVs from like the the 80s and the '9s
+[117:07] and today I think that today's uh
+[117:09] technology is not like that but the the
+[117:12] the notion still exists there in terms
+[117:15] of
+[117:17] um
+[117:19] so if if I think that if you would work
+[117:22] with a single buffer you will still end
+[117:24] up with the same problem but it's just
+[117:26] the technology is not is not like uh
+[117:29] There is no tube today. Back then the
+[117:32] you have the large TVs there was
+[117:33] actually at the back of the TV. Um there
+[117:37] was a ray that was scanning the the
+[117:40] image 24 times per second or whatever.
+[117:43] And so the technology is different but
+[117:45] the problem remains the same I think
+[117:47] even with the newer technology which is
+[117:49] why uh we have the notion of a swap
+[117:52] chain
+[117:54] which contains several uh at least two
+[117:56] images uh for doing double buffering.
+[118:00] This is true for both uh OpenGL and
+[118:03] Vulcan. In Vulcan the swap chain is an
+[118:05] actual um object. So this is something
+[118:08] that you need to create and manage
+[118:10] because in um an another thing in Vulcan
+[118:15] is moving the work and most of the
+[118:18] responsibility from the driver to the uh
+[118:22] to the user because to the developer
+[118:25] because one of the things that we did
+[118:27] had to do back then in the DX9 and 10 uh
+[118:30] days was to try to understand what the
+[118:34] software is trying to do and maybe help
+[118:37] it by optimizing things underneath
+[118:39] underneath but but the software is not
+[118:42] really providing you with hints. So even
+[118:44] though you're running the same render
+[118:47] loop each time as as a GPU as a as a
+[118:52] driver you have no idea this is that
+[118:54] this is what is going to happen. You
+[118:57] don't have access to like the code.
+[118:59] You're not going to analyze the code and
+[119:01] say, "Okay, I know that the the next
+[119:03] frame is going to be the same except
+[119:05] that some matrix is going to be
+[119:07] different. So, I'm going to I'm going to
+[119:09] skip some of the stuff." No, you have to
+[119:12] um
+[119:13] be ready for any change in any state
+[119:16] even though it's not going to happen. So
+[119:18] um
+[119:20] the the driver includes
+[119:23] um a lot of uh error checkings
+[119:26] and a lot of management of command
+[119:29] buffers because actually command buffers
+[119:31] do exist in OpenGL and DirectX but not
+[119:35] as uh part of the API. This is how
+[119:38] usually how the
+[119:41] the software talks to the GPU. it
+[119:43] actually creates command buffers and
+[119:46] fills them up with information and
+[119:48] provides them
+[119:49] >> to the um to the GPU. Um
+[119:55] >> okay. But then
+[119:56] >> they simply they simply exposed it to
+[119:59] the developer.
+[120:01] >> Okay. But uh what is it there to to to
+[120:05] for example modify uh in swap chain like
+[120:08] you can create it you can set it to um
+[120:13] for double buffering and then and then
+[120:15] what like what's there to manage? uh you
+[120:17] you can control the number of um
+[120:21] of images. You can decide whether to use
+[120:24] one, two or three images. More
+[120:28] theoretically possible, but there is a
+[120:31] problem with creating too many images
+[120:32] because you are
+[120:35] um there is there may be some disconnect
+[120:38] between what the player is doing and
+[120:41] what they're seeing. if you have too
+[120:43] many images because you're already
+[120:46] running too fast into the future if
+[120:48] you're creating more more images. So two
+[120:52] or three buffers are probably the
+[120:54] maximum. The swap chain also includes
+[120:57] information such as format
+[121:00] and whether in it includes depth buffer.
+[121:04] So there there's a few pieces of
+[121:06] information
+[121:08] and they decided to expose it also.
+[121:11] um different presentation methods. So
+[121:14] for example they have FIFO and mailbox
+[121:18] and few different ways of replacing an
+[121:21] image. So for example
+[121:23] in one in one method it will simply
+[121:28] traverse as a in a loop over all the
+[121:30] images in in in another method if a new
+[121:33] image comes along it can override an
+[121:36] existing image which was not yet been
+[121:39] rendered. Okay. So if there is an image
+[121:41] in the queue but another one came along
+[121:44] and the presentation man presentation
+[121:47] engine hasn't been able to
+[121:50] to render the the waiting image, it can
+[121:53] replace it with a newer version. So
+[121:57] there are a few
+[121:59] uh capabilities there and some
+[122:01] improvements.
+[122:03] Okay. And some other ways uh or new
+[122:08] capabilities that Vulcan provides is for
+[122:10] example the idea that you can have a
+[122:14] much more programmable
+[122:17] stages in terms of you can define what
+[122:21] you have in terms of shaders one after
+[122:24] another.
+[122:25] >> No it's actually it's actually the same
+[122:27] shaders.
+[122:28] >> So Vulcan provides a vortex shader,
+[122:30] geometry shader, distillation shaders.
+[122:33] Yeah. In terms of the shaders, you have
+[122:35] the same stages.
+[122:38] Um
+[122:40] it's all a man management of um okay
+[122:43] another feature. So um Vulcan is mostly
+[122:47] for performance. The guys who are
+[122:50] responsible for um in Kronos who are the
+[122:53] designers of OpenGL
+[122:55] they've been researching it for years.
+[122:57] they identified all the bottlenecks and
+[123:00] um one of the bottlenecks is that uh
+[123:03] OpenGL is very limited in terms of
+[123:06] multi-
+[123:08] multipprocessing or multi-core on the
+[123:11] CPU. So it's difficult to render what
+[123:14] happens when you render submit draw
+[123:17] calls from different uh threads.
+[123:20] >> It's not so well defined. And usually
+[123:22] you have a single rendering thread which
+[123:26] takes all the rendering work. And then
+[123:27] if you want to offload some of the stuff
+[123:30] to other threads, you can do that as
+[123:33] long as you don't do um changes to to
+[123:37] the render to the actual OpenGL work. So
+[123:40] they opened it up entirely in Vulcan.
+[123:44] They allow you to submit um command
+[123:48] buffers from different threads. um place
+[123:52] um synchronization mechanisms directly
+[123:56] into the command buffer. So you can say
+[123:58] that hey this command buffer is going to
+[124:00] be dependent on this one and will be
+[124:04] executed after that. And if you if if
+[124:08] your application is one which does
+[124:10] record command buffers during real time
+[124:13] which is kind of like I think not what
+[124:17] what what the purpose of command buff
+[124:19] the whole idea is to record them
+[124:21] beforehand and then submit them. But if
+[124:23] you want to record them, you can create
+[124:27] command buffers, pools, command buffers,
+[124:30] command buffer pools on different
+[124:32] threads and then each thread will have
+[124:36] its own pool to record command buffers
+[124:38] from.
+[124:41] >> Okay.
+[124:41] >> So you you you don't create you don't
+[124:44] allocate a command buffer out of thin
+[124:46] air like when you call Malo. You have to
+[124:49] create a pool and then you can uh
+[124:51] allocate from the pool and you can
+[124:53] return stuff from the pool which is
+[124:55] often what you do when you want to reuse
+[124:58] a lot of the same memory even for any
+[125:01] other type of in of of software right
+[125:04] you create like uh pools of objects and
+[125:06] then you allocate and deallocate
+[125:10] so it's the same in Vulcan only that
+[125:12] they allow you to create uh a dedicated
+[125:15] command buffer pool for different
+[125:17] threads and then the threads
+[125:19] will be entirely independent.
+[125:24] >> Okay. Okay.
+[125:26] >> So if you were to compare a Vulcan and
+[125:29] OpenGL,
+[125:31] what would be the dimensions and
+[125:33] differences?
+[125:34] >> So there there's a lot more
+[125:36] responsibility on the developer. I think
+[125:38] that Vulcan is much a much bigger
+[125:41] challenge especially for beginners
+[125:45] and you know in many cases
+[125:48] there is a tradeoff because
+[125:51] you're going to spend more time on
+[125:53] debugging you may end up not having
+[125:56] enough time to do kind of like you know
+[126:00] interesting work. uh you need to you
+[126:03] need to you want to implement a more
+[126:06] sophisticated sophisticated lighting
+[126:09] model but you end up not having enough
+[126:11] time because you need to set up the
+[126:13] framework or the game engine working
+[126:16] correctly and takes a lot of time with
+[126:18] Vulcan because um everything which was
+[126:21] offloaded to you the developer as well
+[126:23] as error checking stuff which doesn't
+[126:26] work correctly previously you could get
+[126:29] a hint from the from the from the OpenGL
+[126:33] driver
+[126:35] um or the driver would make sure that
+[126:38] you will not crash with Vulcan. It would
+[126:40] crash more often. Even though you do
+[126:42] have validation layers which are pretty
+[126:44] good actually you have they did provide
+[126:47] validation layers to Vulcan which can be
+[126:49] enabled or disabled entirely. So they
+[126:52] you will not have any
+[126:54] um overhead from from error checking
+[126:58] only during development and they will te
+[127:00] test and and trigger any fault that you
+[127:04] make in terms of not adhering to the
+[127:06] specification.
+[127:09] So this is good but um uh a lot of
+[127:13] responsibility moves over to you and so
+[127:17] this is um something that you need to be
+[127:20] aware of.
+[127:22] and and in many cases you may not need
+[127:25] this improved performance.
+[127:27] I mean there's always a question of
+[127:29] whether whether you need to actually
+[127:31] develop the the game whatever using
+[127:35] OpenGL or simply use a game engine. I
+[127:38] think that most games today are being
+[127:41] programmed uh with game engines, right?
+[127:44] So
+[127:47] um
+[127:47] >> yeah and also like if you decide to go
+[127:51] with Vulcan then you take more
+[127:54] complexity as you mentioned. You will
+[127:56] need to spend more time on setting this
+[127:58] up and making sure it will work and the
+[128:02] performance gains only make sense if
+[128:05] your game would be bottleneck
+[128:08] >> bottlenecked on the GPU right and it's
+[128:11] not necessarily the case.
+[128:14] because because Vulcan does allow you to
+[128:17] make a better uh use of the G of the CPU
+[128:19] as well.
+[128:20] >> Okay. Okay.
+[128:21] >> Multiple multiple rendering threads. And
+[128:24] so if the type of workload that you're
+[128:27] going to create uh runs fast enough with
+[128:30] OpenGL, then why why go to Vulcan?
+[128:35] Yeah,
+[128:36] >> it might be also tricky to tell in
+[128:38] advance,
+[128:39] especially if you're we're talking about
+[128:41] like AAA games. We're doing things from
+[128:43] scratch with an custom engine and like
+[128:46] you don't really know what will happen
+[128:47] in 3 years when the full game is out
+[128:50] there. Okay. Now, if you you know, you
+[128:54] remember in the beginning when we talked
+[128:56] about your YouTube channel, we said
+[128:57] let's talk about OpenGL and then we come
+[128:59] back. Now, after like two hours of
+[129:01] discussion, we come back.
+[129:04] when you make videos for OpenGL and
+[129:07] Vulcan, what's the difference uh the
+[129:11] response of the audience? What is more
+[129:13] preferable? What is uh how people react
+[129:16] to to to these videos and how is it
+[129:18] different to to make videos for OpenGL
+[129:21] and Vulcan?
+[129:22] >> So, um OpenGL usually gets more views.
+[129:28] >> Okay.
+[129:28] >> Yeah. So I think that people or at least
+[129:31] you know in terms of the material
+[129:33] because it's it's a bit of a different
+[129:35] material material what I what I I made a
+[129:38] kind of like a business decision
+[129:41] to focus on
+[129:45] graphics and math uh and techniques and
+[129:48] algorithms on the uh OpenGL
+[129:52] series and on the Vulcan series focus on
+[129:55] the API. So for example
+[129:58] right now I'm working on uh physically
+[130:03] based I'm I'm using some book which I've
+[130:05] recommended which is um uh the 3D
+[130:10] rendering cookbook. The first version
+[130:12] was OpenGL and and Vulcan and the second
+[130:15] version is only Vulcan and so I'm I'm
+[130:18] still using both of them because the
+[130:20] first one supports OpenGL and I'm taking
+[130:23] stuff for OpenGL from there but even on
+[130:25] the second book for example if they
+[130:28] explained the physically based rendering
+[130:31] um what I'm going to do is to present uh
+[130:35] I have a previous video on physically
+[130:38] based rendering but this is like more
+[130:39] advanced using gltf F2.
+[130:42] So I'm going to present it using OpenGL
+[130:47] and then just take the shaders to Vulcan
+[130:50] when the time comes and just show the
+[130:52] integration.
+[130:54] So this is kind of like the in Vulcan
+[130:56] focus on the on the how to use the API
+[130:59] correctly. On OpenGL there as you said
+[131:02] there is not so much of of an API. you
+[131:04] you learn how to create the buffers,
+[131:07] load the textures, and from now on, it's
+[131:09] a lot of uh shader work and framework.
+[131:14] So, for example, if you need to do to
+[131:16] create a render pass, if you need to
+[131:17] render into an offscreen buffer and then
+[131:20] read from me, then you you need to call
+[131:23] the OpenGL functions correctly. But 90
+[131:26] 90% of the time it's it's shady work.
+[131:29] And so the if I present all the
+[131:32] algorithms
+[131:34] in uh if I explain the idea behind
+[131:37] shadow mapping and you understand it
+[131:39] from the from the OpenGL video then on
+[131:42] the Vulcan video we're just going to
+[131:44] focus on how to implement it with
+[131:46] Vulcan. We're not going to explain why
+[131:48] you need the shadow the shadow map. How
+[131:51] does it work the the shading the
+[131:55] calculating the shading the shadow
+[131:57] factor is going to be on the OpenGL side
+[131:59] and then on the Vulcan side it's we're
+[132:03] going to assume that you you know how to
+[132:04] do it and then it's it also helps me
+[132:07] that I don't need to do everything from
+[132:09] scratch because it's it's it's a lot of
+[132:12] work.
+[132:14] How how much time do you devote to to
+[132:17] making these videos? So, um it's usually
+[132:20] on the weekends and um sometimes uh on
+[132:25] weekdays
+[132:26] um late evening
+[132:30] >> and uh
+[132:32] um yeah, that's most of uh so I I I
+[132:36] usually produce a video once every two
+[132:41] or three weeks and that that's like the
+[132:44] most that I can
+[132:47] What what was the impact of these videos
+[132:50] for you?
+[132:53] >> Um, I would say a lot because basically
+[132:56] I have a dream of simply working on the
+[132:59] channel full-time.
+[133:02] Uh, right now I cannot do it because
+[133:05] it's not generating
+[133:07] a lot of uh income or enough income from
+[133:10] it. But that's kind of like the dream.
+[133:14] So, okay.
+[133:15] >> Hopefully, I don't know down the road or
+[133:19] >> Okay. In the future.
+[133:21] >> Future.
+[133:21] >> Okay.
+[133:23] >> Nice. So, what is there uh what's out
+[133:27] there uh now in the future for the new
+[133:30] videos
+[133:31] >> and what is out there for you uh on the
+[133:34] Intel side?
+[133:36] So, in terms of the videos,
+[133:39] uh the plan is to I mean I'm kind of
+[133:42] because I don't have a lot of time and I
+[133:45] always need to to think strate
+[133:48] strategically about it because it's
+[133:51] important for me to keep some cadence of
+[133:54] of out of of some schedule
+[133:57] which is like not a video once every two
+[134:01] months or three months.
+[134:04] Um you can see some channels that do
+[134:07] that and they have like huge following
+[134:11] but they are but each video is like you
+[134:13] know
+[134:15] nuclear bomb. I mean it's it's amazing
+[134:17] what what what they can put there but uh
+[134:19] my my videos are like more modest and so
+[134:23] I always try to do stuff which doesn't
+[134:27] take a lot of research. I I can kind of
+[134:30] like I use a lot of books with a lot of
+[134:32] prepared material which helps me and
+[134:34] then hopefully with a few hours I can
+[134:37] produce the video and so right now it's
+[134:40] kind of like becoming my comfort zone to
+[134:43] focus on graphics but I would like to
+[134:47] expand into game programming
+[134:50] and um physics which is often tied
+[134:54] together. I mean like collision
+[134:56] detection. You can't really make any
+[134:58] game without some form of collision
+[135:00] detection. And this I'm I'm I'm thinking
+[135:04] about it. I'm looking at the books. I'm
+[135:06] still haven't figured out when I can do
+[135:08] it.
+[135:10] But that is what where I plan to expand
+[135:12] in like not the near future but the
+[135:15] future that comes after like in the
+[135:17] intermediate future.
+[135:18] >> Okay.
+[135:19] >> Right now I will continue producing all
+[135:22] kinds of effects. you know I have the
+[135:24] physically based rendering I'm working
+[135:27] on SSAO screen space ambient occlusion
+[135:32] um
+[135:34] per noise for my terrain rendering I
+[135:38] think that um there is already
+[135:42] uh enough to to create games with with
+[135:45] this information it's enough I mean you
+[135:48] can I think it will be very nice to uh
+[135:51] to have to like read a book which
+[135:54] explains
+[135:55] uh game programming with OpenGL and have
+[135:58] it produce some form of a simple game in
+[136:01] each chapter or even multiple times per
+[136:04] chapter just to show you what you can do
+[136:07] with with even the the amount of
+[136:10] information that you gain from this
+[136:12] chapter. They usually I don't think they
+[136:14] do that.
+[136:15] Um, I have a few books on on game
+[136:18] programming that do that, but not on
+[136:20] OpenGL on on older u like 2D 2D APIs.
+[136:26] Yeah, it's easier. Yeah, it's easier.
+[136:28] Yeah,
+[136:29] >> where where you have a sprite and
+[136:30] whatever and then you they you create
+[136:32] some silly game. So, um I would like to
+[136:36] do that with OpenGL. Right now, I still
+[136:40] haven't figured it out.
+[136:42] >> Okay. Okay. And on the Intel side,
+[136:46] >> so right now we're focusing um as I said
+[136:49] on deep learning. We're actually
+[136:53] transitioning from from CPU work to GPU
+[136:56] work. Intel is also working on GPUs not
+[137:00] just for games like the one that they
+[137:03] have released but also for uh uh for AI.
+[137:08] and um we are ramping up and start
+[137:13] helping um in the it's not the
+[137:18] development of development of the GPU
+[137:20] but more on the performance analysis. So
+[137:23] the idea because my team is a software
+[137:25] team. We don't have like architects or
+[137:29] or or hardware designers. What we do is
+[137:32] to analyze uh workloads and identify
+[137:37] uh bottlenecks and uh performance
+[137:40] optimizations, performance opportunities
+[137:43] and work with various parties within the
+[137:46] organization to to push them or to make
+[137:49] changes to to make AI work faster.
+[137:54] >> That's the idea.
+[137:54] >> Okay.
+[137:56] >> All right.
+[137:57] >> Thank you.
+[137:58] >> You're welcome.
+[137:59] >> This was so cool. We spent two hours
+[138:02] discussing
+[138:03] >> the mostly graphics graphics pipeline
+[138:07] rendering pipeline. Always wanted to do
+[138:10] that on the show.
+[138:11] >> Mhm.
+[138:12] >> Thank you so much.
+[138:12] >> Welcome. It was uh Thanks for having me.
+[138:15] It was a lot of fun.
+[138:17] >> Let's do the shout out to your uh
+[138:19] channel OGLde on YouTube. Where can
+[138:23] people uh where can people find you
+[138:25] apart from YouTube? Where you where are
+[138:28] you available? So, first of all, on the
+[138:30] website, the website is not uh updated
+[138:33] now with more content, but I usually
+[138:37] just keep track of the of the video. So,
+[138:39] whenever a video comes out, I make a
+[138:42] note of that on the uh on the channel on
+[138:44] the on the website. And if you want to
+[138:46] read material on OpenGL, of course,
+[138:49] you're welcome to do that. So, that's
+[138:50] oglddev.org.
+[138:53] And um I also have um um I'm also
+[138:58] available on Tik Tok. I have like a few
+[139:01] videos on Tik Tok. It's not exactly Tik
+[139:03] Tok material and all the links are on
+[139:06] the channel, okay, to uh to Tik Tok and
+[139:09] uh yeah, it's pretty much it. I have a
+[139:11] LinkedIn account uh can can be found by
+[139:14] my name.
+[139:16] >> Okay, we'll put those links in the
+[139:18] description.
+[139:19] >> Thanks a lot.
+[139:20] >> Thank you so much. You're welcome.

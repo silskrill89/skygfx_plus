@@ -1,0 +1,1173 @@
+# Transcript: 11fUaWvWYFQ
+# Fetched: 2026-08-07T06:23:21.047024
+# Entries: 1168
+# Duration: 4416s
+
+[00:01] hi i'm chris wilson from grinding gear
+[00:02] games
+[00:03] thanks so much for joining us here today
+[00:05] and today is a day about path of exile
+[00:07] you're going to find out a lot of
+[00:08] awesome stuff we've been working on
+[00:10] before we get started though i wanted to
+[00:12] mention that there are twitch drops that
+[00:13] you can win
+[00:14] below the live stream there are some
+[00:15] instructions for signing up and linking
+[00:16] your twitch account with your path of
+[00:17] excel account and if you do that you'll
+[00:19] be eligible to receive the drops
+[00:21] so today's live stream has got four
+[00:22] sections they say you should start your
+[00:24] show with a bang so we're going to start
+[00:25] right off with path of excel 2.
+[00:27] after that we're going to show you path
+[00:29] of exile ultimatum this is an expansion
+[00:31] for regular path of exile that's coming
+[00:32] out literally next week
+[00:34] after that we're going to be joined by
+[00:35] ziggy d who's going to host a q a where
+[00:37] he asks me a whole bunch of questions
+[00:39] from twitch chat
+[00:40] so if you have any questions about the
+[00:41] various reveals make sure to keep them
+[00:42] for the q a
+[00:44] then there's going to be a live episode
+[00:45] of the bay class podcast where take cat
+[00:47] and his crew of path of exile veterans
+[00:48] are going to discuss all of the things
+[00:50] we've announced today
+[00:51] they'll be joined by rory rackham who's
+[00:52] the grinding games developer who is in
+[00:54] charge of the development of the
+[00:55] ultimatum league
+[00:57] all right let's get started you're
+[00:58] probably wondering why has it been so
+[01:00] long since we last showed you any path
+[01:02] of xl2 footage
+[01:03] and honestly this is because the project
+[01:05] is so important to us that we are
+[01:06] definitely taking our time to make sure
+[01:08] that we make the best possible action
+[01:10] rpg
+[01:11] let's watch a new trailer
+[01:22] among ancient ruins evil grows once more
+[01:31] the feed of corruption advances
+[01:33] spreading dread and despair
+[01:37] we must give chase
+[02:13] [Music]
+[02:18] we must hunt down and put an end to this
+[02:23] madness if rake lust
+[02:27] is to survive
+[02:36] [Music]
+[02:48] [Music]
+[03:02] that trailer really shows what we've
+[03:04] achieved with path of xl2 i am
+[03:06] so proud of the efforts of the entire
+[03:07] team and putting that together
+[03:09] at exocon we announced the path of xl2
+[03:12] is a true sequel to path of exile
+[03:14] so that means a new seven-act campaign
+[03:16] it means a whole new skill gym system
+[03:18] new items new monsters character classes
+[03:21] all the ascendancy classes are
+[03:22] completely new it's got cutting edge
+[03:24] next generation graphics as you just saw
+[03:27] basically it's everything you would
+[03:28] expect from a sequel to path of exile
+[03:31] but we're not just throwing away our
+[03:32] legacy we're embracing it
+[03:34] both campaigns will be fully playable
+[03:36] from within the same game plan you'll be
+[03:37] able to play through the original path
+[03:39] of xl's storyline or the new path of xl2
+[03:41] campaign
+[03:42] on the way to the shared end game all of
+[03:43] your old characters will still be
+[03:45] playable and of course any
+[03:46] microtransaction purchases you've made
+[03:48] in path of exile will carry on to the
+[03:49] sequel
+[03:51] at exorcon we introduce the dark forests
+[03:53] of the island of ogam where you start
+[03:55] your journey
+[03:55] today we're proud to showcase path of
+[03:57] exile to second act which takes place in
+[03:59] the vasteri desert
+[04:04] welcome to path of exile to second act
+[04:07] as you saw in the trailer act ii is
+[04:09] centered around a caravan of mariketh
+[04:11] called the ardura who live in the
+[04:12] vasteri desert
+[04:14] you're chasing another caravan from an
+[04:16] opposing tribe called the faraday
+[04:18] there's a set of large ancient gates
+[04:20] blocking the progress of the caravan
+[04:21] through a desert pass
+[04:22] so you're being sent through the
+[04:23] traitor's passage to unlock them we
+[04:26] shall wait here jingak but the military
+[04:28] carts have departed for the gates
+[04:31] make haste
+[04:34] path of xl2 is a lot more than just new
+[04:37] acts we want combat to feel both brutal
+[04:39] and responsive even at low levels
+[04:42] we're ensuring that each weapon type has
+[04:43] unique and different mechanics
+[04:45] each weapon class feels different to
+[04:47] play and today we're going to start by
+[04:48] demonstrating the new spear weapon class
+[04:51] spears are a weapon class favoring
+[04:53] mobility with both melee and ranged
+[04:54] attack options
+[04:56] to that end each spear will grant you at
+[04:57] least one mobility skill
+[04:59] in this case the spear comes with both
+[05:01] an engage and disengage skill
+[05:04] when you engage it increases your melee
+[05:05] damage for a short time and that really
+[05:07] encourages you to be mobile during
+[05:09] combat
+[05:15] one of the skills we're using here is
+[05:17] called whirling slash
+[05:18] when you use whirling slash it creates a
+[05:20] sandstorm that grows in size each time
+[05:22] you use the skill
+[05:23] when you leave the sandstorm it explodes
+[05:25] dealing damage to nearby monsters
+[05:27] a great way to do that is to use the
+[05:28] disengage skill which makes you fly
+[05:30] backwards and throw projectiles
+[05:44] in poe 2 each area's mini boss is a much
+[05:46] more substantial fight with interesting
+[05:48] mechanics
+[05:49] you'll be able to find at least one mini
+[05:50] boss in each area of the game
+[05:52] one thing i love about this boss in
+[05:54] particular is that it destroys the
+[05:55] ceiling when it slams the ground letting
+[05:57] in more light
+[05:58] clever players will notice that if
+[05:59] they're standing in the light then
+[06:01] they're not going to have any rocks
+[06:02] falling on their head
+[06:07] the rapid assault skill that we're using
+[06:09] against this boss does three rapid stabs
+[06:11] followed by a fourth step that deals
+[06:13] more damage and can stun if you're
+[06:14] willing to commit to a long attack time
+[06:17] while developing the skills for path of
+[06:18] xl2 we were really thinking a lot about
+[06:20] designing skills that could be cancelled
+[06:22] early to dodge
+[06:23] or you can commit to the full attack for
+[06:25] maximum damage
+[06:42] [Music]
+[06:46] hey
+[06:53] one of the skills we're using here is
+[06:55] called spearfield which creates an area
+[06:57] of spears coming out of the ground that
+[06:58] impale monsters who walk into them
+[07:00] causing them to bleed as the monsters
+[07:02] move towards you they take damage
+[07:04] so using your mobility skills as a way
+[07:05] to move away from them is a great
+[07:07] strategy here
+[07:10] in path of xl2 we've invested a lot in
+[07:12] our animation system
+[07:14] i'm sure you're noticing the animations
+[07:15] are looking a lot better than they did
+[07:17] in poe 1
+[07:18] but there's also a lot of subtle detail
+[07:19] like characters having different run
+[07:21] animations depending on how fast they're
+[07:22] moving
+[07:23] when we use a quick silver flask here
+[07:24] you can see the character changes to a
+[07:26] sprinting animation
+[07:36] [Music]
+[07:42] now
+[08:04] now that we've arrived at the ancient
+[08:06] gates we're going to show you another of
+[08:07] the new weapon classes and path of xl2
+[08:09] crossbows crossbows are special and they
+[08:12] ground attack skills implicitly this
+[08:14] particular crossbow grants powershot
+[08:15] which is a high damage single target
+[08:17] attack
+[08:18] in order to modify what powershot does
+[08:20] you're going to need to equip bolt skill
+[08:21] gems which change the type of bolts that
+[08:23] are loaded into the crossbow
+[08:25] here we've got three different bolt
+[08:26] skills that the character can switch
+[08:27] between depending on the situation
+[08:32] incendiary bolts
+[08:35] permafrost bolts can be used to disrupt
+[08:37] packs of enemies to prevent them from
+[08:38] closing in on your position
+[08:40] you can then follow up with
+[08:41] armor-piercing bolts to do plenty of
+[08:43] damage
+[08:50] in this area we're helping asala leader
+[08:52] of the ardura to open the ancient gates
+[08:54] and let the caravan through
+[09:01] [Music]
+[09:07] because the bolt types are the skill
+[09:08] gems support gems that are added to them
+[09:10] will modify whatever the skill is that
+[09:12] you're using
+[09:12] here we're going to add multiple
+[09:14] projectiles to our incendiary bolts
+[09:31] [Music]
+[09:48] i'm
+[09:56] we're doing a lot more interesting
+[09:57] things with monster packs here you can
+[09:59] see some of the monsters patrolling
+[10:02] around
+[10:11] [Music]
+[10:19] [Music]
+[10:21] incendiary balls
+[10:27] armor piercing bolts
+[10:34] i'm a piercing
+[10:52] [Music]
+[10:58] i'm a piercing
+[11:01] [Music]
+[11:08] now we're coming to another example of a
+[11:10] path of exile to miniboss limb the
+[11:12] impaler
+[11:38] a siege crossbow this crossbow grants
+[11:40] the siege cascade skill
+[11:42] the skill is also modified depending on
+[11:44] what type of bolts you're using
+[11:58] [Music]
+[12:01] century books
+[12:11] give these demons
+[12:37] we tried to add a lot more little
+[12:38] details to combat in path of xl2
+[12:40] you might notice that the monsters who
+[12:42] die while burning have charred corpses
+[12:44] we really want to make sure that there's
+[12:45] a feeling that as you leave the
+[12:47] battlefield there's clear evidence of
+[12:48] what combat took place then
+[13:02] [Music]
+[13:04] permafrost
+[13:18] falls
+[13:21] incendiary bolts
+[13:25] armor-piercing bolts
+[13:29] incendiary bolts
+[13:40] incendiary box
+[14:00] mechanism
+[14:03] [Music]
+[14:14] incendiary
+[14:23] this is the perennial king the leader of
+[14:24] the faraday his goal here is to prevent
+[14:27] you from catching the caravan at any
+[14:28] cost
+[14:34] [Music]
+[14:49] [Applause]
+[14:49] [Music]
+[15:10] wow
+[15:12] [Music]
+[15:22] we will finish this
+[15:27] he must not escape
+[15:37] quickly he conjures the very sands
+[15:40] against
+[15:40] us
+[15:48] this madness has gone on long enough
+[15:51] the king is not the man i once knew and
+[15:54] said swallow me if i do any more to
+[15:57] enable him
+[15:58] you plan to continue your pursuit yes
+[16:00] you will not catch him
+[16:02] not without me we cannot follow through
+[16:05] the raging sands
+[16:07] let us return to the caravan and
+[16:09] question this defector
+[16:14] this is the ardura caravan your town in
+[16:16] acts 2.
+[16:26] i care not where you came from know what
+[16:28] cast you might have been there
+[16:31] all that matters is that you have shown
+[16:33] yourself capable in battle
+[16:35] jinga remain a friend to the adora
+[16:38] and you shall have nothing but respect
+[16:41] from us
+[16:44] from what your shade has told us the
+[16:46] situation is dire
+[16:48] this balbalic will live or die based on
+[16:51] her usefulness
+[16:52] in pursuit of the seed of corruption ask
+[16:55] her what questions you will
+[16:56] then we adora will decide her fate
+[17:06] you need not trust me you'll see the
+[17:09] truth of my information
+[17:10] soon enough i ask nothing of you
+[17:13] only that you do what you know is right
+[17:16] one of the things we really wanted to do
+[17:17] in acts 2 was to use the mobility of the
+[17:19] caravan to allow the player to choose
+[17:21] how they explore the act
+[17:22] here you're given four options on how to
+[17:24] proceed
+[17:27] there is a tribe of lost man that
+[17:29] inhabits the mastodon bedlands
+[17:31] they worship the bones of those long ago
+[17:33] beasts
+[17:34] and that faith has given rise to
+[17:37] powerful tasks
+[17:38] that can somehow call on storms and
+[17:41] strike
+[17:42] enemies with lightning the king wishes
+[17:45] to steal
+[17:46] these objects of worship and use their
+[17:49] lightning
+[17:50] in war do what you must
+[17:55] though events demand you tread upon a
+[17:57] valley of the dead
+[17:58] do not do so flagrantly keep your
+[18:01] presence
+[18:02] light cleanse what corruption you can
+[18:04] and we shall skirmish with the faradam
+[18:06] to protect your flank
+[18:08] once you've picked your destination the
+[18:10] caravan will travel to that area and
+[18:11] come to a stop so that you can disembark
+[18:13] and go on your
+[18:14] quest
+[18:22] because we just got the storm swear
+[18:24] skill as a quest reward now would be a
+[18:25] great time to switch back to spears and
+[18:27] use some ranged abilities
+[18:28] [Music]
+[18:32] storm spear fires a lightning projectile
+[18:34] which splits on contact
+[18:43] the other skill we're using here is
+[18:45] called blazing lance blazing lance
+[18:47] creates a trail of fire from the ground
+[18:49] dealing damage over time
+[18:50] however if you're willing to stand in
+[18:52] place for long enough you can throw a
+[18:53] second spear that will fan the flames
+[18:54] for much more damage
+[18:58] [Music]
+[19:04] [Music]
+[19:21] we've just found a unique spear it's
+[19:22] called devata's wind
+[19:24] this spear has an extra modifier that
+[19:26] synergizes really well with storm spear
+[19:28] when you disengage you get two
+[19:29] additional projectiles on your
+[19:30] projectile skills
+[19:59] [Music]
+[20:04] so wow
+[20:29] [Music]
+[20:32] hello
+[20:34] [Music]
+[20:52] [Music]
+[21:00] well
+[21:05] [Music]
+[21:28] now
+[21:36] [Music]
+[21:56] so
+[22:04] [Music]
+[22:36] [Applause]
+[22:49] [Music]
+[22:56] [Music]
+[23:01] [Applause]
+[23:06] so
+[23:19] if you have any questions about what you
+[23:20] just saw we'll be doing a q a later on
+[23:23] while path of exile 2 definitely won't
+[23:25] be released this year
+[23:26] we do have a path of xl expansion you
+[23:28] can play one week from now
+[23:30] i'd like to introduce path of exile
+[23:31] ultimatum
+[23:35] you only live once exile
+[23:39] make your choice
+[23:51] [Music]
+[23:56] a simple ultimatum leave with your life
+[24:00] and a media reward or risk it all
+[24:03] for a chance at ungodly riches
+[24:10] for each trial you accept the challenge
+[24:13] grows
+[24:15] but fail and leave with nothing
+[24:35] reap the reward you deserve
+[25:04] [Music]
+[25:07] ultimate reward requires ultimate risk
+[25:12] face the ultimatum
+[25:26] when some people think of the vowel
+[25:27] civilization they think of
+[25:29] blood sacrifices or queen at zeri or
+[25:32] lost temples in the jungle
+[25:33] but i think of risking your items from
+[25:35] valors through double corruption the
+[25:37] whole vowel or no balls meme
+[25:39] we had to make sure that this expansion
+[25:41] was about the concept
+[25:42] of risking your items to get great
+[25:44] reward
+[25:46] in each area of the ultimatum league
+[25:48] you'll meet the trial master
+[25:49] an emissary of a vile entity only known
+[25:52] as chaos
+[25:53] on behalf of chaos the trial master
+[25:55] enacts trials where exiles must risk an
+[25:57] escalating set of valuable rewards
+[25:59] as they attempt to overcome
+[26:00] progressively more difficult encounters
+[26:03] in each trial you'll be presented with a
+[26:05] reward an objective and a selection of
+[26:07] difficulty modifiers that make the trial
+[26:09] harder
+[26:10] once you've chosen one of the modifiers
+[26:11] you must then complete that objective
+[26:13] under the constraints of that modifier
+[26:15] in order to win the promised reward
+[26:20] [Music]
+[26:23] if you succeed in the challenge the
+[26:24] trial master will present you with an
+[26:26] ultimatum
+[26:27] either walk away with what you have
+[26:28] earned so far or risk it all to try to
+[26:30] win additional rewards
+[26:32] he'll offer you another item if you can
+[26:34] select an additional difficulty modifier
+[26:35] and complete the challenge with both
+[26:37] modifiers present
+[26:38] if you fail though you'll lose both
+[26:40] rewards and walk away with nothing
+[26:46] if you succeed you'll be offered an
+[26:48] additional reward in exchange for adding
+[26:49] yet another difficulty modifier that
+[26:51] stacks on top of the current ones
+[26:53] this cycle continues until the rewards
+[26:55] become increasingly valuable and the
+[26:56] encounter extremely difficult
+[26:58] you'll have to pick a point to end your
+[27:00] run and claim your spoils before you
+[27:01] make the encounter too hard and lose
+[27:03] everything
+[27:05] at its longest an ultimatum and endgame
+[27:07] maps can sometimes have up to 10 fast
+[27:09] trials in a row
+[27:10] with a special surprise in the last one
+[27:13] in maps you'll occasionally find items
+[27:15] called inscribed ultimatums
+[27:17] these items can be placed in the map
+[27:19] device to transport you to the trial
+[27:20] master's domain
+[27:22] each inscribed ultimatum specifies an
+[27:24] offering that you must bring with you
+[27:25] a reward you can earn and an assortment
+[27:27] of ultimatum difficulty modifiers
+[27:30] if you're able to complete the trial the
+[27:31] trial master will reward you with a
+[27:33] specified reward
+[27:34] which is usually worth around twice the
+[27:36] value of the item you must bring
+[27:38] for example you may be asked to risk an
+[27:39] exalted orb to win a stack of two
+[27:42] or potentially risk a stack of five to
+[27:43] win a stack of ten
+[27:45] naturally inscribed ultimatums can be
+[27:47] traded with other players
+[27:48] so if you don't feel capable of
+[27:50] completing a difficult challenge you may
+[27:52] be able to trade it away for a portion
+[27:53] of the difference in price between the
+[27:54] reward and the item that must be risked
+[27:57] likewise if you have a powerful
+[27:58] character you may be able to selectively
+[28:00] trade for profitable ultimatums to run
+[28:04] there are also new unique items that can
+[28:06] only be obtained from ultimatum
+[28:07] one such unique is the glimpse of chaos
+[28:09] vowel mask which provides powerful
+[28:11] benefits to your maximum life
+[28:13] mana and energy shield at the cost of
+[28:15] having severely reduced elemental
+[28:16] resistances and no chaos resistance
+[28:19] the item can be corrupted multiple times
+[28:21] and has unique corruption outcomes
+[28:23] such as removing a random modifier or
+[28:25] transforming it into a different random
+[28:26] corrupted unique helmet entirely that
+[28:28] retains its corruption implicit mod
+[28:32] another new value unique item in
+[28:34] ultimatum is mahuzutl's machination
+[28:36] which grants you six keystone passives
+[28:38] at once
+[28:39] combining all of these keystones results
+[28:41] in some very unusual outcomes
+[28:42] and the item features an entirely new
+[28:44] unique keystone as well
+[28:47] we have worked hard to make sure that
+[28:48] ultimatum doesn't punish you for being
+[28:50] in a party with other players
+[28:52] party members compete in trials together
+[28:54] but have separate rewards available to
+[28:56] them that will need to be locked in to
+[28:57] begin the trial
+[28:58] each player votes on which difficulty
+[29:00] modifiers to select
+[29:01] if there's a draw in votes the modifier
+[29:03] will be chosen at random
+[29:05] if one player wants to take their reward
+[29:07] and opt out to the next difficult trial
+[29:08] they're able to do so without stopping
+[29:10] the other party members from continuing
+[29:12] rewards are dropped allocated to the
+[29:14] players who earned them
+[29:18] so that's path of exile ultimatum i can
+[29:20] tell you on release day a lot of our
+[29:22] developers are looking forward to
+[29:23] watching twitch so we can see players
+[29:25] risking far too much in order to try to
+[29:27] get good rewards
+[29:29] speaking of rewards there's a lot to
+[29:31] talk about here
+[29:32] we had a look at path of exile's past
+[29:34] reward systems
+[29:35] and we honestly feel many of them are
+[29:36] out of date many of them kind of lack
+[29:38] identity and to top it all off like the
+[29:40] core drop pool of just items that drop
+[29:42] when you kill regular monsters just
+[29:44] wasn't really compelling enough
+[29:46] like you know that feeling where any
+[29:47] monster could drop a mirror we want that
+[29:49] for a whole slew of different items and
+[29:51] so we've made a lot of changes to path
+[29:53] of exile's reward systems there's a
+[29:55] bunch of ones to the core drop pool to
+[29:56] keep it really interesting
+[29:57] there's wants to basically every piece
+[29:59] of league and expansion specific content
+[30:01] and we're going to go through all of
+[30:02] those for quite a while now and i should
+[30:05] mention that every change we're about to
+[30:06] discuss
+[30:07] not only affects the ultimatum league
+[30:08] but also standard league too
+[30:12] we started by reviewing which items can
+[30:14] drop from monsters and chests in the
+[30:16] core game
+[30:16] to make sure the core drop pool remains
+[30:18] compelling we've made various changes
+[30:20] you can now find two additional currency
+[30:22] items as core drops orbs of binding from
+[30:24] the harbinger league
+[30:25] and the new veiled chaos orb which we'll
+[30:27] reveal in more detail soon
+[30:29] we've also added five new atlas based
+[30:31] types like this energy shield recharge
+[30:33] amulet
+[30:33] these drop in specific regions of the
+[30:35] atlas of worlds and have some powerful
+[30:36] new implicit mods
+[30:38] another topic related to the core drop
+[30:40] pool is that of boss runs
+[30:42] veteran community members will remember
+[30:43] when people used to do vile oversoul or
+[30:45] dominus runs over and over
+[30:47] because they were a profitable use of
+[30:48] time final axe bosses now drop more and
+[30:51] better items giving you a much more
+[30:53] satisfying close to a difficult act and
+[30:54] a more item-focused approach to getting
+[30:56] ready for maps if you prefer
+[31:00] we have also added a bunch of very
+[31:01] powerful and valuable league specific
+[31:03] uniques into the core drop pool
+[31:05] this means that they can drop from any
+[31:06] sufficiently high level monster without
+[31:08] you having to engage with specialized
+[31:09] content
+[31:11] examples of these are badge of the
+[31:13] brotherhood a salem pledge of hands
+[31:15] maloney's mechanism brutus's lead
+[31:17] sprinkler
+[31:18] and headhunter the goal of all these
+[31:20] changes is to make sure that every
+[31:22] monster you kill and path of exile has a
+[31:23] chance to drop something
+[31:25] incredibly valuable regardless of what
+[31:26] content you're playing
+[31:29] on top of all of that we have added a
+[31:30] handful of new vendor recipes
+[31:32] which let you make some pretty cool
+[31:34] stuff we really miss the days when
+[31:35] players were scrambling to try to find
+[31:37] unknown recipes and so we're looking
+[31:38] forward to seeing how long it takes for
+[31:40] you to discover how these ones work
+[31:42] we have also introduced a new type of
+[31:44] reliquary key into the core drop pool
+[31:46] for this expansion
+[31:47] if you're very lucky you can find a
+[31:48] vowel reliquary key from any monster or
+[31:50] chest and path of excel
+[31:52] when consumed in the map device it gives
+[31:54] you access to a vault with a chest that
+[31:56] drops a special foil version of a vowel
+[31:57] theme's unique item
+[32:00] each unique has an equal chance of
+[32:01] dropping due to the value and power
+[32:03] level of the items contained within
+[32:04] this is the rarest relocate ever added
+[32:06] to part of excel
+[32:09] the rest of our reward changes relate to
+[32:11] items that you can earn by playing past
+[32:12] content like prior leagues and
+[32:14] expansions
+[32:15] we have two goals here the first is to
+[32:17] add and improve items so that all past
+[32:18] content is a compelling set of rewards
+[32:21] the second goal is to make it so the
+[32:22] best way to get any reward is to play
+[32:24] the content that is primarily associated
+[32:26] with that type of reward
+[32:28] path of exile's first expansion
+[32:30] sacrifice of the val introduced a new
+[32:32] ultimate boss
+[32:33] at zerry queen of the valve this fight
+[32:35] holds up pretty well these days
+[32:36] considering that it is seven years old
+[32:38] but its rewards really needed a refresh
+[32:40] the sacrificial guard base type that
+[32:42] drops from at zeri has been
+[32:43] significantly improved with the addition
+[32:45] of an implicit mod that grants plus one
+[32:47] to the level of all valve gems you have
+[32:48] equipped
+[32:50] we have also added two new unique items
+[32:52] to at zerry's drop pool and two more to
+[32:53] overhead series
+[32:55] one of which is the at series rule
+[32:56] judgment stuff which prevents you from
+[32:58] being stunned or having your damage
+[32:59] reflected
+[33:00] it grants a skill that alternates
+[33:02] between flames of judgment and storm of
+[33:04] judgment when used
+[33:05] as if you absorb the powers of etzeri
+[33:06] herself
+[33:09] skipping forward to 2016's release of
+[33:11] ascendancy
+[33:12] we have made some changes to how you
+[33:13] receive your labyrinth enchantments
+[33:15] previously when you completed the
+[33:16] labyrinth and went to enchant an item
+[33:18] you couldn't see what random result
+[33:20] you'd get now the result for each type
+[33:22] of enchantment is shown to you in
+[33:23] advance
+[33:24] so you can make the right choice in the
+[33:26] eternal labyrinth you're now offered
+[33:27] three different helmet enchantments to
+[33:28] pick between in addition to the boots
+[33:30] and gloves
+[33:31] this will make it a lot easier to find
+[33:32] enchantments relevant to the skills
+[33:34] you're using and to apply them to
+[33:35] appropriate items
+[33:38] in 3.14 we're going to stop giving out
+[33:40] unique jewels for each day's fastest
+[33:42] labyrinth runs
+[33:43] and we have added these jewels as very
+[33:44] rare drops that you might find in the
+[33:46] labyrinth's final reward chests
+[33:50] another highly requested labyrinth
+[33:51] related improvement is that you can now
+[33:53] consume an offering to the goddess and
+[33:54] the map device to open portals directly
+[33:56] to a random trial
+[33:58] this greatly accelerates the speed at
+[33:59] which you can find your final trials
+[34:02] we have also added two new labyrinth
+[34:04] specific unique items including
+[34:06] the scales of justice unique shield
+[34:08] which rewards building your character
+[34:09] with a careful balance of life and mana
+[34:11] if used correctly you'll be granted
+[34:13] protection from shock and ignite as well
+[34:15] as additional fire damage
+[34:17] cadero parandis now has a much larger
+[34:19] selection of unique item rewards
+[34:21] we have also rebalanced all sources of
+[34:23] paradise coins so that paradise content
+[34:25] is still the best place to get them from
+[34:27] a craft introduced in harvest kinda
+[34:29] destroyed the parandis coin economy so
+[34:31] we're absolutely fixing that at the same
+[34:32] time
+[34:34] essences have been numerically
+[34:35] rebalanced and are in general stronger
+[34:37] than they were before
+[34:39] screaming essences can now be used to
+[34:40] reroll rare items in addition to their
+[34:42] capability to upgrade items too rare
+[34:45] the four corrupted essences have had
+[34:47] some of their less useful outcomes
+[34:48] improved or replaced
+[34:50] now the only way to get the powerful
+[34:52] upgrade only top tier essences is
+[34:53] through remnants of corruption
+[34:55] which come from essence content
+[34:58] blessings the currency used to upgrade
+[34:59] breach uniques
+[35:00] can now be used to upgrade breach tones
+[35:02] between tears also
+[35:04] [Music]
+[35:06] our best jewels have been rebalanced and
+[35:08] are on average more powerful than they
+[35:09] were before
+[35:10] we have also buffed to best chess to
+[35:12] make sure that they are the best place
+[35:13] to get abyss jaws
+[35:15] we have also introduced abyss scarabs
+[35:17] and have added four new abyss specific
+[35:19] unique jewels
+[35:20] such as techrod's gaze a murderous eye
+[35:22] jewel that increases your main hand
+[35:23] critical strike charms and your offhand
+[35:25] critical strike multiplier
+[35:26] based on how many murderous side jewels
+[35:28] you have equipped
+[35:30] another example is the ulaman's gaze
+[35:32] searching ai jaw which counts how many
+[35:33] searching idols you have equipped and
+[35:35] grants your projectiles a chance to be
+[35:36] able to chain
+[35:37] when colliding with terrain proportional
+[35:39] to this number these unique jaws have a
+[35:41] chance to drop from any of the unique
+[35:43] encounters at the end of the abyssal
+[35:44] depths
+[35:45] and these encounters are now by far the
+[35:46] most reliable way to obtain a stygeon
+[35:48] vice build
+[35:50] we have added a handful of new beast
+[35:52] crafts such as add a mod to a map
+[35:54] or add a mod to an influenced item which
+[35:56] consume existing beasts
+[35:58] there are some other aspects of beast
+[35:59] crafting that we've been keeping our eye
+[36:01] on for a while and we're taking this
+[36:02] opportunity to rework them
+[36:04] so that high level gameplay is less
+[36:05] reliant on obtaining certain beast
+[36:07] crafts
+[36:08] now when you use the splitting
+[36:09] beastcraft recipe on an item
+[36:11] both copies are marked as split which
+[36:13] prevents them from being split again
+[36:14] you cannot imprint split items
+[36:18] one of my favorite reward changes in
+[36:19] this expansion is that incursion's
+[36:21] temple of atsuato can now be itemized
+[36:24] once you have access to the map device
+[36:25] alva can turn your completed and ready
+[36:27] to run temple into a tradable object
+[36:29] that can be consumed in the map device
+[36:31] this means that players can specialize
+[36:32] in either making temples to trade to
+[36:34] other players
+[36:35] or trading for temples that are ready
+[36:36] for them to run
+[36:38] there have also been a lot of changes to
+[36:40] the temple as you may know specific
+[36:42] rooms in the temple of atsuado can drop
+[36:44] unique incursion items that can be later
+[36:45] upgraded
+[36:46] many of these base unique items have
+[36:48] been improved in this update
+[36:50] previously the temple's boss the
+[36:52] omnitech dropped random rare items with
+[36:54] special incursion mods on them
+[36:55] now it also drops rare items with
+[36:57] incursion mods based around the themes
+[36:59] of the rooms your temple contains
+[37:00] higher tear rooms cause more rare items
+[37:04] specific rooms now add specific monster
+[37:06] packs to the temple which results in
+[37:07] more monster density challenge and
+[37:09] reward
+[37:10] temple mods have been buffed so that if
+[37:12] your temple has more high tier rooms
+[37:13] than is equivalent to a good map
+[37:16] we have performed a modernization pass
+[37:18] on rewards from temple rooms so that
+[37:19] they're competitive with rewards from
+[37:21] newer leagues
+[37:23] the explosive shroom also contains some
+[37:25] basic chests that can be opened with
+[37:26] flash powder kegs if you don't need them
+[37:28] for opening a path elsewhere in the
+[37:29] temple
+[37:31] delve has had a big increase to early
+[37:33] rewards and a reduction to the quantity
+[37:35] of high tier rewards spawning at very
+[37:37] deep depths
+[37:38] the end result of that doll was a lot
+[37:39] more rewarding for almost everyone
+[37:41] but a few extreme players who delved
+[37:42] very deep will not be getting quite so
+[37:44] rich from it
+[37:47] a big problem with rewards and betrayal
+[37:48] is that players deem it not worthwhile
+[37:50] to kill katarina because it resets your
+[37:52] betrayal syndicate board
+[37:53] in this expansion we have massively
+[37:55] increased the incentive for doing this
+[37:57] now if you manage to kill katarina all
+[37:59] syndicate members drop their rewards at
+[38:01] one tier higher than they previously
+[38:02] would
+[38:03] this change required the introduction of
+[38:05] a new fourth tier of reward from each
+[38:06] syndicate member and encourages the use
+[38:08] of a larger variety of syndicate targets
+[38:10] and safe house leaders
+[38:12] we have improved rewards that were not
+[38:13] as interesting or valuable as the best
+[38:15] ones
+[38:16] for cases where we deemed rewards too
+[38:17] powerful we moved them to tier 4 rather
+[38:19] than nerfing them
+[38:20] the tier 4 rewards are approximately
+[38:22] twice as powerful as tier 3 ones were
+[38:25] we have also added a new unique item to
+[38:26] katarina's drop pool as further
+[38:28] incentive for killing her
+[38:30] the cane of color mac drops only from
+[38:32] katarina similar to paradoxica it has
+[38:34] three veiled modifiers that must be
+[38:36] unveiled one at a time via jun
+[38:38] this means that each version of a cane
+[38:39] could be entirely different and because
+[38:41] of the way the veiled modifier system
+[38:42] works
+[38:43] you have the chance to get three mods
+[38:44] that potentially synergize extremely
+[38:46] well
+[38:47] or maybe just a crazy bag of mods that
+[38:48] don't work together furthermore the cane
+[38:50] itself scales up the magnitudes of any
+[38:52] unveiled modifiers on it
+[38:55] we have made some changes to how
+[38:56] unveiling mods works you still get
+[38:58] offered a choice of three mods but these
+[39:00] are now more powerful versions of the
+[39:01] existing ones
+[39:02] the powerful ones are unveiled onto
+[39:04] items and the normal versions are the
+[39:06] ones you unlock that can be crafted onto
+[39:07] items
+[39:08] also progress towards unlocking crafting
+[39:10] available mods is at a slightly faster
+[39:12] rate than before
+[39:14] some very powerful veil modifiers are
+[39:16] now only available at their original
+[39:17] strength on the unveiled version of the
+[39:19] modifier
+[39:19] and the crafted version of the modifier
+[39:21] has been lowered in power
+[39:24] earlier in the presentation i alluded to
+[39:25] the new veiled chaos orb as an item that
+[39:27] has been added to path of exile's core
+[39:29] drop pool
+[39:30] this new currency item rerolls the
+[39:31] target at him with new mods like a
+[39:33] regular cow sword does
+[39:34] but one mod is guaranteed to be a veiled
+[39:36] mod while it can drop from many monster
+[39:38] chests in the game by far the most
+[39:39] effective way of getting it is from
+[39:41] isling and some betrayal safe houses
+[39:45] we have introduced three new types of
+[39:47] incubators for blight metamorph and
+[39:48] delirium and have modernized the rewards
+[39:50] from the other incubators
+[39:53] the item yield from chests and blighted
+[39:55] maps is now affected by a portion of the
+[39:57] map item's quantity
+[39:58] giving you a reason to roll your
+[39:59] blighted maps if you can handle the
+[40:00] additional challenge
+[40:03] annoyments to blighted maps have been
+[40:04] rebalanced and reworked so that each has
+[40:06] its own purpose and with a consistent
+[40:07] increase in reward as the oils get rarer
+[40:10] this is basically entirely buffs because
+[40:12] one big nerf we needed to do was already
+[40:13] done last league
+[40:16] you can now corrupt blighted maps these
+[40:18] can very rarely drop the new tainted oil
+[40:20] which allows you to apply anointments to
+[40:22] corrupted items
+[40:27] we have also introduced blighted scarabs
+[40:31] we have added two new types of catalysts
+[40:33] themed around speed and critical strikes
+[40:35] respectively
+[40:36] these new catalysts are rarer than
+[40:37] previous ones
+[40:40] as discussed in the recent development
+[40:42] manifesto the current 3.13 version of
+[40:44] harvest is too rewarding
+[40:45] so we're rebalancing its crafting and
+[40:47] also increasing how often you'll
+[40:48] encounter portals to the sacred grove
+[40:51] the current version spams you with way
+[40:52] too many crafts so each seed has a
+[40:54] chance to ground a craft now
+[40:56] reducing the overall number of crafts
+[40:57] you can perform per garden
+[40:59] you will encounter the growth 60 more
+[41:01] than you did before
+[41:02] some of the most powerful crafting
+[41:03] options have been removed or changed
+[41:05] the heart of the grove encounter is now
+[41:07] a map fragment that can randomly drop
+[41:08] from tier 4 harvest bosses instead of
+[41:10] rarely replacing the entire grove when
+[41:12] it spawns
+[41:14] with the release of ultimatum ritual
+[41:16] will be added to the core game
+[41:18] with a chance to occur in each map you
+[41:19] play it has also been added to the atlas
+[41:21] passive skill tree system and is
+[41:23] available as a sexton mod
+[41:27] almost every time we release a league we
+[41:29] later roll it into the core game with a
+[41:30] chance to spawn in maps
+[41:32] usually 10 sometimes 5 when ritual is
+[41:35] added to the core game we are
+[41:36] standardizing this rate at 8
+[41:38] which means a small decrease for some
+[41:40] leagues and an increase for harvest
+[41:42] we have rebalanced other things to
+[41:44] compensate like the rate at which high
+[41:45] strokes level up
+[41:46] most atlas passive trees have the same
+[41:48] increase in chance for bonus content
+[41:50] meaning they now offer more than double
+[41:51] the chance of encountering your
+[41:52] preferred content
+[41:54] so i just spent a ton of time describing
+[41:56] lots of buffs to path of exile's
+[41:58] different reward systems and there was
+[41:59] one nerf that i left to last
+[42:01] and this gives us a nerf to a league
+[42:02] that i kind of care about a bit talisman
+[42:04] was one that i kind of led the design on
+[42:06] and players joke that it's my favorite
+[42:08] league
+[42:08] now in the 3 12 3 content update
+[42:12] there was a change to talismans
+[42:14] basically they weren't good enough so
+[42:16] the team decided to add a random
+[42:17] annoyment to them which made them a lot
+[42:19] more powerful and also to juice up the
+[42:21] mods to make them well rolled
+[42:23] and that was overkill like as you've
+[42:24] seen recently talismans have just been
+[42:26] dropping with insane mods and great
+[42:27] annoyance and we felt in this expansion
+[42:29] especially because you can use tainted
+[42:31] oils
+[42:31] in order to redo the anointments on
+[42:34] talismans because now you can modify
+[42:35] corrupted amulets
+[42:37] honestly they don't need the well-rolled
+[42:38] mods anymore and so we've removed that
+[42:40] talismans are still compelling
+[42:42] but they're not quite where they were in
+[42:43] the last league
+[42:45] every path of exile expansion needs new
+[42:47] ways for players to slaughter their
+[42:49] enemies
+[42:49] in path of exile ultimatum this takes
+[42:51] the form of four new skill gems and four
+[42:53] support gems
+[42:54] in line with ultimatum's vowel theme
+[42:56] these gems focus on blood
+[42:58] the idea of spending life rather than
+[42:59] mana to use your skills
+[43:01] alongside the new skill and support gems
+[43:03] we've also made some adjustments to the
+[43:04] low life mechanic
+[43:05] including changing the low life
+[43:07] threshold to 50 this makes it much
+[43:09] easier and safer to stay on low life for
+[43:11] builds where it matters
+[43:14] typically when players create low life
+[43:15] builds they rely on energy shield to
+[43:17] protect themselves against incoming
+[43:18] damage
+[43:19] the new skill petrified blood enables
+[43:21] low life builds to instead use some of
+[43:22] their life pool to absorb hits
+[43:24] while it's active you can't recover life
+[43:26] above 50 through any method other than
+[43:28] flasks
+[43:29] sources of life recovery like life
+[43:31] regeneration and life leech only apply
+[43:32] to the bottom half of your life pool
+[43:34] additionally a portion of incoming hit
+[43:36] damage that affects the lower half of
+[43:38] your life pool is spread out over time
+[43:40] rather than being applied instantly
+[43:43] corrupting fever consumes a chunk of
+[43:45] your life and grants you a buff that
+[43:47] causes all your hits to apply corrupted
+[43:48] blood to your enemies
+[43:50] corrupted blood stacks up with each hit
+[43:52] causing more and more physical damage
+[43:53] over time
+[43:54] when you have consumed a certain amount
+[43:56] of life to cast skills from your life
+[43:57] pool
+[43:58] the buff's duration refreshes
+[43:59] essentially as long as you're consuming
+[44:01] life to use skills you'll be causing
+[44:02] damage over time to stack on enemies
+[44:04] be careful though the exsanguinate skill
+[44:08] shoots tendrils of blood in front of you
+[44:09] at the cost of life rather than mana
+[44:11] in addition to a strong physical damage
+[44:13] hit it also applies a physical damage
+[44:14] over time debuff which you can stack up
+[44:16] to three times
+[44:17] you can also support exsanguinate so
+[44:19] that its tendrils chain from one target
+[44:21] to the next
+[44:23] reef conjures a giant bloody side that
+[44:25] swings across a selected area applying
+[44:27] strong hit damage and physical damage
+[44:28] over time
+[44:29] each use of the skill causes it to gain
+[44:31] a charge that scales its damage up and
+[44:33] increases its life costs up to five
+[44:34] times
+[44:35] these charges drop off over time as well
+[44:37] as after killing enemies
+[44:38] making reap very powerful at stacking up
+[44:40] damage against single targets
+[44:43] we've also added two new support gems
+[44:45] that have split the existing blood magic
+[44:46] support into two separate support gems
+[44:49] the first of these is the arrogant
+[44:50] support which causes supported skills to
+[44:52] reserve life instead of mana
+[44:53] and also provides an increase to the
+[44:55] effect of auras that it supports
+[44:57] just like the original blood magic
+[44:59] support gem the reservation multiplier
+[45:00] diminishes as the gem levels up
+[45:04] the lifetap support gem causes supported
+[45:06] skills to cost life instead of mana
+[45:08] once you've consumed a certain amount of
+[45:10] life to use a skill you gain life tap
+[45:11] which increases your damage for a few
+[45:13] seconds
+[45:15] the cruelty support gem grants a buff
+[45:16] called cruelty which increases the
+[45:18] damage of a time you deal with supported
+[45:20] skills
+[45:20] it also boosts the hit damage from
+[45:22] supported skills and the cruelty buff
+[45:24] gets stronger the harder you hit
+[45:26] this gem is designed as an additional
+[45:27] option for builds that focus on both
+[45:29] hits and damage over time
+[45:32] the bloodthirst support gem is a new
+[45:33] option for low-life attackers
+[45:35] this gem adds a percentage of your life
+[45:37] as physical weapon damage while you're
+[45:38] on low life
+[45:39] letting low-life attack based builds
+[45:41] really scale their damage which wasn't
+[45:42] an option before
+[45:45] alongside a vowel themed expansion and
+[45:47] blood themes gems it felt right to take
+[45:48] the opportunity to improve vowel skills
+[45:50] which are supercharged versions of
+[45:52] regular gems that charge up with the
+[45:53] souls of your slain enemies to deal huge
+[45:55] bursts of damage
+[45:57] one of the main improvements is that you
+[45:58] now get far more souls for vowel skills
+[46:00] from damaging unique enemies so your
+[46:01] vowel skills will recharge faster
+[46:03] against bosses
+[46:04] we've also improved yet series reign
+[46:06] unique jewel alongside increasing the
+[46:08] duration of your vowel skills it also
+[46:09] grants a chance to regain all consumed
+[46:11] souls
+[46:12] vowel skills have also received a
+[46:14] balance pass that you can check out in
+[46:15] the full path of excel automate and
+[46:17] patch notes in a few days
+[46:19] so we've covered most of the key
+[46:20] components that make up path of excel
+[46:22] ultimatum
+[46:23] keep an eye on the news over the next
+[46:24] week as we reveal the finer details of
+[46:26] what's coming
+[46:27] we'll move on to the q a shortly to
+[46:29] answer your burning questions but first
+[46:30] let's have a quick look at the new
+[46:31] supporter packs that are available right
+[46:33] now to celebrate the launch of ultimatum
+[46:35] and help fund ongoing development of
+[46:36] path of exile
+[46:38] the silver crescent and imperial sun
+[46:40] supporter packs come with masses of
+[46:41] points to spend in the store
+[46:42] social frames forum titles and badges a
+[46:45] download of the digital soundtrack
+[46:47] and of course exclusive cosmetic
+[46:48] microtransactions such as armor sets
+[46:50] alternate helmets and weapon skins
+[46:52] the silver crescent series has an
+[46:54] exclusive portal effect and the imperial
+[46:56] sun series has an exclusive aura effect
+[46:58] each series has two packs and the
+[47:00] smaller packs can be upgraded to their
+[47:01] respective large pack anytime while
+[47:03] they're still on sale
+[47:05] these are of course in addition to the
+[47:06] new core packs that were released at the
+[47:08] end of last year
+[47:09] remember to check those out if you
+[47:10] haven't already thank you so much for
+[47:12] your support
+[47:13] purchases of these supporter packs are
+[47:15] the only thing that fund ongoing
+[47:16] development of path of excel
+[47:18] its sql path of xl2 and expansions like
+[47:21] ultimatum
+[47:22] the reveals we showed you today are
+[47:24] already live on youtube for you to link
+[47:25] to your friends in case they missed the
+[47:26] live stream
+[47:27] please do so we're keen to get a big
+[47:29] turnout on the release of ultimatum next
+[47:30] week
+[47:31] and we've got plenty more reveals
+[47:32] planned for the rest of the year there's
+[47:34] a lot more path of xl2 stuff to show off
+[47:36] and we've also got some new progress on
+[47:37] path of exile mobile we're keen to share
+[47:39] with you as well
+[47:40] anyway if you have any questions from
+[47:41] what we've shown you today please get
+[47:43] them ready because i'm about to be
+[47:44] joined by ziggy d as we do a q a based
+[47:46] on your questions from twitch chat
+[47:59] you

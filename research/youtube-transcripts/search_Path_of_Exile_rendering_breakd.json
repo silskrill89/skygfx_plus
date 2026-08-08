@@ -1,0 +1,107 @@
+{
+  "query": "Path of Exile rendering breakdown shader",
+  "results": [
+    {
+      "video_id": "bp7REZBV4P4",
+      "title": "How do Major Video Games Render Grass?",
+      "channel": "SimonDev",
+      "url": "https://www.youtube.com/watch?v=bp7REZBV4P4"
+    },
+    {
+      "video_id": "a72NKOFxwOM",
+      "title": "Path Of Exile - Shader Mod Demonstration",
+      "channel": "Calculating Contriverman",
+      "url": "https://www.youtube.com/watch?v=a72NKOFxwOM"
+    },
+    {
+      "video_id": "Do9NB7l4Sx8",
+      "title": "Path of Exile ocean water",
+      "channel": "Alexander Sannikov",
+      "url": "https://www.youtube.com/watch?v=Do9NB7l4Sx8"
+    },
+    {
+      "video_id": "itZB1hriaSk",
+      "title": "Ocean rendering shader breakdown",
+      "channel": "Alexander Sannikov",
+      "url": "https://www.youtube.com/watch?v=itZB1hriaSk"
+    },
+    {
+      "video_id": "3j_k4OnHeEg",
+      "title": "Path of Exile river water WIP",
+      "channel": "Alexander Sannikov",
+      "url": "https://www.youtube.com/watch?v=3j_k4OnHeEg"
+    },
+    {
+      "video_id": "fulVw_g8I4M",
+      "title": "Asmongold on WoW in Unreal Engine 5",
+      "channel": "Asmongold Clips",
+      "url": "https://www.youtube.com/watch?v=fulVw_g8I4M"
+    },
+    {
+      "video_id": "cYJ6d1ifSqA",
+      "title": "Inside Hades - 3D Modeling & Rigging",
+      "channel": "Supergiant Games",
+      "url": "https://www.youtube.com/watch?v=cYJ6d1ifSqA"
+    },
+    {
+      "video_id": "dAoX3sTqAT4",
+      "title": "New water shader",
+      "channel": "Alexander Sannikov",
+      "url": "https://www.youtube.com/watch?v=dAoX3sTqAT4"
+    },
+    {
+      "video_id": "JjOrnndyOgA",
+      "title": "Path of Exile 2 - Druid Werewolf Summoner, 9070xt DX12",
+      "channel": "Sparkzmaster",
+      "url": "https://www.youtube.com/watch?v=JjOrnndyOgA"
+    },
+    {
+      "video_id": "o2kgW2TBpUo",
+      "title": "2d Full Global Illumination #2 (working principle and perf tests)",
+      "channel": "Alexander Sannikov",
+      "url": "https://www.youtube.com/watch?v=o2kgW2TBpUo"
+    }
+  ],
+  "transcripts": [
+    {
+      "video_id": "bp7REZBV4P4",
+      "error": "type object 'YouTubeTranscriptApi' has no attribute 'get_transcript'"
+    },
+    {
+      "video_id": "a72NKOFxwOM",
+      "error": "type object 'YouTubeTranscriptApi' has no attribute 'get_transcript'"
+    },
+    {
+      "video_id": "Do9NB7l4Sx8",
+      "error": "type object 'YouTubeTranscriptApi' has no attribute 'get_transcript'"
+    },
+    {
+      "video_id": "itZB1hriaSk",
+      "error": "type object 'YouTubeTranscriptApi' has no attribute 'get_transcript'"
+    },
+    {
+      "video_id": "3j_k4OnHeEg",
+      "error": "type object 'YouTubeTranscriptApi' has no attribute 'get_transcript'"
+    },
+    {
+      "video_id": "fulVw_g8I4M",
+      "error": "type object 'YouTubeTranscriptApi' has no attribute 'get_transcript'"
+    },
+    {
+      "video_id": "cYJ6d1ifSqA",
+      "error": "type object 'YouTubeTranscriptApi' has no attribute 'get_transcript'"
+    },
+    {
+      "video_id": "dAoX3sTqAT4",
+      "error": "type object 'YouTubeTranscriptApi' has no attribute 'get_transcript'"
+    },
+    {
+      "video_id": "JjOrnndyOgA",
+      "error": "type object 'YouTubeTranscriptApi' has no attribute 'get_transcript'"
+    },
+    {
+      "video_id": "o2kgW2TBpUo",
+      "error": "type object 'YouTubeTranscriptApi' has no attribute 'get_transcript'"
+    }
+  ]
+}

@@ -1,0 +1,66 @@
+# Tutorial: How To Optimize Almost Every Step In Modern Game Rendering
+Channel: Threat Interactive
+Duration: 2:01:25
+URL: https://www.youtube.com/watch?v=SnNm7rSSvlg
+
+## Chapters
+- [00:00] Intro & Abouts, Resources, APIs
+- [08:00] The Importance Of Resource Clearing Management
+- [14:21] How To Properly Prepass Content
+- [28:53] How To Properly Sort Deferred Basepass Content
+- [36:44] Post Basepass Resource Management & Decal Notes
+- [39:00] Perspective Shadow Maps & Deferred Stencil Volume Lighting
+- [49:45] WIP Global Illumination & Hybrid Reflections
+- [53:48] Screen Space Subsurface Scattering
+- [57:21] Direct Lighting Compositing & Effects Rendering
+- [1:04:45] Tone Mapping & Exposure Mechanics
+- [1:19:38] AA (Non Temporal Aspect)
+- [1:24:25] AA (Temporal Aspect)
+- [1:42:40] Velocity Compensation
+- [1:57:29] Motion Effects, Composite Effects, & UI/Gamma
+- [2:00:29] Outro & Bonus Slides
+
+## Description
+Threat Interactive Video 33 discusses 2 years of optimization research & philosophy's that challenge the mainstream rendering approach. #tutorial #rendering #videogames #graphics 
+-------
+Our Patreon: https://www.patreon.com/THREATINTERACTIVE 
+Our Website: https://threatinteractive.wordpress.com 
+Our Bonfire: https://www.bonfire.com/store/threat-interactive/
+All official accounts can be found here: https://linktr.ee/ThreatInteractive
+-------
+For Updates or Questions, contact our studio or founder on with these links: 
+Email: ThreatInteractive@gmail.com 
+X / Twitter: https://x.com/ThreatInteract 
+Reddit: https://www.reddit.com/user/ThreatInteractive/ 
+LinkedIn: https://www.linkedin.com/company/threat-interactive 
+
+Studio Founder: X / Twitter: https://x.com/TheKevinJimenez 
+------- 
+0:00- Intro & Abouts, Resources, APIs, 
+8:00- The Importance Of Resource Clearing Management 
+14:21- How To Properly Prepass Content 
+28:53- How To Properly Sort Deferred Basepass Content
+36:44- Post Basepass Resource Management & Decal Notes
+39:00- Perspective Shadow Maps & Deferred Stencil Volume Lighting 
+49:45- WIP Global Illumination & Hybrid Reflections
+53:48- Screen Space Subsurface Scattering
+57:21- Direct Lighting Compositing & Effects Rendering
+1:04:45- Tone Mapping & Exposure Mechanics
+1:19:38- AA (Non Temporal Aspect)
+1:24:25- AA (Temporal Aspect)
+1:42:40- Velocity Compensation
+1:57:29- Motion Effects, Composite Effects, & UI/Gamma
+2:00:29- Outro & Bonus Slides
+
+------ Credits & Resources:
+https://advances.realtimerendering.com/s2015/aaltonenhaar_siggraph2015_combined_final_footer_220dpi.pdf
+https://learnopengl.com/Guest-Articles/2022/Compute-Shaders/Introduction
+https://www.yumpu.com/en/document/read/51951811/cryengine-3-graphics-gems-crytek/5
+https://www.cse.msu.edu/~cse872/papers_files/PerspectiveShadowMaps.pdf
+https://gpuopen.com/learn/occupancy-explained/
+https://cgg.mff.cuni.cz/~jaroslav/gicourse2010/giai2010-07-anton_kaplanyan-slides.pdf
+https://gdcvault.com/play/1029339
+
+## Subtitles
+Manual: No
+Auto-generated: Yes

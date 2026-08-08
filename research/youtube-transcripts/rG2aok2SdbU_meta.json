@@ -1,0 +1,21 @@
+{
+  "video_id": "rG2aok2SdbU",
+  "title": "Sparse Radiance Cascades: goodbye screenspace",
+  "channel": "Alexander Sannikov",
+  "channel_id": "UCly0QRJAaJ2UGSGycOQoOdA",
+  "upload_date": "20251225",
+  "duration": 91,
+  "view_count": 20815,
+  "like_count": 1096,
+  "tags": [],
+  "categories": [
+    "Science & Technology"
+  ],
+  "chapters": [],
+  "has_manual_subs": false,
+  "has_auto_subs": false,
+  "subtitles_available": [],
+  "auto_subtitles_available": [],
+  "desc_timestamps": [],
+  "description_preview": "My previous sparse RC demo was running with a screenspace raymarcher because it was easy to implement at the time. But now that the RC part has proven to be working well, I focused on improving the raymarching part and replaced the screenspace raymarcher with hardware accelerated raytracer: not only it it allows me finally achieve offscreen lights, it's also faster.\n\nIt easily runs at 60fps, it's completely stable to small camera movement, all lighting that you see in the demo is calculated from"
+}

@@ -1,0 +1,98 @@
+{
+  "video_id": "GOee6lcEbWg",
+  "title": "Real-Time Samurai Cinema: Lighting, Atmosphere, and Tonemapping in Ghost of Tsushima",
+  "channel": "SIGGRAPH Advances in Real-Time Rendering",
+  "channel_id": "UC9V4KS8ggGQe_Hfeg1OQrWw",
+  "upload_date": "20211030",
+  "duration": 3568,
+  "view_count": 16010,
+  "like_count": 394,
+  "tags": [],
+  "categories": [
+    "People & Blogs"
+  ],
+  "chapters": [
+    {
+      "start": 0,
+      "end": 95,
+      "title": "Intro"
+    },
+    {
+      "start": 95,
+      "end": 133,
+      "title": "Introduction Goals"
+    },
+    {
+      "start": 133,
+      "end": 230,
+      "title": "Introduction Lighting"
+    },
+    {
+      "start": 230,
+      "end": 382,
+      "title": "Introduction Overview"
+    },
+    {
+      "start": 382,
+      "end": 953,
+      "title": "Indirect Lighting Diffuse"
+    },
+    {
+      "start": 953,
+      "end": 1810,
+      "title": "Indirect Lighting Specular"
+    },
+    {
+      "start": 1810,
+      "end": 2134,
+      "title": "Atmospheric Lighting Clouds"
+    },
+    {
+      "start": 2134,
+      "end": 2296,
+      "title": "Atmospheric Lighting Volumetric Haze AA GHOST"
+    },
+    {
+      "start": 2296,
+      "end": 2630,
+      "title": "Atmospheric Lighting Partide Lighting"
+    },
+    {
+      "start": 2630,
+      "end": 2942,
+      "title": "Tonemapping Bilateral Grid"
+    },
+    {
+      "start": 2942,
+      "end": 3044,
+      "title": "Tonemapping Color Space"
+    },
+    {
+      "start": 3044,
+      "end": 3354,
+      "title": "Tonemapping White Balance"
+    },
+    {
+      "start": 3354,
+      "end": 3568,
+      "title": "Tonemapping Purkinje Shift"
+    }
+  ],
+  "has_manual_subs": false,
+  "has_auto_subs": true,
+  "subtitles_available": [],
+  "auto_subtitles_available": [
+    "ab",
+    "aa",
+    "af",
+    "ak",
+    "sq",
+    "am",
+    "ar",
+    "hy",
+    "as",
+    "ay"
+  ],
+  "desc_timestamps": [],
+  "description_preview": "In this talk, we describe some of the graphics techniques used in the production of Ghost of Tsushima. Part of the SIGGRAPH 2021 Advances in Real-Time Rendering in Games course (http://advances.realtimerendering.com/). \n\nSet in 13th century Japan, Ghost of Tsushima pays homage to classic samurai cinema with dramatic lighting, wind, clouds, haze, and fog, and features a beautiful open-world version of the island of Tsushima during the first Mongol invasion. In this talk, we will cover the diffuse"
+}

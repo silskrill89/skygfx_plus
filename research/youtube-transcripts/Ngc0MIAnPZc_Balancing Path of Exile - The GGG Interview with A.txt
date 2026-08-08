@@ -1,0 +1,3891 @@
+# Transcript: Ngc0MIAnPZc
+# Fetched: 2026-08-07T06:23:26.139182
+# Entries: 3886
+# Duration: 14454s
+
+[00:00] you know, like how often that's just
+[00:01] like a bug, basically, right?
+[00:04] Sure. Um, you know, I mean, it it you're
+[00:07] correct it it is a bug. I think that has
+[00:09] been addressed in this patch. Um, but
+[00:11] it's still extremely creative and and
+[00:14] cool to leverage that. Um, like
+[00:16] >> Wait, can I clarify right there, then?
+[00:17] Can I can I just check that as a piece?
+[00:19] So, you said it's cool to leverage
+[00:22] a bug. And it's cool if I do that in the
+[00:24] future, right?
+[00:25] >> bug. No. It's all good, right?
+[00:27] >> This is this is an extremely blurry
+[00:29] subject of line. So, like there
+[00:32] Now, Spawn, if you guys don't know who
+[00:33] that is, this guy is Team Liquid's head
+[00:35] coach for League of Legends.
+[00:37] He is one of the most well-regarded
+[00:40] coaches in League. This guy is really
+[00:43] known to care about his players, a great
+[00:47] coach, a great dad, a great competitor,
+[00:49] a really bad PoE player, um,
+[00:51] but one of the people that I've met that
+[00:53] I respect the most. Um, so yeah, this is
+[00:56] Spawn. Welcome to the our pod. I guess
+[00:58] we'll talk about the title after.
+[00:59] What's up, Jake?
+[01:00] >> Uh, thank you so thank you so much for
+[01:02] having me. When you said you were going
+[01:03] to introduce me, and I had to introduce
+[01:05] you, I was a a little bit nervous that
+[01:06] it was going to be too serious. Um, but
+[01:08] thank you. Good introduction.
+[01:10] Um, I am Spawn. Uh, as Jake said, I'm
+[01:13] pretty excited about this podcast. I
+[01:15] think that we've been talking about
+[01:16] doing something like this for a little
+[01:17] while. Um, I'm going to bring probably
+[01:20] more of a casual perspective to the G uh
+[01:23] to the PoE side. Um, but obviously, used
+[01:26] to work at Riot as well, so have a lot
+[01:27] of uh perspective about games from
+[01:29] publisher's side uh and from a coaching
+[01:31] side. So, should be a good conversation.
+[01:33] JezzyNA was a former top laner of
+[01:36] Complexity Red, who played with
+[01:37] legendary players such as N K Ink in his
+[01:40] League of Legends career, uh before
+[01:42] failing and swapping to Path of Exile,
+[01:45] and is one of the more alternative build
+[01:47] guides out there. If you want a build
+[01:50] that you need to press multiple buttons
+[01:52] and have significant understanding of
+[01:55] how layered offense works,
+[01:57] uh Jung is the person for you.
+[01:59] Um and there is a good chance that a lot
+[02:01] of the builds that you need pretty much
+[02:03] a PhD in Path of Exile to study won't
+[02:06] actually make it to release as he will
+[02:08] get them nerfed significantly before
+[02:10] they even get there. Um but in all
+[02:13] seriousness, I think Jung is one of the
+[02:14] people that actually fundamentally
+[02:15] understands the game uh of Path of Exile
+[02:18] and can explain it pretty well to his
+[02:20] viewers. And I think that that allows
+[02:22] him to build
+[02:23] uh you know, build guides that uh
+[02:25] probably a lot of other people uh don't
+[02:28] don't build. And I I really like and
+[02:30] appreciate the complexity. I've played a
+[02:31] couple of these builds myself. I played
+[02:33] his Eye of Winter Arcane Blast brand. Uh
+[02:35] I played his old school blade trap with
+[02:37] fatal flourish. Um so I think that uh
+[02:39] this should be a fun conversation cuz I
+[02:41] do have some of that uh and uh
+[02:45] Uh on the other hand, uh hopefully you
+[02:47] can bring some good technical uh
+[02:48] knowledge about the game as well.
+[02:50] Formally described as the bedrock of PoE
+[02:53] 1 by TVN and similarly described by
+[02:56] secret well-respected informants as the
+[02:58] goat, my goat, and base savior
+[03:01] responsible for a lot of the major work
+[03:02] on Path of Exile 1 these days.
+[03:05] Um
+[03:05] This is Andrew. Uh it's someone I would
+[03:07] love to hear more about more gloat and
+[03:10] glaze a little bit behind the scenes but
+[03:11] can't wait for the future. And our
+[03:13] second guest today is Chris Octavian.
+[03:15] Renowned amateur League of Legends
+[03:17] caster from the time when I was playing
+[03:19] amateur League of Legends too. You could
+[03:21] call us actually both former um amateur
+[03:23] content creators. Uh on the real, I've
+[03:25] watched a ton of your casting reel from
+[03:27] back in the day when I used to scout um
+[03:28] for NA CS and he's actually one of the
+[03:30] most underrated PoE build makers back in
+[03:32] the day. I have still on your rainbow
+[03:34] trapper as inspiration um for two races
+[03:36] actually in the late 3.1's. Um
+[03:39] remade that on quiz, saw the old crema
+[03:41] necro stuff that I really liked back in
+[03:42] the day too. Um I know Rise is part of
+[03:44] that as well but
+[03:46] really underrated from back in the day
+[03:47] and can't wait to be talking to you here
+[03:49] today. Welcome, guys.
+[03:52] Thanks for having us. That's a that's a
+[03:53] deep cut, man.
+[03:56] I mean, the con-
+[03:58] It was actually a smaller world than I
+[03:59] remember back then, too, but uh maybe we
+[04:01] can get into that a little bit. You
+[04:02] know, there's some cross kind of stuff
+[04:03] cuz you know, sponsors a caster these
+[04:05] days, and or it was.
+[04:06] >> a caster these days. I was a caster 7
+[04:08] years ago. It's like these days, man.
+[04:11] Um so, our podcast called Take the Bait.
+[04:13] Um a lot of our questions we we've
+[04:15] already like we've talked briefly about
+[04:16] what we might want to cover, but at the
+[04:18] same time we want to kind of start with
+[04:19] something that you guys can choose to
+[04:21] engage with or not. I think it's just
+[04:23] something I've been curious about. Do
+[04:25] you guys Do Are you guys both work
+[04:27] mostly on the PoE 1 game, right? Almost
+[04:29] exclusively. Uh at this point, yeah,
+[04:31] we're exclusively on PoE 1. Um I mean,
+[04:33] both of us have jumped between the two
+[04:34] games over the, you know, years we've
+[04:35] been here at the company, but but yeah,
+[04:38] as of, you know, the last few
+[04:39] expansions, um I've been only on PoE 1.
+[04:41] I think Andrew has, too.
+[04:43] Yeah, I think generally maybe from like
+[04:46] that period of like
+[04:48] 2020 up until like 2024-ish,
+[04:51] I would have said I was
+[04:53] exclusively on PoE 1. And then in the
+[04:55] lead-up to like 0101 PoE 2's release, I
+[04:58] was flipping back and forth a bit.
+[05:00] But I'd say now I'm back on PoE 1
+[05:01] solely. Amazing. So, then do you guys
+[05:04] think that PoE 1 is the best ARPG on the
+[05:07] market right now because you guys work
+[05:09] on PoE 1, or do you guys work on PoE 1
+[05:11] because it's the best ARPG on the market
+[05:13] right now?
+[05:14] Well, I don't really think of ARPGs as
+[05:17] like best and worst. I play all of them
+[05:19] generally, except strangely I've never
+[05:21] played Diablo 2. But I plan to play it
+[05:23] at some point. Um
+[05:25] I'd say my favorite, historically, might
+[05:28] have even been Grim Dawn over over Path
+[05:30] of Exile 1, but it's pretty close
+[05:31] between those two. See, I'm I'm a far
+[05:33] less educated gamer when it comes to
+[05:36] this department. I'm I'm very much a
+[05:37] very a very singular kind of person.
+[05:39] Like I have an obsession, and I focus on
+[05:42] that to probably the detriment of a lot
+[05:44] of other things. So, like I've really
+[05:46] not played very many other ARPGs like
+[05:49] when I go to play a video game, it's
+[05:50] usually Path of Exile or like one or two
+[05:53] other games. I just don't have a lot of
+[05:56] breadth when it comes to that. I'm
+[05:57] actually the same as you. Like I've
+[06:00] had very limited ARPG experience
+[06:02] outside, and I think like actually over
+[06:04] the past couple years seeing a lot of
+[06:05] convergence and cross-cutting from the
+[06:06] two PoE games has been
+[06:08] unreal now. And like it's like once upon
+[06:11] a time when they said like, "Yo, the
+[06:12] benefits, you know, you you're going to
+[06:14] see them in PoE 1, and we're going to
+[06:15] see like the iterations between both." I
+[06:17] really like didn't believe that, but
+[06:18] it's so much more present now. Well,
+[06:20] that's sort of the nice thing of having
+[06:22] the two games now as like both games can
+[06:25] just steal the best parts from
+[06:28] each other.
+[06:30] And it's like you don't have to use them
+[06:31] in the exact same way because they are
+[06:33] different games, but it's like
+[06:35] have we talked about the volatile void?
+[06:38] Would you be okay if
+[06:39] you want to explain it or is that a
+[06:41] spoiler?
+[06:41] >> about it. Go ahead. Oh, well, you know
+[06:43] how in PoE 2 you have the corruption
+[06:46] outcome where you it defines the ranges
+[06:49] of unique items outside of their normal
+[06:51] ranges.
+[06:52] I think there's a Mirage currency that's
+[06:55] going to be doing that, which we haven't
+[06:56] talked about yet.
+[06:58] Uh yeah, I actually
+[07:01] don't So, another designer was the one
+[07:03] who designed all of the like specific
+[07:05] reward outcomes for various mechanics
+[07:07] and Mirages. So, I don't actually
+[07:09] remember off the top of my head exactly
+[07:10] where it comes from, but it does come
+[07:11] from Mirage.
+[07:13] Okay, so how much of those mechanics are
+[07:15] like, "Hey, this cool thing exists in 2.
+[07:16] I want to bring it to 1." versus, "Hey,
+[07:19] let's design something that's going to
+[07:20] go into both games simultaneously."
+[07:22] Rarely is something designed with the
+[07:25] intention that it cross-pollinates into
+[07:27] both games.
+[07:28] I I say rarely. Like I can't think of an
+[07:31] example.
+[07:33] Um often it's you know, this is a cool
+[07:36] thing that has been in one of the games
+[07:39] or the other and has been, you know, has
+[07:41] shown through battle testing, so to
+[07:42] speak, that it's something either
+[07:44] players like or we like or hopefully
+[07:46] both. And why not adapt it, you know? If
+[07:50] it's a good idea and we can adapt it to
+[07:52] one game or the other, working around
+[07:54] however that game, you know,
+[07:56] the constraints, so to speak, of
+[07:57] whichever game, then
+[07:59] wouldn't you want to do that? Yeah, for
+[08:01] sure. And do you guys like feel like the
+[08:02] selfish plagiarism in that sense then
+[08:04] like exists in like across other games
+[08:06] as well? Like Andrew, like how often are
+[08:08] you picking up like a different ARPG and
+[08:10] thinking like, "Hey, I need to figure
+[08:11] out a way to do this in POE 1." And then
+[08:14] like hopefully therefore it's like going
+[08:15] across like multiple teams or is it
+[08:17] something where you guys try and stay
+[08:19] internally with that? Like how does the
+[08:21] actual design philosophy work with kind
+[08:24] of how you look at mechanics in that
+[08:26] way?
+[08:27] I mean, there's definitely conscious
+[08:29] decisions to not straight up just like
+[08:31] plagiarize something from another game,
+[08:32] for sure. I guess most of the things
+[08:34] you'd pick up might actually be like
+[08:37] you'd unconsciously gather like certain
+[08:40] cool aspects from other games.
+[08:42] Like a funny story actually is like
+[08:46] we started developing all these holy
+[08:48] skills like right at the very start of
+[08:50] um
+[08:51] this league cycle.
+[08:53] So, Chris was coming up with all these
+[08:55] cool holy skill ideas and then uh
+[08:57] I think it was a few weeks later Diablo
+[08:59] 4 announced
+[09:01] Paladin. So, we were like all worried.
+[09:02] It's like, "Oh, hopefully they don't
+[09:04] think that because Diablo 4 dropped
+[09:06] Paladin that we're going to have to
+[09:08] we're just like straight up copying
+[09:09] them." You should have copied the
+[09:10] Paladin monetization strat, too. Super
+[09:12] smart. See, this is where my my lack of
+[09:15] knowledge of other ARPGs gets in the way
+[09:17] cuz I have no idea what they did for
+[09:18] that. Um
+[09:20] but yeah, even like the fact that holy
+[09:23] hammers is called holy hammers,
+[09:25] apparently there is a skill in Diablo
+[09:27] that has a similar name and I got some
+[09:28] feedback internally that like maybe we
+[09:31] should change the name
+[09:32] because players will expect it to behave
+[09:34] a certain way that it doesn't, but
+[09:36] I don't know.
+[09:37] Holy hammers is a cool name. I like
+[09:38] alliteration. That's Okay, yeah, cuz
+[09:40] when Spectral Helix came out, that was
+[09:42] sort of I remember thinking at the time
+[09:43] like that was the thing that's most
+[09:44] related. Um and we were really excited
+[09:47] about Helix, but obviously it's gone
+[09:48] through
+[09:50] its sagas as a skill.
+[09:52] Um Actually, it was kind of really
+[09:53] dominant for a while, right? I think we
+[09:54] had that as the premier like skill for a
+[09:56] while, and I think
+[09:58] I'm going to use that to segue into what
+[09:59] I really am interested in, which is
+[10:01] balance. Cuz I think that kind of set
+[10:03] melee weapon balance back for a long
+[10:05] time. For about like a year, Helix was
+[10:06] the skill. Damage numbers weren't there
+[10:08] like weren't there for anything else. Um
+[10:11] and I guess the thing that I've always
+[10:12] been thinking about is
+[10:14] PvE game balance is really weird, right?
+[10:16] In a sense of you're not actually
+[10:17] balancing for like play rate against
+[10:18] other players necessary or win rate
+[10:19] against other players, and I've always
+[10:21] been curious kind of what the core
+[10:22] priorities you're thinking about are. Um
+[10:24] there's a lot more specifics, um but how
+[10:26] do you guys see that kind of concept uh
+[10:28] in your context in your domain? I think
+[10:31] the goal isn't necessarily to get
+[10:33] everything perfectly balanced just
+[10:35] because of how ever-changing our game
+[10:36] is. I feel like it's a little bit of a
+[10:38] futile task, and we don't really have
+[10:40] the time resource to develop to
+[10:43] to get that into like a perfect spot
+[10:45] every time, but
+[10:47] what you'd prefer to have is really
+[10:49] Well,
+[10:50] me personally, I just like a variety. I
+[10:52] don't want the same skill to be running
+[10:54] the meta for like 2 years or whatever
+[10:56] like historically.
+[10:58] I mean,
+[10:59] to be fair, we probably have had some
+[11:01] skills that have been on top for quite a
+[11:03] while now, and maybe we should more
+[11:05] radically shift them out, but
+[11:07] >> I think like I I want to hear
+[11:09] first, I think, cuz I I think as you're
+[11:11] talking, it doesn't need to be a clear
+[11:12] answers, but getting the directional
+[11:13] where you guys are at is the most
+[11:14] interesting for me to start this, I
+[11:15] think, yeah.
+[11:17] Like how you guys individually view
+[11:18] that.
+[11:19] >> one of the important things as well is
+[11:22] you know, you're correct that it's not a
+[11:23] PvP game. So like if skill A is strong,
+[11:26] it doesn't make, you know, a player's
+[11:28] experience worse who isn't playing that
+[11:30] necessarily because they're not playing
+[11:31] against skill A.
+[11:33] But it still does in a way if something
+[11:35] is like
+[11:36] you know, the the whole premise of a
+[11:38] game like Path of Exile is here. We have
+[11:40] this really big puzzle. Come and solve
+[11:42] it. You know, we have all of these
+[11:44] moving pieces, all these uniques and
+[11:45] ascendancies and skills and supports and
+[11:47] whatever. Come and solve this or solve
+[11:49] some little corner of it. And if there's
+[11:51] a skill that just does a bajillion
+[11:53] damage out the box with basically no
+[11:55] effort, it's not a very interesting
+[11:57] puzzle anymore, is it? So like that is
+[11:59] part of it. Like there needs to be
+[12:01] some
+[12:03] you know, balance needs to be in place
+[12:04] so that it isn't just like I slot this
+[12:07] skill in and win without any of any
+[12:10] extra effort, which
+[12:11] you know, you can have your own
+[12:13] subjective opinion on how well of a job
+[12:14] we've done on that historically. Um and
+[12:16] then you also don't want players feeling
+[12:18] like you know, there are a lot of
+[12:20] choices that are basically pointless
+[12:22] because this thing over here does
+[12:23] everything better than every other
+[12:25] choice. So like those are probably the
+[12:26] two driving reasons why balance is
+[12:29] important even in a game that isn't PvP
+[12:31] centric. Or is there a reason why it's a
+[12:34] bit more conservative these days as far
+[12:36] as changing goes? Cuz I understand the
+[12:37] resource side, but let's say that the
+[12:39] concerns then that you're bringing up
+[12:40] right now are things like a really stale
+[12:42] meta where things are like constantly
+[12:43] the same and then having like false
+[12:46] heterogeneity
+[12:47] um or false choice like an illusion of
+[12:50] choice where you could pick all these
+[12:52] skills, but like you know, lightning
+[12:53] strike is better than the rest. Not
+[12:54] anymore, but hypothetically, right? Um
+[12:57] what's sort of the hesitation these
+[12:58] days? Cuz I remember we used to have
+[12:59] those massive balance patches. We'd see
+[13:01] like 20 on the low end or like a couple
+[13:03] hundred skills just have their numbers
+[13:04] changed. Is that a matter of resources
+[13:06] these days still? Is that just about
+[13:08] care? Is that like what are the drivers
+[13:10] behind not doing that these days?
+[13:13] Um I don't know. I guess it just hasn't
+[13:16] been brought up very much. Like I think
+[13:18] there have been times in the past where
+[13:20] the higher-ups are like
+[13:22] don't shake the boat too much because of
+[13:25] people
+[13:27] If people don't have their like tried
+[13:28] and true safe skill, then they'll be
+[13:30] more reticent to play the next league.
+[13:32] So,
+[13:33] like from a personal point of view, I'd
+[13:35] love if everything just got scrambled
+[13:37] without even like a huge amount of
+[13:38] thought going into like what goes up and
+[13:40] what goes down. But, going back to your
+[13:42] like whole heterogeneity comment, it's
+[13:46] that is one of the other axes of balance
+[13:48] that we can address. Like,
+[13:51] if all the skills
+[13:53] scale exactly the same, like a lot of
+[13:55] the spells scale in the same way and a
+[13:56] lot of the attacks scale in the exact
+[13:58] same way. So, if one of them is 10%
+[14:00] better than all those others, then why
+[14:01] would you play any of the other ones?
+[14:03] So, you need a kind of like try to
+[14:05] differentiate all the skills as well in
+[14:06] terms of like their damage shapes and
+[14:09] their clear speed and their single
+[14:10] target potential and their scaling axes.
+[14:13] So, I have a question I want to jump in
+[14:14] here a little bit. Um, Andrew, I don't
+[14:16] know if you've played League of Legends,
+[14:18] but Jung, Octavian, and I obviously
+[14:20] have.
+[14:20] Strangely, I've never tried it. Okay,
+[14:23] cool. So, then you're going to
+[14:24] absolutely miss this one. Um, but in
+[14:26] League of Legends, when they balance,
+[14:28] they like take an average player, like a
+[14:29] gold player, and then they balance
+[14:32] around that. But, if there's outliers,
+[14:33] say you know, a champion is fine in
+[14:35] gold, but then has like a 100% pick rate
+[14:37] in pro, then they'll obviously slap it
+[14:39] down and be like, "Well, we don't want
+[14:40] to see the exact same thing played in
+[14:42] every single pro game." Um, I was
+[14:44] wondering if you guys could speak a
+[14:45] little bit about what areas you look at
+[14:48] when you're looking to balance skills.
+[14:49] Is cuz like I was talking to Jung about
+[14:51] this. Like, you're not balancing for
+[14:52] Jung. He's playing like 20 hours a day
+[14:54] on league start. Are you balancing
+[14:55] around someone that plays, you know, 5
+[14:57] hours a day in the journey that they
+[14:58] have through Path of Exile league start?
+[15:00] How do you look at that? And then, I
+[15:02] think that a lot of people talk about
+[15:03] skills in terms of uh how league start
+[15:07] actually works around the abilities.
+[15:09] But, what other levers do you look at as
+[15:11] the journey of the league happens?
+[15:13] Because, you know, sometimes we're very
+[15:14] slow to actually pick up which skills
+[15:16] are good and bad as they're introduced
+[15:18] into the game, in my opinion. I feel
+[15:20] like that's more of like a a global
+[15:22] question that goes across many many
+[15:24] leagues rather than on a per league
+[15:25] basis because the game's been out for so
+[15:27] long now
+[15:28] that we've kind of ended up in the
+[15:30] steady state equilibrium where this is
+[15:33] how things are and this is the
+[15:35] difficulty of the game and every so
+[15:37] often we might shake that up with like
+[15:39] making act one extremely hard at some
+[15:42] point in time and not doing it to the
+[15:44] other acts.
+[15:45] But
+[15:46] yeah, I'm not really sure.
+[15:48] Do you have anything on that? I mean on
+[15:50] a specific skill by skill basis usually
+[15:52] my play testing will consist of like how
+[15:54] does the skill feel immediately when I
+[15:56] get it and for, you know, maybe a few
+[15:57] dozen levels thereafter. How does it
+[15:59] feel in early maps? How does it feel in
+[16:01] like
+[16:02] yellow maps? How does it feel in like
+[16:03] red maps? And usually when I'm doing
+[16:05] those tests it's like alk enter map, do
+[16:08] some combat, fight a boss, you know.
+[16:11] Um so yeah, I'm not necessarily
+[16:15] doing I mean we do have a QA department
+[16:17] that also will test and the QA
+[16:20] department actually skews mostly
+[16:22] in my experience towards testing things
+[16:24] in their end game and like giga juiced
+[16:26] and, you know, super entrenched
+[16:28] established player sort of context
+[16:30] because usually when we're hiring for QA
+[16:32] that is the kind of person that we hire.
+[16:33] We're hiring, you know, people with
+[16:34] thousands and thousands and thousands of
+[16:36] hours in the game.
+[16:37] Um so often what actually gets
+[16:40] overlooked in testing is that stuff that
+[16:41] I try and test while I'm, you know,
+[16:43] doing the the the major tweaks in the
+[16:45] implementation to the skill is the the
+[16:47] experience of it when you first get it
+[16:49] and the experience of it in like, you
+[16:51] know, on a crappy character who's just
+[16:52] hit maps.
+[16:53] Um because
+[16:55] and that's not to say that we always get
+[16:57] that perfectly right. There are there
+[16:58] are skills that I have implemented that
+[16:59] I would like to go back and try and
+[17:01] improve that specific experience on. Um
+[17:03] but that is, you know, the first
+[17:05] impression and that is quite important
+[17:07] for sure. So then you guys are speaking
+[17:08] from it from almost like a
+[17:11] a vacuum not a bad way but from like
+[17:12] your guys' perspective. There aren't
+[17:14] like kind of key vignettes of like
+[17:16] player vignettes or like player
+[17:18] archetypes that you'd be thinking about
+[17:19] like oh we need to know about like Joe
+[17:20] Blow who enters maps at like 20 hours
+[17:22] like this guy is going to be weaker in
+[17:23] this kind of way. Um
+[17:25] is that sort of like is there kind of
+[17:28] average player or like medium player
+[17:29] that you're thinking about when you do
+[17:30] like balancing changes? Um or is it just
+[17:32] about like this skill compared to other
+[17:34] skills? Or is it about the tools in the
+[17:35] system compared to other tools in the
+[17:36] system?
+[17:38] I'd say it's more on the the skill
+[17:40] compared to other skills and this tool
+[17:42] compared to other tools. It's like I
+[17:43] said we're at this like sort of
+[17:45] equilibrium state with the game where
+[17:48] if we're thinking about the average
+[17:50] player just getting into the maps we're
+[17:51] probably thinking on more of a global
+[17:52] level. Like for example in Sentinel
+[17:54] League when we like decided to buff
+[17:56] basically all the melee skills scaling
+[17:58] massively. So that's a thing of like
+[18:00] okay melee players aren't having a good
+[18:02] experience. Players typically think that
+[18:04] melee is behind other archetypes. So
+[18:07] let's bring melee up everywhere.
+[18:10] Rather than on a per skill basis to me
+[18:12] it's more like the skill is relatively
+[18:15] worse than another and all the skill is
+[18:16] relatively better than another and we
+[18:18] should bring them more closely in line.
+[18:20] But also trying to differentiate them in
+[18:22] like ways that aren't just
+[18:24] damage.
+[18:25] So like in terms of that then I think
+[18:27] like yeah we've kind of ended up in a
+[18:29] really skill-centric place but
+[18:31] are there other levers that you guys are
+[18:32] more comfortable pulling in terms of
+[18:34] rebalancing? Cuz I know like the passive
+[18:35] tree for instance is fairly static as
+[18:37] far as things go. But we've seen some
+[18:39] pretty big shifts in terms of say like
+[18:41] gearing-wise, right? Like the gear meta
+[18:43] has changed drastically in the past two
+[18:44] years where
+[18:45] an energy blade set or an energy shield
+[18:47] stacker used to be really weak and part
+[18:50] of the past year now it's been very very
+[18:52] dominant in both like racing starts and
+[18:54] hardcore and whatnot. Um so like what
+[18:56] levers would you actually look to other
+[18:57] than skill gems when it comes to
+[18:58] rebalancing PvE?
+[19:01] The our our head of QA
+[19:03] uh likes to say that everything is
+[19:06] always more complicated than you think
+[19:07] it is and he's absolutely correct there
+[19:09] and it's one of the reasons why the past
+[19:11] few leagues I would say we haven't seen
+[19:13] huge shake-ups in those large systems
+[19:14] because
+[19:15] you can't really adjust a large system
+[19:17] like that in isolation. You know, if we
+[19:19] were to go in and make a lot of changes
+[19:21] to the passive tree, it would probably
+[19:22] have knock-on effects to some uniques
+[19:24] and some ascendancies and some skills
+[19:25] and
+[19:26] X, Y, and Z. And that isn't a reason not
+[19:28] to do it. I would love to do all of
+[19:30] these things.
+[19:31] But
+[19:32] yeah, it's
+[19:34] tackling any of those larger systems is
+[19:36] often going to be like one of the focal
+[19:38] points of a league's
+[19:40] of an expansion, if that makes sense.
+[19:42] You know, like and that's often how we
+[19:43] think about it in a given expansion is
+[19:45] like there's you know, we want to get X
+[19:47] number of focal points and then a lot of
+[19:48] miscellaneous extra stuff alongside it.
+[19:50] You know, for Mirage for instance, it
+[19:51] was the end game rework, the league
+[19:54] itself,
+[19:55] um
+[19:57] probably something that I'm forgetting
+[19:58] going off the top of my head. Yeah.
+[19:59] That's not to say we haven't done many
+[20:01] recently. Like for example, you're
+[20:03] probably going to notice you're finding
+[20:04] a lot more currency this league. True.
+[20:07] You might be slamming exalts on like
+[20:10] crappy gear that you probably weren't
+[20:11] slamming exalts on before.
+[20:13] And I think in like a few of the
+[20:14] previous leagues there might be like
+[20:15] subtle things that have vastly affected
+[20:17] your campaign itemization, like the
+[20:20] gambler for example being in every town.
+[20:22] Yep. Yeah.
+[20:25] Okay. Part of what you just said was
+[20:26] like really cool, uh Octavian, cuz I
+[20:29] think that people now that there is just
+[20:31] like the PoE one team are very
+[20:33] interested in like kind of how you guys
+[20:35] view your backlog and like if there are
+[20:37] any things in that list that you are
+[20:39] like we didn't get to it this league,
+[20:41] but like I really want to get to it. And
+[20:43] then from someone that used to work at
+[20:44] Riot, I'm really interested like how
+[20:46] much of it is a push system onto people
+[20:48] working on stuff versus how much of it
+[20:49] is a pull system of hey, we have this
+[20:51] like backlog and you know, Andrew, I'm
+[20:53] really like I I love skill gems. Like I
+[20:55] want to jump in like grab like 40 of
+[20:56] these things and change them before the
+[20:58] new patch. Like can you guys talk about
+[20:59] like your workflow going into like how
+[21:01] new leagues kick off and kind of what it
+[21:03] looks like? Uh yeah, I mean usually
+[21:05] it'll be around this time actually. The
+[21:07] The you know, the release of an
+[21:08] expansion we'll be talking about the
+[21:09] next one. And it'll be like trying to
+[21:12] work out, you know, those large points
+[21:14] first because
+[21:16] yeah, we have a backlog of like, you
+[21:18] know, how I like I said, we have like
+[21:20] three or four focal points to every
+[21:21] expansion. We have a backlog of probably
+[21:22] like 20 focal points worth of stuff that
+[21:24] we want to do.
+[21:26] Uh and you can only fit three or four
+[21:27] into a given 4-month dev cycle. Uh and
+[21:30] then usually within the course of that
+[21:31] 4-month dev cycle, you get to the end
+[21:32] and you realize, "Oh, there's this thing
+[21:34] that would have been really cool and we
+[21:35] could fit that in maybe next time." And
+[21:37] you know, it's it's like that that uh
+[21:39] that cartoon meme of the guy who's
+[21:41] trying to fit something into his daily
+[21:43] schedule and he's pulling sleep out in
+[21:44] order to do it. Um and
+[21:48] yeah, I it's we you know, we have
+[21:52] a internally we have an issue tracking
+[21:54] system that has a backlog of a ton of
+[21:55] these things, but often the issue
+[21:57] tracking system is more for like the
+[21:58] hyper specific stuff. Uh and for the
+[22:01] broader scope-related things, that's
+[22:03] done um more like just
+[22:06] in conversations between designers and
+[22:08] and tracked in like internal documents.
+[22:12] Yeah, I think there's a lot of like
+[22:14] cost-benefit analysis that goes into
+[22:16] like what type of things we touch as
+[22:17] well. Like for example, next league, I'm
+[22:19] not saying we're definitely not doing
+[22:20] this, but next league we could say,
+[22:22] "Okay, we want to rework mana costs
+[22:24] throughout the game." And it's like, if
+[22:26] you look hard at anything, you're going
+[22:28] to find a numerable problems.
+[22:30] But the thing is, is this a worthwhile
+[22:31] goal? It's like, yes, okay, so melee has
+[22:34] this issue where mana eventually
+[22:36] devolves into everyone using mana leech
+[22:39] or minus mana cost on their rings. And
+[22:40] it's like, should mana matter that much
+[22:43] to melee builds? Should it matter as
+[22:45] much as it currently is for spells? Like
+[22:47] do they scale mana cost correctly? Are
+[22:49] there any builds that Are there any
+[22:50] builds that are like particularly
+[22:53] mana intensive?
+[22:55] But
+[22:56] that to fully audit mana is going to
+[22:59] take a ton of our time and then we might
+[23:01] come out of it ending up
+[23:03] making a bunch of changes which make
+[23:05] people unhappy. So,
+[23:07] touching minor in that way
+[23:09] is probably not going to be on our
+[23:10] agenda.
+[23:12] Well, maybe it will be at some point,
+[23:13] but definitely not in the near future.
+[23:16] It's one of the things that Mark was
+[23:17] talking about in the Q&A where like it's
+[23:19] really easy to
+[23:22] be scared of touching some of these
+[23:24] systems. Be scared of touching for
+[23:26] instance the end game changes that we
+[23:27] did this league because there's an
+[23:29] established status quo
+[23:31] that is pretty good, but like it could
+[23:34] probably better in a lot of cases. And
+[23:37] you know, you could just keep iterating
+[23:39] on existing systems and basically
+[23:41] continue to put icing on the cake so to
+[23:43] speak, but sometimes you have to go and
+[23:45] bake another cake.
+[23:46] Uh and that's much much harder. Yeah, I
+[23:48] think like in terms of the system side,
+[23:51] the thing that stood out to me most this
+[23:52] patch, I think the intelligence nerf was
+[23:54] the single
+[23:56] from my perspective best balanced line
+[23:59] I've ever seen in note.
+[24:01] Um
+[24:02] and all the system
+[24:03] >> about thing about that is we were just
+[24:06] that was one of our QA who brought it
+[24:08] up, but we were just looking at the
+[24:09] relative ratio of the attributes
+[24:11] compared to the bonuses they give and
+[24:13] comparing that to the small node values
+[24:15] on the passive tree. And all of them
+[24:17] were basically correct except the amount
+[24:19] of energy shield you get from
+[24:20] intelligence. Like for example, I think
+[24:23] on the passive tree a small evasion node
+[24:25] would grant you like 14% increased
+[24:27] evasion, while a small energy shield
+[24:29] node would be like 6 or 7%. So, the fact
+[24:31] that dexterity and
+[24:34] intelligence were giving the same amount
+[24:35] of percent evasion and energy shield was
+[24:38] just
+[24:40] wrong. And I guess that's just been
+[24:41] wrong forever. Not to say everything
+[24:44] needs to be perfectly symmetrical, but
+[24:46] yeah, it was definitely justification
+[24:48] for the nerf outside of it just being
+[24:50] historically very good for a while.
+[24:53] Okay, that's more like simplified then.
+[24:55] So, when it comes to like bigger changes
+[24:56] like when you're talking, I'm thinking
+[24:57] about Expedition right now.
+[24:59] Um, as a patch.
+[25:01] Cuz
+[25:02] I totally agree. I think the
+[25:05] public reception to system-wide changes
+[25:08] can be skewed very, very negative. And I
+[25:10] was on that side for like probably a
+[25:12] year and a half where like 3.15 was like
+[25:14] doomsday for me.
+[25:15] Um,
+[25:16] I probably wasn't as vocal at back then,
+[25:18] but like I remember thinking, "Oh my
+[25:19] god, I'll never be able to go through a
+[25:21] map again or go through the campaign." I
+[25:22] remember walking to Blood Aqueducts
+[25:25] in a race getting frozen and not
+[25:26] pressing my flask and dying and thinking
+[25:28] this game is doomed. Um, but in
+[25:29] retrospect, I think it's
+[25:31] and this might be unpopular, one of the
+[25:33] like most important balance patches ever
+[25:34] happened. So, is it a matter of building
+[25:36] up like equity or trust or like
+[25:40] And then also on the flip side, how do
+[25:41] you see that patch? Like, how do you see
+[25:42] a patch like Expedition in the grand
+[25:44] scheme? Well,
+[25:46] I think there's things on in the
+[25:48] Expedition patch that I very strongly
+[25:51] agree with. And then there's a bunch of
+[25:52] mistakes we made on the patch, which I
+[25:54] think sold but more than it needed to be
+[25:56] sold. So, for example,
+[25:58] the damage support nerfs are like I was
+[26:01] very happy with those changes because
+[26:04] the damage supports at that time were
+[26:05] just like like 50% more damage
+[26:08] on average for a damage support.
+[26:10] And that basically invalidated a lot of
+[26:12] the more interesting supports in the
+[26:13] game.
+[26:14] Um, but the things that were definitely
+[26:16] an issue with that patch were
+[26:18] the mana cost multipliers being changed
+[26:21] on supports. I think the numbers were
+[26:24] ran and like certain melee builds just
+[26:27] if you were using those same supports,
+[26:28] it doubled your mana cost,
+[26:30] which is definitely not acceptable.
+[26:32] And then there was also, I think there
+[26:34] was some problems with the flask
+[26:36] changes, but I can't actually remember
+[26:37] the specifics of those now. But yeah, I
+[26:39] think Expedition certainly
+[26:42] burned us a little bit in the sense of
+[26:44] like going and doing a full nerf patch.
+[26:48] I don't know if we've done a patch since
+[26:49] then on that scale in terms of like
+[26:52] character power nerf. The one that I
+[26:53] would be thinking about is not so much
+[26:55] like system-wide, but casters took a
+[26:57] pretty big hit, I would say, especially
+[26:59] in early game during the divine blessing
+[27:01] change. That one was like really big.
+[27:03] And then the changes to inspiration um
+[27:06] going from multiple or going from
+[27:07] additive to multiplicative were really
+[27:08] big for like casters across the board.
+[27:10] And I think that's probably responsible
+[27:11] for a lot of like
+[27:12] why there's a dearth of casters right
+[27:15] now in like the early game.
+[27:17] Can't think of anything else though.
+[27:18] Yeah, those two changes don't really
+[27:20] come to mind. Think I'm thinking more of
+[27:22] like a wild wide-scale system change
+[27:25] that just makes everyone weaker.
+[27:28] But yeah, I can't really think of
+[27:30] anything since Expedition, but there
+[27:32] there certainly would have been nerfs
+[27:33] that were done. Well, I I guess for me
+[27:35] like that kind of was like
+[27:38] like pretty large scale. I mean, I guess
+[27:39] there were casters using mana and there
+[27:41] was Archmage and there was the buffs
+[27:42] there, but for like a long time I think
+[27:44] EB and like EB MOM specifically, those
+[27:46] two things were really dominant like at
+[27:48] least the league start caster meta.
+[27:50] Um
+[27:51] and maybe I'm wrong there. Let me just
+[27:53] Let me just ramble here instead or go
+[27:54] completely differently. How how wrong do
+[27:56] you think I am? Or maybe more broadly,
+[27:57] how dumb do you think the average like
+[27:59] content creator build maker streamer is
+[28:01] in terms of actually identifying what's
+[28:03] strong and what isn't?
+[28:05] Yeah, I wanted to jump in on this cuz
+[28:06] John told me yesterday that he thinks
+[28:08] that PoE content creators are now too
+[28:11] good. They've got the game figured out.
+[28:13] And I was like, I'm really curious to
+[28:15] see whether the developers actually
+[28:17] think you guys are good at figuring out
+[28:19] their game because
+[28:21] I don't know whether that's true. Like I
+[28:23] think that every now and again like
+[28:25] people completely whiff on what is
+[28:27] actually strong in the current meta and
+[28:28] then you find it like 6 months later.
+[28:30] Well,
+[28:31] this is just anecdotal because I played
+[28:34] Kinetic Fist of Rubelad last league,
+[28:35] right? I leveled it throughout the game
+[28:37] and it was super duper smooth. And I
+[28:39] played it all through end game. And then
+[28:42] usually what I do is I farm up a ton of
+[28:44] currency and I'm like, "Okay, what am I
+[28:45] going to invest my next build on? So, I
+[28:47] actually go on my local
+[28:49] dev client and try out a ton of people's
+[28:52] builds, like build creators' ones, ones
+[28:55] that I see on Ninja.
+[28:56] And it's like Kinetic Blast just didn't
+[28:59] do it for me. If you select just better.
+[29:01] So, people, even though Kinetic Blast
+[29:03] was
+[29:05] the more popular skill last league, I
+[29:07] guess people didn't pick up on Fusilade
+[29:10] so quickly, but it it does seem to be
+[29:11] pretty popular now.
+[29:14] Mhm. I I guess the other side of that
+[29:15] coin though is like
+[29:17] people will come up with builds that we
+[29:18] just never saw coming in the first
+[29:20] place. You know, like the whole um I I
+[29:22] don't remember the name of the content
+[29:23] creator, so I feel a little bad not
+[29:25] being able to shout them out
+[29:25] specifically, but the guy who made the
+[29:28] the build that constantly canceled his
+[29:30] own portal cast in order to spam out,
+[29:32] you know, spells. Like that was not
+[29:35] expected and is a very cool build. You
+[29:38] know what's crazy? Stuff like that. I
+[29:40] remember on week one of the league,
+[29:41] there was like a Someone sent me a video
+[29:43] of Billy Billy showing showcasing the
+[29:45] interaction.
+[29:46] And I think I had forwarded it to GGG
+[29:49] like right away. I was like, "Hey, this
+[29:50] there's no way this thing lives past
+[29:52] like I'm not even going to bother making
+[29:53] a build with this. There's not a chance
+[29:54] this thing lives." And I saw it come up
+[29:56] like a month later on an actual build.
+[29:57] I'm like, "What?"
+[29:59] And when it comes to things like that,
+[30:00] you know, like how often that's just
+[30:02] like a bug, basically, right? So
+[30:05] Sure. Um
+[30:06] you know, I mean it it you're correct.
+[30:08] It it is a bug. I think that has been
+[30:09] addressed in this patch. Um but it's
+[30:12] still extremely creative and and cool to
+[30:15] leverage that. Um like
+[30:17] >> Wait, can I clarify right there though?
+[30:18] Can I can I just take that as a piece?
+[30:20] So, you're saying it's cool to leverage
+[30:23] a bug and it's cool if I do that in the
+[30:25] future, right? No, not the John. It's
+[30:26] all good, right?
+[30:28] >> This is This is an extremely blurry
+[30:30] subjective line. So, like there is no
+[30:32] There is no like Peo- People look for
+[30:34] like this, you know, word from on high,
+[30:36] this authoritative take on like, you
+[30:38] know, okay, what can I do? What isn't a
+[30:40] bug? Like I can't anticipate the bugs
+[30:43] that will be found. We try to. We have a
+[30:45] QA department that's dedicated to trying
+[30:46] to.
+[30:47] But, there might be, you know, there's
+[30:49] always the chance that there's something
+[30:51] in the game that, you know, I've
+[30:52] overlooked or
+[30:53] you know, all of us as developers have
+[30:55] overlooked that gets found.
+[30:57] And then it just has to be subjectively
+[30:59] assessed in that time. Like, it is
+[31:01] really, unfortunately, just purely
+[31:04] case-by-case. No, and I think that makes
+[31:05] a lot of sense. But, Octavian, I'm kind
+[31:07] of interested in your thoughts on like
+[31:09] the OJ question. Like, do you think that
+[31:11] content creators are up to date with
+[31:13] what is strong within the game? Or do
+[31:15] you think that, you know, are we playing
+[31:17] in free show what was actually strong at
+[31:19] the start of keepers? Like, how how good
+[31:20] do you feel like the community and
+[31:22] content creators, specifically, are at
+[31:24] reading that meta
+[31:26] balances within the game?
+[31:28] There's definitely some
+[31:29] lag, for lack of a better term, I think,
+[31:32] there. But, I think that's not
+[31:33] necessarily, like, I wouldn't want to
+[31:35] say that's because, you know, the people
+[31:37] playing the game at the highest level
+[31:38] aren't smart enough to find these
+[31:40] builds. There are definitely people who
+[31:41] are making extremely
+[31:43] >> that comment for you. That that that's
+[31:44] fine. It's
+[31:46] Like, well, no, cuz I have I have an
+[31:48] interesting perspective on this because
+[31:49] I was a content creator for Path of
+[31:51] Exile for years before joining the team.
+[31:53] And if you want to be really successful
+[31:56] at league start, what you want to do,
+[31:58] like, the perfect build is a build that
+[32:01] has some new stuff going on that also is
+[32:04] on a foundation that people trust.
+[32:06] And then people will be like, oh, I know
+[32:08] that this can be strong, but there's
+[32:09] also some new cool interaction or new
+[32:11] cool unique or whatever that it's using
+[32:13] that can draw me in. Like, people want,
+[32:15] you know, I know this is going to work.
+[32:17] I know this is going to be
+[32:18] foundationally good. And also a little
+[32:20] bit of spice. Like, that's the perfect
+[32:22] build guide. You know, you'll get the
+[32:23] most traction, the most people watching,
+[32:26] you know. So, like, there is an
+[32:27] incentive to innovate a little bit and
+[32:29] not too much at league start. To be
+[32:31] honest.
+[32:31] >> Okay, so let's talk about that because
+[32:33] on top of like whether they're good or
+[32:35] bad, there's obviously POE for a new
+[32:38] player especially and for a lot of
+[32:39] intermediate players. If you don't have
+[32:40] a build guide, you struggle to play the
+[32:42] game. Like that's just straight up true.
+[32:43] So, how do you guys view like dev versus
+[32:45] content creator relationship in terms of
+[32:47] like actually putting out these good
+[32:49] build guides because you're right, if
+[32:50] you have someone put out a bad build
+[32:52] guide, it completely destroys league
+[32:53] start for a lot of people. They never
+[32:54] log into the game again. So, how do you
+[32:56] guys view that and you know, what what's
+[32:58] your current thought on GGG's
+[33:00] relationship with like content creators
+[33:01] and build guide management? And you
+[33:04] know, third-party tools as a whole,
+[33:05] right? Path of Building is like just so
+[33:06] handy to be able to actually use all
+[33:08] these things and I know that people have
+[33:09] been asking for like in-client mapping
+[33:11] out the passive tree and things like
+[33:13] that. How do you view all of this
+[33:14] symbiotic relationship? Well, I mean, I
+[33:16] think overall content creation for the
+[33:18] game and build guides and stuff have
+[33:20] been a massive boon. You're correct that
+[33:21] there are occasionally you know, maybe
+[33:23] there's a build guide that goes out that
+[33:25] doesn't do what you know, that people
+[33:27] get baited into for lack of a better
+[33:29] word.
+[33:30] Um, that is you know, maybe does ruin
+[33:33] some people's league start experience,
+[33:34] but what we can we can really do on the
+[33:36] dev side about that is just try and make
+[33:38] the game more approachable in general so
+[33:40] that you know, I don't think we'll get
+[33:42] to the point where you don't necessarily
+[33:44] need any build guide at all. We'll see.
+[33:47] Um, but we can definitely do more on
+[33:48] that front. For one thing like the whole
+[33:51] keywording system from PoE 2 is
+[33:52] something that I'm personally really
+[33:53] keen to bring back to PoE 1 because it's
+[33:55] way better than the hold alt for
+[33:57] reminder text system that we have right
+[33:59] now.
+[34:00] Um, like that if we can get more ways to
+[34:02] onboard people into the game without
+[34:04] having to alt-tab out to a wiki or go to
+[34:06] a build guide, then the risk of that is
+[34:08] minimized, right? Where does the name of
+[34:10] this podcast come from? Just heard the
+[34:12] word bait. I think people are really
+[34:13] incendiary.
+[34:15] Yeah. People say all kinds of things.
+[34:19] The truth is, I think that
+[34:21] I have never ever
+[34:24] made a bad build. There's just bad
+[34:27] players that copy them poorly.
+[34:30] And if You better than me. If a if a if
+[34:32] a good player copies my bad build, I
+[34:34] have a lot of builds on my YouTube
+[34:35] channel. Those are They do not hold up.
+[34:37] You actually might be the I've got to
+[34:38] say I mean there's been I think
+[34:40] Where does that come from is actually
+[34:41] kind of interesting cuz let's say I have
+[34:43] a reputation for baiting people with a
+[34:44] build. Let's just say hypothetically.
+[34:46] Not saying that's the truth.
+[34:48] Um I think a lot of it has to do with
+[34:49] skill complexity. So there's a skill
+[34:51] that I'm seeing on this current patch
+[34:53] that I think might be incredibly bait. I
+[34:55] think it is
+[34:57] potentially powerful but looks to be
+[35:00] weak. And that's I think it's Holy
+[35:01] Hammer. It's the one where it's like you
+[35:03] consume a power charge and you have the
+[35:04] cascading things. Is that Holy Hammer?
+[35:05] Mhm. The the row of hammers, yeah, sure.
+[35:08] So there's been like speculation about
+[35:10] overlaps and you know how often how much
+[35:13] damage does this do cuz I think a lot of
+[35:14] times we're trying to moneyball skills
+[35:15] to get it down to if you do everything
+[35:17] correctly in this way and you have the
+[35:19] correct scalars for the skill and
+[35:20] package it correctly, what is that
+[35:22] damage effectiveness when you calculate
+[35:24] attack speed and everything? I think
+[35:25] there might be like overestimation on
+[35:27] the Holy Hammer for instance because we
+[35:28] don't know about the consistency of
+[35:30] overlaps and how much damage it actually
+[35:31] does. So from my perspective, I see that
+[35:34] a lot of that risk or like whether
+[35:36] something will be good or bad in that
+[35:37] sort of like unknown factor and the
+[35:39] complexity is actually just about not
+[35:41] knowing how a skill functions
+[35:43] specifically as it pertains to hit rate,
+[35:45] right? And I'm not sure like what you
+[35:47] could or would even want to do to
+[35:48] elucidate that better for players.
+[35:50] I don't know. Uh
+[35:52] cuz
+[35:53] I think this
+[35:54] fundamentally comes down to like what
+[35:56] kind of player I am as well because
+[35:59] like like we we have this game that I'm
+[36:01] like I said earlier is is this
+[36:02] incredibly complex puzzle and that kind
+[36:04] of encourages people to solve it and it
+[36:05] also attracts people who want to solve
+[36:07] that puzzle. And for a lot of people,
+[36:09] it's just about like solving the biggest
+[36:11] number, you know? Or maybe you pick a
+[36:14] skill and then from there you solve the
+[36:15] biggest number for it. Whereas when I'm
+[36:18] approaching a build, I more want to like
+[36:20] get the num the numerical aspect of it
+[36:22] to a point that's comfortable and then
+[36:23] it's about solving how the play style
+[36:25] feels for me.
+[36:26] Um I don't know. I feel like I'm not
+[36:28] answering your question super well. I'm
+[36:30] not trying to dance around it. I just I
+[36:33] think I have a very different way of
+[36:35] thinking about this sort of thing than
+[36:38] necessarily translates well onto like,
+[36:41] you know, a DPS estimate or uh
+[36:44] uh
+[36:45] just numerical estimates of how
+[36:47] effective a character is. Like that's
+[36:48] just not
+[36:50] necessarily how I look at a build most
+[36:51] of the time. Yeah, I feel like from a
+[36:54] player's point of view, the new skills
+[36:56] are like it's there's more excitement in
+[36:58] not knowing how effective it is just by
+[37:00] the numbers off the gem because of all
+[37:02] those external factors by not knowing
+[37:04] the hit rates or the number of overlaps,
+[37:06] for example. So, I feel like I sort of
+[37:09] like there not being perfect information
+[37:11] going into a release for that. I was
+[37:13] going to say that's interesting because
+[37:14] you got someone like Jon that's going to
+[37:16] look at a skill and he's going to pull
+[37:17] it apart. And if the damage
+[37:18] effectiveness isn't high enough, he's
+[37:20] just never going to touch the skill,
+[37:21] right? He's like not even going to do
+[37:22] it. Then I assume that there's like the
+[37:24] average person that is like, "Oh, you
+[37:25] know, I played Paladin in all of these
+[37:27] other games. There's no Paladin skills.
+[37:29] No matter how little damage I do, I'm
+[37:31] going to try and grind this one out and
+[37:32] stick with the skill."
+[37:34] Um, and I guess like that becomes like
+[37:36] nearly an economy question because it's
+[37:37] like, "Okay, if the skill operates in
+[37:39] that way, then how far ahead or behind
+[37:41] do you become in the economy?" Because
+[37:43] if you play a great skill, you get ahead
+[37:45] if you play the game enough. And then
+[37:47] you're able to make the skill even
+[37:49] better. So, I think that that's actually
+[37:51] quite interesting going back to the
+[37:52] first area of like balance of like how
+[37:54] you approach like how these skills
+[37:57] operate within an a game that has such a
+[37:59] big economy on league start, you know?
+[38:02] Um, because I think that that is
+[38:04] something that
+[38:06] uh we were also quite interested in.
+[38:08] It's like, "You know, do you guys
+[38:09] balance your skills around like, you
+[38:11] know, this is mainly a SSF player that's
+[38:13] going to interact with chat a little
+[38:14] bit?" Or do you guys think about your
+[38:16] skills as in like, "Hey, we have
+[38:18] especially in softcore trade, we have
+[38:19] like a completely wide-open economy. You
+[38:21] have access to completely every single
+[38:23] item in the game theoretically, and a
+[38:24] lot of them are quite cheap after like
+[38:25] two or three games. You know, that's
+[38:27] what we expect the players to be able to
+[38:28] utilize to be able to create these build
+[38:30] guides. I will say that like when I'm
+[38:32] approaching trying to come up with skill
+[38:34] concepts, all of that is not
+[38:36] unimportant, but it is secondary to does
+[38:39] the skill have a cool power fantasy?
+[38:41] Like does the skill have a cool unique
+[38:44] way that it functions, and that fulfills
+[38:45] a certain
+[38:47] you know, like I want to be dropping
+[38:49] giant hammers on huge packs of monsters,
+[38:51] you know? Like that is why Holy Hammer's
+[38:54] exists. And then from there it's okay,
+[38:56] well what what spacing do we need on the
+[38:57] hammers in order to have it be
+[38:58] competitive in terms of overlap? What
+[39:00] you know, what what effectiveness does
+[39:01] the skill need given that it functions
+[39:03] this way? But like we first determine
+[39:05] how does the skill need to function in
+[39:07] order to fulfill the the cool base
+[39:10] fundamental concept, and then you know,
+[39:13] work out the balance around that. And
+[39:15] that sometimes means that you get to the
+[39:16] point where you're trying to work out
+[39:17] the balance around the cool base
+[39:18] fundamental concept, and you just can't.
+[39:21] And then the skill gets cut. Uh there
+[39:23] was actually one additional skill that
+[39:24] was meant to go into this patch that you
+[39:26] know, the concept was cool, but it
+[39:28] didn't translate well enough in game
+[39:29] into like actual play in a
+[39:32] moment-to-moment level, and it's been
+[39:35] pulled. It'll maybe get redesigned and
+[39:37] go into 3.29 with some changes or a
+[39:39] future patch or become a unique item or
+[39:41] something. We don't want to waste the
+[39:43] assets that have been made, but
+[39:45] yeah, like like there it's that's not to
+[39:47] say like it's only about power fantasy
+[39:49] and and class fantasy and whatever you
+[39:51] want to call that, but it is like the
+[39:52] starting point.
+[39:54] I think that's really cool. I love
+[39:55] Crackling Lance. It's like one of my
+[39:56] favorite abilities. Like I'll run it
+[39:57] like probably like once every two
+[39:58] leagues, even though I think it is a
+[40:00] little bit like underpowered at the
+[40:01] moment, cuz like I just love the power
+[40:02] fantasy of like big beam become small
+[40:05] beam when I still have to stand still
+[40:06] and like concentrate on something like
+[40:08] it's just such a cool ability to me, so
+[40:10] I I do agree that's cool. I think Nick's
+[40:13] patch has been tabled quite a lot of few
+[40:16] times already, but Self-Cast is
+[40:18] definitely on our radar. Oh, and there
+[40:19] is also a new exceptional support
+[40:21] specifically for intensity based skills,
+[40:23] which might be pretty good with
+[40:25] crackling lance this league.
+[40:26] >> Yeah, cool. Yeah. Well, like sometimes
+[40:28] we'll fall we'll fall a bit short in
+[40:30] terms of the balance on those class
+[40:32] identities and fantasies, but like it's
+[40:33] important to have them because you want
+[40:36] skills to feel distinct because
+[40:37] otherwise you go back to the problem we
+[40:38] discussed earlier where like every skill
+[40:40] operates the same way. This one is 10%
+[40:41] better. Why would you use these other
+[40:43] five skills, right? And it's hard not to
+[40:45] fall into that trap especially when you
+[40:46] have triple digit number of skills in
+[40:48] the game.
+[40:49] Um but yeah, something like crackling
+[40:52] lance is a good example where it's a
+[40:54] cool concept that maybe just needs some
+[40:56] more numerical love and that could be in
+[40:58] 329 or 330 or whatever. And it's good to
+[41:00] have those cool concepts in the game
+[41:02] because you can always buff numbers in a
+[41:03] future patch. To me it seems like
+[41:05] arriving at the right number has got to
+[41:06] be really hard because of certain things
+[41:09] as far as design space go. Like certain
+[41:10] I think there's certain mechanics and
+[41:12] items and skills that restrict the
+[41:13] design space of everything else because
+[41:16] in their absence you could be a bit more
+[41:18] like relaxed, but with their presence it
+[41:20] becomes ridiculous. Like things like
+[41:22] Penance Mark for instance. Um
+[41:24] I know like on release I actually do
+[41:26] want to hear about that specifically
+[41:28] when it was like introduced, but at the
+[41:30] time of Penance Mark's release I
+[41:32] remember building around it cuz I saw
+[41:34] the trailer. I did a bunch of like
+[41:35] screen measurements to see, okay, is
+[41:36] this within 1.5 radius sometimes? And I
+[41:39] made a whole low tolerance Pathfinder
+[41:41] proliferation setup. Still comes out.
+[41:43] Forget about what people did on release
+[41:45] but now it's a 3.5 4.5 radius. Um and I
+[41:48] saw I guess how problematic it would
+[41:49] have been, but there's like that aspect,
+[41:51] but then I think about like even now
+[41:53] with that and Southbound you get like
+[41:54] massive issues with overlaps. I think
+[41:55] Nemesis is another great example of an
+[41:57] item that might have greatly restricted
+[41:59] design space. I've always
+[42:01] thought about what if I just like didn't
+[42:03] do that? Um like return projectiles kind
+[42:05] of
+[42:07] setting what you can and can't do in
+[42:08] terms of introducing new projectile
+[42:09] skills bouncing that. Do you think
+[42:10] there's like big problem outliers that
+[42:12] you wish weren't there? Um or is it just
+[42:14] something that's more interesting now
+[42:15] for your problem solving to create that
+[42:17] puzzle?
+[42:18] Well, I think something like Nemesis to
+[42:20] me is more fine because it is such an
+[42:23] extremely rare in-game item. Like, yeah,
+[42:25] for the average player they're probably
+[42:27] never seeing a Nemesis. Um what was the
+[42:30] other example you guys said? Penance
+[42:31] Mark.
+[42:32] Yeah, no, Penance Mark is getting near
+[42:34] Worm Blaster in in terms of like or the
+[42:37] Writhing Jar in terms of levels are
+[42:40] problematic. Whenever we design a new
+[42:41] skill, someone's like, "But what about
+[42:44] this and this with Penance Mark?" So,
+[42:45] maybe
+[42:46] it will be adjusted at some point
+[42:48] because it does keep on cropping up in
+[42:50] terms of our like QA testing. Now, this
+[42:53] should not be taken as there being any
+[42:56] changes coming to this keystone. Um but
+[42:59] like definitely not. Uh the maybe this
+[43:02] will get clipped out of context, still.
+[43:03] We'll see. Uh but like CI is the biggest
+[43:05] example of this. You know, just immunity
+[43:07] to a full damage type is very cool. Like
+[43:10] that's super iconic. CI is an incredibly
+[43:11] iconic keystone, and it's great that
+[43:13] it's in the game, and it means we can't
+[43:15] have an in-game boss that's full damage
+[43:16] chaos, right? Because otherwise you play
+[43:18] CI build, you're immune to it. You know,
+[43:20] you can't have this thing that's
+[43:21] supposed to be threatening and
+[43:23] challenging do full chaos damage, or
+[43:24] else suddenly you can click a keystone
+[43:26] and be completely immune to it. So, like
+[43:28] it is Yeah, exactly. But but like if you
+[43:31] want to put cool stuff in the game
+[43:33] that's transformative and game-changing,
+[43:34] you have to build those constraints for
+[43:36] yourself. It's just it's impossible not
+[43:38] to, or else everything is milktoast. You
+[43:41] know, everything is like flat and vapid
+[43:43] if you don't have interesting spiky
+[43:46] constraints that you have to build
+[43:47] around. I definitely see like some
+[43:49] things as adding more and some things as
+[43:50] adding less in that way. Like, I
+[43:52] remember going I was going through
+[43:53] unique design process,
+[43:54] when I was looking back at some of them,
+[43:55] I'm like, "Oh, yeah, given what happened
+[43:56] in the next few patches, this would have
+[43:59] Adding this one item would have actually
+[44:00] removed three different items, four
+[44:02] different skills, and the possibilities
+[44:03] for like two different skill trees." Um
+[44:05] but when it comes to like overlaps and
+[44:06] splash, I think that's always going to
+[44:07] be one to consider.
+[44:09] The other thing I had about that was I
+[44:10] guess like
+[44:11] it was reminding me that Penance Mark,
+[44:13] that specifically the implementation, it
+[44:14] basically and correct me if I'm wrong,
+[44:16] it changed from the time that from the
+[44:17] trailer to when it was launched, right?
+[44:19] The skill functionality.
+[44:21] Um, I think yes. The radius at which the
+[44:26] um, ghosts spawn around the monster was
+[44:29] made further away, I'm pretty sure. I
+[44:31] don't know if there were any other
+[44:32] changes.
+[44:33] But yeah, that was certainly the case.
+[44:35] So then do you think there's been like
+[44:36] an increasing degree of comfort from
+[44:37] your guys' side in terms of changing the
+[44:39] game or like changing what's
+[44:42] the balance state of balance or the
+[44:44] skill functionality or item
+[44:45] functionality from the point at which
+[44:46] the patch release happens on Thursday
+[44:49] um,
+[44:49] to when the patch review drops on
+[44:50] Friday?
+[44:51] Or sorry, the trailer on Thursday to
+[44:52] when the patch drops on Friday. Cuz I
+[44:54] feel like from my perspective there's
+[44:55] been a lot more every day we have like a
+[44:58] brand new list of notes. Whereas back in
+[44:59] the day it felt a little bit more
+[45:00] conservative in that way.
+[45:02] Um, well, I guess also it is we used to
+[45:05] drop the patch notes on uh, the
+[45:08] Wednesday before the release. So we do
+[45:09] do the patch notes far earlier than
+[45:11] before. So I guess it hasn't really
+[45:13] changed our like fanaticism in terms of
+[45:16] like trying to get more and more changes
+[45:17] in just before release. Yeah, I guess
+[45:19] you're now just like seeing a lot of the
+[45:21] changes that would have previously been
+[45:22] invisible at that point because yeah,
+[45:24] there is usually you know, last week
+[45:26] before release there's some something
+[45:28] that comes together and we didn't
+[45:29] realize, you know, this is going to be a
+[45:31] problem and then unfortunately you have
+[45:32] to fix it. I want to avoid that as much
+[45:34] as possible. Like I really dislike One
+[45:36] of my favorite things about the the role
+[45:38] about the the job is being able to like
+[45:39] show players cool stuff and I really
+[45:41] dislike when I show a player a cool
+[45:43] thing and then it's like oh, wait, no,
+[45:45] actually we have to change that. Uh, so
+[45:47] I I want to try and minimize that as
+[45:48] much as humanly possible, but sometimes
+[45:50] it slips through. What do you guys think
+[45:51] about your timings at the moment because
+[45:53] I know Octavian in his his interview you
+[45:55] were saying that you love that there's a
+[45:56] certain amount of undiscovered things
+[45:58] going into every new patch and sure it
+[45:59] gets data mined and stuff, but the
+[46:00] average player probably isn't looking at
+[46:02] that. Do you guys now like the change
+[46:04] where the patch notes are way earlier
+[46:06] and people get a longer time to plan, or
+[46:07] do you think that there is a uh
+[46:09] a way that you would go back to? Like
+[46:11] maybe later patch notes and having a
+[46:13] little bit more surprise going into the
+[46:14] actual league start weekend. I remember
+[46:15] like waking up like I'm Australian, like
+[46:17] waking up at like, you know,
+[46:19] 2:00 3:00 a.m. putting the final touches
+[46:20] on builds. Uh you know, the the morning
+[46:22] of the league launching. I think
+[46:24] personally I preferred the patch notes
+[46:27] being on the Wednesday, but the reason
+[46:29] for that was because I feel like on the
+[46:31] Friday of the live stream you get to too
+[46:32] much information overload. Cuz you have
+[46:34] the live stream with the new stuff, and
+[46:36] then you also have the patch notes. So,
+[46:38] having like that teaser season prolonged
+[46:40] from like the live stream, and then
+[46:42] you're also looking forward to the patch
+[46:44] notes in a few days. This isn't going to
+[46:46] translate into a change of policy on
+[46:47] this front. Um this is just purely a
+[46:49] personal opinion. I just I really like
+[46:52] having stuff in the game that isn't in
+[46:53] the patch notes that player players can
+[46:55] discover. Like I said in on the Ziz
+[46:56] podcast, this time around that's all the
+[46:58] like little campaign improvements, you
+[47:00] know? Like that's kind of where I put
+[47:01] that energy. It's there's a bunch of
+[47:03] little rooms in the campaign,
+[47:04] uh little rewards and stuff. We showed
+[47:06] one. Uh I specifically asked that we not
+[47:08] show more than one because I want them
+[47:10] to be discovered. I want them to be
+[47:11] found. And also that is the kind of
+[47:12] thing that's relatively safe from data
+[47:14] mining, thankfully. Uh because I don't
+[47:17] think, maybe I'm wrong on this front,
+[47:19] but I don't think data miners can
+[47:20] actually access like the specific
+[47:22] locations of things within the the files
+[47:24] that control, you know, level
+[47:26] generation. I think uniques are the
+[47:27] other place that that's like really well
+[47:28] hidden before the patch. Like we have no
+[47:30] idea what the unique most of the uniques
+[47:32] are, and like the last patch Talborns,
+[47:34] it like drastically shifted what the
+[47:36] meta is, their accessibility and
+[47:37] everything. So, like I think there's
+[47:39] other places where there's a lot of
+[47:40] undiscovered potential.
+[47:42] I mean it it calls back to that tension
+[47:44] that I was talking about earlier, um
+[47:45] back when I was, you know,
+[47:47] live streaming the game for a living.
+[47:48] Where like before league start, our game
+[47:50] is very complex, obviously. And people
+[47:53] just want to know that their league
+[47:54] start is going to be comfortable and
+[47:56] good and and solid. Um and so that I
+[47:59] think that is what drives a lot of the
+[48:00] desire to have as much information as
+[48:02] possible because you want to know all
+[48:03] the variables so that you can have a
+[48:05] comfy league start. Uh and I I relate to
+[48:08] that to some degree, but also I really
+[48:10] really like the whole community
+[48:11] discovery aspect of it in the first week
+[48:13] where you see these posts of people
+[48:15] going like, "Oh, look at this cool thing
+[48:16] that I that I found that we haven't seen
+[48:17] yet, you know, this cool new unique."
+[48:19] Um so there's there's a balance there to
+[48:21] be struck. I think releasing, you know,
+[48:23] skill changes, character changes,
+[48:25] ascendancy changes, you know, passive
+[48:27] tree, all of that is very important
+[48:28] having that ahead of time. But new
+[48:30] uniques, yeah, I would I would I don't
+[48:32] think I'd ever want to, you know, start
+[48:34] teasing tons and tons of those before
+[48:36] launch.
+[48:36] >> Yeah, I'm not 100% sure if the
+[48:38] exceptional supports can be data mined
+[48:40] or not. I think they can, which is a
+[48:42] little unfortunate. But you only I think
+[48:44] you can infer where they're from mostly
+[48:46] from their flavor text and name,
+[48:48] potentially. That will be the more
+[48:49] interesting thing, how to get them all.
+[48:51] For those ones as well, like I'm more
+[48:52] okay with those being something that the
+[48:54] community discovers because they're very
+[48:56] much less likely to impact your league
+[48:59] start plan because it's not something
+[49:00] you get until you defeat, you know, end
+[49:02] game bosses probably multiple times. I'm
+[49:04] with you. Like my one of my
+[49:06] favorite recent leagues was actually
+[49:08] mercenaries and it was because I went
+[49:10] from these things are useless to these
+[49:12] things can buff you amazingly to every
+[49:14] single day on Reddit like a different
+[49:15] person posting how their merc is now
+[49:17] soloing the whole game and they're
+[49:18] sitting there doing nothing. And like
+[49:20] the evolution of that was like actually
+[49:22] so cool to like watch and like I think
+[49:24] that if that had have been solved
+[49:25] beforehand, you know, that would have
+[49:27] been like a real downer on that league
+[49:29] in particular. I think I like the
+[49:31] uniques thing. I think the old uniques
+[49:33] is where
+[49:34] I might have more concern. In so far as
+[49:37] and this is the only time I'll lobby in
+[49:38] this whole session. Um is there any
+[49:41] chance that when you guys change the
+[49:43] unique tearing of a specific unique,
+[49:45] that there might be a more public
+[49:47] communication of that? I
+[49:49] I to kind of socialize this in
+[49:50] Archnemesis, I made a build for
+[49:53] Nightblade Perfect Agony
+[49:54] Spectral Helix using Angol's, which was
+[49:57] the most common unique tier at the time,
+[49:58] or maybe second most common. And that,
+[50:00] for some reason, it was bad, by the way.
+[50:02] That That build was bad. You can talk
+[50:03] about bad builds, that build was worse
+[50:04] than just not I unclicked Berzerk and
+[50:06] that build got better. Anyways, that
+[50:08] patch, Angol's went up to I think T1 or
+[50:10] T2 um in like kind of in secret. So,
+[50:12] like on the league start, it was one of
+[50:14] the more unaccessible items. I wonder,
+[50:16] could we have like a communication of
+[50:18] that when that does happen? Cuz brings
+[50:20] since this patch we have Fowlborn
+[50:21] Ghostflame. Will things like that be
+[50:22] accessible, or will that be like hard to
+[50:23] get? I hope not. That's so fun. Well,
+[50:26] interestingly, it is now easier to know
+[50:28] when a unique has changed rarity Right.
+[50:31] on release than before because
+[50:34] you can just go to Rog and Kings Match
+[50:37] and see how much dust it sells for. I
+[50:39] was actually contemplating if that is
+[50:41] like a if we wanted to make it more
+[50:43] secret in that when we change the rarity
+[50:45] of uniques, we don't actually affect
+[50:46] their dust cost at all. But, honestly, I
+[50:48] don't really have a strong opinion
+[50:51] either way on whether or not we should
+[50:53] be
+[50:54] revealing. I just know that historically
+[50:56] we haven't really announced waiting
+[50:58] changes to the players. Yeah, this is
+[50:59] something we'll probably have to talk
+[51:00] about probably.
+[51:02] I would We would probably need to, you
+[51:04] know, loop loop Mark, maybe Jonathan, in
+[51:06] on this because it is a very established
+[51:09] historical trend with, you know, this
+[51:11] game and PoE too.
+[51:12] Um so, I wouldn't want to, you know,
+[51:14] make that call without at least
+[51:15] consulting them. When an item's normal
+[51:17] version is not very like it's fine, but
+[51:20] like, you know, not exceptional, but
+[51:21] then the Fowlborn version of the item is
+[51:24] insanely powerful. Let's use Geofri's
+[51:26] for the uh example. Like, is there ever
+[51:28] going to be a splitting of the tiers, or
+[51:31] are they always similar tiers? And
+[51:32] again, like I understand this is
+[51:33] probably not a concrete answer area, but
+[51:35] >> Um I will say we have the ability to
+[51:38] control like what percentage of a time
+[51:40] the unique does become Fowlborn, or if
+[51:42] it has more than one Fowlborn outcome,
+[51:44] we can like make one of those outcomes
+[51:46] rarer than the other.
+[51:48] So, I'm not going to like say which ones
+[51:50] are rare and which ones are common, but
+[51:52] yeah, we have we
+[51:53] do do that for a few of them. I I hear
+[51:55] what you're saying. It scares me what
+[51:57] you're saying, Andrew, in particular,
+[51:58] for sure.
+[51:59] I I think like the only reason why is
+[52:01] or the the biggest positive that I see
+[52:03] is like the potential for build
+[52:05] heterogeneity at league start in so far
+[52:08] as like
+[52:09] I think Paul Strom was kind of ranting
+[52:11] about this the other day. The idea that
+[52:13] all these league starts kind of need to
+[52:14] be all based on blue or rare items.
+[52:17] Which is in a sense, in a vacuum,
+[52:19] neither here nor there, but in terms of
+[52:20] what you could do in terms of distinct
+[52:21] builds that feel different, that are
+[52:23] different right away, um it becomes a
+[52:25] lot harder to set plans for that, right?
+[52:28] And so then your league start
+[52:30] kind of looks like, oh, let's just play,
+[52:32] you know, explosive arrow blaster for
+[52:34] the 10th time. Like, let's go slams
+[52:35] again until we know. Let's do this again
+[52:37] until we know. KBOC until we know. I
+[52:39] feel like that could be like a really
+[52:40] big upside, right? In terms of knowing
+[52:43] what's still accessible to us. Not so
+[52:44] much the uniques, but just knowing that.
+[52:46] Yeah, I think from my point of view, I
+[52:48] don't feel like the majority of unique
+[52:51] items actually like
+[52:53] bias towards one skill over another.
+[52:55] Like, most uniques are more of like I
+[52:57] mean, there are certainly a few where
+[52:59] it's like, for example, Kinetic Fury
+[53:00] Scepter, you want to stack as much
+[53:01] reduced duration as possible. So, you
+[53:03] really need like two or three key
+[53:05] uniques in that sense.
+[53:07] But for the majority of the skills, I
+[53:09] don't think they're like super unique
+[53:10] dependent. Okay. How do you feel about
+[53:12] balance? I'm I'm happy. I think that
+[53:15] all the unique stuff, I don't know if
+[53:17] you want to move on to a different
+[53:18] topic, but I've got what I need. Um I
+[53:20] did want to kind of delve deeper into
+[53:22] that content creator thing.
+[53:24] In terms of how they impact
+[53:26] as streamers and build guys and all
+[53:27] that, how they impact
+[53:30] the meta, how they impact how people see
+[53:32] builds and skills. Um beyond just that,
+[53:35] do you guys see it as like or is there
+[53:36] some perspective of it as like a bit of
+[53:38] an arms race between creator and
+[53:40] developer when it comes to that? I'm not
+[53:41] sure I follow. Like in arms race in what
+[53:44] way? Let's say there are currently five
+[53:46] really overpowered skills in AC racing.
+[53:48] Let's just say hypothetically. And one
+[53:49] of them is on one of them is known as
+[53:50] seismic trap. And then next patch we
+[53:52] discover like I'm going to wait and then
+[53:54] release like DD ignite for next patch.
+[53:56] And then you know, you guys are looking
+[53:57] down like oh, you know, can't wait for
+[53:58] this guy to do this again and so on and
+[54:00] so on. Um are you guys worried about or
+[54:02] are you guys excited about that sort of
+[54:03] dynamic appearing? Cuz I've I've felt
+[54:05] that way at times. Let's put it that
+[54:06] way. Sort of adversary on nature in
+[54:08] terms of balancing. I don't know that
+[54:09] there's really much that we can
+[54:12] do about that.
+[54:14] Like like often times it goes back to
+[54:17] the whole philosophy of of skill balance
+[54:19] in PvE games being partially to try and
+[54:23] make it not feel like there's one thing
+[54:25] that is just drowning out everything
+[54:26] else, right? And so if a skill becomes
+[54:29] popularized
+[54:31] because it's incredibly strong to the
+[54:32] point where it feels like it's drowning
+[54:34] everything out drowning out everything
+[54:35] else, we kind of need to address that.
+[54:37] Um and or if we don't, we lead to a
+[54:40] stale meta and that is something that
+[54:42] people very much dislike.
+[54:44] So whether that was because it got
+[54:47] popular just because the numbers are
+[54:48] obviously insane or got popular because,
+[54:51] you know, one person was super
+[54:53] responsible for that popularity. Like
+[54:54] where how it got to that point doesn't
+[54:56] seem
+[54:57] as relevant to me as like just
+[55:01] addressing a stale meta if one comes up.
+[55:03] Does is held like biggest popularity of
+[55:05] skills still factoring in? Cuz I know it
+[55:07] used to be like really publicly
+[55:08] mentioned as the premier thing that you
+[55:10] guys look to in terms of reducing power.
+[55:12] It's Yeah, probably because of the
+[55:14] perception or I don't know. Probably
+[55:16] because of the fact that people will
+[55:18] become very unhappy with a stale meta.
+[55:21] Popularity factors in because that is a
+[55:23] large part of what determines what a
+[55:25] meta is. I wouldn't say it's the sole
+[55:28] factor. Like anytime that I come to
+[55:30] Andrew with, you know, hey, maybe we
+[55:31] should take a look at this skill or this
+[55:32] archetype or whatever. Andrew's response
+[55:34] is always to pull up a bunch of
+[55:35] spreadsheets, uh and start comparing
+[55:38] balance numbers and comparing damage
+[55:40] numbers. Like, it's not like, "Ooh, this
+[55:41] is really popular. Make the numbers 20%
+[55:43] lower." It's But, it can be an impetus
+[55:45] point for like, looking at it and
+[55:47] seeing, well, is this actually
+[55:50] a problem? Is this actually overpowered?
+[55:51] And in the case of like Detonate Dead,
+[55:54] yeah, the answer is often was often yes.
+[55:56] Uh I was going to say this, like, often
+[55:58] it's not necessarily the skill itself,
+[56:01] but there's external factors around the
+[56:02] skill which could be problematic
+[56:04] instead. Like, Detonate Dead. Well,
+[56:06] Detonate Dead is very very closely tied
+[56:07] to Disintegrate, but for example, the
+[56:09] whole We had years and years of players
+[56:12] having lots of different specters, so
+[56:14] they could pollute their Disintegrate
+[56:15] pool with more and more high-life
+[56:17] minions, which is a very PoE thing to
+[56:19] do, but at some point, it's like, we're
+[56:22] balancing around a very non-intuitive
+[56:25] way of playing the skill. So, we sort of
+[56:29] that's the reason we'd want to get rid
+[56:30] of it. You know what's really intuitive,
+[56:33] but I hate, is uh stackers. How do you
+[56:35] guys feel about stackers right now?
+[56:37] Um when you say stackers, are you
+[56:39] talking about like attribute stackers,
+[56:41] or herald stacking, or is there a
+[56:43] particular type of stacking?
+[56:45] I think the last time I ever talked to
+[56:47] Chris Wilson, he said Righteous Fire was
+[56:50] the most problematic skill in the game.
+[56:51] This is a decade ago.
+[56:52] Um because it lets you scale life and
+[56:54] damage at the same time. And I talked
+[56:55] about this a lot. Um these days, the
+[56:57] premier builds, I think, for end game
+[56:59] are still energy shield stack. There's a
+[57:01] life stacker win set up. Power charge
+[57:03] stacking with um eternal separation,
+[57:05] like Elkin Humerus.
+[57:07] Um and then strength stacking. And
+[57:09] seeing that kind of convergence, I
+[57:11] think, at the end game towards stacking
+[57:12] has made some people
+[57:15] kind of feel like build making is more
+[57:16] linear now, less
+[57:18] interesting, less complex, I guess, at
+[57:19] least in terms of horizontality. Do you
+[57:21] guys like the presence of stackers,
+[57:22] their current power? Um do you guys like
+[57:24] that kind of building? Just general
+[57:25] thoughts, I guess. It's it's a very
+[57:28] thorny balance problem that I've been
+[57:29] kind of bouncing around in my head for a
+[57:31] number of leagues now uh because it has
+[57:34] the upside of giving you builds that
+[57:35] have these like really really high
+[57:37] ceilings that you can keep incrementally
+[57:39] improving and that's that's a good
+[57:40] thing. We like you know, we we don't
+[57:42] want to build to become static
+[57:44] like I've reached level 92 or whatever
+[57:46] and you have you know, you're just kind
+[57:48] of done.
+[57:49] Um but then the other problem is exactly
+[57:51] what you're saying like it sort of
+[57:53] funnels the build making meta into you
+[57:56] know, pick your top level thing that
+[57:58] you're stacking around and then find
+[57:59] ways to stack around that be that ward
+[58:01] int decks strength es life whatever
+[58:05] and pewie one has become so complex with
+[58:07] so many different avenues at this point
+[58:08] that like it's just proliferated to a
+[58:10] lot of different parts of the game. But
+[58:12] it's not something that we should be
+[58:14] like super hasty with going and just
+[58:16] chopping away at. There are upsides and
+[58:18] downsides here and the perfect solution
+[58:20] would retain some of the upsides while
+[58:22] making it feel
+[58:24] less one-dimensional.
+[58:26] Um this is also the kind of thing that I
+[58:27] feel like is a problem for the 1% of the
+[58:30] 1% you know, like it's a problem for
+[58:32] people who are getting to that level 95
+[58:34] plus build and really investing in like
+[58:37] you know, then making another build and
+[58:38] maybe making another build and feeling
+[58:40] like all of the build making is is very
+[58:41] similar. You know, it's it's not the
+[58:43] kind of thing that's a problem if you
+[58:44] you know, play one build a league to
+[58:46] level 90 and then finish.
+[58:48] Um so I don't know. I I feel like I
+[58:50] maybe went on a little circuitous rant
+[58:52] there but regardless like it is
+[58:54] something that's been on my mind. I just
+[58:56] can't speak to any specific changes
+[58:58] because I haven't figured out any
+[58:59] specific changes. It's the same thing
+[59:02] There's a number of problems at any
+[59:04] given moment that are always just in the
+[59:05] back of my head and I'm trying to come
+[59:06] up with a solution and usually something
+[59:08] pops into my head at 2:00 a.m. some
+[59:09] random day. You know, mercenaries is on
+[59:11] that same list like how how how
+[59:14] mercenaries? How? And eventually my
+[59:17] brain will present some kind of answer.
+[59:18] We'll see if it's a good one. I hope so.
+[59:20] The way I see it is that it's about a
+[59:22] separation of offense and defense,
+[59:24] right? Cuz the all the skill and mana
+[59:26] and armor stack are the same. All of
+[59:28] these stackers are able to really scale
+[59:31] at a very high level both offense and
+[59:32] defense at the same time. But, you'll
+[59:34] notice one I'll never mention is
+[59:35] dexterity stacking. Cuz I think the only
+[59:37] defensive scalar for dexterity, save for
+[59:39] like during freeze and whatnot, is guard
+[59:41] cons basically. You could say shapers
+[59:42] touch, right? So, isn't about
+[59:45] the separation of those things, which
+[59:46] kind of from what I understand used to
+[59:48] be one of the core principles in terms
+[59:49] of introducing like mechanics, items,
+[59:51] and skills. Yeah, I feel like over time
+[59:52] we have added more and more things that
+[59:54] scale both offense and defense or scale
+[59:56] damage off life or scale damage off the
+[59:58] energy shield, stuff like that. And it
+[60:01] suddenly like it's been brought up as
+[60:03] like the more and more of those
+[60:04] mechanics you add in, they're like
+[60:05] multiplicative with each other. So, it's
+[60:07] like making those builds stronger and
+[60:09] stronger over time. Like it certainly
+[60:11] has been on our radar for a while, and
+[60:13] we are making a couple of nerfs this
+[60:15] patch to energy shield stackers in
+[60:17] particular. But, we will like I think we
+[60:20] probably will make future nerfs to these
+[60:21] type of builds. I was wondering if it
+[60:23] was a quantity or quality thing from
+[60:24] your perspective. But, that's
+[60:25] interesting to hear it that way. Um I
+[60:27] want to completely change the topic for
+[60:29] a little bit. Um crafting is a skill in
+[60:32] PoE that I think like is really
+[60:34] entertaining to watch and the people
+[60:36] that craft the best are like actually
+[60:38] like uh
+[60:40] can separate themselves onto another
+[60:41] tier. I think crafting leagues lately
+[60:43] have become a little bit they do all
+[60:47] crafting better than the other crafting
+[60:49] mechanics in the game. Like, you know,
+[60:51] the tree for example just spit out
+[60:52] fractures better than anything else,
+[60:54] spit out like high DPS axes anything
+[60:56] else, spit out like everything better
+[60:58] than anything else. And then like I go
+[60:59] back to necro, that was kind of the
+[61:01] same. Every single piece of the gear
+[61:02] eventually was like double craft uh uh
+[61:04] double fractured off necropolis. Then
+[61:06] you go back to like even harvest. Um
+[61:08] Does that make you scared to introduce
+[61:11] new crafting mechanics into the game?
+[61:13] And if not, do you think that the
+[61:14] current power level of like cuz I think
+[61:17] it you need to engage in the league
+[61:18] mechanic. It needs to be slightly better
+[61:20] than the other mechanics in the game
+[61:21] probably on launch. But it just seems
+[61:23] like the power dynamic
+[61:25] seems a little bit off to me at the
+[61:27] moment because it feels like I don't If
+[61:29] it's a crafting league, it feels like I
+[61:31] don't engage in the other avenues of
+[61:33] crafting probably as much as I would.
+[61:35] Mhm. I think it was definitely slightly
+[61:39] unintentional how strong the breach
+[61:42] equipment tree went out. Um and it took
+[61:45] away a lot from like fossils from my
+[61:48] point of view.
+[61:49] Um
+[61:50] because it's basically doing fossils but
+[61:52] with like mod tier rating on top of it.
+[61:55] But I also agree that if you're going to
+[61:57] have a crafting league, then you need to
+[61:59] make sure the crafting is front and
+[62:00] center. So it does need to be relatively
+[62:03] powerful and feel good to players.
+[62:05] Um
+[62:06] do you have anything on that? What it
+[62:08] what it kind of needs to do is iterate
+[62:10] in a different novel direction from
+[62:13] previous crafting methods. And that's
+[62:15] where I think both Necropolis and the
+[62:16] tree kind of failed.
+[62:17] Um because they essentially were just
+[62:20] here's crafting and it's very good. And
+[62:23] it doesn't They don't have like, you
+[62:24] know, some new thing that they're doing
+[62:26] that isn't something that the other
+[62:27] systems can do. Cuz if you can And
+[62:29] that's just really hard, by the way.
+[62:31] Like the crafting system in Path of
+[62:32] Exile 1 is so um tight and so, you know,
+[62:37] it's extensive with with so many things
+[62:39] going on that it's really hard to
+[62:40] iterate in a new and meaningful way. And
+[62:42] that's probably why the tree and
+[62:43] Necropolis didn't because there just
+[62:46] wasn't, you know, wasn't some
+[62:48] fundamental new thing to throw in at the
+[62:50] time.
+[62:51] Um so like going forward, if we have a
+[62:53] league, you know, Mirage is not super
+[62:54] heavy on the crafting. Though there are
+[62:55] a few things you can find in Mirages
+[62:57] through other league mechanics that may
+[62:58] impact crafting decisions. But it's not
+[63:00] like a crafting league, so to speak. Um
+[63:03] if we have a league in the future that
+[63:05] is more crafting-centric, I'd want to
+[63:06] make sure that it has some new unique
+[63:08] novel selling point that the crafting
+[63:10] can be built around because then you can
+[63:11] put the power budget there rather than
+[63:13] putting the power budget into just okay,
+[63:15] it makes rares with really big numbers.
+[63:17] Yeah, that makes sense cuz from my
+[63:18] perspective, the thing that I liked
+[63:20] about Necropolis is like I was playing I
+[63:22] think poison molten strike at the time.
+[63:23] Like I still had to go to heist to
+[63:26] actually get the corpse to be able to
+[63:28] make my pneumatic daggers, right? So I
+[63:30] still had to engage with different parts
+[63:32] of the game to be able to do the
+[63:33] crafting that like I needed to do.
+[63:35] Whereas it has felt like in the past
+[63:37] some of the leagues were like you just
+[63:39] did the core game of mapping and then
+[63:42] you were able to access as you said like
+[63:43] fossils or you know
+[63:45] it seemed like strange that would pull
+[63:47] you away from the part of the game that
+[63:49] that item came to, but I really like
+[63:50] that you guys are addressing that at the
+[63:52] moment. I don't know if you feel
+[63:53] similarly. An emphasis on all league
+[63:56] mechanics and we're not in that place
+[63:58] yet. We're certainly not in that place.
+[64:00] But an emphasis on all league mechanics
+[64:01] having some interesting unique draw that
+[64:03] you would want to do that thing for is
+[64:05] very important to me personally. Like
+[64:07] that that I think is what gives the game
+[64:10] its longevity. That or is one of the
+[64:12] found foundational things that gives the
+[64:14] game its longevity. Being able to go
+[64:15] like, you know, oh, I want to I want to
+[64:17] specifically, you know, build around and
+[64:19] invest into heist or delve or delirium
+[64:22] or blight or whatever and be rewarded in
+[64:24] a way for doing that that I wouldn't be
+[64:26] rewarded in for doing one of the other
+[64:28] choices I could have picked. Is there
+[64:30] like a favorite crafting system for each
+[64:32] of you guys? It's definitely Rog from
+[64:35] Expedition.
+[64:36] Oh. And I think the reason I love Rog so
+[64:39] much
+[64:41] is because it's it just strikes the
+[64:44] right balance between non-determinism
+[64:46] and having a lot of player skill
+[64:48] knowledge to like leverage your way to
+[64:50] like economic returns effectively. So
+[64:52] it's like yeah, strikes the right
+[64:54] balance between RNG and like me thinking
+[64:57] that my skill is what is causing me to
+[65:00] do well when I'm crafting from Rog.
+[65:02] Rog is a really interesting one because
+[65:04] he doesn't actually give you anything
+[65:05] that you couldn't get from other
+[65:06] systems. He's it's more like the way of
+[65:09] interacting with it is the thing that's
+[65:10] unique there.
+[65:11] >> Yes, I also
+[65:12] how he gives you like very strange items
+[65:14] sometimes. Like he'll give you some
+[65:17] crazy looking item which is like might
+[65:20] be hyper specifically very good for some
+[65:22] random person's build. And it ends up
+[65:25] selling for a lot. Personally,
+[65:28] probably fossils and resonators and
+[65:30] delve in general. I mean it's probably
+[65:32] one of the reasons why we started there
+[65:33] for this whole trying to make league
+[65:35] mechanics more
+[65:37] sequestered and contained. It's because
+[65:39] I have a soft spot for delve and I I
+[65:42] I I like I like the the fossil resonator
+[65:44] system. I think it's pretty solid
+[65:46] despite it being what almost a decade
+[65:48] old at this point. God. Yeah, we
+[65:49] definitely still use them.
+[65:50] >> quite that old. It's cool cuz delve has
+[65:52] like the two big like kind of cleavages
+[65:54] in crafting where like you can just spam
+[65:56] a dense fossil and get some pretty good
+[65:57] stuff. But then when you want to make
+[65:58] your high end items you can like deeply
+[66:00] invest where every resonator is costing
+[66:01] like five and six more plus divines per
+[66:04] like slam.
+[66:06] From my I really thought one of you guys
+[66:07] would have said it like
+[66:09] recombinator.
+[66:10] What are your thoughts cuz or I guess
+[66:11] sentinel broadly cuz it's a progressive
+[66:13] crafting system that's like actually
+[66:14] building on other things, right? But
+[66:16] it's still separate. I think I do like
+[66:18] recombinators. I think the main thing I
+[66:20] don't like about it is the opaqueness of
+[66:22] it. And also how much like expert
+[66:25] knowledge you sort of need to know cuz
+[66:27] there's weird things going on behind the
+[66:28] scenes regarding like exclusive mods and
+[66:30] that type of thing. It's a little less
+[66:33] clear to players exactly like how to
+[66:36] take the best advantage of it. Yeah,
+[66:37] it's a cool system that's not
+[66:39] communicated as well as it could
+[66:40] otherwise be. So there might be work to
+[66:42] to be done there.
+[66:43] I do remember when I first joined the
+[66:45] company one of the first things that I
+[66:47] asked one of the one of the designers I
+[66:49] was talking to at the time is okay, so
+[66:50] when are recombinators coming back? It
+[66:52] was like a month after I joined in QA.
+[66:54] What was that?
+[66:55] What was that?
+[66:56] What league was that then? I think I
+[66:59] joined basically as Sentinel was was
+[67:01] finishing up. Okay, so okay. You've been
+[67:04] kind of pushing behind the scenes. I
+[67:05] think like they're still I I what you're
+[67:06] saying about the complexity thing. I
+[67:08] feel like that's what makes it
+[67:09] interesting to me cuz my biggest problem
+[67:11] with tree this patch was how simple it
+[67:12] was. Like the power is its own issue
+[67:14] that can be just be like it's a lever
+[67:16] that can be pulled, right? You can just
+[67:17] change numbers.
+[67:18] But the sheer simplicity of crafting
+[67:20] from it, I didn't like. It was like I
+[67:21] want defense, I want money, I want this
+[67:23] and I just press it. Whereas like recon
+[67:25] learning about the hidden rules like I
+[67:26] think having the It's not I wouldn't
+[67:28] call it intuitive. But they didn't feel
+[67:30] like bugs to me. They didn't feel like
+[67:31] things that were generally problematic,
+[67:33] but they still had you like thinking
+[67:34] about the game, had you think about like
+[67:36] what's possible, had you think about why
+[67:37] these things are possible. And then once
+[67:38] you figure out why one thing was
+[67:39] possible, you start thinking about why
+[67:40] other things aren't. And I would like
+[67:43] worry then that as we separate crafting
+[67:45] systems and reduce complexity that we
+[67:47] start to lose the possibility of that,
+[67:48] right?
+[67:49] Yeah, I feel like the breach tree is
+[67:51] more like a means of getting your
+[67:53] starting item, but given how powerful it
+[67:55] was, it probably was like yeah, this is
+[67:57] your starting item and your finishing
+[67:59] item. As in like once you generate the
+[68:01] rare item, you don't need to go through
+[68:02] further crafting systems to iterate on
+[68:04] it. But I I do also share your love for
+[68:08] like just loading up Path of Exile and
+[68:11] like being like this is the item I want
+[68:12] to end up with. How do I get there? And
+[68:14] then just messing around and seeing what
+[68:16] different things I can do to
+[68:18] maximize my odds of building that
+[68:21] specific item. And like all the weird
+[68:23] little ways in which an item can be
+[68:25] hyper specific is one of the things that
+[68:26] drew me to Path of Exile in the first
+[68:28] place, you know? And and that's just
+[68:29] gotten more and more over time. Like you
+[68:30] can have
+[68:32] this item, you know, you can have one of
+[68:33] those those high strings with extra
+[68:35] suffixes and then you know, what maybe
+[68:36] one of them is fractured and you've
+[68:38] synthesized or changed the implicit,
+[68:39] though I don't think that actually works
+[68:40] on the high strings. Maybe a bad
+[68:42] example. You know, like you can have you
+[68:44] can mess with the implicits, you can
+[68:45] mess with the corruptions, you can mess
+[68:46] with the explicits a whole ton. You can
+[68:48] have enchantments and stuff and
+[68:50] I wouldn't want to reduce that, no. I I
+[68:53] I love how crazy and weird items can or
+[68:56] rare items in particular can get
+[68:58] eventually on like some giga end game
+[69:00] and When I think about that, it's like
+[69:01] the random item stuff I would like a
+[69:02] lot. I like the idea of like having
+[69:04] these weird items. Last league I made a
+[69:05] character that was based around a ring
+[69:06] that had minus 200 mana on it. Um it was
+[69:09] like a helical. And I got like a lot of
+[69:11] reduced mana. I had I think 80 total
+[69:13] mana at the very end, and I did
+[69:14] permanent staff of seasons with that cuz
+[69:16] it also had like 200 mana regen. It was
+[69:18] some weird brick to mirror ring. But at
+[69:20] the same time, what I'm thinking is like
+[69:22] all the systems we're talking about
+[69:23] actually don't really interact with each
+[69:24] other, right? Like fracturing orbs are
+[69:25] kind of the cross kind of thread that
+[69:27] makes a lot of crafting systems I deal
+[69:29] interact with each other. And a lot of
+[69:30] times, I don't necessarily mind or not
+[69:31] mind whether things are made in
+[69:33] isolation. I think it's kind of cool
+[69:34] when you like, oh this is lot for your
+[69:36] build is best made through this system,
+[69:37] and this lot is through this system. But
+[69:39] like that's what is really drawing me
+[69:41] constantly over and over again back
+[69:42] towards like recombinator. And I feel
+[69:44] like the interaction between systems I
+[69:46] worry about that. Um
+[69:48] a lot of systems
+[69:49] >> that's actually true though? Like cuz I
+[69:50] think like maybe at the top end that's
+[69:51] true, but I think like, you know,
+[69:52] essences into like June slams and stuff
+[69:55] is like probably where a lot of like the
+[69:57] base player base crafts things and
+[69:59] stuff. You know, so like I think like
+[70:01] there are some systems that overlap, and
+[70:02] then like I mean, I'm a fan of Rog as
+[70:05] well, and then I'll just get some items
+[70:06] that have like good modifiers, and I'll
+[70:07] just like slam them together on a
+[70:09] recombinator to see if they actually
+[70:10] turn into anything good, and if not,
+[70:12] they just get deleted. I think like the
+[70:13] systems are in a pretty healthy spot
+[70:15] from a casual perspective, I guess. I
+[70:16] think one of the changes that I was
+[70:18] surprised went under the radar so much
+[70:20] from last patch is all the harvest
+[70:23] crafts now respecting meta mods.
+[70:25] Like I made some very powerful items
+[70:27] this patch, and I'm like, is this
+[70:28] busted? But I didn't see people talking
+[70:31] about it very much, so maybe it's not as
+[70:32] busted as I thought it was. Um I think
+[70:35] part of it is something like the breach
+[70:37] tree or like Necropolis crafting, it's
+[70:39] safer from a design standpoint to design
+[70:41] it in such a way that it doesn't
+[70:42] cross-pollinate with other systems
+[70:44] because then you reduce the chance that
+[70:45] you've, you know, overlooked some
+[70:47] incredibly busted interaction. Uh but
+[70:50] you're absolutely correct, it's also
+[70:51] less interesting. So, yeah, like I said
+[70:52] earlier, if we do another crafting
+[70:54] league going forward, I'd I'd like for
+[70:56] it to be more distinct having its own
+[70:59] kind of spin that it brings to the table
+[71:01] and then also probably functioning with
+[71:03] other systems in some ways if it can.
+[71:06] What that looks like I don't know off
+[71:07] the top of my head but I I want to find
+[71:09] out. How does graveling fit into the
+[71:11] crafting system conversation at the
+[71:13] moment cuz like to me at the high end
+[71:14] best gear normally does come from stuff
+[71:16] that you make and I like that about path
+[71:18] of exile but I mean there is a lot of
+[71:20] conversation about you know items on the
+[71:21] ground and people just hide everything
+[71:23] apart from a certain item base. Um you
+[71:26] know where does that fit into your head
+[71:28] when it comes to crafting? Well I don't
+[71:30] think we're making like huge strides to
+[71:31] address that or anything this patch but
+[71:33] we are basically saying that all those
+[71:34] starting point items like the items that
+[71:36] generate with like very high modifier
+[71:38] tier rating are getting worse from
+[71:40] sources like King's March and the
+[71:42] Gambler and the Breach tree but better
+[71:44] from memory strands which is ground loot
+[71:47] and memory strands also has that
+[71:48] advantage that even once you identify
+[71:50] the item all of your future crafts on
+[71:52] that item are better because of the
+[71:54] whole like the strands add more tier
+[71:56] rating. Yeah I used strands like the
+[71:57] first time this league for like crafting
+[71:59] and the complexity that it was like the
+[72:01] things that you could do were pretty
+[72:03] crazy especially like think about like
+[72:05] beasts and like shifting bases.
+[72:09] Whereas when it first came out I was
+[72:09] like yo this is seems useless like I
+[72:11] think the leg
+[72:13] the player leg in terms of understanding
+[72:15] systems is definitely there and right
+[72:16] now when you're saying the harvesting
+[72:17] I'm I'm still lagging really far behind
+[72:19] man I don't know where you're at.
+[72:21] Don't say anything though. But I have no
+[72:22] idea what you're talking about still
+[72:23] like in terms of like what would be more
+[72:25] OP than we already did before. Well I
+[72:27] think it's more like
+[72:28] in harvest you have things like reroll
+[72:31] more likely What is it? Reroll an item
+[72:34] with a fire mod or a speed mod or
+[72:35] whatever it is.
+[72:37] Those didn't used to
+[72:38] respect like prefixes cannot be changed
+[72:41] and suffixes cannot be changed but I
+[72:43] think we changed that last patch. I
+[72:45] think that's cool. It was a result of
+[72:47] introducing the new wand bases that have
+[72:50] those implicits where they can't roll
+[72:51] caster modifiers I believe because those
+[72:53] work on the same system and they needed
+[72:54] to function with that. So, it was just
+[72:55] kind of a side effect. That That always
+[72:58] worked, I think. That we We've been
+[73:00] doing that forever. Yeah, I could be
+[73:01] wrong. I There was definitely something
+[73:03] related to how that switch changed, but
+[73:05] maybe I'm like
+[73:06] >> right? Like that's what it would have
+[73:07] been? Maybe. I I'd have to get the patch
+[73:09] notes in front of me. There's been too
+[73:11] many of them since then. I can't
+[73:12] remember it all specifically off the top
+[73:13] of my head.
+[73:14] >> I I think there's I think there's some
+[73:15] that have always worked and now you're
+[73:17] saying that all of them work now. I know
+[73:19] for sure that prefixes and suffixes
+[73:21] can't be changed always worked.
+[73:23] Yeah, those two worked. That
+[73:24] functionality
+[73:26] was changed at a fundamental level to
+[73:27] allow for the new wand bases to
+[73:28] function. I know that much. Like that's
+[73:30] where the change came from, but I don't
+[73:32] remember all the specifics of all the
+[73:33] ramifications. I can see why that would
+[73:35] line up then with like cannot roll
+[73:36] caster cannot roll attack. Um in terms
+[73:38] of this looting thing,
+[73:39] and this is probably a conversation I
+[73:40] had been 15 years ago and
+[73:42] it's just me not knowing. What if just
+[73:44] everything was ID'd? And like I know
+[73:46] there's an over-reliance on filter in
+[73:48] that case, but I think the biggest
+[73:50] reason for this is like people it's just
+[73:53] going to explode the complexity of what
+[73:55] a item filter should look like Yeah. Is
+[73:57] the main thing. And playing games like
+[73:59] Last Epoch, this is might be one of my
+[74:02] biggest problems with that game. That's
+[74:03] for some reason.
+[74:04] >> It's because everything drops ID'd. I
+[74:06] feel like I need to build these like
+[74:08] hugely complex filters and I need to be
+[74:10] hovering over items like constantly
+[74:12] during maps.
+[74:13] I don't know. There's something about it
+[74:15] which I dislike fundamentally. I I may I
+[74:18] may farm some L's in chat saying this,
+[74:20] but also I I like identifying items.
+[74:23] Like I like you know, I play in in
+[74:26] hardcore trade often, which is a smaller
+[74:27] economy, or I play in group found
+[74:29] settings, you know, where where rares,
+[74:31] you know, still have some value. Like
+[74:33] I'll pick up rings, I'll pick up amulets
+[74:35] mostly, you know, maybe I'll pick up
+[74:36] high-level bases of the kinds of bases
+[74:38] that I'm using for my build, that sort
+[74:39] of thing.
+[74:40] And I like
+[74:42] identifying the item and that moment of
+[74:44] like, "Ooh, could this be good?" Often
+[74:46] times, 90% of the time, No, but then 10,
+[74:48] 5, 2% of the time, it's good enough that
+[74:51] I keep it, and that's cool. I like that
+[74:53] moment, personally. Um I understand that
+[74:56] that may be something that a lot of
+[74:58] people don't care for or relate to, but
+[75:00] like just on a subjective level,
+[75:02] I I like to identify rare gear.
+[75:05] When I think about it, it's like the
+[75:06] sound engineering side of things helps
+[75:08] that a lot, cuz I do hear the sound of
+[75:11] ID'ing the item.
+[75:12] And and and the feedback that that
+[75:14] provides me in my chest area, you know?
+[75:16] I was like telling my like
+[75:18] friends who don't play PoE um about
+[75:21] like, yeah, I guess like one of the
+[75:23] reasons we still play it like that ting
+[75:24] sound, you know? Like things like that.
+[75:25] I think a lot of the sound engineering
+[75:26] provides that satisfaction.
+[75:28] The ID thing,
+[75:30] I I hear what you're saying, for sure. I
+[75:31] think that's where it comes from for me,
+[75:33] if that's there. One of one of the
+[75:34] really old series on my YouTube channel
+[75:36] is just me ID'ing tabs full of jewelry
+[75:38] and price checking it and then listing
+[75:40] it. Like I that was actually what
+[75:42] started to get me an audience in the
+[75:43] first place, way back in the day.
+[75:45] Um I like I would rather we try and
+[75:49] address loot to the point where, you
+[75:50] know, there are some rares dropping
+[75:53] sometimes. You know, not hundreds. I
+[75:54] don't want people picking up multiple
+[75:55] inventories worth of stuff to ID. That
+[75:57] gets tiresome real fast. But you know,
+[75:59] you pick up a handful of items in the
+[76:01] course of a map that you identify and
+[76:03] assess. Do you want to keep it? Do you
+[76:04] want to vendor it? And then you get rid
+[76:05] of it if you don't want it. Like that is
+[76:07] is a fun draw for me, not not a
+[76:11] frustrating annoyance. I do understand
+[76:12] for some people maybe it's the inverse,
+[76:14] but uh that subjectively, that is that
+[76:17] is how I how I feel. I like never had
+[76:19] strong thoughts on this, I think, cuz
+[76:20] the balancing of quantity and rarity
+[76:22] seems like there's a lot of things that
+[76:23] when people talk about I'm like, oh, I
+[76:24] have ideas about what prescriptions
+[76:26] might be. When I think about everything
+[76:27] that could be useful,
+[76:29] it never makes sense just to like cull
+[76:30] up a bunch of items to me. And there's
+[76:32] like times in which
+[76:33] especially during like SF races, my
+[76:35] entire filter is switching. Basically,
+[76:37] every single base is changing, eye
+[76:38] levels are changing, everything is
+[76:39] changing. So, I don't know, like I think
+[76:41] it was just in here about like no
+[76:43] prescription or kind of slant in that
+[76:44] direction. Honestly, I think the ground
+[76:46] loot thing's being talked about a lot.
+[76:47] I'm kind of with Octavian and I like
+[76:49] ID'ing stuff. I I I I'm interested in
+[76:52] the dopamine feedback
+[76:54] loop that you guys just spoke about with
+[76:55] the noises though.
+[76:57] I actually have like a little bit of a
+[76:58] funny anecdote. When PoE 2 came out, we
+[77:01] were all creating our loot filters. One
+[77:02] of my friends
+[77:04] put exalts on things cuz like he was
+[77:06] like I just want to hear things every
+[77:07] now and again and then 2 weeks into the
+[77:08] league he's like this league uh this
+[77:10] filter completely sucks. Like I'm just
+[77:12] tinkling like every 2 seconds. It's
+[77:13] completely destroyed the game for me. Um
+[77:16] so
+[77:18] how do you guys balance that dopamine
+[77:20] kind of feedback
+[77:22] reaction? Do you guys think it's in a
+[77:23] good spot? I know that people are saying
+[77:25] divines are too rare at the moment. Like
+[77:26] maybe chase items are not happening as
+[77:28] often as they want. Like is there a
+[77:30] sweet spot that you guys talk about in
+[77:31] terms of like how often you guys want
+[77:33] people getting that really big feeling
+[77:35] when they play the game? Cuz you know,
+[77:37] I've never dropped a floor mirror for
+[77:38] example. And I'm sure like I think I've
+[77:40] got like 8 and 1/2 thousand hours. So
+[77:42] like the day that happens I'm sure I'll
+[77:44] be very happy. What what's easy to
+[77:46] design there is the mirror, you know?
+[77:48] What's easy to design there is the thing
+[77:49] that happens one in a bajillion times
+[77:52] and is super exciting when it happens
+[77:53] cuz you just set the weightings to
+[77:55] stupid low and you make the item really
+[77:56] powerful. What's hard to design there is
+[77:58] the middle class, so to speak, you know?
+[78:01] Like it's easy to make a super common
+[78:02] currency that nobody cares about and
+[78:03] they'll hide on their filter like a
+[78:05] transmute. And it's easy to make a
+[78:07] mirror, but it's hard to make something
+[78:08] that sits in that middle space that is
+[78:10] exciting but drops often enough that it
+[78:12] doesn't feel completely impossible to
+[78:13] get. And part of pulling ancient orbs
+[78:16] and fracturing orbs into the core drop
+[78:17] pool is an attempt to fully to further
+[78:19] populate that middle ground. Because if
+[78:21] we were to just, you know, make and we
+[78:23] are making divine orbs more common with
+[78:25] the the currency changes, but if we were
+[78:26] to make divine orbs as common as say
+[78:28] alterations, just as an extreme example,
+[78:31] they wouldn't be a tink anymore, right?
+[78:33] Like everybody would have a thousand
+[78:35] divine orbs, so they would be worthless.
+[78:36] So you can't just arbitrarily pull down
+[78:39] the rarity so much that it gets to that
+[78:41] point, but there might be some merit to
+[78:43] like maybe this thing is a little bit
+[78:45] too rare and it needs to drop a little
+[78:46] bit more often to give people a little
+[78:47] bit more in the way of the the dopamine
+[78:49] hit. Um so, yeah, I don't know. But and
+[78:51] then but you do that too much and then
+[78:53] you have the problem that existed, you
+[78:55] know, back when I was streaming the game
+[78:56] and playing it regularly where it felt
+[78:58] like there wasn't nearly enough in the
+[78:59] way of chase drops. Uh basically, for a
+[79:01] chase drop to exist, definitionally,
+[79:04] most people can't drop it.
+[79:06] Or if if everybody's dropping it, it's
+[79:08] no longer a chase drop. Like I said,
+[79:10] those ones are the the easy ones though.
+[79:11] Like just set the rarity stupid low.
+[79:13] That's That's That's not difficult. It's
+[79:15] the middle class that's hard. Yeah, I
+[79:16] think it's it's more to do with the fact
+[79:19] that it's like what proportion of all
+[79:20] the valuable drops in the game are
+[79:21] coming from the ground because what is a
+[79:24] valuable drop is entirely constructed by
+[79:26] the players and whoever sets up the
+[79:28] filters.
+[79:29] So, it's
+[79:30] what we uh doing a little bit this
+[79:32] league is shifting more of the very
+[79:33] valuable drops in the game from other
+[79:35] places into ground loot. So, and not to
+[79:38] say we will monitor this topic and do it
+[79:41] more in the future.
+[79:43] Like for example, it's it's the whole
+[79:45] like contention between window loot and
+[79:46] ground loot. Arguably, you could say
+[79:48] it's boss loot as well, but I think
+[79:49] bosses having a bunch of exclusive
+[79:51] valuable rewards is completely fine. And
+[79:53] then another thing that came to my mind
+[79:54] when we're talking about this is the
+[79:56] value of the currency to a player base
+[79:58] versus the value of the click. I feel
+[79:59] like divines at the moment, like
+[80:01] especially for the uniques have like
+[80:03] skewed very hard where I assume the
+[80:04] majority of player base like actually
+[80:06] just don't click a divine on an item at
+[80:08] the moment because they're like I can
+[80:09] buy something like way more valuable
+[80:11] with this. Whereas in the past, I'm sure
+[80:13] that was with the exalt. So, like what
+[80:15] are your thoughts on like the actual
+[80:16] value of a currency versus the usability
+[80:19] of the currency? Uh well, divines are a
+[80:22] very strange one because the value of a
+[80:24] divine in a trade league isn't actually
+[80:26] based on the function of the divine
+[80:28] itself. It's based on what it's used for
+[80:31] on the crafting bench. Yep. I think I
+[80:33] was one of the big proponents of the big
+[80:35] exalt divine switch back in the day, and
+[80:38] that was the reason for that primarily
+[80:40] was
+[80:41] exalts are a currency we want players to
+[80:43] be using quite frequently, whereas
+[80:45] divine orbs are not really. They're
+[80:46] supposed to be for like perfecting an
+[80:48] item at the very late game, and having
+[80:50] divines be like very expensive in a
+[80:52] trade league means that random uniques
+[80:54] you find on the ground are more likely
+[80:56] to be valuable cuz if it high rolls,
+[80:59] then you can't just cheaply divine it.
+[81:02] >> Yeah, that was like good. My Moonstone
+[81:03] rings like were on my filter last patch
+[81:05] for like multiple items, which was like
+[81:06] pretty crazy.
+[81:08] Um even when I'm like trying to push
+[81:09] like 30 40 D an hour.
+[81:12] Never would have expected that. Um on
+[81:14] the UX side, I've been really curious
+[81:17] about that in general. So, I'm going to
+[81:19] start with an example.
+[81:20] The most annoying example for me, and
+[81:22] I'm going to set this in context. So,
+[81:23] today we still can't move boss hot bars,
+[81:24] and they get in the way of like all our
+[81:26] buffs and debuffs and stuff, right?
+[81:27] That's like I think we probably can
+[81:28] generally say that's a problem, but
+[81:29] every time that this is being introduced
+[81:31] as a topic publicly, we kind of get the
+[81:33] comparison to World of Warcraft and
+[81:34] like, you know, um weak auras and all
+[81:36] that thing.
+[81:37] I wonder if you guys have plans to
+[81:40] change the degree of customization in
+[81:42] the near future. Um for me, FF14
+[81:44] oftentimes kind of had the right balance
+[81:46] in terms of how much you could move
+[81:47] things, um how much you could customize
+[81:48] without kind of losing the common look
+[81:49] and feel. Um and I'm also wondering like
+[81:52] what is the UX flow for you guys.
+[81:54] When does that come into process?
+[81:56] I I don't mean to disappoint you, but I
+[81:58] feel like Andrew and myself are not
+[82:01] the people who are most qualified to
+[82:03] talk about this. This is something that,
+[82:05] you know, both Mark and Jonathan feel
+[82:07] very strongly on, uh and not just them,
+[82:09] but also our like UI department. Um
+[82:13] So, I don't mean to dodge the question.
+[82:15] I'm more just not actually really
+[82:17] capable of answering it in a meaningful
+[82:19] way, you know? Like I can definitely say
+[82:22] the previous established talking points
+[82:24] of we want the game to have a consistent
+[82:26] feel, and we want the game and part of
+[82:29] that feel comes from the UI and and the
+[82:31] intentionality of its design. Uh I
+[82:34] but as to whether or not you're able to
+[82:36] tweak that more, you know, specific
+[82:37] changes that might be coming, just just
+[82:39] not in my field. Sorry.
+[82:42] Do you think we can just get the guy to
+[82:43] let us know the boss hot bar this patch?
+[82:47] Say that again? Can we just get the
+[82:48] ability to move the boss hot bar or make
+[82:50] it smaller? The health bar, sorry.
+[82:52] Um I have a list a a specific document
+[82:55] of QOL and UI stuff that I need to pitch
+[82:58] pitch to Jonathan and Mark. I will put
+[83:00] it on that.
+[83:01] I will make sure it gets mentioned.
+[83:03] >> pretty sure there is like
+[83:05] um issues in the issue tracker for the
+[83:07] problem in both POE 1 and POE 2 of like
+[83:11] the bosses health bar excluding your
+[83:13] buffs and reworking the buff UI in
+[83:15] general, but I can't put a time frame on
+[83:17] that at all. I have no idea what the
+[83:18] status is. Yeah, I think it's really
+[83:20] interesting, right? Because when
+[83:22] Jonathan and I were talking about this,
+[83:23] there's like two different things. It's
+[83:24] like the current rate of ability is bad,
+[83:26] and I'm sure that's like very high on
+[83:28] your guys list, and I'm sure as players
+[83:30] you guys can like sympathize with what
+[83:32] people are saying. And then there's the
+[83:33] next thing where Jonathan was like, I
+[83:34] want to turn off the ability to see my
+[83:36] own ability, and I was like, well, no
+[83:37] one else wants that. That is just
+[83:38] completely ridiculous. Why do you want
+[83:40] to run around
+[83:40] >> say that publicly, dude.
+[83:42] Um so like
+[83:43] >> I love skill MTX, and I always buy every
+[83:46] herald MTX for my skills that I want.
+[83:48] >> I like there is a there is a middle
+[83:50] ground between the a middle ground
+[83:52] between these two things. So I was just
+[83:53] uh yeah, wondering like as players,
+[83:55] where do you feel like the any of those
+[83:57] customization, but be there's
+[83:58] functionality. Like how do you feel it's
+[84:00] going at the moment? The boss bar thing
+[84:02] specifically is frustrating. Yeah.
+[84:05] Um I would I would like to get some kind
+[84:07] of good change there, particularly
+[84:09] because it's it feels like we're
+[84:10] stepping on our own toes a little bit,
+[84:12] and it's just it's it's not great. Um
+[84:14] but like I said, it it's not something
+[84:16] that I can really make a call on. So I
+[84:19] don't want to promise anything that we
+[84:21] won't be delivering, but I'll I'll make
+[84:22] sure to find time to talk to them about
+[84:24] it.
+[84:24] No, I think I don't think it's about
+[84:26] promises for me. It's like I think
+[84:27] sometimes the community is loves to hear
+[84:29] that the people that are making the game
+[84:30] also share similar frustrations and it's
+[84:32] like not a lack of effort for like
+[84:34] actually trying to get these things
+[84:35] through, you know? Like another thing is
+[84:36] like the list of map mods on the right
+[84:38] side of the screen. Like I wish I could
+[84:39] like just show the ones that I really
+[84:41] care about so I remember that they're in
+[84:42] my map before they one shot me, but then
+[84:44] I just don't want to have the whole list
+[84:46] every single time I go in because the
+[84:47] list is like quite high sometimes. Maybe
+[84:49] it'll go down now that the tier 17s are
+[84:51] out, but that that was another one on
+[84:52] the top of my head where it's like I
+[84:54] wish there was just a customization
+[84:55] where it's like, "Okay, if there are
+[84:56] volatiles in this map, then it will
+[84:58] always show me that there's volatiles,
+[85:00] but I don't have to look at the whole
+[85:01] list every single time, you know what I
+[85:02] mean?"
+[85:03] Yeah. I mean, as a really specific point
+[85:05] adjacent to that, like we removed a
+[85:07] bunch of T17 mods that were frustrating
+[85:09] to players this league. One of the ones
+[85:11] we removed at the end of that list was
+[85:12] the whole like when you get a bunch of
+[85:14] impales, they explode and deal damage
+[85:16] and all that. And we removed that one
+[85:18] specifically because I hated that it had
+[85:22] this four-line long description that
+[85:24] would go off your screen when it's in
+[85:25] the in the top right corner. So like
+[85:27] yeah, yeah, we share some of these
+[85:29] frustrations. Like that one wasn't
+[85:30] removed because it was OP. That one
+[85:32] probably wasn't even really that
+[85:33] dangerous, to be fair. Uh it was just
+[85:35] gone purely for the UI portion of it.
+[85:38] Which is on me. I am the one who
+[85:40] designed that modifier, but you know,
+[85:41] I'll go back and clean up my own
+[85:42] mistake. I've died to that mod before,
+[85:44] I'll be straight up. I died to that
+[85:46] conqueror.
+[85:47] Like I just had that PR and like there's
+[85:49] a bat mass of spike. It's actually huge.
+[85:52] Well, you won't die to it anymore.
+[85:53] I'll find other things, don't you worry.
+[85:55] I'll
+[85:56] Um on that note actually
+[85:59] PO and I know you guys aren't in charge
+[86:01] of this, so just at a personal level,
+[86:03] e-sports and racing. Is this something
+[86:06] you guys like talk about frequently in
+[86:07] the office? What are like the general
+[86:08] perspectives on this? I know that like
+[86:10] there's a lot in terms of community run,
+[86:11] but it feels like increasingly you guys
+[86:12] are more supportive when it does happen.
+[86:14] Um I've had like pretty decent support
+[86:16] when I tried to do things, and then to
+[86:18] what extent does that affects
+[86:20] balance, game design, and how you guys
+[86:22] actually create the game on the front
+[86:23] patch to patch? Um
+[86:25] See, to me that feels like a kind of
+[86:27] emergent thing that comes out of the
+[86:28] game. I'd rather not it impact design
+[86:32] super specifically because
+[86:35] it's like to me the the speed running
+[86:37] and the racing should be like, "Okay, we
+[86:39] have this this final product, you know,
+[86:41] we have this game. Now, let's see how we
+[86:43] can, you know, massively break it and
+[86:45] find
+[86:48] Rather than like us designing
+[86:50] specifically a product for the max
+[86:52] maximum ease of use in that on that
+[86:53] front. But, that's just on the design
+[86:56] side of things. On the community team
+[86:57] support side of things, I think it's
+[86:59] it's great to support more of these
+[87:00] endeavors. Um you know, to have more
+[87:02] events, to have more, you know,
+[87:04] competitive Path of Exile out there. I
+[87:07] just wouldn't want to
+[87:08] design the game around it. Um that
+[87:10] doesn't feel correct to me. I guess from
+[87:12] a personal perspective, how do you guys
+[87:14] feel that the aspirational
+[87:17] aspect of PoE is like do you see like
+[87:19] Ben as like the good PoE gamer because
+[87:22] he just wins every gauntlet? Like is it
+[87:23] Fubgun because he farms the most
+[87:24] currency? Like what do you like
+[87:26] personally, for you, what is
+[87:28] aspirational Path of Exile, I guess?
+[87:30] Um
+[87:31] I feel like definitely Ben, I think, is
+[87:35] probably the archetypical like best PoE
+[87:38] player just because of his expertises
+[87:41] and like
+[87:44] Well,
+[87:45] I think those like basically in those
+[87:48] type of races he's leveraging all the
+[87:49] tools necessary to like take down Ubers,
+[87:52] whether that's a combination of like
+[87:54] leveling very fast, but also knowing how
+[87:56] to itemize and create a build that's
+[87:59] strong enough to handle all of like the
+[88:01] the tests at the very end of the end
+[88:03] game, rather than someone who's
+[88:05] necessarily just about farming up as
+[88:07] much currency as possible. Like to me
+[88:09] that's a more exciting thing. Um at one
+[88:14] of the Exile Cons, I forget which one it
+[88:17] was, uh I got to meet Pee Wee Dan and I
+[88:19] felt like a fanboy. So,
+[88:21] probably him.
+[88:23] Um
+[88:24] he's uh for for anyone who's not
+[88:25] familiar, he's just a really prolific
+[88:27] and successful builds creator in in the
+[88:30] hardcore trade economy generally.
+[88:32] Um he's he basically every build he
+[88:34] makes is extremely well thought out,
+[88:36] extremely powerful, and very
+[88:38] well-rounded. Um exactly the kind of
+[88:40] build that I like to try to make. I
+[88:41] don't always succeed.
+[88:43] Um though honestly, I would say like
+[88:46] probably for the average player, it
+[88:48] would
+[88:48] it would be somebody like Mathil who can
+[88:50] take seemingly any skill unique
+[88:52] combination and turn it into a viable
+[88:54] build, you know? And just do that over
+[88:57] and over and over again. I agree on
+[88:58] Mathil. I love the like X item, X class,
+[89:02] three question marks, try and get
+[89:04] something to actually function. And
+[89:05] usually it works out. I love that
+[89:07] mindset. It's so good. I think he's
+[89:08] underrated. I'd say he's a build maker.
+[89:10] Here to sign out. Like, I think a lot of
+[89:11] narratives and I think the narrative
+[89:13] space in PoE is really interesting have
+[89:14] been shifting towards
+[89:16] very extreme ideas about like, if it's
+[89:19] not this, it's not valid. Like, if
+[89:20] you're not farming X way, you're not
+[89:21] really valid. If you're not racing this
+[89:22] way, your build's invalid. If your
+[89:24] skill's not rolling magma, it's not
+[89:25] really valid, that kind of thing.
+[89:27] Um and I think that like whenever I
+[89:29] watch him play and watch him do stuff is
+[89:30] like really really eye-opening. Kind of
+[89:32] reminds me of a time in which we used to
+[89:33] be
+[89:34] kind of more human, more grounded.
+[89:36] >> When you used to have fun, John. When
+[89:38] you used to have fun before you solved
+[89:39] the game. Huh. On like a very personal
+[89:42] level, that is one of my evergreen
+[89:45] frustrations from back even before I
+[89:46] joined the company, from back when I
+[89:47] was, you know, a content creator, is
+[89:49] like it doesn't seem to matter the tier
+[89:52] of content that gets put into the game,
+[89:55] the expectations of what is minimum
+[89:57] viability will just rise to meet that.
+[90:00] So, like ever since Uber bosses have
+[90:01] been added to the game, for instance, I
+[90:03] will often make a build that doesn't
+[90:06] quite reach Uber boss viability and
+[90:08] still be personally quite happy with
+[90:10] that build cuz it accomplished what I
+[90:12] wanted it to do. But it does sometimes
+[90:14] feel like uh particularly among
+[90:15] entrenched players, there's a feeling
+[90:17] that if the build doesn't, you know,
+[90:18] demolish every Uber boss in the game
+[90:20] that it's it's not it's not valid
+[90:22] enough. It's not good enough. I and I
+[90:23] would just encourage people to, you
+[90:26] know, cut yourself a little slack on
+[90:27] that front. You know, like there there
+[90:29] are a lot of degrees of difficulty and
+[90:32] challenge in this game. There's a lot of
+[90:33] rabbit holes you can go down. And if you
+[90:35] theory craft something that's cool and
+[90:37] interesting, but it doesn't quite, you
+[90:38] know, kill Uber bosses in 12 seconds,
+[90:41] it's it's probably fine. It's still it's
+[90:43] probably still cool. Like that's that
+[90:44] could still be a really cool build, you
+[90:46] know? Have just just, you know, tone
+[90:48] tone back the expectations a little bit
+[90:49] to allow yourself a little more room to
+[90:52] explore weird cool stuff. Yeah, you get
+[90:54] bullied, you know? I mean, everyone's
+[90:57] It's it's harder when you're in front of
+[90:58] a camera with a thousand viewers, yes.
+[91:00] I, you know, not that my stream ever
+[91:02] reached that level, but when when you
+[91:04] have when when you have a lot of people
+[91:06] who are expecting you to consistently
+[91:08] create, you know, every build is
+[91:10] reaching that same watermark, if not
+[91:12] higher, I can understand. That that's a
+[91:14] little tougher. Um
+[91:16] What's interesting though is we did add
+[91:18] one bit of like super mega Uber content
+[91:21] to the game that didn't end up becoming
+[91:23] the watermark, which is Valdo maps.
+[91:26] The jungle Valdo map.
+[91:27] >> that, that's why we actually pulled it
+[91:28] up because
+[91:31] The last
+[91:31] >> Has it now become the watermark? I have
+[91:32] not slept for the sixth like the past
+[91:34] four days, I have not slept more than 3
+[91:36] hours on any given night because I'm
+[91:39] trying to make a build to to be able to
+[91:42] run every single Valdo map agnostically
+[91:44] that I can get set up roughly by day
+[91:45] three. Um and and do it in a reasonable
+[91:48] time. And it's just like last night did
+[91:49] not sleep pretty much. I just lay there
+[91:51] like this. I was staring at my ceiling,
+[91:52] reading the list of Valdo mods, not on
+[91:54] my phone, but on my ceiling as it's
+[91:56] appearing before my eyes over and over
+[91:58] again. So you say that, Octavian, but
+[91:59] I'm like
+[92:00] it's a nightmare, you know? I mean,
+[92:02] maybe I'm not having fun, but It's It's
+[92:05] It's cool that it's a thing you can
+[92:06] aspirationally shoot for. That's great.
+[92:08] But, I Would you say that it's like
+[92:10] every build guide that you see and that
+[92:12] you put out, people are asking is this
+[92:13] Baldo viable? Cuz that hasn't been my
+[92:15] experience looking through, you know,
+[92:17] the forums and Reddit and that sort of
+[92:18] thing. Like for my content these days,
+[92:20] people are just asking if it's five or
+[92:22] more buttons, I think, to play.
+[92:25] So, they don't like that, you know.
+[92:27] And then, can I ask who do you Who do
+[92:28] you like watching um when you do consume
+[92:30] any PoE content? Uh I wouldn't say I
+[92:32] consume much streamer content or YouTube
+[92:35] videos. I think on league launch, I will
+[92:37] watch Quin69, though. But, I'm not
+[92:39] watching him for expert gameplay. I'm
+[92:41] watching him for other reasons. At
+[92:43] least.
+[92:44] I I actually think he's like
+[92:45] >> quality.
+[92:46] Um I'm I'm often looking in uh either
+[92:50] PoB, his channel, he's you know, he's
+[92:53] like a some somewhat smaller like sort
+[92:55] of hardcore creator. Um and or Captain
+[92:58] Lance. Sometimes I'll just be working
+[93:00] there without without notifying anyone,
+[93:02] seeing what busted crafting methods he's
+[93:04] cooking up.
+[93:05] >> They're both like Both PoB and Lance are
+[93:06] much more like
+[93:08] willing to delve into off-meta really
+[93:09] early and right away, right? And really
+[93:11] trying to keep this caster thing afloat.
+[93:12] Yeah, I mean, if it involves ignite, PoB
+[93:14] will play it, so. Um I think the
+[93:16] benchmark thing was pretty cool, though.
+[93:18] Ben, uh John, you turn off your stream.
+[93:21] You You're laying in bed.
+[93:23] Who do you tune into? Is this Path of
+[93:25] Exile only or
+[93:27] Yes, Path of Exile only. I do not want
+[93:28] to hear about any other habits
+[93:30] Um It's a shame cuz he doesn't really
+[93:32] stream much anymore from my perspective.
+[93:34] And I I mean, he's got stuff coming up,
+[93:35] but I think one of my favorite players
+[93:37] might have been Steelmage. Um at least
+[93:39] my one of my favorite streamers. I would
+[93:41] say my favorite streamer of all time is
+[93:43] Or at least the person I consider the
+[93:44] best streamer of all time is actually
+[93:46] Quin, as well.
+[93:47] But, Steel's stream I miss it a lot. Um
+[93:50] I thought he balanced a lot of things in
+[93:51] there. In terms of like having a
+[93:53] relatively casual-friendly narrative,
+[93:55] being pretty inviting.
+[93:56] Talking in a way that a lot of and I
+[93:58] want to use this word carefully just
+[94:00] don't contextualize this probably but
+[94:01] like PoE elites I guess kind of talk
+[94:03] with too much of an elitist lens. I feel
+[94:04] like he really didn't do that. But I
+[94:07] think it ended up fostering a really
+[94:08] interesting dynamic with his chat and
+[94:10] probably winning gauntlet made him try
+[94:12] hard try less hard, you know. Maybe
+[94:14] maybe when I win I'm going to quit, you
+[94:15] know, just be washed up. There was one
+[94:17] other skill that was really interesting
+[94:18] about
+[94:20] that I kind of was thinking about asking
+[94:21] since we're kind of on big topic side
+[94:24] feeling uncomfortable. Um General's Cry.
+[94:27] It's like the skill that I think has
+[94:28] gone probably under the radar for a long
+[94:30] time.
+[94:31] And I brought it back with like Tech
+[94:32] Slam while back. I know Path of
+[94:34] someone used to play it back in the day
+[94:36] with Blade Flurry and Abysses and stuff
+[94:38] and these days I feel like it still has
+[94:39] like really really insane numbers um but
+[94:41] the mechanical complexity of it is
+[94:43] absurd.
+[94:45] Every skill that I try to play on it
+[94:46] kind of functions differently. I
+[94:47] recently tried Static Strike for
+[94:48] instance which allows you to have clones
+[94:51] summon these static beams. The static
+[94:53] beams are still there when the clones
+[94:54] disappear. But then when new clones are
+[94:56] being summoned those beams will
+[94:57] disappear.
+[94:59] The so the two questions I have kind of
+[95:00] flowing from that is one like when you
+[95:02] think about this kind of skill balance
+[95:03] is it balanced against the complexity
+[95:04] and hidden mechanics of the skill is
+[95:06] power and then two are there ways and
+[95:08] what like are there things that we just
+[95:09] don't know about how these skills
+[95:11] function? Are there like some skills
+[95:12] that you think are much more powerful
+[95:13] but that we haven't really understood
+[95:15] them yet as players and seen their
+[95:16] potential?
+[95:18] Um well General's Cry is an interesting
+[95:20] one because it's often creates a lot of
+[95:24] like unintended or even interactions.
+[95:27] Like I think for a long while there
+[95:29] you had like the alternate Tectonic Slam
+[95:31] gem and it's like the General's Cry
+[95:34] minions did not consume endurance
+[95:37] charges but they still benefited from
+[95:39] all your endurance charges making it
+[95:41] very strong. So I wasn't actually aware
+[95:42] of that Static Strike case. Sounds
+[95:44] slightly buggy to be honest so maybe we
+[95:46] should fix it at some point.
+[95:47] >> maybe in a league start then.
+[95:49] Oh.
+[95:51] Oh no, we're definitely not changing it
+[95:53] in time for tomorrow. Yeah, I think I
+[95:55] played General's Cry once on like a
+[95:57] shield crush build and it was yeah, I
+[96:00] agree it has a little bit of jank which
+[96:02] might justify some slightly higher
+[96:04] numbers, but it was pretty fun. The
+[96:06] skill that I had the most complexity
+[96:07] that I ever worked with would have been
+[96:08] I Winter, right? Where like
+[96:10] and I Winter's Return. I don't know if
+[96:12] you guys ever saw that build come out,
+[96:13] the Arcanist Brand.
+[96:14] >> Oh yeah, I think that's like the only
+[96:15] build that I know from you quite well. I
+[96:17] thought that was like a very novel
+[96:19] concept at the time. That was the one
+[96:20] with the
+[96:22] Arcanist Brand Return, but you needed to
+[96:24] use Arcanist Brand so that the I Winter
+[96:27] projectiles could actually come back and
+[96:28] shotgun. There was like this weird line
+[96:30] that said, cuz I Winter shot projectiles
+[96:32] could always shotgun, but there was a
+[96:34] line that said maximum or like less
+[96:36] travel range. I forgot what it says on
+[96:38] Arcanist Brand. It's not found anywhere
+[96:39] else in the game and I think Lance had
+[96:41] been testing with Nimus that patch prior
+[96:43] about like certain skills needed certain
+[96:45] projectile speed thresholds. So we were
+[96:47] under the assumption that a lot of
+[96:48] projectiles couldn't return. Um and I
+[96:51] Winter might have been the case, but
+[96:52] then once you put that in it made it
+[96:53] like a lot of projectiles more easy. I I
+[96:55] wonder about the other skills, you know,
+[96:57] like
+[96:58] that we're not knowing, that we're not
+[97:00] understanding in terms of the greater
+[97:01] complexity.
+[97:01] >> And also how much of it is deliberate
+[97:03] design choice, like you know, we know
+[97:04] that this is
+[97:06] complicated, so we're going to make it
+[97:07] slightly stronger or slightly different
+[97:09] and how much of it is just like, oh you
+[97:12] know, that skill was put in the game X
+[97:13] amount of years ago and if anyone tries
+[97:15] to touch the code it actually breaks
+[97:16] molten strike, so we can't touch the
+[97:18] code, you know. Um Well, for for
+[97:20] Arcanist Brand in particular, I imagined
+[97:22] that that line was put there just in
+[97:24] order to limit the reach of the Arcanist
+[97:25] Brand and, you know, keep it from being
+[97:29] quite as strong in terms of its ability
+[97:31] like I I'm sure when Arcanist Brand was
+[97:33] originally being designed, whoever was
+[97:35] the designer was like, we want this to
+[97:36] be strong, but we don't want this to be
+[97:37] able to like off screen stuff for you.
+[97:39] So let's put a stat that lowers the
+[97:41] maximum action distance of the
+[97:42] projectile.
+[97:44] Um you know, we don't necessarily use
+[97:45] that stat elsewhere, but
+[97:47] it does exist. Um it's often on monster
+[97:50] abilities, so that monsters can't
+[97:52] off-screen you with stuff as as as
+[97:54] easily. Um basically every monster with
+[97:56] a projectile skill has some amount of
+[97:58] that stat. Um
+[98:00] and it was very likely not
+[98:05] to you know, not not considering the
+[98:07] balance implications it might have with
+[98:09] some niche interaction.
+[98:11] Um
+[98:12] I It's the same thing with General's
+[98:13] Cry. Like General's Cry is one of those
+[98:16] things that I personally really like.
+[98:17] I've played like three or four General's
+[98:18] Cry builds over the years.
+[98:20] Um but it can be a little frustrating
+[98:22] design-wise because it means every time
+[98:24] we design a new skill that can interact
+[98:25] with it, you have to test it against it,
+[98:27] and you have to test that new skill
+[98:28] against you know, the Savior if it works
+[98:29] with that. You have to test it against
+[98:31] traps, mines, totems, Arcanist Brand, uh
+[98:34] triggering with the various different
+[98:35] ways. And like it's just another
+[98:37] example, you know, it's similar to like
+[98:39] something like Reliquarian where we
+[98:40] design ourselves something that we have
+[98:42] to have maintenance and upkeep and
+[98:43] maintenance and upkeep, but that's what
+[98:45] makes the game cool. Like, you know, I
+[98:47] say it's frustrating, but it
+[98:48] it's what makes the game cool. So it's
+[98:50] it's worth it, definitely. Sorry, I went
+[98:52] off on a bit of a tangent there. Yeah, I
+[98:54] I have another like kind of niche
+[98:55] question around that as well. Uh there
+[98:57] was a bug in League of Legends. I don't
+[98:58] know if you kept up to date with the
+[99:00] game, Octavian, where Rumble on blue
+[99:02] side would just do more damage for some
+[99:04] reason than Rumble on red side. And it
+[99:05] was just because of how League of
+[99:07] Legends was coded. So for like genuinely
+[99:10] since the inception of League of
+[99:11] Legends, Rumble on blue side has just
+[99:13] had a 5% higher win rate. And then Freek
+[99:16] looked at the number and like Freek was
+[99:18] a caster, Andrew, and like a big
+[99:20] community guy. Now he's on design, which
+[99:21] is like really really cool for me. Um
+[99:23] and it was like, "Okay, I know that this
+[99:26] number does not make sense. It has
+[99:27] nothing to do with match sentry. I'm
+[99:29] going to go in, I'm going to look at it,
+[99:30] and then I'm going to fix it." And he
+[99:31] said like tearing through that code was
+[99:33] like a nightmare. Are there any niche
+[99:35] bugs that you guys have come across or
+[99:36] like are there any experiences you've
+[99:38] had with like legacy code and like how
+[99:40] PoE as a game kind of was written versus
+[99:43] how it is now that have like had funny
+[99:45] stories like that internally cuz like
+[99:46] stuff like that to me is just so
+[99:47] hilarious. Um so it's not player skill
+[99:50] related, but I I do have an example that
+[99:52] pretty much fits this perfectly. Um
+[99:54] so there was a bug that was around since
+[99:56] before I joined QA and that I kept
+[99:59] getting reports for maybe once or twice
+[100:00] a month when I was back in QA and it
+[100:02] really bothered me, which was the Delve
+[100:05] node that gives you you know the one
+[100:06] that has like the little pillar that you
+[100:08] break and it drops a fossil and there's
+[100:09] a bunch of essence monsters around it. I
+[100:11] forget the name of the fossil, but that
+[100:12] pillar one.
+[100:13] The Delve node that gives you that
+[100:15] essence from the pillar or sorry, that
+[100:16] fossil from the pillar was breaking. I
+[100:17] think it's called an aetheric essence or
+[100:19] aetheric fossil, sorry.
+[100:21] Um and sometimes you just weren't able
+[100:23] to interact with it and so you would not
+[100:25] get your fossil and that obviously
+[100:26] sucks. And I couldn't So when when
+[100:29] somebody does a bug report in game, we
+[100:30] get a what we call a repro of that area.
+[100:33] So we get a cheat code that allows us to
+[100:34] then go to exactly that area with all
+[100:36] the stats that are applied to it. And I
+[100:38] would do that and it would just work. It
+[100:39] would still just work most of like every
+[100:41] time. It was fine. It wasn't broken, but
+[100:44] you know, enough people were
+[100:45] consistently reporting this that it
+[100:46] clearly wasn't just player error or
+[100:47] something. Uh so one eventually I
+[100:49] realized that every time one of the
+[100:51] essence monsters surrounding it was an
+[100:53] essence of scorn. Essence of scorn has
+[100:55] this ability where it grabs you with a
+[100:56] big hand and pulls you to it. Uh that is
+[100:58] stolen from the Dominus fight. It's a
+[100:59] recolor of that. So Dominus has this
+[101:01] ability where he'll pull you next to him
+[101:02] with a big hand sometimes in his second
+[101:04] phase, I believe. Uh and what that skill
+[101:07] was doing was looking for anything not
+[101:09] on its team,
+[101:11] grabbing it and pulling it to it.
+[101:13] The thing the pillar that drops the
+[101:14] fossil is technically a chest, so it's
+[101:16] not on the monster's team, so it could
+[101:18] sometimes if the player was standing at
+[101:20] the wrong place at the wrong time grab
+[101:21] the chest and move it. And the code for
+[101:24] that chest is so ancient, it's not
+[101:25] looking for the chest, it's looking for
+[101:27] the location that the chest is at. So if
+[101:29] the chest moves at all, it doesn't work
+[101:30] anymore. So what we did is we made the
+[101:33] the hand skill look specifically for you
+[101:35] know, things on the enemy team, not just
+[101:37] things not on its team, so neutral
+[101:39] objects like chests don't get grabbed,
+[101:40] but yeah, it was it was a bit of a
+[101:42] rabbit hole. That's crazy. There's a bug
+[101:45] right now. I don't know if you have an
+[101:46] answer for this. Earthquake of
+[101:47] amplification with General's Cry after
+[101:49] 5.4 seconds from the point at which the
+[101:52] instance is created will disappear
+[101:54] instead of resolving. Have you heard
+[101:55] about this? Mhm.
+[101:58] What do you mean by since the instance
+[102:00] was created? The earthquake instance.
+[102:02] Like not from the point at which you
+[102:04] attack, the point at which it hits the
+[102:05] ground.
+[102:06] That would internally the word instance
+[102:08] is used to like refer to an area, so I
+[102:10] would say damage instance, but like
+[102:12] Yeah, sure. Let's say skill. Let's say
+[102:13] skill. After the initial animation has
+[102:15] resolved, that would be the point. Yeah,
+[102:17] no, I haven't heard anything. Maybe we
+[102:18] can someone can look into it after this,
+[102:20] but Yeah. Yeah, yeah. That's one of
+[102:22] those things where it's just like
+[102:24] there's just so much
+[102:26] complexity and
+[102:28] permutations of interactions within in
+[102:30] the game at this point. We really
+[102:34] there's definitely not enough time for
+[102:35] everyone in design and QA to test them
+[102:37] all out, so community members will find
+[102:40] them 2 years later
+[102:41] since the gem was released. What's like
+[102:43] the area of the game that you guys like
+[102:44] working on the most in terms of design
+[102:46] for like the future leagues and stuff?
+[102:47] Especially like I kind of see Path of
+[102:50] Exile in two ways. One is as a loot
+[102:51] game, like a looting game, and one is a
+[102:53] character creation game.
+[102:55] I'm sure there's lots of shades in
+[102:56] between, and I think from those two
+[102:58] lenses there's lots of different sub
+[102:59] aspects that like I would I kind of
+[103:01] value the most or that I am most excited
+[103:03] about when I say I read patch notes.
+[103:05] When I see changes, um what are the
+[103:06] systems that you guys look at and like
+[103:07] get most excited about when you're
+[103:08] working on it and why? Personally, I'd
+[103:10] probably say ascendancies, and I think
+[103:12] that's just because I just like the idea
+[103:15] of having very few, but very punchy and
+[103:17] transformative passives. Uh I think
+[103:19] skill design for me, um
+[103:21] which is which is why we've had new
+[103:23] skills the last two patches cuz I've
+[103:24] really pushed for that. Um and
+[103:26] I like I've said in some of these
+[103:28] previous Q&As, um I want to push for
+[103:30] every every skill to eventually have its
+[103:32] own transfigured version or versions.
+[103:34] Partially just cuz I really like working
+[103:36] on skills. Um it's it's very very fun.
+[103:38] Though the end game boss this league is
+[103:42] the the first end game boss that I've
+[103:43] like designed, you know, start to finish
+[103:45] and I really enjoyed that process. Uh
+[103:47] hopefully people like fighting him. So
+[103:50] cuz cuz that was that was a lot of fun.
+[103:51] Um following up with the first one
+[103:52] first, what what is the ascendancy that
+[103:54] you think is best designed then? When
+[103:56] you like and like what's the rationale
+[103:57] behind that? Well,
+[103:58] I'm trying to discern between best
+[104:01] design and my favorite. I think
+[104:02] historically my favorite is probably
+[104:04] Trickster and I've always felt that
+[104:05] Trickster has struck us a nice medium of
+[104:07] just being like it feels like a nice
+[104:09] balance of both offense, defense, and
+[104:11] utility all wrapped in one. It's usually
+[104:14] had a lot of like varied choices which
+[104:16] you could go for. I don't think I played
+[104:18] it in a while though, so
+[104:20] I I can't actually speak to the current
+[104:22] state of Trickster, but historically
+[104:23] that's probably been my favorite
+[104:24] ascendancy. So maybe by that token I
+[104:27] also consider it the best designed. Like
+[104:30] to be honest, I'd say best designed to
+[104:32] me would be more from a flavor point of
+[104:34] view as opposed to necessarily like the
+[104:37] stats it offers. I think bad designs on
+[104:40] ascendancies tend to be things that are
+[104:42] also like hyper niche. Like we've never
+[104:44] really like Saboteur calling out traps
+[104:46] and mines directly cuz it feels like if
+[104:49] you're a trap and mine build, well, you
+[104:50] should be playing Saboteur, but if
+[104:52] Saboteur's not very good, then no one
+[104:54] plays Saboteur cuz half of its nodes are
+[104:56] related to traps and mines.
+[104:58] It's interesting cuz I think I hard to
+[105:00] use saying this, I had the opposite
+[105:01] ideal what I thought you guys thought.
+[105:04] In so far as I thought PoE 2's
+[105:06] ascendancy design would be considered
+[105:07] like better in the sense that a lot of
+[105:08] things are much more unique, right? Like
+[105:09] from ascendancy to ascendancy, they're
+[105:11] very very transformative. Whereas I
+[105:13] thought PoE 1 ascendancy design is more
+[105:15] like it gives you baseline power or
+[105:17] scale power in different ways, but it's
+[105:18] more interactive with what's already
+[105:19] there. So like I guess like between the
+[105:21] tension of like yeah, heterogeneity and
+[105:23] homogeneity and generic modifiers
+[105:25] it seems like prioritizing choice is
+[105:26] actually what you're seeing as like good
+[105:28] design as far as ascendancies, right? Uh
+[105:30] are you saying choice within an
+[105:31] ascendancy or choice between
+[105:32] ascendancies? Once you choose an
+[105:34] ascendancy, you're still granted further
+[105:35] choice. As opposed to like I've chosen
+[105:37] an ascendancy, it gives me X skill.
+[105:39] Yeah. Well, I I definitely feel like say
+[105:41] I'm just playing Fireball for example,
+[105:43] then I want to like I think we
+[105:46] internally have this test of like a good
+[105:48] ascendancy. I think this was primarily
+[105:50] when designing PoE 2, but we've also
+[105:52] used it on PoE 1 where it's like, can
+[105:55] you play this ascendancy on Fireball? Do
+[105:57] I have enough nodes to take if I'm a
+[105:59] Fireball build? And can I play this
+[106:01] ascendancy on Flicker Strike?
+[106:03] Is there enough nodes to play if I'm a
+[106:05] Flicker Strike build? So, if you can
+[106:06] answer those two questions, then you
+[106:08] probably have enough generic It doesn't
+[106:11] have to be super generic. It just needs
+[106:12] to be like It can be super weird, but
+[106:14] you could still theoretically make a
+[106:16] Fireball build around it.
+[106:18] So, yeah, having it be generic enough
+[106:20] that you can do that is like probably
+[106:23] one of our main goals. That's really
+[106:25] interesting because
+[106:27] if you like working on that and if
+[106:29] that's something that you guys discuss
+[106:30] internally, how do the Bloodline
+[106:31] ascendancies come in? Because I feel
+[106:33] like what Bloodline was for me is like,
+[106:35] okay, I have like a couple of hyper
+[106:37] niche things and then, you know, I have
+[106:39] all the other ascendancies where I can
+[106:40] get my generic power, you know? And I
+[106:42] think that that design choice was really
+[106:45] like actually a beautiful solution to a
+[106:47] rather complex problem, to be honest,
+[106:49] cuz I was always like, give me Forbidden
+[106:50] Flesh Flame for like free jewel or give
+[106:52] me the access to one free jewel, and
+[106:53] then you kind of came up with this
+[106:54] hybrid middle ground, and it was It was
+[106:56] pretty cool to me.
+[106:58] Yeah, Bloodlines are certainly designed
+[107:00] differently to regular ascendancy nodes.
+[107:02] They sort of are a bit more niche and
+[107:04] they can be niche. The reason for that
+[107:06] is we don't really want you to be
+[107:09] saying, "Oh, I'm an Occultist. I take
+[107:12] one node on the Occultist and then I
+[107:14] take three nodes on the Bloodline." And
+[107:15] then are you really an Occultist at that
+[107:17] point if you're only taking one node on
+[107:19] the Occultist? It was sort of meant to
+[107:21] just give you like, enumerate other
+[107:23] options that are often very niche but
+[107:26] can like pair with your base ascendancy.
+[107:28] The other danger if you go the route of
+[107:31] making bloodlines that are less niche
+[107:32] and more broad is you water down the
+[107:35] identity of the other ascendancies in
+[107:37] the game where like, you know, if
+[107:39] there's this really powerful bloodline
+[107:40] that's also really broad half the builds
+[107:43] in the game are taking that bloodline
+[107:44] and suddenly it's it doesn't really
+[107:45] matter like, you know, well I'm a slayer
+[107:47] versus a champion versus a trickster or
+[107:49] whatever.
+[107:50] Most of my power from the ascendancy
+[107:51] points is actually coming from these
+[107:53] four points I put in my bloodline that
+[107:54] everyone else is taking. So I think I
+[107:56] think niche is important for bloodlines.
+[107:58] They're they're sort of a capstone
+[108:00] niche, you know, direction you take your
+[108:02] build in the end game. But then why is
+[108:03] slayer the worst ascendancy design then?
+[108:07] That that feels like a very loaded
+[108:08] question.
+[108:10] What I would say about slayer
+[108:12] I feel like slayer historically has got
+[108:15] fewer changes than a lot of the other
+[108:17] ascendancies. Like I feel like it still
+[108:19] has its a lot of the same nodes that it
+[108:21] probably did like 10 years ago at this
+[108:23] point. If ascendancies have been out 10
+[108:26] years
+[108:26] >> is relative. God, it feels recent to me.
+[108:29] That's still probably years ago.
+[108:30] >> that's been since Legion League.
+[108:32] >> Yeah, that's probably a while ago at
+[108:33] this point.
+[108:35] Yeah, overwhelm has been Yeah, but I
+[108:36] think masterful also got a rework,
+[108:38] right? The frenzy charging chance thing.
+[108:40] That came in later as well. So in terms
+[108:42] of I guess like the same thing to you
+[108:44] Octavian, in terms of skill design, is
+[108:46] there something that you look at and
+[108:46] think like this is the most interesting
+[108:48] skill to me in the world? Most
+[108:49] interesting? Yeah. Is is going to be an
+[108:51] answer that I don't think a lot of
+[108:52] people will resonate with or expect,
+[108:54] which is I honestly think
+[108:57] what's it called? Storm bind, the one
+[108:58] where you place the rectangles on the on
+[109:00] the ground and then you charge them and
+[109:01] they explode. I honestly think that
+[109:03] skill is an incredibly cool design for a
+[109:05] different video game.
+[109:07] Like it just it doesn't and this was
+[109:09] designed before I joined the company.
+[109:10] This is not me trying to toot my own
+[109:11] horn, you know, this was this was 2019
+[109:13] 2018 that it was designed I believe.
+[109:16] Like it's a really cool, interesting
+[109:18] design that like takes stats and
+[109:20] leverages them in different ways than
+[109:21] any other build would, where like, your
+[109:23] cast speed sort of becomes your AoE in a
+[109:25] way, and your mana cost sort of becomes
+[109:26] your cast speed. And it's it's really
+[109:29] cool, and then, you know, it it's that
+[109:31] meme of like, thinking about Stormbind
+[109:33] versus playing Stormbind. Um, where
+[109:35] like, in another slower-paced, more
+[109:37] methodical ARPG than what Path of Exile
+[109:39] 1 is, it would have been perfect. Um,
+[109:43] but yeah, it's it's a it's probably the
+[109:45] most interesting. Sure. That sounds
+[109:46] super leading.
+[109:47] >> Um,
+[109:48] what's that? That sounds really leading
+[109:49] in a more methodical ARPG similar to
+[109:52] Path of Exile 1,
+[109:53] but not PoE 1, yeah. It could fit there,
+[109:55] I'm sure.
+[109:55] >> I didn't mean it that way. Sure, yeah.
+[109:57] Sure, I could see where you would
+[109:59] interpret that. Um, no, I don't I, you
+[110:02] know, I don't work on PoE 2. I have no
+[110:03] idea if Stormbind is going to PoE 2.
+[110:05] Probably not. Uh, but I like, I've kind
+[110:08] of always held that opinion that it's
+[110:10] this really, really cool skill that
+[110:12] would do extremely well in some other
+[110:14] video game that isn't PoE 1.
+[110:16] Um, as far as like,
+[110:19] some of my favorite skills in PoE 1
+[110:22] that, you know, I wouldn't put in that
+[110:24] bucket of not really being too viable
+[110:25] for the game, is
+[110:28] I don't know. Uh, it's very basic, but I
+[110:30] really like Shield Crush. I think that's
+[110:31] mostly down to the audio, though. Like,
+[110:33] the the sound team did an excellent job
+[110:35] on that skill. It sounds great. It's
+[110:37] really satisfying to use.
+[110:39] Um,
+[110:40] I also really like Cremation. I like I
+[110:44] I've I've come to realize over the years
+[110:45] that some of the skill design that I
+[110:47] like is things where you place something
+[110:48] in an area and then it does something
+[110:50] for a while. Like, I like, you know,
+[110:51] Flame Totem Trap, Seismic Trap,
+[110:52] Cremation. Um, you know, I'm probably
+[110:55] my other league start option this league
+[110:56] was Siphoning Trap of Pain, the the the
+[110:58] alternate one, because
+[111:00] it's that same sort of design.
+[111:02] Uh, yeah, I don't know. I I could talk
+[111:04] about this for hours. I love skill
+[111:06] design in general, and so many of the
+[111:08] skills in the game. Maybe one day, maybe
+[111:10] in like a year I'll come over and it,
+[111:11] we'll have a conversation about that cuz
+[111:13] I would just
+[111:14] listening to why skills exist and what
+[111:16] like you can gain from them, I think is
+[111:18] a really really different perspective
+[111:19] than what I take. I think it's really
+[111:20] easy for me to get too distilled down to
+[111:22] like this does X number in this content
+[111:24] and this does X number against other
+[111:25] content and
+[111:26] kind of have that be too
+[111:29] prolific in terms of like what's how
+[111:30] it's affecting like my build creation.
+[111:32] Yeah, I mean a lot of the time whether
+[111:34] or not I end up going with a given skill
+[111:36] design is you know, it's a mix of like
+[111:39] talking to Andrew and other designers
+[111:41] and seeing if they think it's cool, but
+[111:42] then also pitching it to like somebody
+[111:44] in the art team or somebody in
+[111:45] environment art or somebody in audio and
+[111:48] you know, that's not to say these people
+[111:49] don't play the game at all, but they're
+[111:50] not at the you know, sort of analytical
+[111:52] level necessarily and if the base
+[111:54] concept is enough to be like oh, that's
+[111:56] cool. I would I would play that then
+[111:59] that that's the
+[112:01] um
+[112:02] acid test I guess is the term and that
+[112:04] that's an acid test for whether or not I
+[112:06] think we should go ahead with that
+[112:08] design. I was just going to say that I
+[112:10] think the skill that got me into like
+[112:12] thinking Path of Exile is a like
+[112:13] insanely cool game is Raise Spectre.
+[112:16] Like when I learned about Raise Spectre,
+[112:18] I'm like what? You can just take like
+[112:19] almost any monster in the game and it
+[112:21] works with all your support gems?
+[112:24] And it's a viable build. It was like
+[112:25] that just blew my mind when I learned
+[112:27] about that skill. [ __ ] love Detonate
+[112:29] Dead. Yeah. I was going to say that like
+[112:32] where how does does skill design work
+[112:35] for you when it is one button versus two
+[112:37] button? Cuz like I think that
+[112:40] simplicity skill design wise is like
+[112:42] always a nice thing. I love that you
+[112:43] mentioned Shield Crush. I think it is a
+[112:44] really good new skill, but then there's
+[112:47] like things like Detonate Dead, you
+[112:48] know, things like you know, Essence
+[112:50] Drain Contagion. Like how do you think
+[112:52] two button versus one button skill
+[112:54] design works and how do you reconcile
+[112:55] that as a designer? Um I think it all
+[112:58] comes down to like whether or not you
+[112:59] have a good core
+[113:02] concept. I I
+[113:03] I'm feel like I'm not communicating this
+[113:05] well. I don't mean to be dodging the
+[113:07] question if it sounds like I am, but
+[113:09] it's like
+[113:10] usually my method of skill design is I I
+[113:12] come up with some strange weird thing or
+[113:15] core foundational concept of what the
+[113:17] skill should do, and then it's about
+[113:19] building the architecture of the skill
+[113:20] around that. So, like for Holy Hammers
+[113:22] for instance, it's like what if you had
+[113:23] a slam and then that slam repeated if it
+[113:26] hit something, and that's that was the
+[113:27] foundation for that skill. And then, you
+[113:30] know, you you get that into game, you
+[113:33] iterate with like placeholder visuals,
+[113:35] and then you see what feels good in
+[113:36] actual gameplay, and and you don't get
+[113:38] too attached to the entirety of a design
+[113:41] right at the start because so much of it
+[113:43] may need to change in the the course of
+[113:46] implementation. I don't know. Um I don't
+[113:48] feel strongly that like one button
+[113:50] versus two button versus three button is
+[113:52] like there's nothing correct there. It's
+[113:54] good to have variety. Like, you know, I
+[113:56] actually these skills this time around
+[113:59] tried to put an emphasis on making
+[114:01] things a little simpler because I feel
+[114:02] like for some of the wand skills, I
+[114:04] probably over complicated a few of
+[114:05] those. You know, like like Divine Blast
+[114:08] is you put a thing on the ground and it
+[114:10] explodes, and that's kind of an
+[114:12] experiment in like, you know, how simple
+[114:14] can you make a skill while still having
+[114:16] it be compelling and interesting? And I
+[114:17] think Divine Blast did pretty well on
+[114:19] that front.
+[114:19] >> That skill is extremely interesting
+[114:21] because I think it's the first time we
+[114:24] have an attack in the game that's not
+[114:26] melee or a projectile. In PoE 1 at
+[114:29] least. I think there are examples of
+[114:30] that in PoE 2, but yeah, it it is just
+[114:33] attack. And how do you feel about the
+[114:36] catch-all ability? Cuz I know what
+[114:37] people are looking for most of the time
+[114:39] when they do it is like this ability
+[114:41] should be able to clear, but then also
+[114:42] should be able to boss. Whereas some of
+[114:43] my favorite builds of all time is like
+[114:45] this is purely a mapping ability. You
+[114:48] know, Exsanguinate is like one of those
+[114:50] things where it's like I would really
+[114:52] not want to boss on that, but to map on
+[114:55] it feels so extremely good. So, how do
+[114:58] you reconcile that during the design
+[115:00] process of, you know, I I want to create
+[115:02] this thing. It's probably not going to
+[115:03] be good for X, but I think it is going
+[115:05] to excel at Y. Is that a better ability
+[115:07] or worse ability skill design-wise?" I
+[115:09] would personally rather lean into things
+[115:12] that differentiate skills rather than
+[115:13] homogenize things. Yeah. I would
+[115:15] personally rather be, you know, and it's
+[115:17] not necessarily a box that I'm checking
+[115:19] on every skill that I'm working on, but
+[115:20] it's like
+[115:21] if a skill feels like from a mechanical
+[115:23] perspective it's going to be much better
+[115:25] for clear, then leaning into that and
+[115:28] making it more of its identity is
+[115:30] probably correct over trying to like
+[115:32] smooth out and make every skill equally
+[115:34] good for every task. That doesn't seem
+[115:36] healthy to me, no. Yeah, I would say
+[115:38] that PoE 1 sort of has a little bit more
+[115:40] of an issue with this compared to PoE 2
+[115:43] just because it's hard to fit multiple
+[115:45] six links into your build.
+[115:47] So, the fact that
+[115:50] your support gems contribute so much of
+[115:51] the power to your main skill means that
+[115:54] often if you want to use multiple skills
+[115:56] like a single target and a clear skill
+[115:58] in game, you need to be giving up either
+[116:00] a lot of utility skills to do so or
+[116:02] having like some sort of pseudo six link
+[116:04] in your like how more glove sock glove
+[116:06] slot. Technically easier this patch
+[116:08] because uh the imbued support things
+[116:11] support everything in the link group
+[116:12] they're in. So, if you have two active
+[116:14] skills and one of them has an imbued
+[116:15] link, then you have two six links. Small
+[116:18] clarifying question.
+[116:19] So, one skill complexity you mentioned,
+[116:21] would you consider it a bug if say there
+[116:23] was a one skill that does damage and
+[116:25] applies some sort of debuff and then you
+[116:27] have to proc that debuff with a
+[116:28] different skill, but if you use
+[116:29] secondary damage to proc that debuff,
+[116:31] you can turn that into one button build?
+[116:32] So, you mean something like somatic
+[116:34] shell plus living lightning? No, impale.
+[116:36] Oh, that's interesting.
+[116:37] Um
+[116:38] well, the impale isn't sourced from the
+[116:40] skill in that way, right? Like that is
+[116:42] working
+[116:43] I wouldn't call that a bug.
+[116:45] Um
+[116:46] because and this is something where Mark
+[116:48] 1 may, you know, contradict me in a
+[116:51] forum post, so I don't want to get too
+[116:52] much into super specifics because this
+[116:54] is definitely his domain, you know, the
+[116:55] specifics of damage being sourced from
+[116:58] certain places and when the damage
+[116:59] packet is occurring and
+[117:01] and that ordering is, you know, hyper
+[117:03] complex. I have a broad understanding of
+[117:06] it. I do not have the in-depth
+[117:07] understanding that Mark 1 has.
+[117:09] Um but from my broad understanding of
+[117:11] it, I don't think that's a bug. That
+[117:13] seems
+[117:14] just correct from the way that the
+[117:16] damage packets are occurring and and
+[117:18] like cuz cuz if impale wasn't
+[117:21] considered as something separate, then
+[117:23] it would scale again, right? And that
+[117:24] would lead to double dipping or whatever
+[117:26] you want to call it and that would be a
+[117:27] problem. Yeah. Well, I guess then the
+[117:28] bug is the fact that that skill gem does
+[117:30] no damage. I can understand. Okay.
+[117:32] Um Sure. Yeah, somatic shell is actually
+[117:34] probably the one that is at the top of
+[117:36] my list for wanting to look at it again
+[117:38] going into like 329 or 330 or whenever
+[117:40] there is time because I think there was
+[117:42] a core cool concept there that didn't
+[117:44] land. I think it's close. I think it it
+[117:46] definitely runs a risk because of that
+[117:47] of like having an infinite loop
+[117:48] interaction because of like things
+[117:49] >> Sure. Cuz like it chains off and then it
+[117:51] chains off to the next one and then it
+[117:52] like I can actually go again and again.
+[117:54] So like when I entered a map with those,
+[117:56] it was slow because of projectile speed
+[117:57] stuff, but It's the kind of skill where
+[117:58] I feel like there is some
+[118:01] small tweak, small to medium tweak that
+[118:03] could be made with the functionality
+[118:04] that would massively improve it and I
+[118:06] just need to spend some time, you know,
+[118:08] maybe with a programmer trying to figure
+[118:10] out what my options are and then and
+[118:11] then make that change. It's also the one
+[118:14] that came in the the the hottest, so to
+[118:15] speak, in 320A. Like it was being worked
+[118:17] on in the last week leading up to
+[118:19] release. So like yeah, it it's one that
+[118:21] I want to revisit, for sure. I can't
+[118:23] promise exactly when, but I want to. Um
+[118:25] I think we've kept you guys here for a
+[118:26] pretty long time. Is there any questions
+[118:28] you have for us or is there anything you
+[118:29] guys want to say to the community? But
+[118:31] probably last interview before the patch
+[118:32] hits in a couple of days. So how are you
+[118:34] guys going?
+[118:35] I don't know. What builds are you guys
+[118:37] playing? Uh I'm going to go champion
+[118:39] aura bot, probably. And I'll probably
+[118:42] play in like a two or three man party
+[118:43] and then I'll probably level as either
+[118:46] slams or if there's a cool strike skill
+[118:48] that I can find, I'll try and do that.
+[118:49] So that's It's where I'll end up. How
+[118:51] many hours of work do you have
+[118:53] available left before the last balance
+[118:55] change can happen?
+[118:57] I won't answer that.
+[118:59] Well, who's to say we can't do them post
+[119:01] release? Now, we we pretty much always
+[119:03] try to avoid post release balance
+[119:05] changes unless there's like extreme
+[119:08] circumstances. Yeah, I mean if you make
+[119:10] something that can crash servers, we
+[119:12] might have a different conversation
+[119:13] here.
+[119:14] Um I mean I think slams need to be
+[119:15] nerfed, but I think going grey wins. Top
+[119:18] side assassin poison um with the new
+[119:21] calculator risk. There was some
+[119:22] interesting stuff there that Calculator
+[119:23] risk being the starter build.
+[119:24] >> to see you make that work. It's it it
+[119:26] looks like the most promising setup I
+[119:27] had after like even in comparing to war
+[119:29] of attrition numbers on gladiator, even
+[119:31] compared to other things. I think that's
+[119:33] looking okay for all those so far.
+[119:35] So, hopefully a couple days, yeah. Don't
+[119:37] have any specific questions for you
+[119:39] guys, I guess. I more so just want to
+[119:42] wish everybody a good league start and
+[119:44] you know, there's there's four months of
+[119:46] it. So, I know there's a lot of pressure
+[119:47] around league start to do super well,
+[119:48] but like
+[119:50] for most players I feel cut yourself a
+[119:52] little slack. Just enjoy it, chill, have
+[119:54] a good time. I I guess personally I
+[119:56] can't speak for myself. I know we both
+[119:57] appreciate having you on here both like
+[120:00] immensely, but I've got to hear so many
+[120:02] things that I've never thought I'd be
+[120:04] able to hear in terms of like
+[120:05] information in terms of understanding
+[120:06] why things happen, in terms of like how
+[120:07] your mindset is and in terms of
+[120:09] understanding why the game has developed
+[120:10] the way that it is. I think the past
+[120:12] like couple of years has been so
+[120:13] different for PoE and really exciting in
+[120:15] a lot of ways. Um and a lot of I think
+[120:17] my concerns about like oh yeah, like
+[120:19] deep scaling and stuff like stocking. It
+[120:21] feels like everything's on the radar and
+[120:23] yeah, I just appreciate this a lot.
+[120:24] Thank you guys so much for making this
+[120:25] time, man. Appreciate that. Thank you so
+[120:27] much, guys.

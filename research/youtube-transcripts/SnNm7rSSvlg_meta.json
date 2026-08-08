@@ -1,0 +1,119 @@
+{
+  "video_id": "SnNm7rSSvlg",
+  "title": "Tutorial: How To Optimize Almost Every Step In Modern Game Rendering",
+  "channel": "Threat Interactive",
+  "channel_id": "UC2ksme4hP4Nx97ilFTQ0K0Q",
+  "upload_date": "20260801",
+  "duration": 7285,
+  "view_count": 61745,
+  "like_count": 7031,
+  "tags": [
+    "Gaming",
+    "Optimization",
+    "Education",
+    "Threat Interactive",
+    "Hardware Unboxed",
+    "Gamers Nexus",
+    "LTT",
+    "Raytracing",
+    "Nvidia",
+    "JayzTwoCents"
+  ],
+  "categories": [
+    "Gaming"
+  ],
+  "chapters": [
+    {
+      "start": 0,
+      "end": 480,
+      "title": "Intro & Abouts, Resources, APIs"
+    },
+    {
+      "start": 480,
+      "end": 861,
+      "title": "The Importance Of Resource Clearing Management"
+    },
+    {
+      "start": 861,
+      "end": 1733,
+      "title": "How To Properly Prepass Content"
+    },
+    {
+      "start": 1733,
+      "end": 2204,
+      "title": "How To Properly Sort Deferred Basepass Content"
+    },
+    {
+      "start": 2204,
+      "end": 2340,
+      "title": "Post Basepass Resource Management & Decal Notes"
+    },
+    {
+      "start": 2340,
+      "end": 2985,
+      "title": "Perspective Shadow Maps & Deferred Stencil Volume Lighting"
+    },
+    {
+      "start": 2985,
+      "end": 3228,
+      "title": "WIP Global Illumination & Hybrid Reflections"
+    },
+    {
+      "start": 3228,
+      "end": 3441,
+      "title": "Screen Space Subsurface Scattering"
+    },
+    {
+      "start": 3441,
+      "end": 3885,
+      "title": "Direct Lighting Compositing & Effects Rendering"
+    },
+    {
+      "start": 3885,
+      "end": 4778,
+      "title": "Tone Mapping & Exposure Mechanics"
+    },
+    {
+      "start": 4778,
+      "end": 5065,
+      "title": "AA (Non Temporal Aspect)"
+    },
+    {
+      "start": 5065,
+      "end": 6160,
+      "title": "AA (Temporal Aspect)"
+    },
+    {
+      "start": 6160,
+      "end": 7049,
+      "title": "Velocity Compensation"
+    },
+    {
+      "start": 7049,
+      "end": 7229,
+      "title": "Motion Effects, Composite Effects, & UI/Gamma"
+    },
+    {
+      "start": 7229,
+      "end": 7285,
+      "title": "Outro & Bonus Slides"
+    }
+  ],
+  "has_manual_subs": false,
+  "has_auto_subs": true,
+  "subtitles_available": [],
+  "auto_subtitles_available": [
+    "ab",
+    "aa",
+    "af",
+    "ak",
+    "sq",
+    "am",
+    "ar",
+    "hy",
+    "as",
+    "ay"
+  ],
+  "desc_timestamps": [],
+  "description_preview": "Threat Interactive Video 33 discusses 2 years of optimization research & philosophy's that challenge the mainstream rendering approach. #tutorial #rendering #videogames #graphics \n-------\nOur Patreon: https://www.patreon.com/THREATINTERACTIVE \nOur Website: https://threatinteractive.wordpress.com \nOur Bonfire: https://www.bonfire.com/store/threat-interactive/\nAll official accounts can be found here: https://linktr.ee/ThreatInteractive\n-------\nFor Updates or Questions, contact our studio or founde"
+}

@@ -1,0 +1,32 @@
+{
+  "video_id": "N6RP3r1M9g4",
+  "title": "Single shot global illumination with no denoiser",
+  "channel": "Alexander Sannikov",
+  "channel_id": "UCly0QRJAaJ2UGSGycOQoOdA",
+  "upload_date": "20230419",
+  "duration": 157,
+  "view_count": 21989,
+  "like_count": 591,
+  "tags": [],
+  "categories": [
+    "Science & Technology"
+  ],
+  "chapters": [],
+  "has_manual_subs": false,
+  "has_auto_subs": true,
+  "subtitles_available": [],
+  "auto_subtitles_available": [
+    "ab",
+    "aa",
+    "af",
+    "ak",
+    "sq",
+    "am",
+    "ar",
+    "hy",
+    "as",
+    "ay"
+  ],
+  "desc_timestamps": [],
+  "description_preview": "In this demo I present my first (mostly) working prototype of cascaded image space global illumination. It's fast enough to converge to a noise-free solution in about 5ms that does not require any denoising. My goal was to achieve this in one frame, which means no temporal reprojection, no reusing data from previous frames, etc. This implementation works in screenspace because I found a particularly efficient way of utilizing image space samples with this approach, but it obviously has classic i"
+}

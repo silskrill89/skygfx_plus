@@ -1,0 +1,61 @@
+{
+  "video_id": "XXT3GZ4dXb0",
+  "title": "Advances in real-time rendering in games, part 1 (ACM SIGGRAPH 2019)",
+  "channel": "Dan the Man",
+  "channel_id": "UChjU26zb0Kc0Emqy8-dcSpQ",
+  "upload_date": "20210821",
+  "duration": 6369,
+  "view_count": 3252,
+  "like_count": 58,
+  "tags": [],
+  "categories": [
+    "Education"
+  ],
+  "chapters": [
+    {
+      "start": 0,
+      "end": 2666,
+      "title": "Leveraging Real-Time Ray Tracing To Build A Hybrid Game Engine"
+    },
+    {
+      "start": 2666,
+      "end": 4152,
+      "title": "Strand-based Hair Rendering in Frostbite"
+    },
+    {
+      "start": 4152,
+      "end": 6369,
+      "title": "Towards greater efficiency in geometry processing"
+    }
+  ],
+  "has_manual_subs": false,
+  "has_auto_subs": true,
+  "subtitles_available": [],
+  "auto_subtitles_available": [
+    "ab",
+    "aa",
+    "af",
+    "ak",
+    "sq",
+    "am",
+    "ar",
+    "hy",
+    "as",
+    "ay"
+  ],
+  "desc_timestamps": [
+    {
+      "start": 0,
+      "title": "- Leveraging Real-Time Ray Tracing To Build A Hybrid Game Engine"
+    },
+    {
+      "start": 2666,
+      "title": "- Strand-based Hair Rendering in Frostbite"
+    },
+    {
+      "start": 4152,
+      "title": "- Towards greater efficiency in geometry processing"
+    }
+  ],
+  "description_preview": "00:00:00 - Leveraging Real-Time Ray Tracing To Build A Hybrid Game Engine\n00:44:26 - Strand-based Hair Rendering in Frostbite\n01:09:12 - Towards greater efficiency in geometry processing\n\nhttps://dl.acm.org/doi/10.1145/3305366.3335035"
+}

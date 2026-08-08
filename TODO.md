@@ -62,15 +62,19 @@
 
 ---
 
-### F. Atmospheric & Shadow Features (NEW — research complete)
+### F. Atmospheric & Shadow Features (research complete, core features implemented)
 - [x] Stencil shadow research — Z-Fail Carmack's Reverse, D3D9 states documented, addresses mapped
 - [x] Cloud research — GTAV geometry dome (not raymarching), VolumetricCloudsExtended.SA (no conflicts)
 - [x] FusionShaders initialized — SunShafts_PS.hlsl, DeferredShadow*.asm available for reference
-- [ ] **Commit uncommitted vehicle shader work** (sRGB, vertex color base, rubber darkening, interior→matte, chrome BRDF)
+- [x] **Commit vehicle shader work** (sRGB, vertex color base, rubber darkening, interior→matte, chrome BRDF) — committed 535cde7
+- [x] **Crytek height fog** — HeightFog.hlsl + DrawHeightFog() in postfx.cpp, INI 7 fields, exponential fog with depth reconstruction
+- [x] **Screen-space god rays** — GodRays.hlsl + DrawGodRays() in postfx.cpp, INI 6 fields, radial blur toward sun
+- [x] **PostFX chain wired** — ColourFilter→MotionBlur→HeightFog→GodRays→UpdateFrontBuffer→SSS
+- [x] **INI config** — 13 new fields parsed in config.cpp with sensible defaults
+- [ ] **Code review** — dispatched to oracle, awaiting result
+- [ ] **debugmenu_ui.cpp** — Add "Atmospheric" collapsing header with 13 ImGui sliders
 - [ ] **Stencil shadow port** — hook RenderStencilShadows (0x7113B0), let game handle geometry generation
 - [ ] **Volumetric clouds** — integrate VolumetricCloudsExtended.SA or build GTAV-style (density+normal maps, HG phase)
-- [ ] **Screen-space god rays** — radial blur toward sun (15 segments), SM3.0 feasible
-- [ ] **Crytek height fog** — density × exp(-heightFalloff × z), timecycle-driven
 - [ ] **Cloud ground shadows** — scroll cloud texture in world XZ (enhance existing g_shadowTex)
 - [ ] Update docs/plans with atmospheric roadmap
 
@@ -86,7 +90,7 @@ See **`docs/plans/2026-08-01-remaining-roadmap.md`** for the complete implementa
 | 1 | Restore full compatibility (dead stubs annotated, Motion Blur wired, SSS wired) | ✅ DONE (7f85408, 05dc968) |
 | 2 | Visual quality (CJ depth, glass, sun streaks, CryEngine PBR, glossiness, env reflections) | ✅ DONE (a600105, c671ce3, f09e50a) |
 | 3 | Architecture cleanup (vehiclePipe dedup, buildingPipe dedup, FOGENABLE fix) | ✅ DONE (aa8693b, 4ef8ce3, b680e31) |
-| **F** | **Atmospheric features (stencil shadows, clouds, god rays, height fog)** | **🔲 NEXT** |
+| **F** | **Atmospheric features (height fog ✓, god rays ✓, stencil shadows, clouds)** | **🔧 IN PROGRESS** |
 | 4 | Platform selection UI (vehicleStyle/buildingStyle/colorStyle INI + menu) | ❌ NOT STARTED |
 | 5 | Advanced features (Forward+, skin/hair/veg, multi-agent) | ❌ NOT STARTED |
 | C | Normal map integration (DK22Pac) — **LAST per user rule** | 🔒 DEFERRED |

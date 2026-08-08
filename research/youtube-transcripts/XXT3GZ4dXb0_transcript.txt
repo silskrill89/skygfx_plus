@@ -1,0 +1,3086 @@
+# Transcript: XXT3GZ4dXb0
+# Fetched: 2026-08-07T06:22:44.629754
+# Entries: 3081
+# Duration: 12292s
+
+[00:05] Hello.
+[00:06] Okay.
+[00:08] Hi everyone. Thank you for attending
+[00:10] this session. My name is Anis Benyagoub.
+[00:13] Um
+[00:15] Today's session is going to be about the
+[00:17] work that we have done and the lessons
+[00:19] that we have learned in the process of
+[00:20] trying to take advantage of ray tracing
+[00:22] hardware acceleration into the Unity
+[00:23] game engine.
+[00:27] Uh this talk can be seen as a sequel to
+[00:29] the talk The World of Unified
+[00:32] Rendering with Unity's High Definition
+[00:33] Render Pipeline presented last year in
+[00:34] the same track. So if you want to know
+[00:36] more details about the environment in
+[00:37] which the implementation I will be
+[00:39] presenting today was done, feel free to
+[00:41] check out the slides from last year or
+[00:44] uh directly the the GitHub repository.
+[00:47] Let's look at the video.
+[00:52] Invent yourself and then reinvent
+[00:56] yourself.
+[00:57] Don't swim in the same slough.
+[01:01] Invent yourself and then reinvent
+[01:04] yourself.
+[01:06] And stay out of the clutches of
+[01:08] mediocrity.
+[01:09] Invent yourself
+[01:11] and then reinvent yourself.
+[01:14] Change your tone and shape so often that
+[01:17] they can never categorize you.
+[01:19] Reinvigorate yourself and accept what
+[01:22] is.
+[01:23] But only on terms that you have
+[01:26] invented. Be self-taught.
+[01:30] And reinvent your life because you must.
+[01:34] It is your life.
+[01:37] And its history and the present belong
+[01:40] only
+[01:41] to you.
+[01:47] All right.
+[01:49] So uh this video was part of the
+[01:51] Realities vs. Illusions project. Uh so
+[01:54] some of the images in the video are real
+[01:55] world footage, others are rendered using
+[01:57] our real-time renderer.
+[01:59] So, the goal for us
+[02:01] working with light and shadow in video
+[02:02] was to explore what does real-time ray
+[02:05] tracing bring in practice for a game
+[02:07] engine based production. So, sometimes
+[02:10] the benefits of real-time ray tracing
+[02:12] are questionable,
+[02:13] but for this demo we were pretty happy
+[02:15] with the results that we were able to
+[02:16] achieve.
+[02:18] So, the result of the project with video
+[02:20] that I just showed you and a real-time
+[02:21] demo that I'll demonstrate at the end of
+[02:23] the presentation. In our journey of
+[02:25] exploring real-time ray tracing in a
+[02:27] game engine, we have implemented a
+[02:29] couple effects.
+[02:30] So, the first one is ambient occlusion.
+[02:32] It is an improvement to screen space
+[02:33] ambient occlusion.
+[02:36] The next one is soft directional
+[02:37] shadows. So, this evaluates the penumbra
+[02:39] of an infinite disc light.
+[02:41] The next one is indirect diffuse. We
+[02:43] also call call it more commonly GI in
+[02:45] games. It is alternative to light maps
+[02:47] and light probes because it does not
+[02:48] require any baking and it can be
+[02:50] replaced It can replace or be combined
+[02:52] with screen space global illumination.
+[02:55] The next one is what we call recursive
+[02:56] tracing. So, that's what we use to
+[02:59] render complex transparent light paths
+[03:01] and that's how we were able to render
+[03:03] properly the the car's headlight and
+[03:05] tail lights.
+[03:07] The next one is indirect specular. Also,
+[03:09] we call it more commonly reflections and
+[03:12] finally stochastic area shadows. So, in
+[03:14] this presentation I'll be mainly talking
+[03:16] about later two effects. They are the
+[03:18] most interesting ones and most of the
+[03:20] points I'll be making for them are also
+[03:21] valid for the rest of the effects.
+[03:24] And another thing that is important to
+[03:25] say is we're not going for a fully ray
+[03:27] traced pipeline, obviously.
+[03:29] Rasterization is still used for most of
+[03:32] the pipeline and we only use ray tracing
+[03:34] to evaluate effects and then everything
+[03:35] is combined to produce the final image.
+[03:39] Okay, so before we dive into details,
+[03:41] there's a couple of things I'd like to
+[03:42] say
+[03:43] about the render pipeline that we're
+[03:45] starting from.
+[03:46] So, in our case we start from a render
+[03:47] pipeline that has two modes for opaque
+[03:50] objects. So, I deferred mode uh most of
+[03:52] the the objects because like they render
+[03:55] using uh deferred method, so they fit
+[03:57] into a G-buffer and on the other side,
+[03:58] we have forward materials that are too
+[04:00] complex to fit into a G-buffer. So, here
+[04:03] it's uh fabric, hair, eyes, and that is
+[04:06] a very important point that we should
+[04:07] keep in mind for the rest of the
+[04:08] presentation. It's going to make a
+[04:10] difference.
+[04:11] Okay? So, uh this is a simplified
+[04:14] version of our render pipeline. So, it
+[04:16] starts with a optional pre-pass, then we
+[04:18] have our decal buffer pass, our G-buffer
+[04:20] pass for the main lighting model, then
+[04:22] we evaluate screen space lighting, light
+[04:24] structures, shadow maps. When all of
+[04:26] that is ready,
+[04:28] we're able to render uh the deferred
+[04:29] lighting for our main lighting model,
+[04:31] then we can render the all other forward
+[04:33] materials, then we have the separable
+[04:35] subsurface scattering, sky and
+[04:37] volumetric scattering, transparence,
+[04:39] core pyramid, distortion,
+[04:41] post-processing, and overlay.
+[04:43] So, with the pipeline that I just
+[04:45] presented, we can render pretty complex
+[04:47] materials.
+[04:48] But, the question is what happens if we
+[04:50] had a mirror tracing?
+[04:51] Uh we want to be able to reflect or to
+[04:54] shade the the the reflected pixel the
+[04:56] exact same way that we shaded uh the
+[04:58] other pixels. So, if they are these are
+[05:00] two pixels that are rasterized, the
+[05:02] point in red uh should be lit the exact
+[05:05] same way.
+[05:06] And a very interesting point of uh
+[05:09] actually is a very interesting part of
+[05:11] new ray tracing APIs is the ability to
+[05:12] share code between the rasterization and
+[05:14] the ray tracing pipeline. So, what does
+[05:16] that mean for us?
+[05:17] That means that to a certain extent all
+[05:19] the information that we had uh during
+[05:21] the rasterization the rasterization
+[05:23] pipeline uh should be available in some
+[05:25] form for ray tracing. So, a good way to
+[05:28] figure out what that what that is, we
+[05:30] just take the rasterization pipeline and
+[05:32] figure out if we're able to provide
+[05:33] everything.
+[05:34] So,
+[05:36] these parts so
+[05:37] the end of the pipeline are things that
+[05:39] are applied on the final image, so they
+[05:40] don't really matter for our exercise, so
+[05:42] we can just ignore them. And we're left
+[05:45] with this as all the information that we
+[05:47] need to provide. So, let's color in red
+[05:49] everything that is screen space
+[05:50] information.
+[05:51] And that's pretty much the whole
+[05:52] pipeline. So, screen space information
+[05:54] are things that we're not able to
+[05:55] provide for the ray tracing pipeline.
+[05:57] So, we need to solve these problems
+[05:58] first
+[05:59] before we able to render the pixel the
+[06:01] exact same way.
+[06:02] So, the first thing that we can do is
+[06:05] light structures.
+[06:07] So, light structures are a very
+[06:09] important thing in render pipelines.
+[06:12] Every render pipeline has them and it's
+[06:14] very useful when your scene looks like
+[06:15] this.
+[06:20] So, to build them, what we usually do is
+[06:22] we start from a set of light volumes and
+[06:25] a camera and we usually call those
+[06:27] volumes using the frustum. Then, we
+[06:29] build structures. Either tile or cluster
+[06:32] or both. These will store light lists
+[06:34] and these light lists are going to be
+[06:35] used to light your screen space pixels.
+[06:38] So, for ray tracing, we take a similar
+[06:40] approach.
+[06:41] We have our volumes, our camera and this
+[06:43] time instead of calling using the
+[06:44] frustum, we call using an area around
+[06:47] the camera because we want information
+[06:49] outside of the frustum. So, with that,
+[06:51] we're able to build a cluster structure
+[06:54] in world space and at every point that
+[06:56] is an indirect point, we are able to
+[06:58] fetch the set of lights that should
+[07:00] affect that point.
+[07:01] So, fair enough.
+[07:03] That solves light light structures
+[07:05] problems, but we're not done yet. The
+[07:06] problem The next problem that we can
+[07:07] look at is decals.
+[07:10] So, decals made a pretty big difference
+[07:12] on the rendering of image. So, we need
+[07:14] absolutely to find a solution for this,
+[07:16] otherwise we're not going to able to
+[07:17] ship anything. So, in the render
+[07:20] pipeline we start from there is decals
+[07:21] are managed two ways. So, for opaque
+[07:23] objects, they're managed through the
+[07:24] decal buffer, which is screen space
+[07:25] buffer,
+[07:26] and that allows us to support decal
+[07:28] meshes and decal projectors. For
+[07:30] transparent objects,
+[07:32] we handle them through the cluster
+[07:33] structure that I defined. Oops.
+[07:36] Okay.
+[07:37] That we defined a couple slides ago and
+[07:40] with that structure we're only able to
+[07:41] support uh decal projectors.
+[07:45] So, if we limit ourselves to decal
+[07:47] projectors and store those uh decal
+[07:50] projectors into the workspace texture
+[07:51] that we just defined, we have a solution
+[07:53] actually for decals. So,
+[07:55] fair enough. Okay, cool. We have a
+[07:57] solution for decals. So, let's continue
+[07:59] investigating what's where we are
+[08:00] missing.
+[08:02] So, for screen-space lighting, um
+[08:04] most of them are evaluated so in like
+[08:07] using some uh form of ray marching. I'm
+[08:09] not going to explain what ray marching
+[08:11] is, uh but ray marching is fetching the
+[08:14] information of geometry or lighting in
+[08:16] another point of the scene.
+[08:17] And
+[08:19] that sounds like ray tracing, right?
+[08:21] Indeed, the first option that we can do
+[08:22] is just like multi-bounce and to solve
+[08:25] the problem. It has advantages because
+[08:27] it doesn't require any baking or
+[08:28] additional work,
+[08:30] but the problem is with the same sample
+[08:32] count, we have to cover a significantly
+[08:34] bigger uh sample space. And that means
+[08:37] that we need to throw more samples to
+[08:39] get the same quality or uh to filter
+[08:41] significantly more aggressively. So,
+[08:44] that's not good and obviously uh this
+[08:47] does not like scale for real-time
+[08:49] content. Like we'll see later in this
+[08:50] presentation to which extent, but it
+[08:52] doesn't work.
+[08:55] The second option that we have is we can
+[08:57] set up approximations. So, we can use
+[08:59] reflection probes, light probes, shadow
+[09:00] maps uh the same way that we do for uh
+[09:03] classic rasterization techniques. And
+[09:06] for most cases, these are enough. Like
+[09:07] we're shading uh rough lobes and we
+[09:10] we're not able really to see the
+[09:11] difference uh if we use these
+[09:13] approximations.
+[09:15] So,
+[09:16] now the all steps have solutions, either
+[09:18] approximation or multi-bounce, and the
+[09:20] next thing that we can look at is
+[09:21] transparency. So, it turns out that for
+[09:23] transparency, it's the same problem as
+[09:25] for the the other yellow steps. We have
+[09:28] problems with multi-dimen-
+[09:29] dimensionality, we have problems with
+[09:31] performance, and with filtering. So,
+[09:33] right now we have solutions, but these
+[09:35] solutions do not scale for games. So,
+[09:36] there's still open problems to solve.
+[09:39] Uh we we are still looking for uh
+[09:40] subsurface scattering and volumetric
+[09:42] scattering, and we still don't have any
+[09:45] uh solution. So, if you find one, please
+[09:47] share it.
+[09:50] Now that we define what we're supposed
+[09:52] to compute, uh
+[09:53] let's figure out what are the
+[09:54] constraints that should be should apply
+[09:56] on our data. So, let's take a very
+[09:57] simple example, the Cornell box.
+[09:59] And the Cornell box is basically just a
+[10:01] set of entities. These entities have a
+[10:04] material uh properties, they have
+[10:06] transforms, uh
+[10:07] meshes, and usually in rasterization,
+[10:10] what we do is we take these entities, we
+[10:12] call them using the frustum, and then we
+[10:14] feed these entities to our draw index uh
+[10:17] API function. And for ray tracing, the
+[10:20] approach is quite similar. So, we have a
+[10:22] set of instances. This time, we don't
+[10:24] call it with the frustum, but we call it
+[10:25] with the volume around the camera. And
+[10:27] this time, it's not for a draw index,
+[10:29] but it is for the build of an
+[10:30] acceleration structure.
+[10:32] So, this is not meant to be a ray
+[10:33] tracing API tutorial. Uh so, uh
+[10:36] but there's a couple things I would like
+[10:37] just to refresh so because they're
+[10:39] required for the rest of the
+[10:40] presentation. So, on one side, uh
+[10:43] ray tracing acceleration structure or AR
+[10:45] RAS are two-level BVHs, and they need to
+[10:49] be bound to a set of resources and
+[10:50] shaders.
+[10:52] Uh the second thing that I would like to
+[10:53] refresh is uh the diagram on the right,
+[10:56] which is the various stages of the ray
+[10:58] tracing shader pipeline. So, you'll be
+[10:59] seeing that one a lot later in in this
+[11:01] presentation.
+[11:04] So, fair enough.
+[11:06] We have to build our RAS, we have our
+[11:08] objects, so there's a couple things that
+[11:09] we can do, couple controls that we have.
+[11:11] So, there's The first one is we can
+[11:13] either do it into the graphics queue or
+[11:15] in the async queue. Uh so, that is
+[11:18] entirely dependent if in your pipeline
+[11:19] you have dispatches that can you can use
+[11:21] to hide the build of your
+[11:24] uh
+[11:24] ray tracing acceleration structure,
+[11:27] but
+[11:29] you should measure and figure out what
+[11:30] is best for you. Uh the second thing
+[11:32] that is you have control over is as soon
+[11:35] as you're seeing that it is going to get
+[11:36] bigger than a couple cubes, uh you can't
+[11:38] afford to update or rebuild the all your
+[11:40] bottom level acceleration structure.
+[11:41] That does just not scale. So, you have
+[11:43] to define a budget and with that budget,
+[11:45] especially if you have particle systems
+[11:47] or skin meshes, you have to uh define
+[11:50] which objects you have to to to to
+[11:53] rebuild or or update, and that is
+[11:55] dependent on a priority list, etc. So,
+[11:57] keep that in mind.
+[11:59] That said, whatever you decide to do,
+[12:01] you have to rebuild fully your top level
+[12:02] acceleration top level acceleration
+[12:04] structure for your frame.
+[12:06] So, if you do that, you end up with one
+[12:08] top level acceleration acceleration
+[12:09] structure for your whole frame, which is
+[12:10] what you want in most cases.
+[12:13] But sometimes, for artistic reasons or
+[12:16] performance reasons, if you're relying
+[12:18] on multiple effects, for instance, you
+[12:20] don't want to really like operate on the
+[12:22] same data for for both effects. So, you
+[12:25] have two options. Either you go for
+[12:27] multiple top level acceleration
+[12:28] top level acceleration structures, and
+[12:31] you share bottom level acceleration
+[12:32] structures between them, but that means
+[12:34] that you have to pay the price for
+[12:35] building multiple ones every frame,
+[12:37] which is a problem.
+[12:38] On the other hand, you can use instance
+[12:40] masks.
+[12:41] So, you only build one, but the problem
+[12:43] is that every ray that you're throwing
+[12:44] is going to pay the price for the full
+[12:48] acceleration structure at least at the
+[12:49] top level, and that can be problematic.
+[12:51] So, there's no absolute best in
+[12:53] practice. It depends on your content,
+[12:55] and the only important message here is
+[12:58] you should measure and figure out what
+[12:59] best for you.
+[13:02] So, the next point I would like to cover
+[13:03] is shaders. So, in most render
+[13:05] pipelines, users have the possibility of
+[13:08] like building graphs. This is a simple
+[13:11] graph.
+[13:12] This is actually a simple graph. So,
+[13:13] this is really our basic material. It
+[13:15] can get much worse than this. And
+[13:18] with this graph, you're going to
+[13:19] generate a set of passes. These passes
+[13:21] match the passes of the rasterization
+[13:24] pipeline, and we use them
+[13:27] like once for most of the time.
+[13:30] So the approach that we take for ray
+[13:31] tracing is quite similar. So we have a
+[13:33] like a system of passes and the
+[13:36] difference here is that these passes are
+[13:38] not linked to the effect that we're
+[13:40] evaluating, but they're more linked to
+[13:41] the signal that they're trying to
+[13:43] estimate. So by that I mean that for
+[13:45] instance indirect is going to evaluate
+[13:47] all the indirect signals, which means
+[13:49] specular and diffuse.
+[13:50] Visibility is used for ambient
+[13:52] occlusion, directional shadows,
+[13:54] stochastic shadows.
+[13:56] Aford is used for recursive tracing and
+[13:58] that little fellow over there I'll cover
+[14:01] later in this presentation.
+[14:03] Keep that in mind. It will pop back.
+[14:05] Okay, so that said we covered a bunch of
+[14:08] things. So this is where we started from
+[14:10] and this is what the the pipeline looks
+[14:12] like now. So there's a couple changes,
+[14:14] but
+[14:15] just I added some images so we can have
+[14:18] you can figure out which box match with
+[14:19] effects. This is ambient occlusion. This
+[14:21] is directional shadows. This is area
+[14:24] shadows. Indirect diffuse, indirect
+[14:26] reflections, the light structure that
+[14:27] we're building and finally the recursive
+[14:30] tracing.
+[14:31] All right.
+[14:32] So we so far we covered pretty much all
+[14:34] the plumbing that we need to have to
+[14:36] call a given dispatch rays with the
+[14:38] right material. And now we need to
+[14:41] figure out where we're computing because
+[14:42] we haven't defined that yet. So we start
+[14:44] from the rendering equation here. The
+[14:46] term in blue is what's usually what is
+[14:48] usually evaluated using an integrator in
+[14:50] offline rendering, but we're not going
+[14:52] for fully integration, we're going for
+[14:53] hybrid. So what we need to do is we need
+[14:55] to rephrase this a bit.
+[14:57] So we rephrase it as on one side
+[14:59] emissive plus direct lighting that is
+[15:01] evaluated using rasterization and on the
+[15:03] other side indirect lighting.
+[15:05] So indirect lighting is evaluated using
+[15:08] with rasterization techniques or ray
+[15:09] tracing techniques.
+[15:12] So if we focus for the moment on
+[15:15] indirect lighting, we can decompose it
+[15:17] as a set of specular indirect lighting
+[15:19] and indirect
+[15:21] specular indirect lighting and diffuse
+[15:23] indirect lighting. So, let's suppose
+[15:25] that we want to evaluate that.
+[15:27] We start from the G-buffer. For every
+[15:28] pixel, we have a set of information. So,
+[15:30] if you remember correctly from what I
+[15:32] said in the beginning of the
+[15:32] presentation,
+[15:34] we don't have the full G-buffer for
+[15:35] every material, and this is all the
+[15:37] information that we have because we want
+[15:39] to support both forward and different
+[15:41] materials. So, we have shading normal, a
+[15:43] perceptual smoothness, depth, motion
+[15:45] vectors, and stencil.
+[15:46] So, with that, we can't evaluate those
+[15:49] lobes correctly. So, what we need to do
+[15:51] is simplify.
+[15:52] So, the first
+[15:54] like simplification that we do is we
+[15:55] approximate the indirect specular lobe
+[15:58] as a isotropic GGX lobe, and we
+[16:00] approximate the indirect diffuse lobe as
+[16:02] a Lambertian lobe. And with very few
+[16:05] parameters, we'll be able to evaluate
+[16:06] those lobes and combine them with the
+[16:07] rest uh later in the pipeline.
+[16:11] Okay, so with that information and those
+[16:14] lobes, we have we can define a lobe that
+[16:15] we can integrate. And the next thing we
+[16:18] need to do is generate samples. And
+[16:21] samples will allow us to generate rays,
+[16:22] and we can integrate that lobe. But,
+[16:25] there's a question we still need to
+[16:26] solve is
+[16:28] how do we generate our samples? So,
+[16:31] that's a very important question. It's
+[16:32] It's really hard to solve. Uh so, let's
+[16:35] suppose just for a moment that we have
+[16:36] one sample per pixel per effect, and
+[16:38] we're targeting a 16-ms frame. Actually,
+[16:41] we don't have as much rays as that, but
+[16:43] let's suppose that's us we have uh for
+[16:45] our case.
+[16:46] So, with one sample, there is no even
+[16:48] notion of coverage. You can doesn't make
+[16:50] sense. So, you need to have more samples
+[16:52] and combine them to get a notion of
+[16:54] coverage. So, to do that, we have to
+[16:57] rely on spatial and temporal
+[16:59] reprojection accumulation. So, for the
+[17:01] spatial part, we use uh the paper by uh
+[17:04] Heitz et al., a low-discrepancy sampler
+[17:06] that distributes Monte Carlo errors as
+[17:08] blue noise in screen space. That was
+[17:10] published this year. And that generates
+[17:12] uh a sequence that we can iterate
+[17:14] actually over the frames, and that gives
+[17:16] us the temporal coverage that we're
+[17:17] looking for.
+[17:18] So, in practice, uh we the code is is
+[17:20] pretty simple. Here it is.
+[17:22] Um so,
+[17:23] this function like has uh different uh
+[17:26] is like it depends on uh the number of
+[17:28] samples that we're targeting.
+[17:30] We decided to go for the same conversion
+[17:32] time as we would do for TAA. So, we take
+[17:35] the the eight sample per per pixel uh
+[17:37] eight sample per pixel version. The
+[17:39] parameters are very simple. The first
+[17:40] one is uh the pixel coordinate in screen
+[17:42] space. The second one is a sample index,
+[17:45] which is basically just the frame index
+[17:46] modulo eight.
+[17:48] And the last parameter is the sample
+[17:49] dimension. Uh so, the sample dimension
+[17:51] is 0 1 for the first bounce and then the
+[17:54] second couple and the third couple of
+[17:55] dimensions for all the additional
+[17:57] bounces. So,
+[18:00] this code can be found at this link uh
+[18:02] with the data that it requires if you
+[18:04] want to try it out.
+[18:06] Okay. So, we're able to generate our
+[18:07] samples, thus thus our directions. So,
+[18:10] the first thing that we can focus on is
+[18:12] uh our effects. So, the first one I
+[18:13] would like to cover is indirect
+[18:15] specular.
+[18:17] So, as men- as we said before, we start
+[18:18] from this approximation that we have
+[18:19] defined. The one thing that we can just
+[18:21] do is throw a bunch of rays, evaluate
+[18:23] this, and we get the right results.
+[18:26] But, the problem is that that will be
+[18:28] very noisy. So, the first like the thing
+[18:30] we should always ask ourselves when
+[18:32] we're implementing those kind of effects
+[18:33] is is there a way to do variance
+[18:35] reduction?
+[18:36] So, the thing that we do for that is we
+[18:38] do display some approximation by
+[18:40] carrots. So, this is uh split as two
+[18:42] integrals. The first one
+[18:44] uh the first term there is uh stored
+[18:46] into a 2D texture, and the term in red
+[18:49] is uh usually evaluated either with uh
+[18:51] rasterization techniques, and for us it
+[18:53] will be ray tracing.
+[18:55] So, this The problem with this variance
+[18:57] technique it does introduces a bias. Uh
+[19:00] the bias is like we've evaluated as
+[19:02] acceptable, but the signal that you will
+[19:03] get will be a bit different.
+[19:05] Okay. So, let's start from our final
+[19:07] image.
+[19:09] This is what the term in red looks like.
+[19:11] And as you can see, like in this scene,
+[19:14] most rays are going in the same
+[19:15] direction. So, it's not really a bad
+[19:18] case for our implementation. So, just
+[19:20] for the sake of the exercise, let's just
+[19:22] make this a bit more challenging. So,
+[19:24] most rays are
+[19:25] Like now that we set the smoothness to
+[19:27] zero, no rays are going in the same
+[19:28] direction. We are just completely
+[19:30] incoherent, and that will be a good way
+[19:32] to measure if this is viable for real
+[19:33] time.
+[19:35] So, let's implement this.
+[19:37] So, if you remember, I I showed this
+[19:39] diagram. So, this is the shader
+[19:40] pipeline. Our
+[19:42] First thing that I would like to say is
+[19:44] it is very important to avoid any hit as
+[19:46] much as possible. Any hit is triggered
+[19:47] for every potential intersection, so
+[19:49] that increases
+[19:50] quite significantly the cost of your
+[19:51] effect. So, avoid it as much as you can.
+[19:54] So, our entry point is the ray
+[19:56] generation shader. So, for the set of
+[19:58] samples that we decide to evaluate, we
+[20:01] generate a new ray. Let's suppose here
+[20:03] that we have more than one sample per
+[20:05] pixel.
+[20:06] We trace that ray, and then what we want
+[20:08] to do is evaluate the lighting for that
+[20:11] point. So,
+[20:14] given that we now we have world space
+[20:16] cluster structure, we I can actually
+[20:18] request all the lights that we want. So,
+[20:20] we basically run the exact same light
+[20:22] loop as
+[20:23] if you were in rasterization.
+[20:25] So, that's what we do.
+[20:26] For every light that we have, we
+[20:28] evaluate the lighting, accumulate, and
+[20:30] then we return the result through the
+[20:31] payload.
+[20:33] Accumulate for every sample, normalize,
+[20:35] and yay! We have the the good result.
+[20:38] That's awesome.
+[20:39] There's a problem.
+[20:41] This is very expensive, and like we're
+[20:43] never we're never going to be able to
+[20:45] ship anything with this. Okay, so
+[20:48] we should try a couple things to try to
+[20:49] damage control this effect.
+[20:51] So, the first thing that we can do is we
+[20:53] can move the light loop outside of the
+[20:55] closest hit. So, the intuition behind
+[20:56] this is if it happens later, and if the
+[20:59] closest hit is smaller, that means that
+[21:01] we will interfere less with the ray
+[21:03] traversal scheduling. So, let's just try
+[21:05] it. Maybe it will be good.
+[21:07] Spoil alert, it will be.
+[21:09] Otherwise, I won't be presenting it
+[21:10] today.
+[21:12] So,
+[21:13] we do pretty much the same as in the
+[21:14] previous slide. We look for our samples,
+[21:16] generate our rays, trace the rays, and
+[21:17] this time
+[21:19] we have a G-buffer.
+[21:21] So, if you
+[21:22] remember, I showed this. So, this is
+[21:24] where this comes from, and this allows
+[21:25] us to store all the material data into a
+[21:27] G-buffer, like the exact same way that
+[21:29] we would do for a G-buffer pass in
+[21:30] initialization. But, this raises a
+[21:32] couple questions. How do we manage this?
+[21:35] How do we manage that we have
+[21:36] like models that do not fit into a
+[21:38] G-buffer? So,
+[21:40] what we do is we have two options. We
+[21:42] have a performance mode where we have an
+[21:44] automatic refeed for every lighting
+[21:45] model into the G-buffer,
+[21:47] into like a simplified a main lighting
+[21:49] model.
+[21:50] That is one option, that's good. And the
+[21:52] other option is if you're not targeting
+[21:54] a game, but you still want to have
+[21:57] very high-quality rendering for those
+[21:58] pixels,
+[21:59] the lighting is still evaluated for
+[22:01] those models in the closest head, and
+[22:03] then for the main lighting model, we
+[22:04] still pack it into the G-buffer.
+[22:07] Okay, so we have a solution for for
+[22:08] pretty much all materials, so we can
+[22:10] retrieve the return the G-buffer through
+[22:12] the payload,
+[22:13] light loop that is run in the
+[22:15] regeneration shader. We accumulate for
+[22:17] every sample, normalize, blah blah blah,
+[22:19] and we're done. Cool.
+[22:21] Okay, this isn't bad, but it's better,
+[22:24] which it is kind of okay.
+[22:27] So,
+[22:29] the the good thing here is that we
+[22:30] learned something. If we interfere less,
+[22:32] then the performance is is better. Okay,
+[22:35] so cool. Let's just offload everything
+[22:37] out of ray tracing shaders and do all
+[22:38] everything in compute shaders. So,
+[22:40] that's what we're going to do. So, now
+[22:41] we have a compute shader pre-pass that
+[22:43] will generate our rays.
+[22:45] Then, we call our ray tracing shader
+[22:46] pipeline.
+[22:48] We read our direction, we build our
+[22:51] ray, we trace our ray.
+[22:53] Same thing, we pack into our G-buffer
+[22:54] materials,
+[22:55] forward or the third doesn't matter. We
+[22:57] go back, and this time we export it into
+[22:59] UAVs. Then, we are we run our deferred
+[23:01] lighting light loop pretty much the
+[23:02] exact same way that we do for
+[23:03] rasterization.
+[23:04] And we get the same
+[23:07] the same result as in the previous
+[23:09] example.
+[23:10] And this is better. Okay, it's not not
+[23:13] real-time yet, but getting better.
+[23:16] There's still a couple of things that we
+[23:17] can try to make this
+[23:19] real-time. So, the first thing that we
+[23:20] can try is ray bending.
+[23:22] So, it was presented in this talk. We do
+[23:26] something very similar. So, we have a
+[23:28] depth and a direction buffer.
+[23:30] And we need to use those components to
+[23:32] define our bending because otherwise the
+[23:34] the rays will end up together won't
+[23:35] traverse the same way BVH. So, the way
+[23:39] that we handle the screen space
+[23:41] information the position information is
+[23:43] to screen space tiles. If you bend
+[23:44] together pixels that are in the same
+[23:45] tile, the probability of having them in
+[23:47] the same pixel coordinate is quite high.
+[23:50] So, you can bend them together.
+[23:52] And for direction, what we do is we bend
+[23:54] using the octahedral space. It is a very
+[23:56] good mapping from directions to the unit
+[23:59] uh
+[24:00] the unit square.
+[24:01] And it's a good it's a good it's a good
+[24:02] way of handling that. So, just for the
+[24:05] sake of it, let's do it for a very
+[24:06] simple example. So, I have a 4 by 4
+[24:08] pixel compute group and see how it goes.
+[24:11] So, for every pixel, we have a set of
+[24:13] directions. So, as you said, we use the
+[24:16] octahedral space. That is a remapping to
+[24:18] 0101. Let's just use color to identify
+[24:21] our bins. The important information here
+[24:23] is that these bins have a given order.
+[24:25] So, and that is is going to be used
+[24:26] later to fetch them.
+[24:28] So,
+[24:29] we can identify for every direction what
+[24:31] which bin it goes in. And using an
+[24:34] atomic add, we're able to compute two
+[24:35] things. On one side, the offset the
+[24:38] number of of of rays in every in every
+[24:40] bin. And the other side, the offset of
+[24:42] every ray in the bin that it's inside.
+[24:45] Then we have another pass where we
+[24:47] compute the offset of every bin into the
+[24:49] global list. And we also build the
+[24:51] global list of directions.
+[24:54] And a final pass that exports that into
+[24:55] data that we're going to use to actually
+[24:57] generate arrays. So, the first one is
+[24:59] the pixel coordinates ordered in
+[25:02] the the the like in bins and then in the
+[25:04] global list and the number of rays into
+[25:08] that tile. So, for us it was 16 because
+[25:10] all the rays that we start from are are
+[25:13] um
+[25:13] valid, but there is cases where rays are
+[25:15] invalid.
+[25:17] Okay, so that's what we do for binning.
+[25:19] So, not going to this code. Just this is
+[25:21] the code that does it. So, if you want
+[25:23] to check it out, make it better, please.
+[25:25] If you have an idea, please do it and
+[25:27] please share it.
+[25:28] Okay. So, now we have an improvement.
+[25:30] Let's integrate it to our pipeline. So,
+[25:33] from the previous step, we actually
+[25:34] already got ray generation out of the
+[25:37] of the ray tracing shader. So,
+[25:39] now we that we have that, we can
+[25:40] actually just run our binning pass right
+[25:42] away.
+[25:43] Then we call a ray tracing shader
+[25:45] pipeline. We do exactly the same as
+[25:47] before. Read the direction, generate
+[25:49] array, package to the G buffer, go back,
+[25:52] back into UVs, and run the deferred
+[25:54] lighting loop.
+[25:55] We get almost a 2 ms improvement. This
+[25:57] is getting better, again, but this is
+[26:00] not good for for games. However, if you
+[26:03] remember correctly, this is with a
+[26:05] smoothness of zero. So, this is the
+[26:06] worst case possible.
+[26:08] In practice, that is not what we get in
+[26:10] our scenes. So,
+[26:12] and I think that we noticed and other
+[26:14] developers noticed also is that it is
+[26:15] acceptable to fall back to a less
+[26:18] cheaper technique when your smoothness
+[26:21] gets to under a certain threshold. So,
+[26:23] here for this scene, it's 0.6,
+[26:25] and the results is actually quite
+[26:26] convincing, and with doing that, we can
+[26:28] actually get something that is
+[26:30] completely acceptable for real-time
+[26:31] application.
+[26:32] So, please note that in the materials,
+[26:34] you'll find additional like
+[26:36] tables with all the specified passes and
+[26:39] the timing for every pass.
+[26:41] Okay? So, this is okay, but imagine this
+[26:44] is too expensive, which is possible if
+[26:45] you have very big content. So,
+[26:48] you can do some compromises that will
+[26:50] change the quality of your rendering and
+[26:52] will also quite significantly decrease
+[26:54] the cost of your effect.
+[26:55] So, first of all, you can use simpler
+[26:56] materials. That means that in your
+[26:58] shader graph, you have nodes that take
+[27:00] simpler paths for ray tracing. That will
+[27:02] reduce quite significantly the cost of
+[27:04] your closest shaders. You can also use a
+[27:06] simplified lighting model, which reduces
+[27:08] quite significantly your
+[27:09] deferred lighting pass. You can do this
+[27:11] in half res. Uh this will reduce both
+[27:14] because you'll like have uh less pixels
+[27:16] to throw rays at and less pixels to
+[27:18] shade.
+[27:19] And this is quite effective. If this is
+[27:22] still too expensive, there's a couple of
+[27:24] other things that you can try. Uh you
+[27:25] can do variable ray tracing. Uh by the
+[27:27] way, these are were presented in this
+[27:29] talk. Um
+[27:31] and you can also So, variable ray
+[27:32] tracing means that you're going to throw
+[27:34] significantly less rays per pixel for
+[27:37] surfaces that are really rough. And that
+[27:39] is quite effective to reduce the cost of
+[27:40] this. But that means that you will spend
+[27:42] additional time in filtering. So, be
+[27:43] aware of that. Uh the other thing that
+[27:45] you can do is you can mix this with ray
+[27:47] marching, meaning that if your
+[27:48] information is in crease space, there's
+[27:50] no need to throw a ray to go fetch it.
+[27:52] You can actually just ray march and get
+[27:54] it.
+[27:55] Okay. So, this covers it for uh indirect
+[27:58] specular. So, the next thing that I
+[28:00] would like to cover is stochastic ray
+[28:02] shadows. So, early in this presentation,
+[28:04] I said that
+[28:06] we only use ray tracing for indirect
+[28:07] lighting. I lied. Uh so, we also happen
+[28:10] to use it for direct lighting. So, this
+[28:12] is the formula if you want to evaluate
+[28:13] the instant like the direct lighting on
+[28:15] a given point by an area light.
+[28:17] If we use this into an offline renderer,
+[28:20] you get this, which is what we should be
+[28:22] trying to do.
+[28:23] So, let's do that.
+[28:25] We have a pixel, we have an area light,
+[28:27] we throw rays, we integrate, get the the
+[28:30] correct results. Yay. But this is going
+[28:32] to be noisy. And with the question we
+[28:34] should always ask ourselves, is there a
+[28:35] way to do variance reduction? Uh so,
+[28:39] a good way to do it is first
+[28:42] in rasterization, we we use uh the
+[28:44] linear transform cosine approximation by
+[28:45] Heitz and Ill.
+[28:47] Uh that is a very good approximation for
+[28:48] area lights. And if we use this to build
+[28:51] a ratio estimator,
+[28:52] we can actually get a very good
+[28:54] estimation of this that is that has
+[28:55] significantly less variance, and this is
+[28:57] what the paper combining analytic direct
+[28:59] illumination
+[29:00] and stochastic shadows by heads and all
+[29:01] is about. So, this is good, but maybe we
+[29:04] could just like integrate the
+[29:06] visibility, and that would work. I mean,
+[29:08] the result is not looking bad. But the
+[29:10] problem with this approach it does not
+[29:12] quite capture specular lobes in
+[29:13] materials. So, we have to do this if we
+[29:15] want to have something that is looking
+[29:17] correct.
+[29:18] All right. Just in case you're not
+[29:20] familiar with the paper, I'm just going
+[29:21] to do a quick reminder of what
+[29:23] stochastic eye shadows are. You start
+[29:26] from So, LTC is the analytic version. We
+[29:29] shoot couple rays. We store the shadowed
+[29:31] so with visibility information
+[29:33] term in a buffer, and then in another
+[29:35] buffer we show we store the in-shadowed
+[29:37] version.
+[29:38] We denoise them independently, but the
+[29:40] important part is that they need to be
+[29:42] denoised with the exact same kernels,
+[29:43] otherwise it does not work.
+[29:45] We do the division of both, and we
+[29:48] multiply this by LTC, and we get the
+[29:50] correct shadow that we're trying to do.
+[29:51] Okay? So, we know pretty much what we're
+[29:53] doing. Let's just implement it. I'm sure
+[29:55] it's going to be awesome first try.
+[29:57] So,
+[29:58] this is our ray tracing shader pipeline.
+[30:01] And like so,
+[30:03] what's cool here is we do not have to
+[30:04] call the closest hit shader because
+[30:06] closest hit shaders are expensive. So,
+[30:08] we're just querying visibility. So,
+[30:11] we would need any hit, but again,
+[30:13] we would try to not call them. So,
+[30:15] basically, we're just relying on the ray
+[30:16] generation the ray generation shader and
+[30:18] the miss shader.
+[30:20] All right.
+[30:21] So, we initialize the something of our
+[30:23] area lights. We loop through the
+[30:24] samples.
+[30:25] We generate a ray, trace the ray, and
+[30:28] the miss shader is going to tell us if
+[30:29] we had an intersection or not. Then we
+[30:31] store the BSDF in you and without the
+[30:33] visibility information. We store the
+[30:35] BSDF with the visibility information in
+[30:37] the shadow term. We go through the
+[30:38] number of samples that we want to to do,
+[30:40] accumulate, normalize.
+[30:43] Awesome.
+[30:44] And then we denoise. Uh so,
+[30:46] we do like so separable bilateral
+[30:48] filters are not really a thing. It's
+[30:50] kind of a hack, but it works. And this
+[30:52] is games, so we do it.
+[30:55] And the result we get is quite
+[30:57] convincing.
+[30:58] But there's a problem with this result.
+[31:00] I'm sure you guessed it.
+[31:02] It's bad.
+[31:03] It's really slow. So, the scene is
+[31:05] complex. It's about 60 million polygons,
+[31:07] so it's quite a heavy scene and very
+[31:08] small uh size, but still you can't ship
+[31:11] anything with this. So, we need to try a
+[31:13] couple things.
+[31:15] So, the first thing that we can do is
+[31:17] just use a simpler shader variant uh for
+[31:19] the evaluation of the BSDF. So, if we do
+[31:21] that, we reduce the register pressure in
+[31:23] our ray tracing shader, and we can
+[31:25] achieve
+[31:27] quite a good improvement with almost
+[31:29] uh no cost. So, this will changes a bit
+[31:31] the the the the shape of the shadow, but
+[31:34] if you do it like if you fall back
+[31:36] correctly for clear coats as a specular
+[31:38] information into your uh lower layers,
+[31:40] you get something that is quite
+[31:42] acceptable.
+[31:43] So, good.
+[31:44] But we can do better than this. And if
+[31:47] we learn correctly, at least if we have
+[31:49] some memory, we can remember that
+[31:51] for uh indirect specular, it would's
+[31:53] always good to offload to compute
+[31:54] shaders. So, let's do that. Let's
+[31:56] offload to compute shaders. Awesome.
+[31:58] Okay, cool. Uh so, we have a pre-pass
+[32:00] now that does uh the the initialization
+[32:02] of the the initialization of uh the our
+[32:04] our light structure and that generates
+[32:07] our samples, that evaluates the BSDF,
+[32:10] and store that into UAVs. And then we
+[32:12] have uh our ray tracing shader pipeline
+[32:14] that is uh if uh like called entry point
+[32:16] that is ray tracing shader. We just read
+[32:18] the direction, reconstruct the ray,
+[32:19] shoot, multiply uh the initial term by
+[32:22] the visibility, and get up, which is
+[32:24] little possible that we can do in this
+[32:26] pipeline. We can go smaller than this.
+[32:28] And then we run the exact same denoising
+[32:30] as before.
+[32:31] So,
+[32:33] this is a quite significant improvement.
+[32:35] Uh this is still expensive,
+[32:37] but we can do better. Note that this
+[32:39] includes both uh the ray tracing part
+[32:41] and the denoising part. So,
+[32:43] this is what we get at the moment. Uh,
+[32:45] we're still working on making this
+[32:46] better, but at least you can ship
+[32:48] something that is interactive.
+[32:49] As you will see in a couple minutes.
+[32:53] Okay. So, actually that covers it for
+[32:55] this presentation. Uh, I would like just
+[32:57] to talk about a bit more about the
+[32:59] things that we've learned and I think
+[33:01] are worth sharing.
+[33:04] So, the first thing is intuitive
+[33:06] implementation is really easy with ray
+[33:08] tracing APIs. Uh,
+[33:10] it's really cool to get something
+[33:12] working.
+[33:13] But, as soon as you measure, you realize
+[33:15] that you won't can't ship anything. So,
+[33:18] the thing is use measuring tools as
+[33:21] quick as possible. And so, when we start
+[33:23] our demo, there were no measuring tools.
+[33:25] They arrived like much later. So, as
+[33:27] soon as we got them, we realized that
+[33:29] we're not we're not going anywhere with
+[33:30] this and we need to find solutions. So,
+[33:32] same thing, please use use them and
+[33:34] you'll probably figure out even better
+[33:36] ways to do this than we we've done.
+[33:40] Another thing that is really cool is
+[33:41] that you can reduce the number of
+[33:43] samples and achieve a a decent quality
+[33:45] if you use variance reduction
+[33:47] techniques. So, that includes importance
+[33:49] sampling, using tables or analytic ways
+[33:52] of
+[33:53] of
+[33:54] doing
+[33:55] bias or consistent estimators. So, the
+[33:58] only thing that you should do is always
+[33:59] compare to your pure reference and
+[34:01] figure out if that is okay for you.
+[34:04] The next thing is complex forward
+[34:06] materials are a struggle.
+[34:07] As you've seen for us, it was we had to
+[34:09] find solution or hacks to make them
+[34:11] work. And if your render pipeline has
+[34:13] forward materials or complex enough to
+[34:15] fit into a G buffer, you have the same
+[34:17] problem.
+[34:19] Another lesson is offload to computer as
+[34:21] much as possible. Like we seen it
+[34:23] through the two effects that I talked
+[34:24] about today. And offloading to compute
+[34:27] shaders allows you one that to less
+[34:29] interfere uh the scheduling of rays of
+[34:32] the traversal of rays and also we have
+[34:34] the LDS and with the LDS we are able to
+[34:36] to do very cool things.
+[34:39] So,
+[34:40] I would suggest doing that.
+[34:43] The currency of rays is
+[34:46] actually the biggest performance problem
+[34:48] that you will have. So, if you just
+[34:50] compare uh smooth surface to a rough
+[34:52] surface, you just multiply the cost of
+[34:54] your effect by a hundred or a thousand.
+[34:56] So, it's really important to be in rays
+[34:58] when the distribution requires it. So,
+[34:59] if you were computing a directional
+[35:01] shadow, it doesn't doesn't make sense,
+[35:03] but if you're computing a rough signal
+[35:04] indirect diffuse, rough indirect
+[35:06] specular, ambient occlusion, do it. Uh
+[35:08] it's it's really changed everything and
+[35:11] so we've seen it at the end of the
+[35:12] pipeline, but you've done it at the
+[35:13] beginning, it makes even a bigger
+[35:14] difference.
+[35:16] So, I shared the way that we do it. It's
+[35:18] not perfect. I think there is room for
+[35:20] improvement, so if you find a way to do
+[35:21] it, please do it.
+[35:23] And share it.
+[35:25] Uh saying it again for the tenth time,
+[35:28] but any hit is is bad. So, what I didn't
+[35:31] say is any hit solves the prob- solves
+[35:33] problems in a way that we can't really
+[35:35] solve them in other way. So, if you want
+[35:36] to support particle systems or um if you
+[35:39] want to support cutout materials, you
+[35:41] can't there's no real other way than to
+[35:43] rely on any hit. So, we can't completely
+[35:45] completely ignore them, but we have to
+[35:47] be careful uh of what comes if we uh use
+[35:50] them in our pipeline.
+[35:53] One thing that we figure out is
+[35:54] sometimes rasterization paradigms are
+[35:56] incompatible with ray tracing. That
+[35:58] means that you'll have to change the
+[35:59] rendering pipeline to make it work with
+[36:01] ray tracing. You can't use it you can't
+[36:02] really use it as a plug-and-play thing.
+[36:04] Okay, there is there is major design uh
+[36:06] things that you have to go through to be
+[36:08] able to make ray tracing work with your
+[36:09] pipeline. We've been through it and I
+[36:11] think pretty much everyone that had to
+[36:13] do integration the integration went
+[36:15] through them.
+[36:16] So, I mentioned before that we have one
+[36:19] sample per pixel uh per effect in a
+[36:22] perfect world. That is not true. We have
+[36:24] significant less than that. Probably we
+[36:26] have one sample uh every four pixels for
+[36:29] all the effects. So, be aware of that if
+[36:31] you want to
+[36:33] like use multiple ray tracing effects in
+[36:35] your
+[36:36] in your in your game and
+[36:39] measure.
+[36:40] And you'll spend a lot of time actually
+[36:42] just avoiding throwing rays into your
+[36:44] scene.
+[36:46] Ray tracing is fun.
+[36:48] Ray tracing is cool. It's fancy. It's
+[36:50] trendy.
+[36:51] But
+[36:53] it's really important to use
+[36:55] approximations that have proved to be
+[36:57] very effective in the rasterization
+[36:59] world. For instance, for multi-bounce,
+[37:02] using shadow maps, using
+[37:04] light probes, just they make a huge
+[37:06] difference and they make your
+[37:08] application or game shippable. So,
+[37:11] ray trace don't ray trace everything. I
+[37:12] mean, you can, but I wouldn't advise for
+[37:16] it.
+[37:17] And finally,
+[37:19] this is very important. Ray tracing does
+[37:21] not make your game prettier. It just
+[37:24] allows you to request information in a
+[37:26] better way. You are able to fetch
+[37:27] information that we didn't have access
+[37:29] before. That's really cool, but that
+[37:31] doesn't guarantee anything.
+[37:33] There is good approximations, they look
+[37:35] really well and sometimes they will
+[37:36] better what we will going to be able to
+[37:38] achieve with a one sample and just a
+[37:40] bunch of denoising. So, make sure that
+[37:43] you can always compare to what
+[37:44] rasterization offers and that it's worth
+[37:48] the trouble.
+[37:49] All right.
+[37:50] I would like to finish by just
+[37:52] mentioning a couple things that we're
+[37:53] working on. So, it is
+[37:56] something that we want to explore more
+[37:57] is ray tracing effects with
+[37:58] rasterization variants. So, that means
+[38:00] SSR with indirect specular, SSGI with
+[38:03] indirect diffuse, contact shadows with
+[38:04] ray traced shadows.
+[38:07] And that is something that also will
+[38:08] allow us to reduce the number of rays
+[38:10] that we throw.
+[38:11] Another thing that we want to work on is
+[38:13] exposing ray tracing for non-rendering
+[38:15] applications. So, that includes sound
+[38:16] propagation, physics, and those are I
+[38:19] think very useful
+[38:21] things to do given the state and the
+[38:23] possibilities of
+[38:24] the devices right now.
+[38:26] We're also working on a path path tracer
+[38:28] for reference. So, real-time rendering
+[38:30] is a lot driven by reference. So, this,
+[38:33] given that we're sharing the exact same
+[38:34] code, allows us to have a reference
+[38:35] instantly, which is really cool because
+[38:37] going to Mitsuba, exploring everything,
+[38:39] rewriting shaders isn't fun for no one.
+[38:42] So, this is a very thing a very cool
+[38:44] thing that we can do now and we're
+[38:45] working on it. Finally, we'll be working
+[38:47] on skin mesh and the particle support.
+[38:50] It's something we lack and it's a
+[38:51] complex problem that we still need to
+[38:53] solve.
+[38:54] I would like to thank those people. So,
+[38:56] they worked on the project. They also
+[38:58] helped with the presentations for some
+[38:59] of them and I'm very grateful that I had
+[39:01] a chance to work with them.
+[39:04] We're hiring. So, if this felt a bit
+[39:06] interesting, feel free to reach out and
+[39:10] probably you'll find something that fits
+[39:11] your expectations.
+[39:14] All right.
+[39:15] I'd like to show you something.
+[39:21] Uh
+[39:23] Okay.
+[39:25] Okay, go ahead.
+[39:27] Now we've learned the limitations of
+[39:29] technology and my screenshot in the
+[39:31] Unity zoom system.
+[39:34] Okay.
+[39:36] Let's go. All right. So, in this shot,
+[39:38] we have both the mouse is Okay, it's
+[39:40] working. So, we have both
+[39:42] screen space as stochastic screen space
+[39:44] shadows and reflections. So, I'm just
+[39:46] going to play a bit with it just so that
+[39:48] you can see.
+[39:51] So, if we remove reflections and we rely
+[39:53] on SSR, the result is quite bad. But, I
+[39:56] mean, this scene is set up to show how
+[39:58] ray tracing amazing is, but still it's
+[40:00] Sometimes artists, this is what they
+[40:01] want. So,
+[40:04] we don't have any real solution for
+[40:05] specular shadows without ray tracing, so
+[40:07] that's that's really cool to have.
+[40:09] And
+[40:14] So, yeah. We're able to achieve easy
+[40:16] recursive
+[40:17] recursive tracing some interesting
+[40:19] effects and that's that's about it.
+[40:22] Okay. Uh
+[40:24] Next slide.
+[40:27] Okay.
+[40:41] All right. So, I'm happy to take any
+[40:44] questions about what I presented today
+[40:46] if there's something not clear or there
+[40:48] is a something uh that you think is
+[40:50] worth uh talking about. Thank you.
+[41:01] As usual, please come to the microphone
+[41:03] and there is one speaker right there.
+[41:06] Uh thank you.
+[41:07] So, you mentioned that um you're
+[41:09] floating some of the region work to
+[41:11] compute shaders and one reason being
+[41:13] that you can use LDS.
+[41:15] Um so, can you elaborate more on what
+[41:17] you're doing with LDS?
+[41:20] Why is that important?
+[41:22] So, most of the things that we're doing
+[41:24] into uh compute shaders like this
+[41:27] presentation where we're binning and
+[41:28] lighting. And for instance, light
+[41:30] binning relies on on LDS. So, we're able
+[41:33] to access information of other pixels uh
+[41:35] and that is a very cool thing to have
+[41:37] and either for lighting or if you want
+[41:39] to uh for instance, initialize your
+[41:41] your lighting structure for multiple
+[41:43] pixels, but that's a quite expensive
+[41:45] thing to do. You can do it for multiple
+[41:46] pixels except the bias that comes with
+[41:48] that and then you can reduce quite
+[41:50] significantly the amount of uh things to
+[41:52] do per pixel which you can't do in ray
+[41:53] tracing because you have don't have
+[41:54] access to any neighbor pixel.
+[42:00] Does that that answer your question?
+[42:02] I think so.
+[42:02] Okay.
+[42:03] So, if you had LDS in region shaders,
+[42:06] would you rather use region directly?
+[42:08] I mean, so
+[42:10] if I mean, let's say the thing is LDS is
+[42:13] cool, like it accelerates the the
+[42:15] process, but the other problem is
+[42:17] if I had it into my racing shaders,
+[42:21] I would still mess up with scheduling.
+[42:22] Like some rays would start before the
+[42:24] others and would wait for the other ones
+[42:25] to execute and that is so bad. I mean,
+[42:28] I'm
+[42:29] racing shaders are cool. They allow us
+[42:30] to do things, but computer do it better
+[42:32] and they have less constraints over
+[42:34] memory and why would I spend time trying
+[42:37] to make it fit while I still have a good
+[42:38] solution?
+[42:41] Thank you.
+[42:44] Hi.
+[42:45] You mentioned that you guys use temporal
+[42:47] like temporal aggregation of the
+[42:49] samples.
+[42:51] When you perform this and you have a
+[42:52] dynamic scene like object moving, when
+[42:55] you combine the result from
+[42:57] rasterization which is instant from that
+[42:59] frame with the result from the ray
+[43:01] tracing which is the result of
+[43:03] aggregation over previous frames that
+[43:05] the content was moving, has there been
+[43:07] any plausible separation of these two
+[43:09] from each other? Like
+[43:11] when you combine your soft shadows from
+[43:13] ray tracing with a hard shadow that is
+[43:16] rasterized,
+[43:17] you have like a signal that is
+[43:19] interfering from each other.
+[43:21] Okay, I'm not sure. I'm going to
+[43:23] rephrase and please tell me if that is
+[43:25] what you're you're you're asking.
+[43:28] So, you're asking if there is problems
+[43:31] that come with the fact that
+[43:33] so the rasterization techniques are per
+[43:35] frame and the rate Sorry. Sorry, the ray
+[43:37] tracing problems are accumulated over
+[43:39] frames and maybe that introduce problems
+[43:41] into the the frame. Is that the question
+[43:42] you're asking for? Okay, so indeed ray
+[43:44] tracing like if you accumulate, you get
+[43:46] ghosting effects. That is guaranteed.
+[43:48] There's other problems is that it's
+[43:49] really hard to define a metric to define
+[43:51] when you need to reject or or keep a
+[43:54] history information. So, that is still
+[43:58] problem that is open, but we have the
+[44:00] same problems when you say TAA. TAA is
+[44:02] accumulation, so you would get the same
+[44:03] artifacts for both accumulating for ray
+[44:06] tracing and for TA. So, in practice it's
+[44:08] acceptable. Uh it doesn't look bad. Uh
+[44:11] it looks actually quite good. But, uh
+[44:14] we'll we'll still have to figure out
+[44:15] when to throw uh the the the history
+[44:17] because the signal has changed and we
+[44:19] don't have any way to detect that into
+[44:21] the ray tracing pipeline.
+[44:23] Thank you.
+[44:24] Okay.
+[44:27] Okay.
+[44:29] Hello.
+[44:30] Um okay. So, today I will be presenting
+[44:33] the research made at Frostbite uh
+[44:35] regarding strand-based hair rendering.
+[44:38] And um this is a project aimed at seeing
+[44:41] what is possible regarding hair
+[44:42] rendering uh and simulation on current
+[44:44] or near-future hardware for use in
+[44:46] games.
+[44:48] Keep in mind that this is still very
+[44:49] much work in progress and uh nothing
+[44:51] presented in this uh presentation is
+[44:53] final.
+[44:57] Um
+[44:59] Okay. So, first I will show uh a movie
+[45:01] that we published on the Frostbite blog
+[45:04] a while ago.
+[45:05] And this is showing our hair technology
+[45:07] uh rendered on a PC. Uh I think it's a
+[45:10] uh 2080.
+[45:12] Uh and it's rendered at uh more than 60
+[45:14] FPS
+[45:15] on that PC on this slightly scary
+[45:18] mannequin.
+[45:32] Okay. Uh so, some background. Uh what is
+[45:34] human hair?
+[45:36] Well, human hair, they are protein
+[45:37] filaments approximately cylindrical and
+[45:39] they're covered in small scales named
+[45:41] cuticles, which you can see in the image
+[45:43] at the top right.
+[45:45] They are very thin, about 17 to 180
+[45:48] micrometers.
+[45:50] And they're mostly made of keratin with
+[45:51] melanin pigments uh which are what
+[45:53] controls the hair color and uh darkness.
+[45:58] The animation at the bottom right shows
+[45:59] the varying uh shows in the effect of
+[46:01] wearing the melanin concentration in the
+[46:03] hair.
+[46:05] A human head has around 100,000 hair
+[46:07] strands on their head.
+[46:12] In games, it is currently very common to
+[46:14] model human hair using hair cards or
+[46:16] shells
+[46:18] where multiple fibers are clumped
+[46:19] together as 2D surface strips.
+[46:22] These cards are generated using a
+[46:24] combination of tooling and manual
+[46:26] authoring by artists.
+[46:29] This work can be very time-consuming and
+[46:31] it can be very difficult to get it
+[46:32] right.
+[46:34] If done well, they can look very good.
+[46:36] Uh but they do not work equally well for
+[46:38] all hairstyles and therefore they limit
+[46:41] the possible visual variety.
+[46:44] And since it's also very coarse
+[46:46] approximation of real human hair, there
+[46:48] are also limits on how realistic any
+[46:50] physics simulation or rendering can
+[46:52] become.
+[46:54] It is also quite common to use very
+[46:56] simplified shading models which do not
+[46:57] capture the full complexity of lighting
+[46:59] in human hair.
+[47:00] And this can be especially noticeable
+[47:02] when you have um
+[47:05] lightly colored hair.
+[47:10] So, what makes strands better?
+[47:12] Well, strand-based rendering
+[47:14] is where hair fibers are more or less
+[47:15] individual strands or curves.
+[47:17] And it is the current state of art
+[47:19] that's used when rendering hair offline.
+[47:21] And as you can see here in the image
+[47:23] which is rendered using Arnold, it can
+[47:25] look pretty good.
+[47:27] So, modeling hair as strands has a lot
+[47:28] of benefits for both physics and
+[47:30] rendering since it's better model it's a
+[47:32] better model of real human hair.
+[47:35] It also requires less authoring time
+[47:37] than hair cards since you do no longer
+[47:39] need to create them.
+[47:41] And since the process of creating hair
+[47:42] cards usually also involves actually
+[47:45] creating hair strands and then
+[47:46] projecting those onto the hair cards.
+[47:49] So, you basically save time on that
+[47:50] whole step.
+[47:52] With hair strands, it is also possible
+[47:54] to do more granular culling for both
+[47:55] physics and simulation and it's easy to
+[47:58] generate automatic LODs via decimation.
+[48:02] The goal of this project is to get as
+[48:04] close as possible to movie quality hair
+[48:06] using hair strands while still still
+[48:08] achieving real-time frame rates.
+[48:14] Here's a quick overview of our system.
+[48:17] So, an artist begins by creating a
+[48:19] hairstyle in an external tool like Maya
+[48:22] XGen or Houdini, for example.
+[48:24] And the hairstyle is exported as
+[48:27] collection of nerves.
+[48:29] These are then processed offline and
+[48:31] converted into series of points with
+[48:33] constraints.
+[48:35] And during execution of a game, these
+[48:37] points are loaded and fed into the
+[48:39] simulator which simulates and updates
+[48:41] the positions of these points every
+[48:43] frame.
+[48:45] And we finally render the hair strands
+[48:47] as triangle strips.
+[48:52] A physically physically plausible
+[48:54] simulation is very important to make
+[48:56] render hair look right. The hair strands
+[48:58] in our system
+[49:00] is simulated as a series of points with
+[49:02] constraints.
+[49:03] The simulation is a combination of
+[49:05] Eulerian simulation,
+[49:07] which means simulation
+[49:09] on a grid,
+[49:10] and Lagrangian simulation, which means
+[49:12] that we simulate on the points as well.
+[49:16] The strand interactions, like friction,
+[49:18] volume preservation, and aerodynamics,
+[49:21] are simulated on a grid. And to the
+[49:23] bottom right, you can see visualization
+[49:25] on of the friction color coded on the
+[49:27] grid.
+[49:30] The actual integration part is done on
+[49:32] each point individually and
+[49:34] they are then solved by iterating over
+[49:36] all the constraints and the colliders.
+[49:39] I will not go into much more detail here
+[49:41] in this presentation, but for those
+[49:42] interested, we will share more details
+[49:44] in future presentations and also on the
+[49:46] Frostbite blog.
+[49:50] So, now on to rendering.
+[49:52] So, rendering of hair can be split up
+[49:54] into three main problems that we need to
+[49:55] solve.
+[49:57] And all of them are important to get the
+[49:58] plausible appearance.
+[50:01] So first we have the single scattering
+[50:02] problem,
+[50:03] which is the problem of how light
+[50:05] interacts with a single fiber.
+[50:07] This is actually a very complex problem
+[50:08] and while there has been a lot of
+[50:10] research done in this area,
+[50:12] much of it is not directly suitable for
+[50:14] real-time rendering.
+[50:17] After single scattering, we have
+[50:19] multiple scattering,
+[50:20] which in this case means scattering
+[50:22] between fibers.
+[50:24] Um
+[50:25] and uh
+[50:27] Yes, and there has also not been a lot
+[50:28] of work done here for real-time
+[50:30] rendering.
+[50:31] The final problem relates to the actual
+[50:33] rendering of the fibers and how to do it
+[50:35] in a way that is performant
+[50:37] and does not introduce a lot of aliasing
+[50:39] due to the thin and numerous nature of
+[50:41] hair.
+[50:43] So we'll go through these problems in
+[50:45] order
+[50:47] and the ways we solve them.
+[50:49] So for single scattering, we're using a
+[50:51] BSDF which is based on an original model
+[50:53] for hair created by Marschner in '03.
+[50:57] The model is a far-field model, which
+[50:59] means that it is meant to model the
+[51:00] visual properties of hair when seen from
+[51:02] a distance, and not really meant for
+[51:04] single fiber close-ups.
+[51:07] This model was later improved for path
+[51:09] tracing by both Disney and Weta Digital,
+[51:12] and was approximated for real-time use
+[51:14] by Karras in an earlier SIGGRAPH
+[51:17] presentation.
+[51:19] This model is split up as a product
+[51:22] between two longitudinal part M
+[51:25] and an azimuthal part N.
+[51:28] And it contains parameters such as
+[51:30] surface roughness,
+[51:32] absorption,
+[51:34] cuticular filament angle, and index of
+[51:36] refraction.
+[51:40] Different type types of light paths are
+[51:42] evaluated separately and then added
+[51:44] together.
+[51:45] And these are the reflected paths, which
+[51:47] are called R.
+[51:49] The transmissive paths, which are are
+[51:51] called TT.
+[51:53] And then we have transmission through
+[51:55] the fiber with a single internal
+[51:57] reflection, which
+[51:58] which is called TRT.
+[52:01] And one can of course add even longer
+[52:02] paths to this as well, but we are only
+[52:05] using these three for now.
+[52:10] Here is a visualization of the different
+[52:12] of the contribution from the different
+[52:14] light paths. So here we have the
+[52:16] reflective path. It's showing a direct
+[52:18] reflections of light.
+[52:21] We then have the transmissive path,
+[52:23] which mostly contributes when we have
+[52:24] light from behind.
+[52:28] Then we have the TRT path, which shows
+[52:30] more saturated colors due to the longer
+[52:33] distance that the light has traveled
+[52:34] inside of the fiber.
+[52:37] And all of them together, it looks like
+[52:39] this.
+[52:45] And here's a comparison showing the
+[52:46] effect of changing the hair absorption
+[52:48] with increasing values from left to
+[52:50] right.
+[52:53] And here is the same hair, but instead
+[52:55] showing the effect of increasing the
+[52:56] surface roughness value instead.
+[52:59] Or
+[53:00] rather decreasing the surface roughness
+[53:02] value, sorry.
+[53:03] And as you can see, the way in which
+[53:05] these parameters
+[53:07] affect the perceived hair color is not
+[53:09] always trivial.
+[53:11] And we need to capture these effects if
+[53:13] we want to get realistically looking
+[53:14] hair.
+[53:17] So now on to actual shading model.
+[53:20] So for the longitudinal part,
+[53:22] each path is modeled using a single
+[53:24] Gaussian lobe
+[53:26] with the parameters depending on the
+[53:27] longitudinal roughness and the cuticle
+[53:29] tilt angle.
+[53:31] So the actual motivations for these
+[53:33] equations, which are based on
+[53:35] measurements,
+[53:36] are explained in more detail in the
+[53:38] original Marschner paper.
+[53:44] For the azimuthal scattering instead, it
+[53:46] is split up into an attenuation factor
+[53:49] A,
+[53:50] which accounts for Fresnel reflection
+[53:52] and
+[53:53] absorption in the fiber.
+[53:56] And then we have a distribution D, which
+[53:58] is the lobe modeling how the light
+[53:59] scatters when it is reflected or exits
+[54:02] the fiber.
+[54:04] To properly simulate surface
+[54:06] roughness for transmitted paths, this
+[54:09] product is then integrated over the
+[54:11] width of the hair strand
+[54:13] to get the final contribution in a
+[54:15] specific outgoing direction.
+[54:18] And numerically integrating this
+[54:20] equation for every shading point and
+[54:22] light paths is is of course not feasible
+[54:24] to do in real time, so we have to
+[54:25] approximate this.
+[54:30] But the reflective path R is still
+[54:32] pretty simple though, and we can use the
+[54:34] simplification from Kajiya's
+[54:36] presentation.
+[54:37] The distribution looks looks like this,
+[54:40] and the attenuation is just the Fresnel
+[54:42] term.
+[54:43] Keep in mind that in this case we're
+[54:44] actually using the original 3D vectors
+[54:46] and not the projected azimuthal vectors,
+[54:49] which we will use for the other
+[54:51] equations.
+[54:55] So in Kajiya's presentation, he also
+[54:56] proposed some approximations for the TT
+[54:58] and the TRT path.
+[55:01] The approximations work pretty well with
+[55:03] smooth hair fibers, and in this
+[55:05] comparison you can see the Kajiya's
+[55:07] model to the left and the reference,
+[55:10] which in our case is the Disney model
+[55:12] which is evaluating the full
+[55:14] integral.
+[55:17] But approximations do not work as well
+[55:19] when the roughness of the hair fibers is
+[55:20] increased and the appearance is getting
+[55:22] more dominated by internal absorption
+[55:24] instead.
+[55:25] And we wanted to try and improve on
+[55:27] these approximations,
+[55:29] so let's start with the attenuation term
+[55:30] A.
+[55:33] So by analyzing the attenuation term for
+[55:35] transmission,
+[55:37] one can note that the dominant
+[55:38] contribution
+[55:39] comes from light that is transmitted
+[55:41] straight through the middle of the
+[55:42] fiber.
+[55:44] Which means that the H parameter is
+[55:46] zero.
+[55:48] If you compare the attenuation value
+[55:50] only calculated at H zero and the full
+[55:53] integral, we can see that it's actually
+[55:55] a pretty good approximation.
+[55:58] And in this plot, we're showing this
+[56:00] approximation for three different
+[56:02] absorption values.
+[56:04] With the reference integral drawn as
+[56:05] crosses and approximation drawn as a
+[56:07] solid line.
+[56:11] Here is a similar plot showing the
+[56:13] approximation that Kajiya used and how
+[56:15] it compares.
+[56:17] As you can see, it has some problems
+[56:19] with grazing angles.
+[56:21] And especially with more translucent
+[56:24] brighter hair.
+[56:30] For distribution, instead we used a
+[56:32] lookup table.
+[56:34] The distribution itself, it depends on
+[56:37] the roughness values,
+[56:39] the azimuthal outgoing angle and the
+[56:40] longitudinal outgoing angle.
+[56:43] This means that the lookup table becomes
+[56:45] three-dimensional.
+[56:48] But instead of storing this whole 3D
+[56:51] lookup table, we instead reparameterize
+[56:53] it down to two dimensions
+[56:55] by fitting a Gaussian function to each
+[56:57] azimuthal angle slice.
+[57:00] So, the parameters A and B in the
+[57:01] Gaussian
+[57:02] are fitted to the integral and we then
+[57:04] store them in a two-channel
+[57:06] two-dimensional texture instead.
+[57:12] So, to summarize the transmitted path,
+[57:16] the distribution is approximated using a
+[57:18] lookup table. We will look up the
+[57:19] parameters for the Gaussian and then
+[57:21] evaluate using the azimuthal angle.
+[57:26] And attenuation term A is approximated
+[57:28] using constant value with H
+[57:35] And now for the final TRT path.
+[57:39] So for the distribution, in this case,
+[57:41] we slightly improved upon Kajiya's
+[57:43] approximation by adding scale factor SR,
+[57:46] which you can see highlighted in the
+[57:47] equation here.
+[57:49] Uh this scale factor was manually
+[57:50] adapted to approximate the effect of
+[57:52] surface roughness on the TRT path.
+[57:56] Uh this approximation is however still
+[57:58] pretty coarse and may need some more
+[58:00] work to improve the visual quality in
+[58:02] some cases.
+[58:06] The attenuation term, we approximate in
+[58:08] the same way we did for the transmission
+[58:10] path,
+[58:11] but here instead of using an H value of
+[58:13] zero, we use a value of square root of 3
+[58:15] / 2.
+[58:17] And this is the same constant used in
+[58:19] Kajiya's approximation as well.
+[58:24] So if we put this all together, here's a
+[58:26] comparison showing how our approximation
+[58:28] compare with the Kajiya and Disney
+[58:30] reference.
+[58:32] And as you can as you can see,
+[58:34] the differences made to the TT and TRT
+[58:36] path better capture the changes,
+[58:38] especially the color saturation that you
+[58:40] get when you have hair with higher
+[58:42] roughness values because of the
+[58:43] absorption.
+[58:48] Here is another comparison with brighter
+[58:50] hair lit only with a single light source
+[58:52] instead and where we instead change the
+[58:55] longitudinal roughness value. So here we
+[58:57] can see improvements in both the
+[58:58] highlights for the shiny hair on the top
+[59:00] row
+[59:01] and color saturation in the bottom row.
+[59:09] So now head on to the multiple
+[59:11] scattering problem. So multiple
+[59:13] scattering for hair is an important
+[59:15] effect
+[59:17] because it it gives you more realistic
+[59:20] color saturation and sense of depth
+[59:21] volume for the hair, especially when you
+[59:23] have lightly colored hair with a lot of
+[59:25] absorption.
+[59:27] So if you
+[59:28] uh or with less absorption, sorry. So,
+[59:30] if you look at the movie to the right,
+[59:31] you will hopefully be able to see that
+[59:32] it looks more saturated
+[59:34] and that the lighting in the hair volume
+[59:36] looks smoother and more natural.
+[59:41] But, in contrast with single scattering,
+[59:42] which aims at capturing how light
+[59:43] behaves in a single fiber,
+[59:45] multiple scattering tries to model the
+[59:46] effect when light travels through many
+[59:48] fibers.
+[59:50] And this effectively means that we need
+[59:51] to evaluate multiple paths and that the
+[59:53] light travel uh between the light source
+[59:55] and the camera.
+[59:56] This again is of course not feasible to
+[59:58] do in real time, so we need to
+[59:59] approximate this effect as well.
+[60:05] In our implementation, we chose to use
+[60:07] the an approximation called dual
+[60:08] scattering.
+[60:10] The point of dual scattering is to
+[60:11] approximate multiple scattering as a
+[60:13] combination of two uh components. We
+[60:16] have local scattering
+[60:17] and we have global scattering.
+[60:20] Local scattering
+[60:22] accounts for scattering in the
+[60:23] neighborhood of a shading point
+[60:26] and it accounts for a lot of visible
+[60:28] hair coloring.
+[60:30] Global scattering uh instead is meant to
+[60:32] capture the effect of outside light uh
+[60:35] traveling through the hair volume.
+[60:39] Oops, sorry.
+[60:41] The reason that the dual scattering
+[60:42] approximation works well for hair
+[60:44] is because most uh light is only
+[60:46] scattered in the forward direction. So,
+[60:48] basically because we have more
+[60:49] contribution from the TT path than the
+[60:51] TRT path.
+[60:53] Uh global scat uh scattering is
+[60:55] estimated by only considering scattering
+[60:57] along a single shadow ray
+[61:00] uh or light direction and therefore uh
+[61:02] we need some way of estimating the
+[61:04] amount of hair between two points in the
+[61:06] hair volume in the light direction.
+[61:10] For that, uh we do it in the same way
+[61:11] that the authors did in the dual
+[61:13] scattering paper. We use uh deep opacity
+[61:15] maps.
+[61:17] And deep opacity maps, uh which are
+[61:19] similar to opacity shadow maps, is a
+[61:21] techniques where shadow maps for
+[61:24] volumetric object is generated in a lot
+[61:26] of slices over the object.
+[61:28] But the benefit of deep opacity maps
+[61:29] compared to
+[61:31] opacity shadow maps is that it requires
+[61:33] a lot fewer layers and it does not
+[61:35] suffer from banding artifacts which are
+[61:38] common with opacity shadow maps.
+[61:41] We use four deep opacity map layers and
+[61:44] four layers to be able to accumulate the
+[61:45] hair transmittance.
+[61:48] And the attenuation due to scattering is
+[61:49] then calculated, averaged, and stored
+[61:53] into a lookup table.
+[61:55] The deep opacity maps are also used to
+[61:57] determine shadows.
+[62:00] As a lower quality fallback, one can
+[62:01] also estimate the attenuation
+[62:04] using a hair density constant and the
+[62:05] Beer-Lambert law.
+[62:07] But this will of course not adapt with
+[62:08] actual changes of the hair volume.
+[62:12] I recommend anyone that's interested in
+[62:13] more details regarding dual scattering
+[62:15] or deep
+[62:17] opacity maps to read the original
+[62:19] papers.
+[62:23] When it comes to rendering, the hair
+[62:24] strands are tessellated and rendered as
+[62:26] triangle strips. So of course you must
+[62:28] take special care to properly handle
+[62:30] aliasing.
+[62:31] So since the strands are very thin,
+[62:34] they will usually have a width that is
+[62:35] less than that of a screen pixel.
+[62:37] So we therefore need to take the pixel
+[62:39] size into account when tessellating and
+[62:41] increase the width appropriately or we
+[62:43] will risk getting missing or broken up
+[62:44] hair strands.
+[62:49] Unfortunately, this may have another not
+[62:51] so nice side effect which can cause the
+[62:53] hair to look too thick and more like
+[62:55] thick spaghetti or straw as you can see
+[62:57] on the left one.
+[62:59] Another problem that we have is that
+[63:01] there is a ton of overdraw which hurts
+[63:03] our performance a lot as well.
+[63:09] And just enabling MSAA does not really
+[63:12] have solve all the problems.
+[63:14] So it does improve on the aliasing issue
+[63:16] by taking more samples per pixel
+[63:18] and therefore allows us to keep the thin
+[63:20] hair appearance.
+[63:22] It will suffer an even bigger
+[63:23] performance hit due to overdraw because
+[63:25] there will be even more of it.
+[63:27] So, to reduce the amount of overdraw, we
+[63:29] chose to use a visibility buffer.
+[63:32] And with the visibility buffer, we can
+[63:34] do a relatively quick rasterization pass
+[63:36] with the MSAA for all hair strands.
+[63:39] And we then use this information to do
+[63:41] screen space shading to get the final
+[63:43] anti-aliased render.
+[63:46] There is still, however, some
+[63:47] unnecessary shading going on because we
+[63:49] maybe still be shading the same strand
+[63:51] multiple times per pixel.
+[63:54] So, to reduce this over-shading, we also
+[63:56] run a sample deduplication pass on the
+[63:59] visibility buffer
+[64:00] so that we only shade samples within a
+[64:01] pixel when they are considered to be
+[64:03] different.
+[64:05] And this reduces the number of pixel
+[64:07] shading invocations greatly, and it gave
+[64:09] us roughly two times performance
+[64:11] increase compared
+[64:12] to just using the visibility buffer.
+[64:17] So, here's an overview over the steps we
+[64:20] use when rendering hair.
+[64:21] So, we start with the strands segments
+[64:23] from the simulation.
+[64:25] These are then rasterized into shadow
+[64:26] maps and deep opacity maps.
+[64:28] And we also rasterize the visibility
+[64:30] buffer
+[64:31] and run the sample deduplication pass
+[64:33] before doing a final screen space
+[64:35] shading pass.
+[64:40] So, now I will just do some minor
+[64:42] mentions about performance, but I need
+[64:44] again to point out that this is still
+[64:45] very much work in progress.
+[64:47] And while we have been looking at
+[64:48] performance, it has mostly been to keep
+[64:50] the project in the realm of possibility.
+[64:52] So, as one example, we have always
+[64:53] rendered and simulated all the strands
+[64:56] in our test models, which is probably
+[64:57] not something someone would do in a
+[64:59] game.
+[65:00] And generally at Frostbite, we usually
+[65:02] work very close with the game teams when
+[65:04] we introduce new tech. And when they
+[65:07] finally have it, they are usually much
+[65:09] better than us at finding a ways of
+[65:11] getting out more from less.
+[65:14] So, in any case, here are some numbers
+[65:16] showing what performance is currently
+[65:18] like on a regular PS4
+[65:21] at 900 pure solution, unfortunately
+[65:22] without PC MSAA in this case,
+[65:25] and with the hair covering most of the
+[65:27] screen.
+[65:28] So, for the long hair asset, which
+[65:29] contains about 10,000 strands and a
+[65:31] total of 240,000 points,
+[65:33] the physics currently take around 4.7
+[65:36] ms and rendering takes about 4.5 ms.
+[65:40] And for the short hair asset, which
+[65:42] contains about 15,000 strands and a
+[65:43] total of 75,000 points,
+[65:46] the physics instead take around 0.4 ms
+[65:49] and rendering 1.9 ms.
+[65:52] The main reason currently for our
+[65:54] long render times
+[65:56] is that the GPU utilization is pretty
+[65:58] low during rasterization and shading,
+[66:01] and that is something that we're
+[66:02] currently investigating different ways
+[66:03] to improve.
+[66:05] Also, keep in mind again that this is
+[66:07] with all strands rendered and simulated
+[66:09] um
+[66:11] every frame. And in comparison, some
+[66:12] other alternative hair simulation
+[66:14] systems only simulate about 1% of all
+[66:17] hair strands.
+[66:19] We have made some early examples of
+[66:21] simulating a fraction, and we we seem to
+[66:24] be able to get around a 5x performance
+[66:26] boost by simulating only one in 10 of
+[66:28] all the strands and interpolating the
+[66:30] results,
+[66:31] and with very good visual quality still.
+[66:36] So, what are the next steps for our hair
+[66:39] rendering project?
+[66:41] Well, we need to work start working more
+[66:43] on performance, especially the shading
+[66:45] part.
+[66:47] We're also investigating methods to get
+[66:49] faster rasterization to improve GPU
+[66:51] utilization.
+[66:54] Related to that, we also plan to
+[66:55] introduce automatic LOD generation via
+[66:57] decimation,
+[66:58] and we would like to improve the quality
+[67:00] of our approximations further.
+[67:03] We also need to improve performance of
+[67:04] physics more and work more on simulating
+[67:07] all the attractions on the strands.
+[67:10] And we want to investigate how to
+[67:11] incorporate area lights into the shading
+[67:13] model, something which is currently not
+[67:14] supported as well.
+[67:18] There's been a lot of people involved in
+[67:20] this project, so special thanks to all
+[67:21] of them.
+[67:23] And now I think I have time for some
+[67:25] questions.
+[67:31] Um so how do you extrude stripes from
+[67:35] hair strands? Do you use a geometry
+[67:37] shader?
+[67:38] Um we tried some different methods
+[67:42] um
+[67:43] and we have to I I think it's currently
+[67:45] done with a geometry shader as yes. So
+[67:48] it's uh yeah, it's not super efficient.
+[67:55] Since you're
+[67:56] uh simulating facial strands, do you
+[67:58] have any problem with the uh tangling or
+[68:01] Sorry sorry, I couldn't really hear
+[68:03] Tangling or matting of the hair.
+[68:05] Um you mean for the simulation?
+[68:07] In the simulation, yeah.
+[68:07] Oh, okay. Well, I'm not the right person
+[68:09] to ask for that really, but uh
+[68:12] I think since most of the like um
+[68:15] the forces that you get from like
+[68:17] density and so are calculated on a grid,
+[68:19] I think some of those problems
+[68:21] don't really
+[68:22] I I think you can sort of um
+[68:24] uh
+[68:26] what do you say? You you can prevent
+[68:27] some of these problems by smoothing out
+[68:29] the some of these, but I'm not the right
+[68:31] person to ask here, so
+[68:33] I can't really answer.
+[68:36] Hi, uh great presentation. Uh I just
+[68:39] wanted to ask, is all of your hair
+[68:40] completely opaque?
+[68:42] Uh
+[68:43] you haven't mentioned anything about
+[68:44] transparency.
+[68:45] Um well, it's it's opaque in the sense
+[68:47] that it's you can't really see through
+[68:49] it, I guess, but on the other hand, it
+[68:51] they are translucent, so they are
+[68:52] transmitting light source.
+[68:54] Um but you don't render anything with
+[68:56] alpha blending, no?
+[68:58] No,
+[68:59] no.
+[68:59] I guess for performance reasons.
+[69:01] Sorry?
+[69:01] I guess for performance reasons.
+[69:03] Yes.
+[69:04] Okay.
+[69:05] yeah, but it they are sort of
+[69:07] transparent, but not like in the
+[69:08] traditional sense, I guess.
+[69:10] Thank you.
+[69:12] Um
+[69:13] So,
+[69:15] I'm going to talk about um
+[69:18] geometry. And actually, Sebastian's talk
+[69:20] was a nice segue into what I'm going to
+[69:22] talk about.
+[69:24] So, I was looking at the uh screenshots
+[69:26] of here, and I think
+[69:29] they truly represents um you know, what
+[69:32] kind of visual richness can be
+[69:33] accomplished by just
+[69:35] uh rendering a lot more geometry than
+[69:37] than we usually used to. So, geometry in
+[69:38] the sense
+[69:40] is at the core of computer graphics.
+[69:41] This is where computer graphics sort of
+[69:43] started. Uh geometry modeling dealing
+[69:46] with uh geometry. So, we're
+[69:48] constantly looking at ways to improve uh
+[69:52] the efficiency of uh geometry
+[69:54] processing.
+[69:57] So, uh when we launched our latest GPU
+[70:00] architecture last year, Turing,
+[70:02] we put a lot of emphasis on ray tracing
+[70:05] and AI, which is of course very
+[70:07] important for um
+[70:09] uh for the future as a future evolution,
+[70:11] but somewhat less obvious for many
+[70:13] people is the fact that Turing is also a
+[70:15] major refresh in terms of um
+[70:18] sort of its classical graphics
+[70:20] architecture um design. It's
+[70:22] specifically for geometry processing.
+[70:26] So, we'll talk about mesh shading. So,
+[70:28] mesh mesh shading is that major
+[70:29] innovation. Um
+[70:32] This is really new uh improved model for
+[70:34] uh geometry.
+[70:36] So, I'm somewhat biased because this is
+[70:38] something I worked on personally,
+[70:40] uh but hopefully
+[70:41] um I can sort of show to you that there
+[70:44] are many opportunities um
+[70:47] that are just waiting to be exploited in
+[70:49] terms of actually making use of this
+[70:51] program model. So, this is not a shading
+[70:52] technique
+[70:54] uh per se. I'm not going to show you any
+[70:55] piece of shader code that you can copy
+[70:57] and paste uh in your game engines. Um so
+[71:00] this is more more about a platform that
+[71:04] you can use to build your own sort of
+[71:06] shading systems on top. So I think it's
+[71:07] still still um sort of counts as as a
+[71:10] major advance in real-time rendering.
+[71:15] So like any major innovation, of course,
+[71:18] I think it is important to understand
+[71:19] these innovations in the in the context
+[71:21] of our past experiences. So I I want to
+[71:23] spend some time uh going over
+[71:27] sort of the history of uh geometry
+[71:30] processing. So hopefully you'll uh
+[71:32] forgive me this little detour, but I
+[71:34] promise it's going to be insightful and
+[71:37] interesting.
+[71:39] Um and then of course we'll review some
+[71:41] of the actual practical use cases of
+[71:43] mesh shading.
+[71:45] Um
+[71:46] this is still
+[71:48] um
+[71:49] largely a work in progress, right? So
+[71:51] there are many applications which are
+[71:53] still emerging. But I think um it's very
+[71:56] exciting what you can do with this
+[71:57] system, as we'll see um
+[72:00] throughout the talk.
+[72:03] So
+[72:07] I'm not claiming this is going to be a
+[72:08] correct representation of sort of the
+[72:10] full taxonomy of graphics hardware, but
+[72:12] we'll start we'll just assume that
+[72:15] uh our starting point is
+[72:17] this earlier hardware rasterizers, this
+[72:19] earlier hardware that was mostly
+[72:21] focusing on rasterization.
+[72:23] Right? So the bulk of the geometry work
+[72:25] was performed on the CPU.
+[72:27] Um and then gradually over time some
+[72:30] functions of the back end, first the
+[72:33] back end of the geometry pipeline, then
+[72:35] the front end uh of the geometry
+[72:36] pipeline were gradually accelerated and
+[72:39] subsumed by fixed-function hardware,
+[72:41] starting with
+[72:42] things like uh triangle setup.
+[72:45] Um and then moving on to uh what is
+[72:48] called hardware transform and and
+[72:49] lighting.
+[72:50] Uh basically basic vertex
+[72:52] transformations and lighting
+[72:53] computations at vertices.
+[72:55] So, incidentally, uh, this picture over
+[72:57] there is a GPU from Silicon Graphics
+[73:00] system called Octane,
+[73:02] which I'm a proud owner of.
+[73:04] Um, so, this thing, it doesn't even
+[73:07] have, uh, texture mapping capabilities
+[73:09] in its basic configuration, yet it
+[73:12] already accelerates, uh, geometry
+[73:13] processing. So, so, so, it was
+[73:15] considered important
+[73:17] uh, geometry very efficiently, uh, very
+[73:19] early on.
+[73:22] So, at the time, uh, hardware was
+[73:23] exposing this very simple, uh, sort of
+[73:25] register-based interface, um,
+[73:28] where
+[73:29] the interface was largely procedural,
+[73:31] host was sending methods, right? You
+[73:33] could essentially program those
+[73:34] registers using functions, you know, the
+[73:36] classical sort of OpenGL
+[73:38] uh, immediate mode rendering.
+[73:41] And individual triangles were
+[73:44] fundamental units of processing, right?
+[73:45] So, applications were thinking in terms
+[73:47] of submitting triangles to the GPU and
+[73:50] and rasterizing them.
+[73:52] Uh, software could also organize
+[73:53] geometry in terms of uh, strips and
+[73:55] fans,
+[73:57] um, to express vertex reuse.
+[74:00] So, this was significant because, uh,
+[74:02] with this geometry structure,
+[74:04] a new primitive can be introduced with
+[74:06] one
+[74:07] uh, new vertex, right? So, this
+[74:09] implication, this assumption,
+[74:11] uh, was actually carried forward for
+[74:13] multiple hardware generations
+[74:15] uh, in the future.
+[74:17] Um,
+[74:18] then, of course, as applications were
+[74:19] demanding more sophisticated processing,
+[74:21] it it became clear
+[74:23] that, uh, fixed-function, uh, processing
+[74:27] is is a dead end, uh, so, vertex shading
+[74:30] uh, was invented,
+[74:32] which is this model where,
+[74:34] uh,
+[74:35] application can define pure functions,
+[74:38] uh, which are executed per vertex, and
+[74:39] the reason I'm calling them pure
+[74:40] functions is because they have
+[74:42] this very well-defined, um,
+[74:45] sort of notion of output, so, they're
+[74:47] outputting collection of attributes of
+[74:48] fixed bounded size.
+[74:51] And this is important for scheduling,
+[74:53] right? Because their size of their
+[74:55] output is bounded, the hardware can
+[74:57] actually pre-allocate
+[74:59] that output space using some fixed
+[75:00] function resource in some on-chip memory
+[75:03] and then schedule them sort of on
+[75:05] demand. So this guarantees that
+[75:08] if the output space is available for
+[75:10] vertex shader, it can always run to
+[75:12] completion and the system wouldn't
+[75:14] deadlock.
+[75:16] So because vertex shading was costly or
+[75:20] it it could be costly,
+[75:22] a cache was introduced at the top of the
+[75:24] pipe.
+[75:25] Essentially,
+[75:27] there was a fixed function hardware that
+[75:29] was scanning the index buffer.
+[75:32] An index buffer is something that
+[75:34] application used to represent geometry.
+[75:36] So we'll talk about it that in a moment.
+[75:39] But there's a serial process which goes
+[75:41] through the the list of indices
+[75:44] in the application submitted vertex
+[75:46] buffer and tries to find unique vertices
+[75:49] scheduling them for shading.
+[75:52] So that design point was okay at the
+[75:55] time
+[75:56] because the rasterizer couldn't
+[75:59] process more than one triangle per clock
+[76:00] anyway. So the design point was still
+[76:03] processing one vertex, one new unique
+[76:07] vertex per triangle per clock.
+[76:10] And as I mentioned,
+[76:13] de facto standard geometry
+[76:14] representation was triangle lists,
+[76:17] essentially a serial list of indices in
+[76:19] directing into vertex array
+[76:21] to construct geometry.
+[76:26] Then of course, the concept of
+[76:27] programmable shading sort of exploded
+[76:29] the industry.
+[76:30] Developers all of a sudden got a lot of
+[76:32] control with the pipeline.
+[76:35] New programmable stages were added
+[76:37] and for the first time ever, developers
+[76:40] could actually generate geometry in the
+[76:42] pipeline, so from the fly.
+[76:45] Uh with geometry shaders, uh you could
+[76:47] inject new primitives into the pipeline
+[76:49] or remove primitives from processing.
+[76:51] So, you could do programmable calling.
+[76:54] However, the the important
+[76:56] uh thing here is that the basic
+[76:58] scheduling model remains unchanged. All
+[77:01] right, so shaders were still run as pure
+[77:03] functions or singleton. They could not
+[77:05] communicate
+[77:06] um and they always had static
+[77:09] assignments
+[77:10] to the elements in the in the data
+[77:12] stream that they're processing. Vertex
+[77:14] shaders would process individual
+[77:15] vertices.
+[77:16] Uh geometry shaders would process
+[77:18] individual primitives, and you couldn't
+[77:19] change that. So, they had fixed roles.
+[77:23] Um
+[77:25] also this model had significant
+[77:27] efficient implications in some cases.
+[77:29] So, for example,
+[77:30] uh
+[77:31] geometry shaders um could only generate
+[77:34] their output serially. Right? So, if you
+[77:36] want to generate a number of triangles
+[77:38] from a single geometry thread, you would
+[77:40] you would have a loop in there
+[77:42] outputting those triangles one at a
+[77:43] time. And the size of the output for
+[77:47] those individual threads
+[77:48] uh had to be essentially sized for the
+[77:50] worst-case expansion, which had uh
+[77:52] significant efficiency implications.
+[77:54] So, another uh
+[77:56] innovation worth noting that happened at
+[77:58] the same time is the notion of
+[77:59] distributed raster. Right? So,
+[78:02] um
+[78:04] consumer GPUs embraced
+[78:06] modular design where essentially
+[78:09] multiple rendering pipelines were
+[78:10] integrated on die. Each capable of
+[78:13] processing one triangle per clock, and
+[78:15] you could have multiple of them. Thus,
+[78:17] uh basically breaking this fundamental
+[78:19] limit limit of one triangle per clock
+[78:22] um
+[78:23] that was the assumption before then.
+[78:26] And this change emphasized the serial
+[78:30] index processing bottleneck at the top
+[78:31] of the pipe. So, the vertex cache, the
+[78:34] process of finding duplicates or unique
+[78:36] vertices in the index stream
+[78:38] was becoming a bigger and bigger issue.
+[78:40] And at the API level, I think we'll
+[78:42] agree that
+[78:43] um the sort of the pipeline the API
+[78:46] abstraction of the pipeline was becoming
+[78:48] becoming more and more complex.
+[78:50] Um so we had this multi-stage
+[78:53] um
+[78:54] multiple shader stages all having fixed
+[78:56] roles, right? So they again they were
+[78:58] specific
+[79:00] uh to their own dedicated function,
+[79:02] right?
+[79:04] And um
+[79:07] one one of the
+[79:09] one of the shader stages had to do with
+[79:11] tessellation,
+[79:13] right? So tessellation was
+[79:15] uh
+[79:16] a fairly interesting idea, right?
+[79:18] Because it enabled uh work
+[79:21] amplification, right? So tessellation is
+[79:22] all about generating geometry,
+[79:24] generating more geometry from, you know,
+[79:26] some compact description of geometry.
+[79:28] You have
+[79:29] patches coming in and then a single
+[79:31] patch might get diced into thousand
+[79:33] triangles.
+[79:35] Um
+[79:36] and this single thread model, this
+[79:38] serial model of processing of the
+[79:40] geometry shader uh was inadequate to
+[79:43] handle this kind of expansion. So this
+[79:45] peculiar uh two-stage model was adopted
+[79:48] for that reason. So um
+[79:51] we had a hull shader that processes
+[79:53] individual patches, these compact
+[79:55] descriptions of geometry.
+[79:57] Um and then it has control over how many
+[80:00] instances of the domain shader to launch
+[80:02] depending on the LOD factor, depending
+[80:04] on how many triangles you want to
+[80:06] generate from uh from that patch.
+[80:09] So this two-stage model was important
+[80:11] for two reasons.
+[80:13] Um
+[80:14] first, because each shader instance
+[80:16] still has bounded output, so it's it's
+[80:18] it's it is still a sort of a pure
+[80:20] function, the hardware can schedule them
+[80:22] in fixed output space, right? So
+[80:24] normally the hardware would allocate uh
+[80:26] some fixed amount of on-chip memory and
+[80:28] that that memory can be fast because it
+[80:30] is on-chip, so you're not spending any
+[80:32] extra memory bandwidth for that.
+[80:34] And sort of time multiplex uh that
+[80:37] output storage
+[80:38] uh for multiple indications of the of
+[80:41] the domain shader.
+[80:43] Uh so the data flow that in that sense
+[80:45] was fully contained in on-chip memories,
+[80:48] uh fully contained on die.
+[80:51] And the second um aspect is is is that
+[80:54] because of the amount of expansion can
+[80:55] be dynamic and it can be very high.
+[80:57] Again, single patch can can get diced
+[80:59] into thousands of primitives.
+[81:01] Uh hardware can redistribute work,
+[81:04] right? So the work redistribution point
+[81:06] that was introduced in between the hull
+[81:07] shader and the domain shader,
+[81:09] which allowed work to migrate and be uh
+[81:12] essentially paralyzed across a large
+[81:13] number of uh processors. So let's keep
+[81:16] these two benefits of the tessellation
+[81:18] model in mind,
+[81:19] because they'll become important in a
+[81:21] couple of slides.
+[81:23] So of course one downside of this model
+[81:24] is that we still had this fixed function
+[81:27] topology generation units, which was
+[81:29] serially
+[81:30] um uh generating sort of the the
+[81:33] tessellation pattern of a patch. Uh for
+[81:35] many applications it was uh inadequate.
+[81:38] So again, Sebastian talked about how you
+[81:41] could use tessellation to generate
+[81:43] strands, but then um the model was sort
+[81:46] of awkward in the sense that you still
+[81:48] need to run a geometry shader to then
+[81:49] expand those strands
+[81:51] uh into strips if you want to render
+[81:53] triangles.
+[81:55] Um so the limit of the fixed function
+[81:58] aspect of of the model was um sort of
+[82:00] obvious.
+[82:02] Then,
+[82:03] somewhat unrelated to that, right?
+[82:05] Compute was introduced, um
+[82:08] uh which was another huge step forward,
+[82:10] uh of course.
+[82:12] And for the first time the GPU was um
+[82:16] uh could now be programmed like a normal
+[82:18] sort of conventional data parallel
+[82:20] machine as opposed to some obscure, you
+[82:22] know, pipeline thing.
+[82:25] Um
+[82:26] so in compute applications program to
+[82:29] data parallel thread groups
+[82:32] rather than individual threads, and the
+[82:33] threads they do not have fixed roles.
+[82:35] Application is free to assign
+[82:37] uh
+[82:38] functions to threads or decide how to
+[82:41] divide the problem domain into pieces,
+[82:43] right? And then uh run
+[82:45] um a shader thread per piece of a
+[82:47] problem. On top of that, shaders can
+[82:49] also communicate and synchronize and
+[82:51] share data.
+[82:52] Uh so, I asked the question about shared
+[82:54] memory.
+[82:56] Uh so, shared memory is that concept of
+[82:58] some very fast on-chip memory that can
+[83:00] be used for efficient communication uh
+[83:02] between them.
+[83:04] On the other hand, compute threads don't
+[83:05] have any notion of pipeline output,
+[83:08] right? So, they're sort of fire and
+[83:09] forget. Uh application can rasterize a
+[83:12] compute grids or essentially do a
+[83:14] dispatch of multiple uh cooperative
+[83:16] thread groups.
+[83:18] But, uh they're they're fire and forget
+[83:20] in terms of they don't feel any back
+[83:21] pressure from from the from the
+[83:24] downstream stages of the pipeline
+[83:25] because there are no stages. The only
+[83:27] thing that they can do is read and write
+[83:28] memory.
+[83:30] And
+[83:31] one important application I want to
+[83:33] mention in this regard, there are of
+[83:35] course many clever techniques that that
+[83:37] were enabled by this, but one um uh sort
+[83:40] of interesting uh one of the most
+[83:42] interesting ones is is so-called compute
+[83:43] tile lighting, which exploits this fact
+[83:46] that threads have no fixed roles, and
+[83:49] application can freely reuse threads as
+[83:52] they go through different phases in
+[83:54] their computation uh and use the same
+[83:57] set of threads threads to do different
+[83:58] functions, right? So, with compute tile
+[84:00] lighting, what you typically do,
+[84:03] uh you basically run a compute grids
+[84:06] um in screen space.
+[84:09] Uh and each thread group would first uh
+[84:11] run this pixel parallel operation
+[84:13] computing uh uh per tile fruster, right?
+[84:17] Which are then used for light calling in
+[84:19] the second phase. In the second phase,
+[84:22] uh sort of switches the degree of
+[84:24] parallelism and uses the same set of
+[84:26] threads to run
+[84:27] in light parallel phase, paralyzing over
+[84:29] lights now. And then it switch back to
+[84:31] pixels uh to shade the result the
+[84:34] resulting light list. So, I'm sure
+[84:35] you're familiar with that, so I won't
+[84:36] spend too much time explaining that.
+[84:39] So, this notion of
+[84:41] application defined thread roles you
+[84:43] know,
+[84:44] was important and and that that that
+[84:46] aspect enabled, you know, these clever
+[84:48] techniques. So,
+[84:49] when we end up with this sort of split
+[84:51] personality problem where
+[84:53] on one hand we had this nice graphics
+[84:55] pipeline,
+[84:57] uh which had all of the efficiency and
+[84:59] producer consumer scheduling and all the
+[85:01] data flow staying on die.
+[85:04] On the other hand, we have compute,
+[85:06] which provides uh ultimate flexibility,
+[85:09] right? So, you can program to GPU like
+[85:11] like if it was a real computer,
+[85:13] but it can communicate with graphics
+[85:14] directly.
+[85:16] Uh so, in fact, we have these two
+[85:17] different personalities of the GPU, and
+[85:19] they can only communicate uh through
+[85:21] memory.
+[85:23] Uh so, this creates two problems.
+[85:25] So, first, because the memory bandwidth
+[85:28] is a limited resource, uh so, this has
+[85:30] scalability implications, right? So,
+[85:33] high frequency communication between the
+[85:34] two sides that the two personalities
+[85:37] is difficult for that reason.
+[85:39] Um second,
+[85:41] because these two personalities are not
+[85:43] scheduled as a pipeline, input and
+[85:45] output memory, uh which can only be
+[85:47] allocated in global memory,
+[85:49] uh
+[85:50] these buffers have to be sized for worst
+[85:52] case.
+[85:53] And sometimes this worst case can be
+[85:54] really bad. Um if you
+[85:57] think about some kind of geometry
+[85:59] synthesis application that uses compute
+[86:01] to generate
+[86:03] uh arbitrary amount of geometry, which
+[86:04] is not known sort of ahead of time,
+[86:07] uh you can you can sort of see the point
+[86:09] where you because you don't know how
+[86:11] many how many uh
+[86:13] how many primitives you can deal you
+[86:15] need to deal with, you have to allocate
+[86:17] for the maximum amount, and that maximum
+[86:18] amount can be all of your memory,
+[86:20] perhaps.
+[86:21] So, the question is, can we somehow
+[86:23] integrate these two worlds
+[86:25] um
+[86:26] and arrive at a middle ground?
+[86:31] So, what if we had
+[86:33] um some kind of shader stage, which is
+[86:36] kind of like a compute shader,
+[86:38] uh that can also read and write global
+[86:39] memory.
+[86:40] It is scheduled as a collection of
+[86:43] thread groups, but it has this notion of
+[86:45] output that can be pipelined into the
+[86:47] rasterizer directly, right?
+[86:49] And um
+[86:51] in fact, this exactly what
+[86:53] uh mesh shading does, right? So, mesh
+[86:56] shaders
+[86:57] um is a new pipeline stage.
+[86:59] Uh it is very, very similar to compute
+[87:02] in that
+[87:03] uh applications are free to define
+[87:04] thread roles, right? So, application
+[87:06] thinks in terms of thread groups,
+[87:09] uh with shared memory that can
+[87:10] synchronize and um
+[87:13] share data.
+[87:15] But, they also have this notion of
+[87:16] bounded size output.
+[87:19] So, the output of
+[87:21] the mesh shader is a meshlet. So, I'll
+[87:22] talk about that in a moment.
+[87:25] But, because it is bounded size, you
+[87:26] have all the properties of the pipeline
+[87:28] scheduling.
+[87:29] Uh that output can be placed in on-chip
+[87:32] memory. The hardware can deal with uh
+[87:34] serializing work,
+[87:36] managing the data flow to stay on die,
+[87:38] etc., etc. So, we have all the nice
+[87:40] benefits of pipelining.
+[87:42] So, let's look at at the meshlet uh
+[87:44] next,
+[87:46] right?
+[87:47] So, meshlet is essentially a small
+[87:48] description
+[87:50] uh of a mesh or part of a mesh, as the
+[87:52] name implies.
+[87:54] So, it's a fixed-size structure
+[87:56] uh
+[87:57] that defines a set of
+[87:59] uh a set of vertices, which are
+[88:01] connected into primitives. So, you can
+[88:03] think of it as essentially an index
+[88:04] buffer
+[88:06] um and an associated vertex buffer. So,
+[88:09] vertices would have their normal
+[88:11] attributes,
+[88:12] uh like position and clip space, uh
+[88:15] colors or texture coordinates.
+[88:17] Then you have this index list defining
+[88:19] topology, and then associated with each
+[88:22] primitive is a set of per primitive
+[88:24] attributes.
+[88:25] Um so you can um
+[88:27] you can think of them as, you know,
+[88:29] things like uh geometric normals, right?
+[88:32] Or maybe flat flat shaded color or
+[88:35] something for each triangle. So, note
+[88:37] that this notion of primitive attributes
+[88:39] is kind of new
+[88:40] in this pipeline. In the classical
+[88:42] pipeline, we don't have anything like
+[88:43] that. Um or rather we have this implicit
+[88:46] notion of flat shaded attributes, uh
+[88:49] which are taken from provoking vertices,
+[88:51] but because the connectivity of the mesh
+[88:53] is explicitly encoded in the in the
+[88:55] index buffer,
+[88:56] um it doesn't make much sense to use the
+[88:58] implicit convention, and we just define
+[89:01] per primitive attributes explicitly.
+[89:04] And also note that all the fields in
+[89:06] this structure can be written by the
+[89:07] shader, by the mesh shader, including
+[89:10] topology
+[89:11] uh and all the attributes, right? So,
+[89:13] the mesh shader can edit the structure
+[89:16] on the fly, which is key in enabling
+[89:18] this flexible geometry synthesis
+[89:20] scenarios.
+[89:22] Um
+[89:24] So, again,
+[89:25] because application defines the thread
+[89:27] roles, they behave just like compute.
+[89:30] Uh so, applications would use all
+[89:33] threads in the group to cooperatively
+[89:35] generate the output meshlets. So, you
+[89:37] can play tricks which are kind of
+[89:38] similar to the to the tile compute
+[89:40] lighting, where you can switch degrees
+[89:42] of parallelism as you go through
+[89:44] different phases of the processing.
+[89:46] Um for example, you can optimize vertex
+[89:48] shading by transforming all the vertices
+[89:51] first,
+[89:52] uh running in the vertex parallel uh
+[89:54] phase,
+[89:55] uh just doing the matrix multiply, then
+[89:57] you would output
+[89:59] uh those results in shared memory and
+[90:00] perform culling. So, culling phase
+[90:02] obviously runs per primitive.
+[90:04] Um so, So, has to look at clip space
+[90:07] locations of which um
+[90:09] uh
+[90:09] vertex
+[90:11] look whether all of them are outside the
+[90:12] frustum, let's say, and then mark those
+[90:15] primitives as culled.
+[90:16] It can then also tag the vertices which
+[90:19] are guaranteed to be invisible
+[90:21] as being invisible, and the subsequent
+[90:23] stage
+[90:24] running vertex parallel can skip shading
+[90:27] them. Right? So, you can get efficiency
+[90:29] gains that way.
+[90:32] One important consideration here is that
+[90:35] this model assumes that the ratio of
+[90:38] vertices to primitives is small and
+[90:41] fixed.
+[90:43] So, you can't generate a lot of
+[90:44] expansion.
+[90:45] You can generate some because you can
+[90:47] still vary the amount of the number of
+[90:49] primitives it generates.
+[90:51] Um
+[90:53] but we still have this implicit
+[90:54] assumption that primitives and vertices
+[90:57] can be processed by the same thread
+[90:58] group. Right? So, you don't have to
+[91:00] migrate work
+[91:02] or or parallelize, for example, per
+[91:04] primitive per primitive work.
+[91:06] And I have this footnote here,
+[91:09] which basically says that
+[91:11] um
+[91:11] Euler tells us
+[91:14] that in the ideal case, if you if you
+[91:18] are looking at manifold meshes, the base
+[91:20] case scenario, which is the speed of
+[91:22] light case, is when you have
+[91:24] uh two vertices
+[91:26] sorry, two
+[91:28] uh
+[91:28] faces for triangles, two triangular
+[91:31] faces
+[91:32] sharing the same vertex. So, so the
+[91:34] ratio between triangles and vertices is
+[91:37] two to one in the best possible case.
+[91:39] So, note how it compares to the
+[91:42] assumption we made at the beginning
+[91:44] where we said that triangle strips
+[91:46] allows us to match them one to one. So,
+[91:48] potentially, this implies that meshlets
+[91:50] can allow for much higher vertex reuse.
+[91:54] Uh
+[91:54] essentially, enabling significant work
+[91:56] savings.
+[91:58] Um so, So, related to meshlet outputs.
+[92:02] So, what about the inputs?
+[92:05] So, the short answer is that the inputs
+[92:08] are completely application defined. The
+[92:10] hardware doesn't provide any help
+[92:12] uh in terms of running any kind of index
+[92:15] deduplication
+[92:16] um or finding unique vertices which can
+[92:19] then be shaded.
+[92:21] So, it's all up to the shader to do
+[92:22] that.
+[92:24] Um and this enables very interesting
+[92:27] um
+[92:28] uh possibilities and we'll review some
+[92:30] of them in a few minutes.
+[92:32] Uh for example, application can employ
+[92:34] compression schemes.
+[92:36] Um
+[92:37] uh custom compression schemes um
+[92:40] to save on the amount of storage for the
+[92:42] input geometry representation or maybe
+[92:44] they
+[92:45] uh they wouldn't use sort of boundary
+[92:47] representations of geometry at all. You
+[92:49] can use voxels
+[92:50] or any kind of maybe it's a scalar field
+[92:53] that you can then um
+[92:55] extract either surface from or something
+[92:57] like that. It's really up to the
+[92:58] application to decide what to do with
+[93:01] with their input.
+[93:03] So, because this fixed function hardware
+[93:06] at the top of the pipe is gone, we don't
+[93:08] have the serial bottleneck anymore,
+[93:09] right? So, the system scales
+[93:12] you know, in a much better way.
+[93:15] So, we've eliminated that civilization
+[93:17] point at the at the top of the pipe.
+[93:21] Um so, how do we exploit vertex reuse
+[93:23] then if there is no vertex cache
+[93:25] available for us?
+[93:27] So, one option um
+[93:29] that we've been experimenting with and
+[93:31] it kind of makes sense is that you can
+[93:32] actually precompute the function of the
+[93:35] vertex cache, right? So, if you think
+[93:36] about it, in many cases the topology of
+[93:39] the meshes that we're rendering uh is
+[93:41] not changing, right? We're mostly
+[93:43] rendering
+[93:44] uh sort of static meshes in the sense
+[93:47] that we're only transform transforming
+[93:48] their vertices. Maybe we're applying
+[93:51] skinning or some kind of complex
+[93:53] uh geometry transformation, but the
+[93:54] connectivity of the mesh stays fixed,
+[93:57] meaning that in the classical pipeline
+[93:59] we're sort of doing this redundant work
+[94:01] uh identifying the same set of unique
+[94:03] vertices over and over again, which has
+[94:06] um implications for power
+[94:08] um which is of course important um in
+[94:12] certain contexts um
+[94:14] like mobile devices as Natasha
+[94:16] mentioned.
+[94:19] So in that sense uh what you can do is
+[94:22] sort of precompute this primitive
+[94:24] clustering. So this picture on the right
+[94:27] sort of uh gives you an idea how these
+[94:28] clusters might look like.
+[94:30] Um these clusters or input meshlets if
+[94:34] if if you think about them that way,
+[94:36] they represent a directly addressable
+[94:38] representation of uh geometry at the
+[94:40] input and the mesh shaders using their
+[94:42] ID just like compute shaders can
+[94:44] essentially go fetch them and um process
+[94:47] them in parallel.
+[94:51] But we also want to support gen more
+[94:53] advanced uh geometry synthesis in
+[94:56] particular those cases which require a
+[94:58] lot of expansion like tessellation
+[95:01] where the the ratio of output primitives
+[95:04] to input primitives can be very high.
+[95:06] Right?
+[95:07] And again uh we look at tessellation as
+[95:10] sort of motivational example where we
+[95:12] had hull shaders, we had this two two
+[95:14] shader stage pipeline, but there is a
+[95:16] way to generalize it.
+[95:18] And essentially say um that, you know,
+[95:21] rather than
+[95:23] running this fixed domain fixed role
+[95:25] shaders, um we'll add another generic
+[95:28] stage at the top of the pipe called the
+[95:30] task shader.
+[95:32] Um
+[95:33] which will be launched from the CPU from
+[95:35] host like a set of uh compute thread
+[95:38] groups, but it can also output an
+[95:41] expansion factor. Right? It can
+[95:43] essentially tell downstream fixed
+[95:45] function hardware
+[95:47] how many mesh shader thread groups to
+[95:49] rasterize. Right? So this is equivalent
+[95:51] to tessellation expansion, but now the
+[95:53] application is responsible to actually
+[95:55] doing the math. Right? So, previously,
+[95:58] hull shaders were outputting LOD
+[95:59] factors, which were transformed. The
+[96:01] hardware was actually calculating how
+[96:02] many threads
+[96:04] of the domain shader to run. Now, it's
+[96:06] all up to the application, to the task
+[96:07] shader to decide that.
+[96:09] In addition to that,
+[96:11] um task shaders can also
+[96:13] essentially provide these payloads to
+[96:15] mesh shaders, which may contain things
+[96:17] like
+[96:18] um
+[96:19] patch constants or control points, as in
+[96:22] the case of tessellation, or it can be
+[96:24] anything else, pointers to
+[96:26] um some precomputed data in memory,
+[96:28] uh which can then be used by mesh
+[96:29] shaders to uh calculate their output
+[96:31] meshlets.
+[96:36] So, putting it all together, here is the
+[96:38] full task mesh shader pipeline. Again,
+[96:39] as I mentioned, these are all generic
+[96:42] shader stages. Each one gets an ID, just
+[96:45] like a compute shader, and it uses that
+[96:47] ID to determine which uh
+[96:50] sort of piece of the of the input domain
+[96:52] to work on.
+[96:54] Um so, in that sense,
+[96:56] if you compare this new pipeline to the
+[96:59] legacy pipeline,
+[97:00] task shaders subsume the vertex and hull
+[97:03] shaders,
+[97:04] and mesh shaders can
+[97:05] subsume domain and geometry shaders.
+[97:08] So, now note how shader stages executing
+[97:12] at similar compute frequency. Right? So,
+[97:14] there's not a whole lot of expansion
+[97:15] going on when you go from vertices to
+[97:18] patches or from domain shaders to
+[97:20] geometry shaders, they're roughly
+[97:22] one-to-one. So, we can simply run them
+[97:25] in a single uh thread group. So, this
+[97:27] has
+[97:28] uh implications for efficiency of the
+[97:30] data flow between them. The overall
+[97:31] pipeline sort of becomes much more
+[97:33] streamlined.
+[97:36] So,
+[97:37] now I'm going to review some of the
+[97:39] concrete um use cases, basically things
+[97:42] that we've experimented with. Um I'm
+[97:44] hoping that this will encourage you to
+[97:47] think about
+[97:48] um what other approaches are possible
+[97:51] within that framework.
+[97:53] So, one obvious use case is culling
+[97:56] uh
+[97:56] using task shaders, right? So, because
+[97:58] task shaders
+[98:00] uh
+[98:01] can operate uh
+[98:04] basically, they they can process a large
+[98:06] number of input primitives.
+[98:08] Uh you can implement a sort of
+[98:09] cluster-based culling of uh of
+[98:12] triangles. So, as opposed to
+[98:13] fixed-function hardware doing culling
+[98:15] one triangle at a time, you can
+[98:16] precompute uh certain parameters. Uh for
+[98:20] example, bounding boxes of these
+[98:21] clusters or
+[98:23] um some statistics over geometric
+[98:26] normals and use that in the task shader
+[98:28] to decide
+[98:29] whether to output whether to launch mesh
+[98:31] shaders subsequently or not.
+[98:35] Uh so, I want to refer to this work by
+[98:37] uh Kristof uh Kubisch from Nvidia. Um
+[98:41] it's actually available on GitHub. It's
+[98:42] all open source. You can go look at it.
+[98:45] Um it uses Vulkan's extensions for mesh
+[98:48] shaders.
+[98:50] And we're seeing fairly significant
+[98:51] speed-ups
+[98:52] um
+[98:53] from just this culling alone. If the
+[98:55] geometric models are sufficiently
+[98:56] complex, this can give you a lot of
+[98:59] benefits. Basically, several times um
+[99:03] speed-ups in terms of geometry
+[99:05] throughput depending on the number of
+[99:06] attributes
+[99:07] that you're processing.
+[99:09] So, if you look at this graph carefully,
+[99:10] you also notice that
+[99:13] um
+[99:14] performance of the classical pipeline
+[99:16] scales roughly linearly with the number
+[99:19] of attributes that you have to process.
+[99:23] While for this task ba- task
+[99:24] shader-based culling approach, uh it's
+[99:28] more constant, right? So, you're less
+[99:29] dependent on the amount of attributes
+[99:31] that you have per vertex.
+[99:33] And more interestingly,
+[99:35] um
+[99:36] so, this approach uses the
+[99:37] pre-precomputation technique that I
+[99:39] talked about where you take your index
+[99:40] buffers and convert them into uh input
+[99:43] meshlets, preprocessing vertex caching.
+[99:45] And it turns out that it's also more
+[99:47] compact in terms of uh memory footprint.
+[99:50] So, you could uh we were seeing as you
+[99:52] know, as high as 50%
+[99:54] um less memory used compared to the
+[99:57] index buffer-based uh representation.
+[100:04] Uh so, another great application for
+[100:05] mesh shading is dynamic LOD management.
+[100:08] Uh so, this use case is illustrated by
+[100:10] the asteroids demo that we released.
+[100:13] Uh so, the the demo basically renders a
+[100:15] very large uh field of um asteroids.
+[100:19] And each asteroid is rendered at
+[100:21] dynamically determined um LOD level,
+[100:23] right? So, CPU is not being involved at
+[100:26] all in deciding which mesh to render.
+[100:27] So, the entire thing is rendered in a
+[100:29] single call.
+[100:31] Um
+[100:32] and all the LOD management logic is done
+[100:34] with task and mesh shaders.
+[100:36] So, the way it works is that we
+[100:38] precompute
+[100:40] um
+[100:41] a set of LOD levels for each asteroids
+[100:43] and store them in memory in this
+[100:45] meshlet-based form, meshlet-based
+[100:47] representation.
+[100:49] And then in the task shader, we decide
+[100:51] um which LOD level to use
+[100:54] based on its screen space footprint or
+[100:56] whatever um
+[100:58] viewing parameters you might want to
+[100:59] consider.
+[101:01] So, the task shader then sends a pointer
+[101:02] to the asteroid mesh corresponding to
+[101:04] the appropriate LOD level, and it
+[101:06] calculates the the number of mesh shader
+[101:09] thread groups required to process
+[101:11] geometry at that LOD level.
+[101:13] And uh mesh shaders are fairly simple.
+[101:15] They simply use the base pointer and
+[101:18] their ID to index into the into the set
+[101:21] of precomputed tables, load that data
+[101:23] into uh the output meshlets
+[101:26] um to generate uh the the final mesh.
+[101:31] So, we actually have a talk tomorrow at
+[101:32] 9:00 a.m. Uh that will go into greater
+[101:35] uh detail of
+[101:37] uh this technique. So, I encourage you
+[101:39] to visit
+[101:41] um,
+[101:42] and listen to the talk.
+[101:46] Um, another cool technique is this
+[101:48] adaptive tessellation work
+[101:50] by
+[101:52] Jonathan Du Dupe
+[101:54] and Cyril Crassant.
+[101:56] Hopefully, I'll get that right.
+[101:58] Uh, from Unity and Nvidia, respectively.
+[102:01] So, it is a fairly clever subdivision
+[102:04] scheme,
+[102:05] um, that encodes subdivision of a
+[102:08] triangle using binary keys. So, the keys
+[102:10] are 32-bit integers, where each bit sort
+[102:13] of represents which path to take in this
+[102:17] subdivision, um, hierarchy.
+[102:19] Right? So, these keys are precomputed
+[102:21] and then the compute shader
+[102:23] is run every frame to decide whether to
+[102:26] merge, uh,
+[102:27] basically two keys,
+[102:29] decreasing LOD level, whether to split
+[102:31] them. So, it's fairly classical, um, in
+[102:34] terms of the overall approach. So,
+[102:36] initially, the implementation was using
+[102:37] compute shaders and it was running in
+[102:39] multiple passes.
+[102:41] Uh, sort of amortizing the subdivision
+[102:43] work over multiple frames.
+[102:46] With meshlets,
+[102:47] um,
+[102:49] all of that can be done in a single pass
+[102:51] with, essentially, very little
+[102:53] synchronization and memory bandwidth
+[102:55] spent. So, again, um,
+[102:58] there is a there is a source available
+[103:00] for the demo. You can go look at it.
+[103:02] Um, again, it uses Vulcan Vulcan
+[103:04] extensions. And I also provide the link
+[103:06] to the white paper there.
+[103:09] And finally,
+[103:11] um,
+[103:12] sort of another interesting experiment,
+[103:14] um,
+[103:15] this is work by, uh, Rahul Sathe from
+[103:17] Nvidia,
+[103:19] um,
+[103:20] who attempted to re-implement DX11
+[103:23] tessellation, basically, standard
+[103:25] tessellation patterns using mesh
+[103:26] shaders.
+[103:28] Uh, you know, just because you can,
+[103:30] uh, it serves as sort of a functional
+[103:33] validation of the expressiveness of the
+[103:35] model.
+[103:36] So, it by no means,
+[103:38] um,
+[103:39] intended to replace the hardware
+[103:41] tessellation pipeline and is likely less
+[103:42] efficient. Um, although it's interesting
+[103:45] in its own way. For example,
+[103:48] um,
+[103:49] by using mesh shaders to implement the
+[103:52] excellent tessellation, you're no longer
+[103:53] subject to the maximum tessellation
+[103:56] factor that, uh, the excellent exposes,
+[103:59] whatever that is. 64 segments per edge
+[104:02] or something like that.
+[104:04] Uh, and the basic idea here is that,
+[104:06] again, you can rely on precomputation.
+[104:08] You can precompute partial tessellations
+[104:11] of the output mesh, store them in
+[104:13] memory, then you run task shaders,
+[104:16] determining LOD factors, and deciding
+[104:18] which lookup table to use for a given,
+[104:21] um, tessellation factor, and then mesh
+[104:24] shaders simply load from those lookup
+[104:25] tables, compute UV, uh, coordinates,
+[104:28] domain space coordinates for each domain
+[104:30] shader thread,
+[104:31] and perform the rest of the domain
+[104:33] shader function.
+[104:34] Um, so again, this is going to be
+[104:36] covered in,
+[104:37] um,
+[104:38] in the same talk tomorrow at 9:00 a.m.
+[104:40] This is still work in progress, uh, but
+[104:43] I think this is fairly interesting what
+[104:45] you can do with this thing.
+[104:49] Okay, this is going to be my last slide.
+[104:51] Um,
+[104:52] so we'll introduce mesh shading, which
+[104:53] is a new program model for geometry,
+[104:55] which is this blend between compute
+[104:59] and, uh,
+[105:01] pipeline execution of graphics work.
+[105:04] Uh, so in that sense, it streamlined the
+[105:05] overall graphics pipeline. We've
+[105:07] eliminated all the serial bottlenecks,
+[105:10] uh, enabling much greater efficiency in
+[105:12] geometry processing, and I think,
+[105:15] uh, there are a lot more interesting
+[105:16] applications which are yet to be
+[105:18] discovered,
+[105:19] um, that can leverage this framework.
+[105:21] So, please go explore.
+[105:24] Um, and I'm giving a few sort of
+[105:26] motivational areas here, right? So,
+[105:28] we've talked about LOD management,
+[105:30] but you can also consider, you know,
+[105:32] some kind of hierarchical data data
+[105:34] structure traversal using task mesh
+[105:36] shaders. Uh, so we've talked about hair
+[105:38] rendering. It occurred to me that that
+[105:40] could be another very interesting
+[105:42] application for mesh shaders.
+[105:45] Uh, and in general, any kind of
+[105:48] geometry synthesis applications and
+[105:51] procedural
+[105:52] uh, techniques are worth exploring.
+[105:55] Um,
+[105:57] and finally, of course, you can Google
+[105:58] for the Vulcan and GL extensions.
+[106:01] Uh, it's all available on Turing.
+[106:03] And we also have an V API interface for
+[106:06] DX applications.
+[106:08] Thank you.

@@ -1,0 +1,245 @@
+# Transcript: brDJVEPOeY8
+# Fetched: 2026-08-07T06:23:02.729864
+# Entries: 240
+# Duration: 1302s
+
+[00:00] hello everyone today we will be
+[00:02] discussing the graphics pipeline this is
+[00:05] going to be the least mathematical video
+[00:07] in my series on computer graphics but it
+[00:10] will be the one that links everything
+[00:12] together the graphics pipeline takes in
+[00:15] some resources and outputs a render
+[00:18] target the resources are triangles which
+[00:21] make up a 3d model as well as textures
+[00:25] the output is the final rendered mobile
+[00:29] so the question is what goes into the
+[00:32] graphics pipeline to transform these
+[00:34] triangles and textures into a rendering
+[00:37] model and there is multiple different
+[00:39] stages we're gonna go over all of them
+[00:42] but for now I want to focus on the fact
+[00:44] that some of them are blue and some of
+[00:47] them are green the blue ones are fixed
+[00:49] function stages which means that we can
+[00:52] set a few parameters to define their
+[00:54] behavior but that's all the control we
+[00:56] have over them the green ones all end in
+[00:59] the world shader and a shader is a
+[01:02] little program which we can write by
+[01:05] ourselves and which runs on the graphics
+[01:07] card since we can write code to define
+[01:10] these stages we have a lot of control
+[01:12] over what they do let's get started with
+[01:15] discussing the input assembler its input
+[01:19] is a vertex buffer which contains all
+[01:22] the vertex attributes for every triangle
+[01:24] that makes up a 3d model the problem is
+[01:27] that since all of this data is in one
+[01:29] big chunk of memory we can't distinguish
+[01:33] the individual attributes therefore we
+[01:36] have to tell the input assembler which
+[01:38] attributes make up a vertex for example
+[01:41] for this vertex buffer we have a
+[01:43] position a UV coordinate and some
+[01:46] normals this data is not enough though
+[01:49] we also have to specify how many
+[01:51] components make up the vector that
+[01:54] defines these attributes for example the
+[01:57] position is a three dimensional vector
+[01:59] the UV coordinate a two dimensional
+[02:01] vector and in normal a three dimensional
+[02:04] vector you might be thinking that it is
+[02:06] redundant to specify the amount of
+[02:08] components that make up a single
+[02:10] attribute however in the case of a
+[02:12] position you could
+[02:13] example also have a two-dimensional
+[02:15] position or in the case of a normal you
+[02:19] could use polar coordinates to pack it
+[02:21] into two components with this
+[02:23] information we are now able to
+[02:25] distinguish the individual attributes in
+[02:28] the vertex buffer the problem is that a
+[02:31] computer needs a bit more information
+[02:33] since it will in stored the numbers in
+[02:35] decimal form like I've written them here
+[02:38] instead it will store them as binary
+[02:41] numbers which means it has to know which
+[02:43] format it has to use to convert them
+[02:46] back to decimal numbers in this case all
+[02:48] the components could get stored in a
+[02:50] floating-point number of 32 bits once
+[02:54] again that's a little implementation
+[02:55] detail that is not really of importance
+[02:57] to us the input assembler can also
+[03:00] assign extra vertex attributes for
+[03:02] example a 30 X ID which starts at 0 and
+[03:06] increments to however many vertices
+[03:08] there are the ID takes up one component
+[03:11] and gets stored as an unsigned integer
+[03:14] probably of 16 bits every row in our
+[03:18] vertex buffer now represents a single
+[03:21] vertex and every single vertex in the
+[03:24] vertex buffer will now get passed on to
+[03:26] the next stage which is the vertex
+[03:29] shader the vertex shader takes in all
+[03:32] the attributes of a single vertex and
+[03:35] outputs a new set of attributes to do
+[03:39] that it will use some external data for
+[03:42] example a matrix we'll discuss those in
+[03:45] detail in a future video
+[03:47] but for now all you have to know is that
+[03:49] we can multiply the position with a
+[03:52] matrix to transform the position so when
+[03:56] the position goes into the vertex shader
+[03:58] it comes out as a different vector a
+[04:01] vector that is transformed by the matrix
+[04:04] the vertex shader can also just pass
+[04:06] attributes without modifying them for
+[04:09] example the UV coordinate usually just
+[04:11] gets passed or it could also introduce
+[04:14] new attributes for example this color
+[04:18] attribute every single vertex at the
+[04:20] vertex shader outputs should have a
+[04:23] position that is in a range between
+[04:26] negative
+[04:27] one and one that means that every vertex
+[04:30] that exits the vertex shader ends up in
+[04:33] a cube of two by two by two for
+[04:36] programmers who are watching these
+[04:38] videos here is the code of the vertex
+[04:40] shader I just described the next stage
+[04:43] in the pipeline is the tessellation
+[04:45] stage which is a combinational name for
+[04:48] the whole shader the tesa later and the
+[04:51] main shader the tessellation stage takes
+[04:54] in a primitive for example this Square
+[04:57] and it outputs a more detailed version
+[05:00] of its input in other words the output
+[05:03] contains more triangles tessellation is
+[05:06] a rather advanced topic so I won't cover
+[05:09] it in depth here in short though the way
+[05:11] it works is that the whole shader
+[05:13] defines the pattern for the outputted
+[05:15] triangles the tesa later will then
+[05:17] create those triangles based on a
+[05:19] pattern and the domain shader will then
+[05:22] position the triangles based on some
+[05:25] formulas a potentional use case for
+[05:27] tessellation is taking in a low poly
+[05:30] model and acting a high poly model by
+[05:33] introducing more triangles the next
+[05:35] stage in the graphics pipeline is the
+[05:37] geometry shader it takes in an entire
+[05:41] primitive which is a triangle and
+[05:43] additionally it can also take in the
+[05:46] adjacent vertices to that triangle and
+[05:48] it outputs a modified version of its
+[05:51] input for example it could just output
+[05:53] its input but it could also introduce a
+[05:57] new vertex which then turns this
+[06:00] triangle into a pyramid the primitives
+[06:03] that enter the geometry shader don't
+[06:05] have to be triangles they could also be
+[06:08] lines that geometry shader now can take
+[06:10] that line and expand it into two
+[06:13] triangles this is useful when we want to
+[06:16] model hair for example we can define the
+[06:19] hair as a line but since a line doesn't
+[06:22] have a surface we need a geometry shader
+[06:25] to create that surface one last
+[06:27] primitive we can enter into a geometry
+[06:29] shader is a single point and the
+[06:32] geometry shader can take that point and
+[06:34] turn it into a court this is for example
+[06:37] useful for particle systems by now leave
+[06:41] these have reached their final positions
+[06:43] and this time to draw them and that gets
+[06:46] done by the rasterizer the rasterizer
+[06:49] I'll put a grid of pixels and it takes
+[06:53] in every single triangle for example
+[06:55] this blue triangle and then it has to
+[06:59] convert that triangle into a bunch of
+[07:01] pixels which would look like this now
+[07:04] the more pixels you have of course the
+[07:06] better the approximation of the triangle
+[07:09] let's have a look at the seam we just
+[07:12] rendered if this is the camera then the
+[07:15] camera obviously saw a blue triangle now
+[07:19] what if there was also a red triangle
+[07:21] behind the blue triangle well the
+[07:24] problem is that we already rasterized
+[07:27] the blue triangle so if we now also
+[07:29] rasterize the red triangle then it will
+[07:31] appear in front of the blue triangle
+[07:35] which is of course wrong unfortunately
+[07:37] we can't solve this problem by changing
+[07:40] the order in which we draw the triangles
+[07:43] since that is not possible on a graphics
+[07:46] card the solution to our problem is to
+[07:48] also use a second image which we call
+[07:52] the depth buffer or set buffer the way
+[07:56] this image gets made is by converting
+[07:58] the Z coordinate of a triangles surface
+[08:00] into a color the closer the surface of
+[08:04] the triangle is to the camera the darker
+[08:06] the color will be in other words the
+[08:08] bottom left corner of the triangle is
+[08:11] the closest to the camera according to
+[08:14] this said buffer if we now rasterize the
+[08:17] red triangle then only the parts that
+[08:19] are behind the blue triangle will become
+[08:22] visible and notice that we also write
+[08:25] the set values for our red triangle into
+[08:28] the depth buffer we'll come back to you
+[08:30] how and why this works in just a moment
+[08:33] for now let's focus on the fact that our
+[08:35] triangles only have a single color what
+[08:38] if we want to apply a texture to that
+[08:41] triangle for example well the rasterizer
+[08:43] is a stage which interpolates vertex
+[08:46] attributes across a triangles surface
+[08:49] and for every pixel of a triangle it
+[08:52] generates it will pass the
+[08:54] attributes onto the pixel shader which
+[08:58] is the stage that calculates the color
+[09:01] as I just said the pixel shader takes in
+[09:04] all the attributes of a single pixel and
+[09:07] outputs a color it can do that based on
+[09:11] a texture and a sampler we discussed
+[09:14] those in the last video which I highly
+[09:16] recommend you go watch and for
+[09:18] programmers here's a code that assigns a
+[09:21] color based on the UV coordinate a
+[09:24] texture and a sampler the final stage in
+[09:27] our graphics pipeline is the output
+[09:29] merger it takes in the color and depth
+[09:33] information of a single pixel
+[09:35] additionally it also takes in the depth
+[09:37] buffer value and the render target color
+[09:40] of the same pixel the output of the
+[09:44] output merger is usually just the same
+[09:46] color as its input however it can also
+[09:49] perform blending which blends between
+[09:52] its input color and the color that is
+[09:55] already in the render target which could
+[09:58] for example give this pink color if the
+[10:01] depth value of the input pixel is
+[10:03] smaller than the value that's already in
+[10:07] the depth buffer then the output merger
+[10:09] will write a color into the render
+[10:11] target and update the value in the depth
+[10:14] buffer however if the depth value of the
+[10:17] output mergers input is larger than the
+[10:22] value that's already in the depth buffer
+[10:24] then the output merger won't write that
+[10:27] color into the render target and leave
+[10:30] the color unchanged this principle is
+[10:32] what made the red triangle appear behind
+[10:35] the blue triangle and that is it for the
+[10:38] graphics pipeline if you enjoy the
+[10:41] series and consider becoming a patron on
+[10:43] patreon comm 4/30 monkey and with that
+[10:47] being said I'll see you all next time
+[10:49] good bye
