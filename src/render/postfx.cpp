@@ -87,17 +87,10 @@ static RwRaster *g_smaaPrevFrameRaster = NULL;
 static int g_smaaRtWidth = 0, g_smaaRtHeight = 0;
 static RwTexture *g_smaaBlendTexRW = NULL;
 static RwTexture *g_smaaPrevFrameTexRW = NULL;
-// Cached D3D9 RT surfaces — SMAA switches render targets without camera Begin/EndUpdate
-static IDirect3DSurface9 *g_smaaEdgeSurf = NULL;
-static IDirect3DSurface9 *g_smaaBlendSurf = NULL;
-static IDirect3DSurface9 *g_smaaPrevFrameSurf = NULL;
 
 void ReleaseSMAAStaticResources(void)
 {
 	dbglog("ReleaseSMAAStaticResources: releasing...");
-	if(g_smaaEdgeSurf){ g_smaaEdgeSurf->Release(); g_smaaEdgeSurf = NULL; }
-	if(g_smaaBlendSurf){ g_smaaBlendSurf->Release(); g_smaaBlendSurf = NULL; }
-	if(g_smaaPrevFrameSurf){ g_smaaPrevFrameSurf->Release(); g_smaaPrevFrameSurf = NULL; }
 	if(g_smaaBlendTexRW){ RwTextureDestroy(g_smaaBlendTexRW); g_smaaBlendTexRW = NULL; }
 	if(g_smaaPrevFrameTexRW){ RwTextureDestroy(g_smaaPrevFrameTexRW); g_smaaPrevFrameTexRW = NULL; }
 	if(g_smaaEdgeRaster){ RwRasterDestroy(g_smaaEdgeRaster); g_smaaEdgeRaster = NULL; }
@@ -3044,8 +3037,11 @@ CPostEffects::DrawSMAA(void)
 		return;
 	}
 
-	int w = RwRasterGetWidth(Scene.camera ? RwCameraGetRaster(Scene.camera) : pRasterFrontBuffer);
-	int h = RwRasterGetHeight(Scene.camera ? RwCameraGetRaster(Scene.camera) : pRasterFrontBuffer);
+	// All intermediates + metrics live on the front buffer's physical texel grid —
+	// the game quad's UVs are normalized to pRasterFrontBuffer, not the camera.
+	if(!pRasterFrontBuffer) return;
+	int w = RwRasterGetWidth(pRasterFrontBuffer);
+	int h = RwRasterGetHeight(pRasterFrontBuffer);
 	if(w < 1 || h < 1) return;
 
 	// --- First-frame / resolution-change detailed log ---
@@ -3075,9 +3071,6 @@ CPostEffects::DrawSMAA(void)
 	if(resolutionChanged){
 		dbglog("[SMAA-DIAG] RESOLUTION CHANGE %dx%d -> %dx%d (destroying all rasters)",
 			g_smaaRtWidth, g_smaaRtHeight, w, h);
-		if(g_smaaEdgeSurf){ g_smaaEdgeSurf->Release(); g_smaaEdgeSurf = NULL; }
-		if(g_smaaBlendSurf){ g_smaaBlendSurf->Release(); g_smaaBlendSurf = NULL; }
-		if(g_smaaPrevFrameSurf){ g_smaaPrevFrameSurf->Release(); g_smaaPrevFrameSurf = NULL; }
 		if(g_smaaEdgeRaster){ RwRasterDestroy(g_smaaEdgeRaster); g_smaaEdgeRaster = NULL; }
 		if(g_smaaBlendRaster){ RwRasterDestroy(g_smaaBlendRaster); g_smaaBlendRaster = NULL; }
 		if(g_smaaPrevFrameRaster){ RwRasterDestroy(g_smaaPrevFrameRaster); g_smaaPrevFrameRaster = NULL; }
@@ -3086,45 +3079,21 @@ CPostEffects::DrawSMAA(void)
 		if(g_smaaPrevFrameTexRW){ RwTextureDestroy(g_smaaPrevFrameTexRW); g_smaaPrevFrameTexRW = NULL; }
 	}
 
-	// Create RW camera texture rasters
+	// Create RW camera texture rasters (8888 — blend pass needs a real alpha channel)
 	if(!g_smaaEdgeRaster){
-		g_smaaEdgeRaster = RwRasterCreate(w, h, pRasterFrontBuffer->depth, rwRASTERTYPECAMERATEXTURE);
+		g_smaaEdgeRaster = RwRasterCreate(w, h, 32, rwRASTERTYPECAMERATEXTURE | rwRASTERFORMAT8888);
 		if(!g_smaaEdgeRaster){ dbglog("[SMAA-DIAG] FATAL: edgeRaster create failed %dx%d", w, h); return; }
-		RwRasterPushContext(g_smaaEdgeRaster);
-		dev->GetRenderTarget(0, &g_smaaEdgeSurf);
-		RwRasterPopContext();
-		if(!g_smaaEdgeSurf){
-			dbglog("[SMAA-DIAG] FATAL: edgeSurf capture failed");
-			RwRasterDestroy(g_smaaEdgeRaster); g_smaaEdgeRaster = NULL;
-			return;
-		}
-		dbglog("[SMAA-DIAG] Created edgeRaster=%p surf=%p %dx%d", g_smaaEdgeRaster, g_smaaEdgeSurf, w, h);
+		dbglog("[SMAA-DIAG] Created edgeRaster=%p %dx%d (fb grid)", g_smaaEdgeRaster, w, h);
 	}
 	if(!g_smaaBlendRaster){
-		g_smaaBlendRaster = RwRasterCreate(w, h, pRasterFrontBuffer->depth, rwRASTERTYPECAMERATEXTURE);
+		g_smaaBlendRaster = RwRasterCreate(w, h, 32, rwRASTERTYPECAMERATEXTURE | rwRASTERFORMAT8888);
 		if(!g_smaaBlendRaster){ dbglog("[SMAA-DIAG] FATAL: blendRaster create failed %dx%d", w, h); return; }
-		RwRasterPushContext(g_smaaBlendRaster);
-		dev->GetRenderTarget(0, &g_smaaBlendSurf);
-		RwRasterPopContext();
-		if(!g_smaaBlendSurf){
-			dbglog("[SMAA-DIAG] FATAL: blendSurf capture failed");
-			RwRasterDestroy(g_smaaBlendRaster); g_smaaBlendRaster = NULL;
-			return;
-		}
-		dbglog("[SMAA-DIAG] Created blendRaster=%p surf=%p %dx%d", g_smaaBlendRaster, g_smaaBlendSurf, w, h);
+		dbglog("[SMAA-DIAG] Created blendRaster=%p %dx%d (fb grid)", g_smaaBlendRaster, w, h);
 	}
 	if(!g_smaaPrevFrameRaster){
-		g_smaaPrevFrameRaster = RwRasterCreate(w, h, pRasterFrontBuffer->depth, rwRASTERTYPECAMERATEXTURE);
+		g_smaaPrevFrameRaster = RwRasterCreate(w, h, 32, rwRASTERTYPECAMERATEXTURE | rwRASTERFORMAT8888);
 		if(!g_smaaPrevFrameRaster){ dbglog("[SMAA-DIAG] FATAL: prevFrameRaster create failed %dx%d", w, h); return; }
-		RwRasterPushContext(g_smaaPrevFrameRaster);
-		dev->GetRenderTarget(0, &g_smaaPrevFrameSurf);
-		RwRasterPopContext();
-		if(!g_smaaPrevFrameSurf){
-			dbglog("[SMAA-DIAG] FATAL: prevFrameSurf capture failed");
-			RwRasterDestroy(g_smaaPrevFrameRaster); g_smaaPrevFrameRaster = NULL;
-			return;
-		}
-		dbglog("[SMAA-DIAG] Created prevFrameRaster=%p surf=%p %dx%d", g_smaaPrevFrameRaster, g_smaaPrevFrameSurf, w, h);
+		dbglog("[SMAA-DIAG] Created prevFrameRaster=%p %dx%d (fb grid)", g_smaaPrevFrameRaster, w, h);
 	}
 
 	// Create D3D textures for area/search lookup
@@ -3184,6 +3153,8 @@ CPostEffects::DrawSMAA(void)
 
 	// Save original camera raster (the draw buffer — back buffer)
 	RwRaster *drawBuffer = RwCameraGetRaster(Scene.camera);
+	int camW = drawBuffer ? RwRasterGetWidth(drawBuffer) : w;
+	int camH = drawBuffer ? RwRasterGetHeight(drawBuffer) : h;
 
 	// Log pre-pass D3D9 state
 	IDirect3DSurface9 *rt0 = NULL;
@@ -3201,27 +3172,28 @@ CPostEffects::DrawSMAA(void)
 	ImmediateModeRenderStatesStore();
 	ImmediateModeRenderStatesSet();
 
-	dbglog("[SMAA-DIAG] Pass0-START: cam=%p camFrame=%p drawBuf=%p",
-		Scene.camera,
-		Scene.camera ? RwCameraGetFrame(Scene.camera) : NULL,
-		drawBuffer);
+	if(dbglog_throttle("smaaP0s"))
+		dbglog("[SMAA-DIAG] Pass0-START: cam=%p camFrame=%p drawBuf=%p",
+			Scene.camera,
+			Scene.camera ? RwCameraGetFrame(Scene.camera) : NULL,
+			drawBuffer);
 
-	// Pure D3D9 RT switching — no camera Begin/EndUpdate (crash fix).
-	// dst surface = entry RT0 (camera raster surface stays bound after EndUpdate).
-	if(!g_smaaEdgeSurf || !g_smaaBlendSurf || !g_smaaPrevFrameSurf){
-		dbglog("[SMAA-DIAG] FATAL: cached RT surfaces NULL (edge=%p blend=%p prev=%p)",
-			g_smaaEdgeSurf, g_smaaBlendSurf, g_smaaPrevFrameSurf);
+	// RW-native RT switching — no camera Begin/EndUpdate, no raw surface handles.
+	if(!g_smaaEdgeRaster || !g_smaaBlendRaster || !g_smaaPrevFrameRaster){
+		dbglog("[SMAA-DIAG] FATAL: intermediate rasters NULL (edge=%p blend=%p prev=%p)",
+			g_smaaEdgeRaster, g_smaaBlendRaster, g_smaaPrevFrameRaster);
 		ImmediateModeRenderStatesReStore();
 		return;
 	}
-	IDirect3DSurface9 *oldRt0 = NULL;
-	dev->GetRenderTarget(0, &oldRt0);
-	if(!oldRt0){
-		dbglog("[SMAA-DIAG] FATAL: entry RT0 NULL");
-		ImmediateModeRenderStatesReStore();
-		return;
-	}
-	dev->SetRenderTarget(0, g_smaaEdgeSurf);
+
+	// Intermediates are front-buffer sized; keep rasterization on the camera
+	// viewport so the quad writes the same top-left texel region its UVs address.
+	D3DVIEWPORT9 vpSaved;
+	dev->GetViewport(&vpSaved);
+	D3DVIEWPORT9 vpCam = { 0, 0, (DWORD)camW, (DWORD)camH, 0.0f, 1.0f };
+
+	RwD3D9SetRenderTarget(0, g_smaaEdgeRaster);
+	dev->SetViewport(&vpCam);
 	dev->Clear(0, NULL, D3DCLEAR_TARGET, D3DCOLOR_ARGB(0,0,0,0), 0.0f, 0);
 
 	// Render states for fullscreen passes — matches SSAO/SSS pattern
@@ -3243,6 +3215,8 @@ CPostEffects::DrawSMAA(void)
 
 	// Set front buffer as input texture on stage 0
 	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)pRasterFrontBuffer);
+	RwRenderStateSet(rwRENDERSTATETEXTUREADDRESSU, (void*)rwTEXTUREADDRESSCLAMP);
+	RwRenderStateSet(rwRENDERSTATETEXTUREADDRESSV, (void*)rwTEXTUREADDRESSCLAMP);
 
 	// Bind previous frame for motion detection on stage 1
 	if(g_smaaPrevFrameRaster){
@@ -3278,7 +3252,8 @@ CPostEffects::DrawSMAA(void)
 	overrideIm2dPixelShader = nil;
 
 	// ---- Pass 1: Blend Weight Calculation ----
-	dev->SetRenderTarget(0, g_smaaBlendSurf);
+	RwD3D9SetRenderTarget(0, g_smaaBlendRaster);
+	dev->SetViewport(&vpCam);
 	dev->Clear(0, NULL, D3DCLEAR_TARGET, D3DCOLOR_ARGB(0,0,0,0), 0.0f, 0);
 
 	IDirect3DSurface9 *p1rt = NULL;
@@ -3290,6 +3265,8 @@ CPostEffects::DrawSMAA(void)
 
 	// Bind edge raster as input texture on stage 0
 	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)g_smaaEdgeRaster);
+	RwRenderStateSet(rwRENDERSTATETEXTUREADDRESSU, (void*)rwTEXTUREADDRESSCLAMP);
+	RwRenderStateSet(rwRENDERSTATETEXTUREADDRESSV, (void*)rwTEXTUREADDRESSCLAMP);
 
 	// Bind area/search textures on stages 1 and 2
 	if(dev){
@@ -3323,8 +3300,9 @@ CPostEffects::DrawSMAA(void)
 		dev->SetTexture(2, NULL);
 	}
 
-	// ---- Pass 2: Neighborhood Blending (back to entry RT) ----
-	dev->SetRenderTarget(0, oldRt0);
+	// ---- Pass 2: Neighborhood Blending (back to camera raster) ----
+	RwD3D9SetRenderTarget(0, drawBuffer);
+	dev->SetViewport(&vpSaved);
 
 	IDirect3DSurface9 *p2rt = NULL;
 	dev->GetRenderTarget(0, &p2rt);
@@ -3334,6 +3312,8 @@ CPostEffects::DrawSMAA(void)
 
 	// Bind original front buffer as color input on stage 0
 	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)pRasterFrontBuffer);
+	RwRenderStateSet(rwRENDERSTATETEXTUREADDRESSU, (void*)rwTEXTUREADDRESSCLAMP);
+	RwRenderStateSet(rwRENDERSTATETEXTUREADDRESSV, (void*)rwTEXTUREADDRESSCLAMP);
 
 	// Bind blend raster on stage 1 via RwD3D9SetTexture
 	if(!g_smaaBlendTexRW && g_smaaBlendRaster){
@@ -3369,11 +3349,11 @@ CPostEffects::DrawSMAA(void)
 	}
 	if(postRt) postRt->Release();
 
-	// Save current frame for next frame's motion detection
-	if(g_smaaPrevFrameSurf)
-		dev->StretchRect(oldRt0, NULL, g_smaaPrevFrameSurf, NULL, D3DTEXF_NONE);
-	oldRt0->Release();
-	oldRt0 = NULL;
+	// Save current frame for next frame's motion detection (RW-native copy:
+	// renders drawBuffer into the pushed prevFrame context — UpdateFrontBuffer pattern).
+	RwRasterPushContext(g_smaaPrevFrameRaster);
+	RwRasterRenderFast(drawBuffer, 0, 0);
+	RwRasterPopContext();
 
 	// Clean up D3D9 state left by SMAA passes
 	if(dev){
