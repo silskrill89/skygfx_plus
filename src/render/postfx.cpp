@@ -3079,19 +3079,25 @@ CPostEffects::DrawSMAA(void)
 		if(g_smaaPrevFrameTexRW){ RwTextureDestroy(g_smaaPrevFrameTexRW); g_smaaPrevFrameTexRW = NULL; }
 	}
 
-	// Create RW camera texture rasters (8888 — blend pass needs a real alpha channel)
+	// Create RW camera texture rasters — plain rwRASTERTYPECAMERATEXTURE at camera
+	// depth, exactly like the radiosity targets (the only creation combo proven to
+	// work with RwD3D9SetRenderTarget in this codebase). Format-forced variants
+	// (e.g. | rwRASTERFORMAT8888) make RW fail the internal texture creation and
+	// crash the RT setter. 2048^2 is fine: pRasterFrontBuffer itself is one.
+	RwRaster *camRasForDepth = RwCameraGetRaster(Scene.camera);
+	int camDepth = camRasForDepth ? camRasForDepth->depth : 32;
 	if(!g_smaaEdgeRaster){
-		g_smaaEdgeRaster = RwRasterCreate(w, h, 32, rwRASTERTYPECAMERATEXTURE | rwRASTERFORMAT8888);
+		g_smaaEdgeRaster = RwRasterCreate(w, h, camDepth, rwRASTERTYPECAMERATEXTURE);
 		if(!g_smaaEdgeRaster){ dbglog("[SMAA-DIAG] FATAL: edgeRaster create failed %dx%d", w, h); return; }
 		dbglog("[SMAA-DIAG] Created edgeRaster=%p %dx%d (fb grid)", g_smaaEdgeRaster, w, h);
 	}
 	if(!g_smaaBlendRaster){
-		g_smaaBlendRaster = RwRasterCreate(w, h, 32, rwRASTERTYPECAMERATEXTURE | rwRASTERFORMAT8888);
+		g_smaaBlendRaster = RwRasterCreate(w, h, camDepth, rwRASTERTYPECAMERATEXTURE);
 		if(!g_smaaBlendRaster){ dbglog("[SMAA-DIAG] FATAL: blendRaster create failed %dx%d", w, h); return; }
 		dbglog("[SMAA-DIAG] Created blendRaster=%p %dx%d (fb grid)", g_smaaBlendRaster, w, h);
 	}
 	if(!g_smaaPrevFrameRaster){
-		g_smaaPrevFrameRaster = RwRasterCreate(w, h, 32, rwRASTERTYPECAMERATEXTURE | rwRASTERFORMAT8888);
+		g_smaaPrevFrameRaster = RwRasterCreate(w, h, camDepth, rwRASTERTYPECAMERATEXTURE);
 		if(!g_smaaPrevFrameRaster){ dbglog("[SMAA-DIAG] FATAL: prevFrameRaster create failed %dx%d", w, h); return; }
 		dbglog("[SMAA-DIAG] Created prevFrameRaster=%p %dx%d (fb grid)", g_smaaPrevFrameRaster, w, h);
 	}
