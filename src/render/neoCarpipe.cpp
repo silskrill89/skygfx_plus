@@ -141,7 +141,10 @@ CarPipe::RenderEnvTex(void)
 		reflectionMatrix->at.y = 0.0f;
 		reflectionMatrix->at.z = 1.0f;
 	}
-	RwMatrix *cammatrix = RwFrameGetMatrix(RwCameraGetFrame(Scene.camera));
+	if(!Scene.camera) return;
+	RwFrame *camFrame = RwCameraGetFrame(Scene.camera);
+	if(!camFrame) return;
+	RwMatrix *cammatrix = RwFrameGetMatrix(camFrame);
 	reflectionMatrix->pos = cammatrix->pos;
 	RwMatrixUpdate(reflectionMatrix);
 	RwFrameTransform(RwCameraGetFrame(reflectionCam), reflectionMatrix, rwCOMBINEREPLACE);
@@ -318,6 +321,11 @@ CarPipe::DiffusePass(RxD3D9ResEntryHeader *header, RpAtomic *atomic)
 	CustomEnvMapPipeMaterialData *envData;
 	int noRefl;
 
+	RwUInt32 savedSrc, savedDst, savedVtxAlpha;
+	RwRenderStateGet(rwRENDERSTATESRCBLEND, &savedSrc);
+	RwRenderStateGet(rwRENDERSTATEDESTBLEND, &savedDst);
+	RwRenderStateGet(rwRENDERSTATEVERTEXALPHAENABLE, &savedVtxAlpha);
+
 	RwD3D9SetTexture(reflectionTex, 1);
 	RwD3D9SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_LERP);
 //	RwD3D9SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
@@ -381,6 +389,10 @@ CarPipe::DiffusePass(RxD3D9ResEntryHeader *header, RpAtomic *atomic)
 		D3D9RenderDual(config->dualPassVehicle, header, inst);
 		inst++;
 	}
+
+	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)savedSrc);
+	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)savedDst);
+	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)savedVtxAlpha);
 }
 
 void
@@ -455,6 +467,10 @@ CarPipe::RenderCallback(RwResEntry *repEntry, void *object, RwUInt8 type, RwUInt
 	if(!iCanHasNeoCar)
 		return;
 
+	RwUInt32 savedFog, savedZWrite;
+	RwRenderStateGet(rwRENDERSTATEFOGENABLE, &savedFog);
+	RwRenderStateGet(rwRENDERSTATEZWRITEENABLE, &savedZWrite);
+
 	_rwD3D9EnableClippingIfNeeded(object, type);
 
 	RxD3D9ResEntryHeader *header = (RxD3D9ResEntryHeader*)&repEntry[1];
@@ -476,4 +492,7 @@ CarPipe::RenderCallback(RwResEntry *repEntry, void *object, RwUInt8 type, RwUInt
 	RwD3D9SetTexture(NULL, 2);
 	RwD3D9SetTextureStageState(2, D3DTSS_COLOROP, D3DTOP_DISABLE);
 	RwD3D9SetTextureStageState(2, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
+
+	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)savedFog);
+	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)savedZWrite);
 }

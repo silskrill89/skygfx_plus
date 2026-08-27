@@ -95,7 +95,7 @@ CustomBuildingEnvMapPipeline__SetupEnv(RpAtomic *atomic, RwFrame *envframe, RwMa
 	   lastfrm != envframe ||
 	   lastrenderframe != RWSRCGLOBAL(renderFrame)){
 		frame = clump ? RpClumpGetFrame(clump) : RpAtomicGetFrame(atomic);
-		if(!frame){
+		if(!frame || !envframe){
 			RwMatrixSetIdentity(envmat);
 			return;
 		}
@@ -143,6 +143,7 @@ setWindParams(RpAtomic *atomic, RwFrame *frame)
 {
 	CVector2D globalWindPos;
 
+	if(!frame) return;
 	RwV3d objPos = RwFrameGetLTM(frame)->pos;
 
 	globalWindPos.x = windPos.x + objPos.x;
@@ -252,6 +253,10 @@ buildingPipe_restoreRenderState(const BuildingRenderState *state)
 {
 	RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTIONREF, (void*)state->alpharef);
 	RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION, (void*)state->alphafunc);
+	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)state->src);
+	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)state->dst);
+	RwRenderStateSet(rwRENDERSTATEFOGCOLOR, (void*)state->fog);
+	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)state->zwrite);
 }
 
 void*
@@ -548,6 +553,9 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Sphere(RwResEntry *repEntry, void 
 	atomic = (RpAtomic*)object;
 	RwMatrixSetIdentity(&ident);
 
+	BuildingRenderState rs;
+	buildingPipe_saveRenderState(&rs);
+
 	_rwD3D9EnableClippingIfNeeded(object, type);
 
 	RwD3D9SetPixelShaderConstant(0, &spheremapfog, 1);
@@ -603,6 +611,7 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Sphere(RwResEntry *repEntry, void 
 
 		instancedData++;
 	}
+	buildingPipe_restoreRenderState(&rs);
 }
 
 void
@@ -754,6 +763,8 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 
 		D3D9Render(resEntryHeader, instancedData);
 	}
+
+	buildingPipe_restoreRenderState(&rs);
 
 	RwD3D9SetVertexShader(NULL);
 	RwD3D9SetPixelShader(NULL);

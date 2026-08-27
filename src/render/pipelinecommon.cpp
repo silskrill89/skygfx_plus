@@ -203,6 +203,7 @@ pipeGetComposedTransformMatrix(RpAtomic *atomic, float *out)
 	RwFrame *frame = RpAtomicGetFrame(atomic);
 	if(!frame){ memset(out, 0, 64); return; }
 	RwMatrix *world = RwFrameGetLTM(frame);
+	if(!world){ memset(out, 0, 64); return; }
 
 	RwToD3DMatrix(&pipeWorldMat, world);
 	transpose(&pipeViewMat, &_RwD3D9D3D9ViewTransform);
@@ -236,6 +237,7 @@ pipeGetLeedsEnvMapMatrix(RpAtomic *atomic, float *out)
 	RwFrame *frame = RpAtomicGetFrame(atomic);
 	if(!frame){ memset(out, 0, 64); return; }
 	RwMatrix *world = RwFrameGetLTM(frame);
+	if(!world){ memset(out, 0, 64); return; }
 	RwCamera *cam = (RwCamera*)RWSRCGLOBAL(curCamera);
 
 	float view[16];
@@ -306,6 +308,7 @@ pipeUploadZeroPS(int loc)
 void
 pipeUploadLightColor(RpLight *light, int loc)
 {
+	if(!light){ pipeUploadZero(loc); return; }
 	float c[4];
 	if(RpLightGetFlags(light) & rpLIGHTLIGHTATOMICS){
 		c[0] = light->color.red;
@@ -320,6 +323,7 @@ pipeUploadLightColor(RpLight *light, int loc)
 void
 pipeUploadLightColorForce(RpLight *light, int loc)
 {
+	if(!light){ pipeUploadZero(loc); return; }
 	float c[4];
 	c[0] = light->color.red;
 	c[1] = light->color.green;
@@ -331,6 +335,7 @@ pipeUploadLightColorForce(RpLight *light, int loc)
 void
 pipeUploadLightColorPS(RpLight *light, int loc)
 {
+	if(!light){ pipeUploadZeroPS(loc); return; }
 	float c[4];
 	if(RpLightGetFlags(light) & rpLIGHTLIGHTATOMICS){
 		c[0] = light->color.red;
@@ -345,6 +350,7 @@ pipeUploadLightColorPS(RpLight *light, int loc)
 void
 pipeUploadLightColorForcePS(RpLight *light, int loc)
 {
+	if(!light){ pipeUploadZeroPS(loc); return; }
 	float c[4];
 	c[0] = light->color.red;
 	c[1] = light->color.green;
@@ -356,6 +362,7 @@ pipeUploadLightColorForcePS(RpLight *light, int loc)
 void
 pipeUploadLightDirection(RpLight *light, int loc)
 {
+	if(!light){ pipeUploadZero(loc); return; }
 	float c[4];
 	if(RpLightGetFlags(light) & rpLIGHTLIGHTATOMICS){
 		RwFrame *lf = RpLightGetFrame(light);
@@ -373,6 +380,7 @@ pipeUploadLightDirection(RpLight *light, int loc)
 void
 pipeUploadLightDirectionForce(RpLight *light, int loc)
 {
+	if(!light){ pipeUploadZero(loc); return; }
 	float c[4];
 	RwFrame *lf = RpLightGetFrame(light);
 	if(!lf){ pipeUploadZero(loc); return; }
@@ -387,6 +395,7 @@ pipeUploadLightDirectionForce(RpLight *light, int loc)
 void
 pipeUploadLightDirectionPS(RpLight *light, int loc)
 {
+	if(!light){ pipeUploadZeroPS(loc); return; }
 	float c[4];
 	if(RpLightGetFlags(light) & rpLIGHTLIGHTATOMICS){
 		RwFrame *lf = RpLightGetFrame(light);
@@ -404,6 +413,7 @@ pipeUploadLightDirectionPS(RpLight *light, int loc)
 void
 pipeUploadLightDirectionForcePS(RpLight *light, int loc)
 {
+	if(!light){ pipeUploadZeroPS(loc); return; }
 	float c[4];
 	RwFrame *lf = RpLightGetFrame(light);
 	if(!lf){ pipeUploadZeroPS(loc); return; }
@@ -418,6 +428,7 @@ pipeUploadLightDirectionForcePS(RpLight *light, int loc)
 void
 pipeUploadLightDirectionLocal(RpLight *light, RwMatrix *m, int loc)
 {
+	if(!light){ pipeUploadZero(loc); return; }
 	float c[4];
 	if(RpLightGetFlags(light) & rpLIGHTLIGHTATOMICS){
 		RwFrame *lf = RpLightGetFrame(light);
@@ -433,6 +444,7 @@ pipeUploadLightDirectionLocal(RpLight *light, RwMatrix *m, int loc)
 void
 pipeUploadLightDirectionInv(RpLight *light, int loc)
 {
+	if(!light){ pipeUploadZero(loc); return; }
 	float c[4];
 	RwFrame *lf = RpLightGetFrame(light);
 	if(!lf){ pipeUploadZero(loc); return; }

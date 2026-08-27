@@ -307,6 +307,9 @@ int32 TriIdx = 0;
 			RwMatrix *pRwMatrix	= RwFrameGetMatrix(pFrame);
 			ASSERT(pRwMatrix);
 
+			// Save original matrix to restore after each plant iteration
+			RwMatrix origMatrix = *pRwMatrix;
+
 			// want same values for plant positions each time...
 			CGeneral_SetRandomSeed(pCurrTriPlant->seed);
 
@@ -413,6 +416,9 @@ int32 TriIdx = 0;
 
 				// do the rendering stuff
 				RpAtomicRender(pAtomic);
+
+				// Restore original matrix before next iteration
+				*pRwMatrix = origMatrix;
 
 			}//for(int32 i=0; i<count; i++)...
 			

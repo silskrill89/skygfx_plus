@@ -41,8 +41,9 @@ static void EnsureSceneTexture(int w, int h)
 {
     if(g_sceneTexture && g_sceneWidth == w && g_sceneHeight == h) return;
     if(g_sceneTexture){ g_sceneTexture->Release(); g_sceneTexture = nullptr; }
-    g_d3dDevice->CreateTexture(w, h, 1, D3DUSAGE_RENDERTARGET,
+    HRESULT hr = g_d3dDevice->CreateTexture(w, h, 1, D3DUSAGE_RENDERTARGET,
         D3DFMT_X8R8G8B8, D3DPOOL_DEFAULT, &g_sceneTexture, nullptr);
+    if(FAILED(hr) || !g_sceneTexture) return;
     g_sceneWidth = w; g_sceneHeight = h;
 }
 
@@ -145,8 +146,11 @@ void waterPipe_setRenderState(void)
     float camPosPS[4] = {camPos.x, camPos.y, camPos.z, 0.0f};
     RwD3D9SetPixelShaderConstant(7, camPosPS, 1);
 
-    float nearClip = RwCameraGetNearClipPlane(ccamera);
-    float farClip = RwCameraGetFarClipPlane(ccamera);
+    float nearClip = 0.5f, farClip = 1000.0f;
+    if(ccamera){
+        nearClip = RwCameraGetNearClipPlane(ccamera);
+        farClip = RwCameraGetFarClipPlane(ccamera);
+    }
     float clipP[4] = {nearClip, farClip, 0.0f, 0.0f};
     RwD3D9SetPixelShaderConstant(8, clipP, 1);
 
@@ -163,5 +167,7 @@ void waterPipe_restoreRenderState(void)
     RwD3D9SetPixelShader(nullptr);
     RwD3D9SetVertexShader(nullptr);
     g_d3dDevice->SetTexture(0, nullptr);
+    RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)false);
+    RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)true);
     g_waterParallaxActive = false;
 }

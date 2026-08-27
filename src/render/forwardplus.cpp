@@ -77,9 +77,12 @@ static void CollectLights(void)
 {
 	g_fpNumLights = 0;
 
+	// Guard: NumLights pointer must be readable and count must be sane
+	if(!NumLights) return;
 	int numLights = *NumLights;
 	if(numLights <= 0 || numLights > MAX_GAME_LIGHTS)
 		return;
+	if(!PointLights) return;
 
 	for(int i = 0; i < numLights && g_fpNumLights < FP_MAX_LIGHTS; i++){
 		const CRegisteredPointLight &light = PointLights[i];

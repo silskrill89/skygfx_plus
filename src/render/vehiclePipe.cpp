@@ -301,7 +301,13 @@ CCustomCarEnvMapPipeline__Env1Xform_PC(RpAtomic *atomic,
 {
 	float sclx, scly;
 	RwMatrix *envmat;
-	envmat = RwFrameGetLTM(RpAtomicGetClump(atomic) ? RpClumpGetFrame(RpAtomicGetClump(atomic)) : RpAtomicGetFrame(atomic));
+	RwFrame *envFrame = RpAtomicGetClump(atomic) ? RpClumpGetFrame(RpAtomicGetClump(atomic)) : RpAtomicGetFrame(atomic);
+	if(envFrame)
+		envmat = RwFrameGetLTM(envFrame);
+	else{
+		static RwMatrix ident = { {1,0,0}, 0, {0,1,0}, 0, {0,0,1}, 0, {0,0,0}, 0 };
+		envmat = &ident;
+	}
 	sclx = envData->GetTransScaleX()*50.0f;
 	scly = envData->GetTransScaleY()*50.0f;
 	// fractional parts of pos/scl
@@ -327,7 +333,13 @@ CCustomCarEnvMapPipeline__Env2Xform_PC(RpAtomic *atomic,
 
 	sclx = envData->GetTransScaleX()*50.0f;
 	scly = envData->GetTransScaleY()*50.0f;
-	envmat = RwFrameGetLTM(RpAtomicGetClump(atomic) ? RpClumpGetFrame(RpAtomicGetClump(atomic)) : RpAtomicGetFrame(atomic));
+	RwFrame *envFrame2 = RpAtomicGetClump(atomic) ? RpClumpGetFrame(RpAtomicGetClump(atomic)) : RpAtomicGetFrame(atomic);
+	if(envFrame2)
+		envmat = RwFrameGetLTM(envFrame2);
+	else{
+		static RwMatrix ident2 = { {1,0,0}, 0, {0,1,0}, 0, {0,0,1}, 0, {0,0,0}, 0 };
+		envmat = &ident2;
+	}
 
 	if(lastrenderframe != RWSRCGLOBAL(renderFrame) ||
 	   lastobject != atomic ||
@@ -905,6 +917,12 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *ob
 	RwFrame *atomicFrame_xbox = RpAtomicGetFrame(atomic);
 	if(!atomicFrame_xbox) return;
 
+	// Save render state at entry
+	VehicleRenderState xboxState;
+	vehiclePipe_saveRenderState(&xboxState);
+	RwBool xboxZwrite;
+	RwRenderStateGet(rwRENDERSTATEZWRITEENABLE, &xboxZwrite);
+
 	noFx = !!(CVisibilityPlugins__GetAtomicId(atomic) & 0x6000);
 	blownUp = !((RpLightGetFlags(pDirect) & rpLIGHTLIGHTATOMICS) == 0 ||
 	           (CVisibilityPlugins__GetAtomicId(atomic) & 0x4000) == 0);
@@ -1070,6 +1088,12 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *ob
 	RwD3D9SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
 	RwD3D9SetTextureStageState(1, D3DTSS_TEXCOORDINDEX, 1);
 	RwD3D9SetTextureStageState(1, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_DISABLE);
+	// Restore render state
+	RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION, (void*)xboxState.alphafunc);
+	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)xboxState.src);
+	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)xboxState.dst);
+	RwRenderStateSet(rwRENDERSTATEFOGCOLOR, (void*)xboxState.fog);
+	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)xboxZwrite);
 }
 
 
@@ -1189,8 +1213,8 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_leeds(RwResEntry *repEntry, void *o
 
 		D3D9Render(resEntryHeader, instancedData);
 
-		RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
-
+		RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)state.dst);
+		RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)state.src);
 		RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)state.fog);
 		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
 		RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION, (void*)state.alphafunc);
@@ -1563,6 +1587,7 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 		RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION, (void*)alphafunc);
 		RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)src);
 		RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)dst);
+		RwRenderStateSet(rwRENDERSTATETEXTUREADDRESS, (void*)rwTEXTUREADDRESSCLAMP);
 		continue;
 	}
 
@@ -1821,6 +1846,11 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 	RwD3D9SetTextureStageState(3, D3DTSS_COLOROP, D3DTOP_DISABLE);
 	RwD3D9SetTextureStageState(3, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
 	RwD3D9SetTexture(NULL, 4);
+	// Restore render state saved at entry
+	RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION, (void*)alphafunc);
+	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)src);
+	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)dst);
+	RwRenderStateSet(rwRENDERSTATEFOGCOLOR, (void*)fog);
 }
 
 void

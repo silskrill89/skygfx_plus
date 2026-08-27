@@ -34,6 +34,7 @@ MakeEnvmapRasters(void)
 	if(envZB) RwRasterDestroy(envZB);
 	envFB = RwRasterCreate(config->envMapSize, config->envMapSize, 0, rwRASTERTYPECAMERATEXTURE);
 	envZB = RwRasterCreate(config->envMapSize, config->envMapSize, 0, rwRASTERTYPEZBUFFER);
+	if(!envFB || !envZB) return;
 	if(reflectionCam){
 		RwCameraSetRaster(reflectionCam, envFB);
 		RwCameraSetZRaster(reflectionCam, envZB);
@@ -132,6 +133,7 @@ MakeNormalRasters(void)
 	if(normalZB) RwRasterDestroy(normalZB);
 	normalFB = RwRasterCreate(w, h, 0, rwRASTERTYPECAMERATEXTURE);
 	normalZB = RwRasterCreate(w, h, 0, rwRASTERTYPEZBUFFER);
+	if(!normalFB || !normalZB) return;
 	RwCameraSetRaster(normalCam, normalFB);
 	RwCameraSetZRaster(normalCam, normalZB);
 	if(normalTex)
@@ -460,7 +462,10 @@ RenderReflectionMap_leeds(void)
 
 	RwCameraSetViewWindow(reflectionCam, &cam->viewWindow);
 
-	RwFrameTransform(RwCameraGetFrame(reflectionCam), &RwCameraGetFrame(cam)->ltm, rwCOMBINEREPLACE);
+	RwFrame *reflFrame = RwCameraGetFrame(reflectionCam);
+	RwFrame *camFrame = RwCameraGetFrame(cam);
+	if(!reflFrame || !camFrame){ RwCameraBeginUpdate(cam); return; }
+	RwFrameTransform(reflFrame, &camFrame->ltm, rwCOMBINEREPLACE);
 
 	RwRGBA color = { skyTopRed, skyTopGreen, skyTopBlue, 255 };
 //	RwRGBA color = { skyBotRed, skyBotGreen, skyBotBlue, 255 };
@@ -476,7 +481,6 @@ RenderReflectionMap_leeds(void)
 	Scene.camera = reflectionCam;	// they do some begin/end updates with this in the called functions :/
 	CClouds__RenderSkyPolys();
 	RenderReflectionScene();
-	RwFrame *reflFrame = RwCameraGetFrame(reflectionCam);
 	if(reflFrame){
 		RwMatrix *reflLTM = RwFrameGetLTM(reflFrame);
 		if(reflLTM)
@@ -595,6 +599,7 @@ RenderNormalBuffer(void)
 
 	// Position normal cam offset along right vector
 	RwFrame *nFrame = RwCameraGetFrame(normalCam);
+	if(!nFrame) return;
 	RwMatrix *nLTM = RwFrameGetMatrix(nFrame);
 	*nLTM = *RwFrameGetMatrix(RwCameraGetFrame(cam));
 	nLTM->pos.x += camLTM->right.x * offset;

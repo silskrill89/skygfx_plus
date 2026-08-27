@@ -92,7 +92,7 @@ See **`docs/plans/2026-08-01-remaining-roadmap.md`** for the complete implementa
 | 3 | Architecture cleanup (vehiclePipe dedup, buildingPipe dedup, FOGENABLE fix) | ✅ DONE (aa8693b, 4ef8ce3, b680e31) |
 | Phase F | Atmospheric features (height fog ✓, god rays ✓, stencil shadows ✓, clouds ✓) | ✅ DONE |
 | 4 | Platform selection UI (presets ✓, pipe dropdowns ✓, hot-reload) | ✅ DONE (hot-reload deferred) |
-| 5 | Advanced features (Forward+ N/A on SM3.0, skin/SSS ✓, normal buffer ✓) | ✅ MOSTLY DONE |
+| 5 | Advanced features (Forward+ ✓, skin/SSS ✓, normal buffer ✓) | ✅ DONE |
 | C | Normal map integration (DK22Pac) — **LAST per user rule** | 🔒 DEFERRED |
 
 ## Key addresses / facts
