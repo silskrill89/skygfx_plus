@@ -1696,7 +1696,7 @@ readIni(int n)
 		ADD_IF_MISSING("SkyGfx", "skinEnhanceEnable", "1");
 		ADD_IF_MISSING("SkyGfx", "hairEnhanceEnable", "1");
 		ADD_IF_MISSING("SkyGfx", "vegetationEnhanceEnable", "1");
-		ADD_IF_MISSING("SkyGfx", "enableNormalMaps", "1");
+		ADD_IF_MISSING("SkyGfx", "enableNormalMaps", "0");
 		ADD_IF_MISSING("SkyGfx", "ivMode", "0");
 		ADD_IF_MISSING("SkyGfx", "ivDesaturation", "0.15");
 		ADD_IF_MISSING("SkyGfx", "ivGamma", "1.0");

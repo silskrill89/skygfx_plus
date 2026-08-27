@@ -255,7 +255,7 @@ readIni(int n)
 	c->nightVision = StrAssoc::get(ps2pcMap, cfg.get("SkyGfx", "nightVision", "").c_str());
 	c->grainFilter = StrAssoc::get(ps2pcMap, cfg.get("SkyGfx", "grainFilter", "").c_str());
 
-	iCanHasNormalMapping = readint(cfg.get("SkyGfx", "enableNormalMaps", ""), 1) == 1;
+	iCanHasNormalMapping = readint(cfg.get("SkyGfx", "enableNormalMaps", ""), 0) == 1;
 	c->normalMapIntensity = readfloat(cfg.get("SkyGfx", "normalMapIntensity", ""), 1.0f);
 	c->normalMapPlayerOnly = readint(cfg.get("SkyGfx", "normalMapPlayerOnly", ""), 1) == 1;
 
