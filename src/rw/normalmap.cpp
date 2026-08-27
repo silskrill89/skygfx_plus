@@ -295,6 +295,19 @@ void normalmap_tryAttach()
     if(normalmapInitialized)
         return;
 
+    // Skip if normalmaps disabled in config
+    {
+        static int checked = 0, enabled = 1;
+        if(!checked){
+            checked = 1;
+            char buf[16] = {0};
+            GetPrivateProfileStringA("SkyGfx", "enableNormalMaps", "0", buf, sizeof(buf), ".\\skygfx.ini");
+            enabled = atoi(buf);
+        }
+        if(!enabled)
+            return;
+    }
+
     // The RW engine must be fully initialized before the plugin can attach.
     // normalmap_init() runs from DllMain (too early), so poll the game's
     // engine-instance pointer and defer until it is valid. This replicates
