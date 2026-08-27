@@ -16,7 +16,7 @@
 | vehiclePipe dedup | Extract 5 shared helpers, refactor 5 callbacks | ✅ DONE (b680e31) |
 | Normalmap deferred attach | RpNormMapPluginAttach timing fix | ✅ DONE (b680e31) |
 | Architecture (WORKFLOW_PLAN 3) | Config refactor, buildingPipe dedup, render state | ✅ DONE (aa8693b, 4ef8ce3) |
-| **Phase F** | **Atmospheric: height fog ✓, god rays ✓, stencil shadows, clouds** | **🔧 IN PROGRESS** |
+| **Phase F** | **Atmospheric: height fog ✓, god rays ✓, stencil shadows ✓, clouds ✓** | **✅ DONE** |
 | Phase 2 (Roadmap) | Platform/game style selection UI | ❌ NOT STARTED |
 | Phase 3 (Roadmap) | GTA V/IV-style settings menu | ❌ NOT STARTED |
 | Phase 4 (Roadmap) | Forward+ unified pipeline | ❌ NOT STARTED |

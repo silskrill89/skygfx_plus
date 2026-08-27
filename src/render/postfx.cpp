@@ -3131,6 +3131,12 @@ CPostEffects::DrawSMAA(void)
 		dbglog("[SMAA-DIAG] Created prevFrameRaster=%p %dx%d (fb grid)", g_smaaPrevFrameRaster, w, h);
 	}
 
+	// Save/restore D3D9 state around all SMAA passes + texture creation.
+	// Must be BEFORE area/search tex generation — those leave D3D9 state dirty,
+	// and we need Restore to capture the original game state, not the post-creation state.
+	ImmediateModeRenderStatesStore();
+	ImmediateModeRenderStatesSet();
+
 	// Create D3D textures for area/search lookup
 	if(!g_smaaAreaTex){
 		if(dev){
@@ -3139,9 +3145,6 @@ CPostEffects::DrawSMAA(void)
 			GenerateSMAAAreaTex(dev, &g_smaaAreaTex);
 			GenerateSMAASearchTex(dev, &g_smaaSearchTex);
 			dbglog("[SMAA-DIAG] Generated areaTex=%p searchTex=%p", g_smaaAreaTex, g_smaaSearchTex);
-			// Skip this frame — D3D9 state may be inconsistent after texture creation.
-			// The next frame will have all resources ready.
-			return;
 		}
 	}
 
@@ -3205,12 +3208,6 @@ CPostEffects::DrawSMAA(void)
 	if(rt0) rt0->Release();
 
 	// ---- Pass 0: Edge + Motion + Depth Detection ----
-	// CRITICAL: IMRS Store/Set must be AFTER all raster/texture creation (above).
-	// The D3D9 calls from RwRasterCreate and GenerateSMAAAreaTex modify D3D9 state —
-	// if IMRS Set ran before them, its state would be corrupted.
-	ImmediateModeRenderStatesStore();
-	ImmediateModeRenderStatesSet();
-
 	if(dbglog_throttle("smaaP0s"))
 		dbglog("[SMAA-DIAG] Pass0-START: cam=%p camFrame=%p drawBuf=%p",
 			Scene.camera,
@@ -3339,14 +3336,17 @@ CPostEffects::DrawSMAA(void)
 		dev->SetTexture(2, NULL);
 	}
 
-	// ---- Pass 2: Neighborhood Blending (back to camera raster) ----
-	RwD3D9SetRenderTarget(0, drawBuffer);
-	dev->SetViewport(&vpSaved);
+	// ---- Pass 2: Neighborhood Blending → edgeRaster (temp reuse) ----
+	// Render to edgeRaster instead of drawBuffer so Pass 3 temporal can read it
+	// while writing to drawBuffer — avoids D3D9 read-write conflict on same surface.
+	// edgeRaster is done being read after Pass 1, safe to reuse as temp.
+	RwD3D9SetRenderTarget(0, g_smaaEdgeRaster);
+	dev->SetViewport(&vpCam);
 
 	IDirect3DSurface9 *p2rt = NULL;
 	dev->GetRenderTarget(0, &p2rt);
 	if(dbglog_throttle("smaaP2"))
-		dbglog("[SMAA-DIAG] Pass2: drawBuf=%p RT0=%p shader=%p", drawBuffer, p2rt, SMAA_BlendNeighbor);
+		dbglog("[SMAA-DIAG] Pass2: edgeRaster=%p RT0=%p shader=%p", g_smaaEdgeRaster, p2rt, SMAA_BlendNeighbor);
 	if(p2rt) p2rt->Release();
 
 	// Bind original front buffer as color input on stage 0
@@ -3372,34 +3372,20 @@ CPostEffects::DrawSMAA(void)
 	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
 	overrideIm2dPixelShader = nil;
 
-	// Cleanup texture stages
+	// Cleanup texture stages after Pass 2
 	RwD3D9SetTexture(NULL, 1);
 	d3d9device->SetTexture(2, NULL);
 	d3d9device->SetTexture(3, NULL);
 
-	// Camera state untouched — RT0 still bound to entry surface.
-
-	// Verify RT0 state after all 3 passes
-	IDirect3DSurface9 *postRt = NULL;
-	dev->GetRenderTarget(0, &postRt);
-	if(dbglog_throttle("smaaPF")){
-		dbglog("[SMAA-DIAG] POST-PASS: RT0=%p cam=%p camRas=%p",
-			postRt, Scene.camera, Scene.camera ? RwCameraGetRaster(Scene.camera) : NULL);
-	}
-	if(postRt) postRt->Release();
-
-	// ---- Pass 3: Temporal Resolve ----
-	// Blends current SMAA result with previous frame for temporal stabilization.
-	// Renders to prevFrameRaster (separate surface) to avoid D3D9 read-write conflict,
-	// then copies result back to drawBuffer.
+	// ---- Pass 3: Temporal Resolve → drawBuffer (final output) ----
+	// Reads edgeRaster (current SMAA result) + prevFrameRaster (history),
+	// writes directly to drawBuffer. No extra copy-back blit needed.
 	if(SMAA_Temporal && g_smaaPrevFrameRaster){
-		// Render temporal blend to prevFrameRaster
-		RwD3D9SetRenderTarget(0, g_smaaPrevFrameRaster);
-		dev->SetViewport(&vpCam);
-		dev->Clear(0, NULL, D3DCLEAR_TARGET, D3DCLEAR_TARGET, 0, 0);
+		RwD3D9SetRenderTarget(0, drawBuffer);
+		dev->SetViewport(&vpSaved);
 
-		// Bind current frame (drawBuffer = SMAA result) on s0
-		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)drawBuffer);
+		// Bind current SMAA result (edgeRaster) on s0
+		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)g_smaaEdgeRaster);
 		RwRenderStateSet(rwRENDERSTATETEXTUREADDRESSU, (void*)rwTEXTUREADDRESSCLAMP);
 		RwRenderStateSet(rwRENDERSTATETEXTUREADDRESSV, (void*)rwTEXTUREADDRESSCLAMP);
 
@@ -3419,20 +3405,20 @@ CPostEffects::DrawSMAA(void)
 		// Cleanup
 		RwD3D9SetTexture(NULL, 1);
 
-		// Copy temporal result from prevFrameRaster back to drawBuffer
+		if(dbglog_throttle("smaaTemporal"))
+			dbglog("[SMAA-DIAG] Pass3 Temporal: edge=%p + prev=%p -> drawBuf=%p shader=%p",
+				g_smaaEdgeRaster, g_smaaPrevFrameRaster, drawBuffer, SMAA_Temporal);
+	} else {
+		// No temporal: Pass 2 result is in edgeRaster, copy to drawBuffer
 		RwD3D9SetRenderTarget(0, drawBuffer);
 		dev->SetViewport(&vpSaved);
 
 		RwRasterPushContext(drawBuffer);
-		RwRasterRenderFast(g_smaaPrevFrameRaster, 0, 0);
+		RwRasterRenderFast(g_smaaEdgeRaster, 0, 0);
 		RwRasterPopContext();
-
-		if(dbglog_throttle("smaaTemporal"))
-			dbglog("[SMAA-DIAG] Pass3 Temporal: prevFrame=%p -> drawBuf=%p shader=%p",
-				g_smaaPrevFrameRaster, drawBuffer, SMAA_Temporal);
 	}
 
-	// Save current frame for next frame's motion detection
+	// Save current frame for next frame's temporal history
 	RwRasterPushContext(g_smaaPrevFrameRaster);
 	RwRasterRenderFast(drawBuffer, 0, 0);
 	RwRasterPopContext();
