@@ -17,10 +17,10 @@
 | Normalmap deferred attach | RpNormMapPluginAttach timing fix | ✅ DONE (b680e31) |
 | Architecture (WORKFLOW_PLAN 3) | Config refactor, buildingPipe dedup, render state | ✅ DONE (aa8693b, 4ef8ce3) |
 | **Phase F** | **Atmospheric: height fog ✓, god rays ✓, stencil shadows ✓, clouds ✓** | **✅ DONE** |
-| Phase 2 (Roadmap) | Platform/game style selection UI | ❌ NOT STARTED |
-| Phase 3 (Roadmap) | GTA V/IV-style settings menu | ❌ NOT STARTED |
-| Phase 4 (Roadmap) | Forward+ unified pipeline | ❌ NOT STARTED |
-| Phase 5 (ROADMAP) | SM3.0 feature fit — skin/hair/veg, normal buffer AO | ❌ NOT STARTED |
+| Phase 2 (Roadmap) | Platform/game style selection UI | ✅ DONE (presets + pipe dropdowns) |
+| Phase 3 (Roadmap) | GTA V/IV-style settings menu | ✅ DONE (ImGui two-tab layout) |
+| Phase 4 (Roadmap) | Forward+ unified pipeline | ❌ NOT POSSIBLE (SM3.0/D3D9 — no compute shaders) |
+| Phase 5 (ROADMAP) | SM3.0 feature fit — skin/SSS ✓, normal buffer ✓, normal maps deferred | ✅ MOSTLY DONE |
 | C (Deferred) | Normal map integration (DK22Pac) — LAST per user rule | 🔒 DEFERRED |
 
 ---

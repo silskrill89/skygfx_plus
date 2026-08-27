@@ -90,9 +90,9 @@ See **`docs/plans/2026-08-01-remaining-roadmap.md`** for the complete implementa
 | 1 | Restore full compatibility (dead stubs annotated, Motion Blur wired, SSS wired) | ✅ DONE (7f85408, 05dc968) |
 | 2 | Visual quality (CJ depth, glass, sun streaks, CryEngine PBR, glossiness, env reflections) | ✅ DONE (a600105, c671ce3, f09e50a) |
 | 3 | Architecture cleanup (vehiclePipe dedup, buildingPipe dedup, FOGENABLE fix) | ✅ DONE (aa8693b, 4ef8ce3, b680e31) |
-| **F** | **Atmospheric features (height fog ✓, god rays ✓, stencil shadows ✓, clouds ✓)** | **✅ DONE** |
-| 4 | Platform selection UI (vehicleStyle/buildingStyle/colorStyle INI + menu) | ❌ NOT STARTED |
-| 5 | Advanced features (Forward+, skin/hair/veg, multi-agent) | ❌ NOT STARTED |
+| Phase F | Atmospheric features (height fog ✓, god rays ✓, stencil shadows ✓, clouds ✓) | ✅ DONE |
+| 4 | Platform selection UI (presets ✓, pipe dropdowns ✓, hot-reload) | ✅ DONE (hot-reload deferred) |
+| 5 | Advanced features (Forward+ N/A on SM3.0, skin/SSS ✓, normal buffer ✓) | ✅ MOSTLY DONE |
 | C | Normal map integration (DK22Pac) — **LAST per user rule** | 🔒 DEFERRED |
 
 ## Key addresses / facts
