@@ -177,6 +177,41 @@ python tools/skytool.py research <url>          # Ingest URL to research docs
 | Source | Location | Count |
 |--------|----------|-------|
 | GTAMods Wiki | `H:/wikis/gtamods/rendering/` | 130 articles |
-| Obsidian Vault | `E:/dev(dave)/SKYGFXPLUS_DOCS/` | 180+ docs |
+| Obsidian Vault (SkyGFX) | `E:/dev(dave)/SKYGFXPLUS_DOCS/` | 195 docs |
+| Obsidian Vault (RE) | `E:/dev(dave)/GTA SA Reverse Engineering Documentation/` | 128 docs |
 | Science Pillars | `memory-bank/.cache/science-pillars/` | 3 docs |
 | Research | `docs/research/youtube/` | 6 transcripts |
+
+### Memory Layers (7 total)
+
+| # | Layer | Location | Purpose |
+|---|-------|----------|---------|
+| 1 | Conversation | Current session | Working context |
+| 2 | Memory Bank | `.opencode/memory-bank/*.md` | Structured project state (6 files) |
+| 3 | Serena | `.serena/memories/*.md` | Curated knowledge notes (6 files) |
+| 4 | Sadie | `.sadie/sadie.db` | Queryable SQLite index of ALL layers (371 items) |
+| 5 | Harness-memory | `.harness-memory/memory.sqlite` | Dream-consolidated memories |
+| 6 | Obsidian RE Vault | `GTA SA Reverse Engineering Documentation` | RW/SA reference library (128 notes) |
+| 7 | Obsidian SkyGFX Docs | `SKYGFXPLUS_DOCS` | SkyGFX-specific documentation (195 notes) |
+
+### Sadie Knowledge Librarian
+
+```bash
+python .sadie/sadie.py init                     # Build/rebuild database from all sources
+python .sadie/sadie_vault_sync.py               # Sync BOTH Obsidian vaults into sadie.db
+python .sadie/sadie.py search "<term>"          # Search items by title/content/tags
+python .sadie/sadie.py query "<sql>"            # Run SQL query
+python .sadie/sadie.py stats                    # Show database statistics
+python .sadie/sadie.py locations                # List file locations
+python .sadie/sadie.py gotchas                  # Show critical items
+python tools/memory-startup.py                  # Bootstrap all 5 file-based layers
+python tools/memory-startup.py --check          # Check freshness of all layers
+```
+
+### MCP Servers (Obsidian)
+
+Two Obsidian vault MCP servers configured in `~/.config/mimocode/mimocode.jsonc`:
+- `obsidian-re-vault` — GTA SA Reverse Engineering Documentation vault
+- `obsidian-skygfx-docs` — SKYGFXPLUS_DOCS vault
+
+Both use `obsidian-mcp-server.exe` via Obsidian Local REST API plugin.

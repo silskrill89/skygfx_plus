@@ -1066,8 +1066,8 @@ CPostEffects::ColourFilter_Modern(RwRGBA rgba1, RwRGBA rgba2)
 		bool isCutscene = CCutsceneMgr__ms_running;
 
 		// --- Timecycle signals (normalized 0-1 where applicable) ---
-		float tcAmbientLuma  = 0.299f*tc.ambientR + 0.587f*tc.ambientG + 0.114f*tc.ambientB;
-		float tcDirLuma      = 0.299f*tc.directionalR + 0.587f*tc.directionalG + 0.114f*tc.directionalB;
+		float tcAmbientLuma  = (0.299f*tc.ambientR + 0.587f*tc.ambientG + 0.114f*tc.ambientB) / 255.0f;
+		float tcDirLuma      = (0.299f*tc.directionalR + 0.587f*tc.directionalG + 0.114f*tc.directionalB) / 255.0f;
 		float sceneLuma      = tcAmbientLuma + tcDirLuma * 0.5f;
 		float shadowNorm     = max(0.0f, min(1.0f, (float)tc.shadowStrength / 255.0f));
 		float fogFactor      = max(0.0f, min(1.0f, tc.fogStart / 500.0f));       // less fog = 1, heavy fog = 0
@@ -1084,34 +1084,46 @@ CPostEffects::ColourFilter_Modern(RwRGBA rgba1, RwRGBA rgba2)
 		// encode the correct mood. We use the same adaptive path for everything.
 		// Cutscene/interior gets a gentle dampening factor where the sun is pointing at camera.
 
+		// --- Garage/sheltered area detection ---
+		// Garages are NOT interiors (currArea==0) but have partial occlusion.
+		// CCullZones detect sheltered areas (no rain zones). In garages, there's
+		// only skylight from the front opening — reduce exposure to match.
+		extern bool CCullZones__PlayerNoRain(void);
+		bool isSheltered = CCullZones__PlayerNoRain() && !isInterior;
+		float garageDampen = isSheltered ? 0.65f : 1.0f;  // 35% darker in garages
+
 		// --- Exposure: reciprocal of scene brightness + timecycle dampening ---
-		float sceneExposure = 1.0f / max(0.70f + sceneLuma * 2.0f, 1e-7f);
-		sceneExposure = max(0.80f, min(1.30f, sceneExposure));
+		// sceneLuma is now normalized 0-1 from timecycle ambient+directional
+		// Night (sceneLuma≈0.05): exposure≈1.3 (brighter, lifts shadows)
+		// Midday (sceneLuma≈0.35): exposure≈0.7 (darker, prevents blowout)
+		float sceneExposure = 1.0f / max(0.50f + sceneLuma * 2.5f, 1e-7f);
+		sceneExposure = max(0.50f, min(1.50f, sceneExposure));
 		// Carcols env mult nudges ±5%
 		float carcolsAdapt = 0.95f + envMult * 0.05f;
 		// Bright sun → slightly less exposure (prevent highlight blowout)
 		float sunDampen = 1.0f - max(0.0f, min(0.08f, sunBright * 0.05f));
-		exposure = baseExposure * sceneExposure * carcolsAdapt * sunDampen;
+		exposure = baseExposure * sceneExposure * carcolsAdapt * sunDampen * garageDampen;
 
-		// Cutscene/interior: no dampening — timecycle encodes the correct mood
+		// Interior: timecycle encodes the correct mood, no extra dampening
 
 		// --- Toe: shadow lift driven by sceneLuma + timecycle shadow depth ---
-		float toeFromLuma   = 0.20f - sceneLuma * 1.0f;
-		float toeFromShadow = shadowNorm * 0.08f;  // deeper shadows → more lift
-		toeStrength = max(0.05f, min(0.25f, toeFromLuma + toeFromShadow));
+		// sceneLuma is normalized 0-1, so toe responds properly to time-of-day
+		float toeFromLuma   = 0.25f - sceneLuma * 0.8f;
+		float toeFromShadow = shadowNorm * 0.10f;  // deeper shadows → more lift
+		toeStrength = max(0.05f, min(0.35f, toeFromLuma + toeFromShadow));
 
 		// --- Grade params: fully timecycle-driven ---
 		// Contrast: shadow strength × fog clearance (deep shadows + clear sky = max contrast)
-		gradeContrast = 1.15f + shadowNorm * 0.25f * fogFactor;
+		gradeContrast = 1.10f + shadowNorm * 0.30f * fogFactor;
 
 		// Brightness: street lights provide fill in dark scenes
-		gradeBrightness = 0.03f + streetLights * 0.04f;
+		gradeBrightness = 0.02f + streetLights * 0.05f;
 
 		// Lift: overcast/cloudy raises blacks slightly; heavy fog also lifts
-		gradeLift = clouds * 0.015f + (1.0f - fogFactor) * 0.01f;
+		gradeLift = clouds * 0.020f + (1.0f - fogFactor) * 0.015f;
 
 		// Curve blend: brighter scenes get more S-curve for depth
-		gradeCurve = 0.25f + sceneLuma * 0.25f;
+		gradeCurve = 0.20f + sceneLuma * 0.30f;
 
 		// Throttled diagnostic
 		static unsigned int tonemapLogCounter = 0;
@@ -1535,9 +1547,11 @@ void DrawPipeChain(void);
 void
 CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 {
-	if(dbglog_throttle( "cf_switch"))
-		dbglog("[PostFX] ColourFilter_switch ENTER filter=%d pipeline=%d pRasterFrontBuffer=%p",
-			config->colorFilter, config->pipeline, CPostEffects::pRasterFrontBuffer);
+	// Log entry with full context for crash correlation
+	if(dbglog_throttle("cf_switch"))
+		dbglog("[PostFX] ColourFilter_switch: filter=%d pipeline=%d smaa=%d ssao=%d motionBlur=%d",
+			config->colorFilter, config->pipeline, config->smaaEnable,
+			config->ssaoEnable, config->motionBlurEnable);
 
 	if(!CPostEffects::pRasterFrontBuffer){
 		dbglog("[PostFX] WARNING: pRasterFrontBuffer is NULL! ColourFilter_switch bailing");
@@ -1849,6 +1863,8 @@ CPostEffects::DrawFinalEffects(void)
 	// Sync front buffer first so HUD (already drawn into camera raster) survives
 	// SMAA's full-frame repaint from pRasterFrontBuffer.
 	if(config->smaaEnable && SMAA_Edge){
+		if(dbglog_throttle("smaa_entry"))
+			dbglog("[SMAA] DrawFinalEffects: entering SMAA (Edge=%p Temporal=%p)", SMAA_Edge, SMAA_Temporal);
 		UpdateFrontBuffer();
 		DrawSMAA();
 	}
@@ -3015,25 +3031,36 @@ void
 CPostEffects::DrawSMAA(void)
 {
 	IDirect3DDevice9 *dev = d3d9device;
+
+	// Guard: SMAA disabled or shaders not loaded
 	if(!config->smaaEnable || !SMAA_Edge || !SMAA_BlendWeight || !SMAA_BlendNeighbor){
-		if(dbglog_throttle("smaa_skip"))
-			dbglog("[SMAA-DIAG] SKIP: enable=%d Edge=%p BlendW=%p BlendN=%p",
-				config->smaaEnable, SMAA_Edge, SMAA_BlendWeight, SMAA_BlendNeighbor);
+		// When SMAA is disabled, release resources so they're recreated cleanly on re-enable
+		if(g_smaaRtWidth != 0 || g_smaaRtHeight != 0){
+			ReleaseSMAAStaticResources();
+			dbglog("[SMAA] Disabled — released resources (Edge=%p BlendW=%p BlendN=%p)",
+				SMAA_Edge, SMAA_BlendWeight, SMAA_BlendNeighbor);
+		}
 		return;
 	}
+
+	// Guard: front buffer not ready
 	if(pRasterFrontBuffer == NULL){
 		if(dbglog_throttle("smaa_skip"))
-			dbglog("[SMAA-DIAG] SKIP: pRasterFrontBuffer=NULL");
+			dbglog("[SMAA] SKIP: pRasterFrontBuffer=NULL");
 		return;
 	}
+
+	// Guard: device state invalid
 	if(!CheckDeviceState()){
 		if(dbglog_throttle("smaa_skip"))
-			dbglog("[SMAA-DIAG] SKIP: CheckDeviceState failed");
+			dbglog("[SMAA] SKIP: CheckDeviceState failed");
 		return;
 	}
+
+	// Guard: D3D9 device not available
 	if(!dev){
 		if(dbglog_throttle("smaa_skip"))
-			dbglog("[SMAA-DIAG] SKIP: d3d9device=NULL");
+			dbglog("[SMAA] SKIP: d3d9device=NULL");
 		return;
 	}
 
@@ -3051,7 +3078,9 @@ CPostEffects::DrawSMAA(void)
 	if(smaaFirstFrame || resolutionChanged){
 		static const float thresholds[] = { 0.15f, 0.1f, 0.1f, 0.05f };
 		static const float maxSearchSteps[] = { 4.0f, 8.0f, 16.0f, 32.0f };
-		int preset = config->smaaPreset & 3;
+		// SMAA internal constants: HIGH preset, temporal always on
+		static const int kSmaaPreset = 2; // HIGH
+		int preset = kSmaaPreset;
 		dbglog("[SMAA-DIAG] === INIT/FIRST-FRAME ===");
 		dbglog("[SMAA-DIAG] pRasterFrontBuffer=%p %dx%d depth=%d",
 			pRasterFrontBuffer, w, h, pRasterFrontBuffer->depth);
@@ -3060,8 +3089,8 @@ CPostEffects::DrawSMAA(void)
 			camRas ? RwRasterGetWidth(camRas) : 0, camRas ? RwRasterGetHeight(camRas) : 0);
 		dbglog("[SMAA-DIAG] Edge=%p EdgeMotionDepth=%p BlendW=%p BlendN=%p Temporal=%p",
 			SMAA_Edge, SMAA_EdgeMotionDepth, SMAA_BlendWeight, SMAA_BlendNeighbor, SMAA_Temporal);
-		dbglog("[SMAA-DIAG] preset=%d thresh=%.3f searchSteps=%.0f temporal=%d",
-			preset, thresholds[preset], maxSearchSteps[preset], config->smaaTemporal);
+		dbglog("[SMAA-DIAG] preset=%d thresh=%.3f searchSteps=%.0f temporal=1",
+			preset, thresholds[preset], maxSearchSteps[preset]);
 		dbglog("[SMAA-DIAG] velocityTex=%p prevFrame=%p",
 			g_velocityTex, g_smaaPrevFrameRaster);
 		smaaFirstFrame = false;
@@ -3110,6 +3139,9 @@ CPostEffects::DrawSMAA(void)
 			GenerateSMAAAreaTex(dev, &g_smaaAreaTex);
 			GenerateSMAASearchTex(dev, &g_smaaSearchTex);
 			dbglog("[SMAA-DIAG] Generated areaTex=%p searchTex=%p", g_smaaAreaTex, g_smaaSearchTex);
+			// Skip this frame — D3D9 state may be inconsistent after texture creation.
+			// The next frame will have all resources ready.
+			return;
 		}
 	}
 
@@ -3150,11 +3182,12 @@ CPostEffects::DrawSMAA(void)
 
 	float cameraMovement = min(1.0f, (cameraVelocity * 0.1f) + (cameraRotation * 2.0f));
 
-	// SMAA preset parameters
+	// SMAA preset parameters — internal constants (HIGH preset)
 	static const float thresholds[] = { 0.15f, 0.1f, 0.1f, 0.05f };
 	static const float maxSearchSteps[] = { 4.0f, 8.0f, 16.0f, 32.0f };
-	float smaaThreshold = thresholds[config->smaaPreset & 3];
-	float smaaSearchSteps = maxSearchSteps[config->smaaPreset & 3];
+	static const int kSmaaPreset = 2; // HIGH
+	float smaaThreshold = thresholds[kSmaaPreset];
+	float smaaSearchSteps = maxSearchSteps[kSmaaPreset];
 	float screenParams[4] = { (float)w, (float)h, 1.0f/w, 1.0f/h };
 
 	// Save original camera raster (the draw buffer — back buffer)
@@ -3246,8 +3279,8 @@ CPostEffects::DrawSMAA(void)
 	if(g_velocityTex)
 		d3d9device->SetTexture(3, g_velocityTex);
 
-	// Set combined edge detection shader constants
-	float motionThresh = config->smaaTemporal ? 0.5f : 1.0f;
+	// Temporal always on — lower motion threshold for better stabilization
+	float motionThresh = 0.5f;
 	float edgeP[4] = {smaaThreshold, motionThresh, 2.0f, cameraMovement};
 	RwD3D9SetPixelShaderConstant(0, edgeP, 1);
 	RwD3D9SetPixelShaderConstant(1, screenParams, 1);
@@ -3355,21 +3388,63 @@ CPostEffects::DrawSMAA(void)
 	}
 	if(postRt) postRt->Release();
 
-	// Save current frame for next frame's motion detection (RW-native copy:
-	// renders drawBuffer into the pushed prevFrame context — UpdateFrontBuffer pattern).
+	// ---- Pass 3: Temporal Resolve ----
+	// Blends current SMAA result with previous frame for temporal stabilization.
+	// Renders to prevFrameRaster (separate surface) to avoid D3D9 read-write conflict,
+	// then copies result back to drawBuffer.
+	if(SMAA_Temporal && g_smaaPrevFrameRaster){
+		// Render temporal blend to prevFrameRaster
+		RwD3D9SetRenderTarget(0, g_smaaPrevFrameRaster);
+		dev->SetViewport(&vpCam);
+		dev->Clear(0, NULL, D3DCLEAR_TARGET, D3DCLEAR_TARGET, 0, 0);
+
+		// Bind current frame (drawBuffer = SMAA result) on s0
+		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)drawBuffer);
+		RwRenderStateSet(rwRENDERSTATETEXTUREADDRESSU, (void*)rwTEXTUREADDRESSCLAMP);
+		RwRenderStateSet(rwRENDERSTATETEXTUREADDRESSV, (void*)rwTEXTUREADDRESSCLAMP);
+
+		// Bind previous frame on s1
+		if(g_smaaPrevFrameTexRW)
+			RwD3D9SetTexture(g_smaaPrevFrameTexRW, 1);
+
+		// Temporal constants: blendStrength (low = more history), motionScale
+		float temporalP[4] = { 0.1f, 2.0f, 0.0f, 0.0f };
+		RwD3D9SetPixelShaderConstant(0, temporalP, 1);
+		RwD3D9SetPixelShaderConstant(1, screenParams, 1);
+
+		overrideIm2dPixelShader = SMAA_Temporal;
+		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
+		overrideIm2dPixelShader = nil;
+
+		// Cleanup
+		RwD3D9SetTexture(NULL, 1);
+
+		// Copy temporal result from prevFrameRaster back to drawBuffer
+		RwD3D9SetRenderTarget(0, drawBuffer);
+		dev->SetViewport(&vpSaved);
+
+		RwRasterPushContext(drawBuffer);
+		RwRasterRenderFast(g_smaaPrevFrameRaster, 0, 0);
+		RwRasterPopContext();
+
+		if(dbglog_throttle("smaaTemporal"))
+			dbglog("[SMAA-DIAG] Pass3 Temporal: prevFrame=%p -> drawBuf=%p shader=%p",
+				g_smaaPrevFrameRaster, drawBuffer, SMAA_Temporal);
+	}
+
+	// Save current frame for next frame's motion detection
 	RwRasterPushContext(g_smaaPrevFrameRaster);
 	RwRasterRenderFast(drawBuffer, 0, 0);
 	RwRasterPopContext();
 
-	// Clean up D3D9 state left by SMAA passes
+	// Clean up D3D9 state
 	if(dev){
 		dev->SetTexture(1, NULL);
 		dev->SetTexture(2, NULL);
 		dev->SetTexture(3, NULL);
 	}
 
-	// Restore RW render states (match ColourFilter_Modern pattern) so any
-	// subsequent game 2D/HUD draws are unaffected by SMAA's pass states.
+	// Restore RW render states
 	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
 	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)TRUE);
 	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);

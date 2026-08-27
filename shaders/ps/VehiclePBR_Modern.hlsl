@@ -264,7 +264,7 @@ float4 main(PS_INPUT IN) : COLOR
     // Edge highlight: subtle Fresnel rim catches sun at grazing angles.
     // Reduced from 0.45 — game lighting already has edge detail from VS.
     float rimFresnel = pow(1.0 - saturate(NdotV), 2.0);
-    float3 rimLight = sunContrib * rimFresnel * 0.15;
+    float3 rimLight = sunContrib * rimFresnel * 0.10;
 
     // ---- COMPOSITE ----
     // layer1 = VS game lighting (ambient + 7 directional × matCol, matches building pipe)
@@ -406,6 +406,23 @@ float4 main_building(PS_INPUT_BUILDING IN) : COLOR
     float clearcoat    = pbrParams.z;
     float subsurface   = pbrParams.w;
     float3 specularTint = paintNoise.xyz; // c23 = {specTintR, specTintG, specTintB}
+
+    // Wet roads recovery: dayparam[3] = CWeather__WetRoads (0-1)
+    // Passed via vertex color alpha from buildingPipe.cpp setDnParams()
+    float wetRoads = IN.dayNight.a;
+
+    // Wet surfaces: increase reflectance, decrease roughness, darken diffuse
+    // This simulates water filling surface micro-structure (beta restoration)
+    if(wetRoads > 0.01){
+        // Wet surfaces are smoother (water fills gaps)
+        roughness *= lerp(1.0, 0.3, wetRoads);
+        // Wet surfaces are more reflective (higher F0)
+        reflectance = lerp(reflectance, 0.04, wetRoads);  // water F0 = 0.04
+        // Wet surfaces darken slightly (water absorption)
+        baseColor *= lerp(1.0, 0.85, wetRoads);
+        // Increase glossiness for wet surfaces
+        glossiness = lerp(glossiness, 0.8, wetRoads);
+    }
 
     // Normals
     float3 N = length(IN.WorldNormal) > 1e-6 ? IN.WorldNormal / length(IN.WorldNormal) : float3(0, 1, 0);

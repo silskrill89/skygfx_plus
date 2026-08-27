@@ -81,7 +81,9 @@ VS_OUTPUT main(in VS_INPUT IN)
 	// Env/Fresnel params for PBR specular
 	float3 V = normalize(eyePos - worldPos.xyz);
 	float b = 1.0 - saturate(dot(-V, worldNormal));
-	OUT.Envcolor = float4(b, b, b, 1.0);
+	// Pass wet roads value (dayparam.w = CWeather__WetRoads) to pixel shader
+	// via Envcolor alpha. Pixel shader reads IN.dayNight.a for wet surface effects.
+	OUT.Envcolor = float4(b, b, b, dayparam.w);
 
 	return OUT;
 }

@@ -344,9 +344,6 @@ readIni(int n)
 	c->ssaoDepthThreshold = readfloat(cfg.get("SkyGfx", "ssaoDepthThreshold", ""), 0.01f);
 
 	c->smaaEnable = readint(cfg.get("SkyGfx", "smaaEnable", ""), 1);
-	c->smaaPreset = readint(cfg.get("SkyGfx", "smaaPreset", ""), 3); // ULTRA by default
-	c->smaaPredication = readint(cfg.get("SkyGfx", "smaaPredication", ""), 0);
-	c->smaaTemporal = readint(cfg.get("SkyGfx", "smaaTemporal", ""), 0);
 
 	// Motion Blur
 	c->motionBlurEnable = readint(cfg.get("SkyGfx", "motionBlurEnable", ""), 0);
@@ -480,11 +477,8 @@ readIni(int n)
 		cfg.set("SkyGfx", "; ===== Modern Enhancements =====", "");
 		cfg.set("SkyGfx", "; --- Anti-Aliasing (SMAA) ---", "");
 		cfg.set("SkyGfx", "; Enables SMAA (Subpixel Morphological Anti-Aliasing)", "");
-		cfg.set("SkyGfx", "; Presets: 0=LOW, 1=MEDIUM, 2=HIGH, 3=ULTRA", "");
+		cfg.set("SkyGfx", "; SMAA — single toggle, preset/temporal are internal", "");
 		cfg.set("SkyGfx", "smaaEnable", "1");
-		cfg.set("SkyGfx", "smaaPreset", "3");
-		cfg.set("SkyGfx", "smaaPredication", "0");
-		cfg.set("SkyGfx", "smaaTemporal", "0");
 
 		cfg.set("SkyGfx", "; --- Ambient Occlusion (SSAO) ---", "");
 		cfg.set("SkyGfx", "; Screen-space ambient occlusion using depth buffer", "");

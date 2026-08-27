@@ -94,7 +94,6 @@ CustomMode_ApplyDefaults(Config *c)
 	c->ssaoKernelSize = 16;
 	c->ssaoSampleCount = 16;
 	c->smaaEnable = 1;
-	c->smaaPreset = 3;      // ULTRA
 
 	// Motion blur (Burnout Paradise style)
 	c->motionBlurEnable = 1;

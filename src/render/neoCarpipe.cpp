@@ -278,9 +278,23 @@ CarPipe::ShaderSetup(RpAtomic *atomic)
 		eyePos = *RwMatrixGetPos(camfrm);
 	RwD3D9SetVertexShaderConstant(LOC_eye, (void*)&eyePos, 1);
 
-	pipeUploadLightColor(pAmbient, LOC_ambient);		// Seems to work better without spec
+	// Use shared timecycle ambient (single source of truth for all pipelines)
+	extern bool CCullZones__PlayerNoRain(void);
+	extern int* CGame__currArea;
+	bool isInterior = (*CGame__currArea != 0);
+	bool isSheltered = CCullZones__PlayerNoRain() && !isInterior;
+	RwRGBAReal tcAmbient = GetTimecycleAmbient();
+	if(isSheltered){
+		tcAmbient.red *= 0.55f;
+		tcAmbient.green *= 0.55f;
+		tcAmbient.blue *= 0.55f;
+	}
+
+	// Upload timecycle ambient directly
+	RwD3D9SetVertexShaderConstant(LOC_ambient, &tcAmbient, 1);
 	UploadLightColorWithSpecular(pDirect, LOC_directCol);	// NOT actually used
 	pipeUploadLightDirection(pDirect, LOC_directDir);
+
 	for(int i = 0; i < 6; i++)
 		if(i < NumExtraDirLightsInWorld && RpLightGetType(pExtraDirectionals[i]) == rpLIGHTDIRECTIONAL){
 			pipeUploadLightDirection(pExtraDirectionals[i], LOC_lightDir+i);

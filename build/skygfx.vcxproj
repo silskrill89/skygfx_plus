@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Release|Win32">
@@ -140,6 +140,7 @@
     <ClInclude Include="..\src\postfx.h" />
     <ClInclude Include="..\src\skygfx.h" />
     <ClInclude Include="..\src\entities\Ragdoll.h" />
+    <ClInclude Include="..\src\core\menu_inject.h" />
   </ItemGroup>
   <ItemGroup>
     <!-- All source paths point to new subdirectory layout after merge restructure -->
@@ -148,6 +149,7 @@
     <ClCompile Include="..\src\entities\chars.cpp" />
     <ClCompile Include="..\src\entities\ragdoll.cpp" />
     <ClCompile Include="..\src\core\diagnostics.cpp" />
+    <ClCompile Include="..\src\core\menu_inject.cpp" />
     <!-- <ClCompile Include="..\src\core\config.cpp" /> -->
     <ClCompile Include="..\src\render\custom_mode.cpp" />
     <ClCompile Include="..\src\rw\defaultFuncs.cpp" />

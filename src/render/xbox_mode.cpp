@@ -83,7 +83,6 @@ XboxMode_ApplyDefaults(Config *c)
 
 	c->ssaoEnable = 0;
 	c->smaaEnable = 0;
-	c->smaaPreset = 0;
 
 	c->ivMode = 0;
 	c->ivDesaturation = 0.0f;

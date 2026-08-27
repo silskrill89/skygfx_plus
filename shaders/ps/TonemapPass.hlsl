@@ -107,6 +107,39 @@ float3 SoftKnee(float3 x)
 	return min(x, 1.0 + log(1.0 + r) * 0.65);
 }
 
+// Filmic color grading based on Xbox press kit analysis
+// Matches the original SA rendering intent: warm shadows, warm highlights,
+// mid-tone saturation peak, highlight desaturation
+float3 FilmicGrading(float3 c, float sceneLuma)
+{
+	float luma = dot(c, float3(0.299, 0.587, 0.114));
+
+	// 1. Warm shadow tinting (Xbox: +3.9% warmth in shadows)
+	// Shadows are warm brown/orange, NOT blue
+	float3 warmShadow = float3(1.15, 0.95, 0.85);
+	float shadowFactor = 1.0 - smoothstep(0.0, 0.3, luma);
+	c *= lerp(float3(1.0, 1.0, 1.0), warmShadow, shadowFactor * 0.3);
+
+	// 2. Warm highlight tinting (Xbox: +11.8% warmth in highlights)
+	// Highlights are warm golden, NOT cool blue
+	float3 warmHighlight = float3(1.1, 1.02, 0.9);
+	float highlightFactor = smoothstep(0.5, 1.0, luma);
+	c *= lerp(float3(1.0, 1.0, 1.0), warmHighlight, highlightFactor * 0.2);
+
+	// 3. Mid-tone saturation boost (Xbox: peaks at 0.484 in mids)
+	// Saturation follows classic film curve: low in shadows, peak in mids, low in highlights
+	float midToneFactor = smoothstep(0.1, 0.4, luma) * (1.0 - smoothstep(0.6, 0.9, luma));
+	float3 desaturated = float3(luma, luma, luma);
+	c = lerp(c, lerp(desaturated, c, 1.3), midToneFactor * 0.15);
+
+	// 4. Highlight desaturation (Xbox: 0.244 in highlights vs 0.484 in mids)
+	// Bright areas desaturate, simulating overexposure/haze
+	float highlightDesat = smoothstep(0.7, 1.0, luma);
+	c = lerp(c, float3(luma, luma, luma), highlightDesat * 0.2);
+
+	return saturate(c);
+}
+
 float4 main(PS_INPUT IN) : COLOR
 {
 	float3 c = tex2D(tex, IN.texcoord0.xy);
@@ -126,6 +159,10 @@ float4 main(PS_INPUT IN) : COLOR
 	// Post-gamma grading: adaptive curves + brightness/contrast
 	// Intensity scales with scene luminance — dark scenes get gentler grading
 	c = PostGrade(c, tonemapParams.z);
+
+	// Filmic color grading: warm shadows, warm highlights, mid-tone saturation,
+	// highlight desaturation — matches Xbox SA press kit rendering intent
+	c = FilmicGrading(c, tonemapParams.z);
 
 	return float4(c, 1.0f);
 }

@@ -39,6 +39,48 @@ void *NormalBufferShader = nullptr;
 void *PipeChainShader = nullptr;
 void *GTAIV_PS = nullptr;
 
+// ============================================================
+// Shared timecycle lighting — single source of truth for all pipelines
+// ============================================================
+// Decoupled: CCoronas__LightsMult is NOT baked into ambient.
+// Instead, it's a global lighting multiplier applied at upload time.
+// This way timecycle controls ambient + sun + directional uniformly,
+// and the corona multiplier scales the combined result.
+static RwRGBAReal s_tcAmbient = {0, 0, 0, 0};   // pure timecycle ambient (no multiplier)
+static float s_lightsMult = 1.0f;                 // CCoronas__LightsMult
+
+RwRGBAReal GetTimecycleAmbient(void)
+{
+	// Return ambient WITH multiplier applied (for backward compat)
+	RwRGBAReal out;
+	out.red = s_tcAmbient.red * s_lightsMult * 0.85f;
+	out.green = s_tcAmbient.green * s_lightsMult * 0.85f;
+	out.blue = s_tcAmbient.blue * s_lightsMult * 0.85f;
+	return out;
+}
+
+RwRGBAReal GetTimecycleAmbientRaw(void)
+{
+	// Return pure timecycle ambient (no multiplier)
+	return s_tcAmbient;
+}
+
+float GetLightsMult(void)
+{
+	return s_lightsMult;
+}
+
+void UpdateTimecycleLighting(void)
+{
+	extern float &CCoronas__LightsMult;
+	// Safety: only update if initialized
+	if(CCoronas__LightsMult <= 0.0f) return;
+	s_tcAmbient.red = CTimeCycle_GetAmbientRed();
+	s_tcAmbient.green = CTimeCycle_GetAmbientGreen();
+	s_tcAmbient.blue = CTimeCycle_GetAmbientBlue();
+	s_lightsMult = CCoronas__LightsMult;
+}
+
 void *gtaivFPVS = nullptr, *gtaivFPPS = nullptr;
 
 typedef D3DMATRIX D3DXMATRIX;

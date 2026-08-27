@@ -426,7 +426,26 @@ void
 uploadLights(RwMatrix *lightmat)
 {
 	if(!lightmat){ uploadNoLights(); return; }
-	pipeUploadLightColor(pAmbient, REG_ambient);
+
+	// Use shared timecycle ambient (single source of truth for all pipelines)
+	// This ensures vehicles get the same ambient as buildings and peds
+	RwRGBAReal tcAmbient = GetTimecycleAmbient();
+	// 0.85 scale is applied in GetTimecycleAmbient() for consistency
+
+	// Interior/garage dampening: reduce ambient in sheltered areas
+	extern bool CCullZones__PlayerNoRain(void);
+	extern int* CGame__currArea;
+	bool isInterior = (*CGame__currArea != 0);
+	bool isSheltered = CCullZones__PlayerNoRain() && !isInterior;
+
+	if(isSheltered){
+		tcAmbient.red *= 0.55f;
+		tcAmbient.green *= 0.55f;
+		tcAmbient.blue *= 0.55f;
+	}
+
+	// Upload timecycle ambient directly (not pAmbient)
+	RwD3D9SetVertexShaderConstant(REG_ambient, &tcAmbient, 1);
 	pipeUploadLightColorForce(pDirect, REG_directCol);
 	pipeUploadLightDirectionLocal(pDirect, lightmat, REG_directDir);
 	for(int i = 0; i < 6; i++)
@@ -917,7 +936,19 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *ob
 		sunDir = *RwMatrixGetAt(pDirectLTM);
 	RwD3D9SetVertexShaderConstant(LOC_sunDir, (void*)&sunDir, 1);
 	RwD3D9SetVertexShaderConstant(LOC_sunDiff, pDirect ? (void*)&pDirect->color : black4f, 1);
-	RwD3D9SetVertexShaderConstant(LOC_sunAmb, pAmbient ? (void*)&pAmbient->color : black4f, 1);
+
+	// Interior/garage dampening for ambient
+	extern bool CCullZones__PlayerNoRain(void);
+	extern int* CGame__currArea;
+	bool isInterior = (*CGame__currArea != 0);
+	bool isSheltered = CCullZones__PlayerNoRain() && !isInterior;
+	RwRGBAReal ambColor = GetTimecycleAmbient();
+	if(isSheltered){
+		ambColor.red *= 0.55f;
+		ambColor.green *= 0.55f;
+		ambColor.blue *= 0.55f;
+	}
+	RwD3D9SetVertexShaderConstant(LOC_sunAmb, &ambColor, 1);
 
 	RwD3D9GetRenderState(D3DRS_LIGHTING, &lighting);
 

@@ -297,11 +297,11 @@ struct Config {
 	float  ssaoBlurRadius;         // default 3.0
 	float  ssaoDepthThreshold;     // default 0.01
 
-	// SMAA
+	// SMAA — single toggle, preset/temporal are internal constants
 	RwBool smaaEnable;
-	int smaaPreset; // 0=LOW, 1=MEDIUM, 2=HIGH, 3=ULTRA
-	RwBool smaaPredication;
-	RwBool smaaTemporal;
+	int _reserved_smaaPreset;      // padding — was smaaPreset, now internal constant
+	RwBool _reserved_smaaPredication; // padding — was smaaPredication
+	RwBool _reserved_smaaTemporal;    // padding — was smaaTemporal, now internal constant
 
 	// Motion Blur (Burnout Paradise style)
 	RwBool motionBlurEnable;
@@ -527,6 +527,7 @@ void reloadAllInis(void);
 void saveConfig(void);
 void installMenu(void);
 void setConfig(void);
+void ApplyPreset(Config *c, int preset);
 
 struct Hooks
 {
@@ -904,6 +905,14 @@ void GTAfree(void *data);
 // ============================================================
 void pipeUploadPBR(float glossiness, float specular, float c22_3, float c22_4,
                    float c23_1, float c23_2, float c23_3);
+
+// ============================================================
+// Shared timecycle lighting — single source of truth for all pipelines
+// ============================================================
+RwRGBAReal GetTimecycleAmbient(void);       // ambient WITH lightsMult applied
+RwRGBAReal GetTimecycleAmbientRaw(void);    // pure timecycle ambient (no multiplier)
+float GetLightsMult(void);                  // CCoronas__LightsMult
+void UpdateTimecycleLighting(void);         // call once per frame from buildingPipe
 
 // ============================================================
 // Rendering mode interfaces (ps2_mode.cpp, xbox_mode.cpp, etc.)

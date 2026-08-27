@@ -85,7 +85,6 @@ IVMode_ApplyDefaults(Config *c)
 
 	c->ssaoEnable = 0;
 	c->smaaEnable = 0;
-	c->smaaPreset = 0;
 
 	c->ivMode = 1;
 	c->ivDesaturation = 1.0f;

@@ -467,7 +467,7 @@ static const BRDFMaterial g_brdfTable[NUM_SURFACE_TYPES] = {
     { "Cardboard Box",        0.04f, 0.10f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f },
     { "Container",            0.50f, 0.50f, 0.0f, 0.0f, 0.7f, 0.7f, 0.7f },
     { "Door",                 0.04f, 0.30f, 0.1f, 0.0f, 1.0f, 1.0f, 1.0f },
-    { "Garage Door",          0.04f, 0.25f, 0.1f, 0.0f, 1.0f, 1.0f, 1.0f },
+    { "Garage Door",          0.50f, 0.45f, 0.0f, 0.0f, 0.7f, 0.7f, 0.7f },  // Dull steel metal
     { "Hay Bale",             0.04f, 0.08f, 0.0f, 0.20f, 1.0f, 1.0f, 1.0f },
     { "News Vendor",          0.04f, 0.40f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f },
     { "Transparent Cloth",    0.04f, 0.10f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f },
@@ -571,6 +571,18 @@ static inline int GetSurfaceTypeFromMaterial(void *material) {
         return SURFACE_CAR_DIRT;
     if(strstri(name, "rust"))
         return SURFACE_CAR_RUST;
+    
+    // --- Building Metal Surfaces (fences, poles, gates, garage doors) ---
+    if(strstri(name, "chainlink") || strstri(name, "chain_link") || strstri(name, "fence"))
+        return SURFACE_METAL_CHAIN_FENCE;
+    if(strstri(name, "pole") || strstri(name, "lamp") || strstri(name, "post") || strstri(name, "lightpole"))
+        return SURFACE_LAMP_POST;
+    if(strstri(name, "garage"))
+        return SURFACE_GARAGE_DOOR;
+    if(strstri(name, "gate") || strstri(name, "railing") || strstri(name, "rail"))
+        return SURFACE_METAL_GATE;
+    if(strstri(name, "bar") && !strstri(name, "barber"))
+        return SURFACE_METAL_GATE;
     
     // --- Generic Materials ---
     if(strstri(name, "chrome") || strstri(name, "polished"))

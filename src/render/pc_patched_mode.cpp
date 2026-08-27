@@ -84,7 +84,6 @@ PCPatchedMode_ApplyDefaults(Config *c)
 
 	c->ssaoEnable = 1;
 	c->smaaEnable = 1;
-	c->smaaPreset = 3;      // ULTRA
 
 	c->ivMode = 0;
 	c->ivDesaturation = 0.0f;

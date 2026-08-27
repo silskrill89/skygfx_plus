@@ -9,6 +9,7 @@
 #include "debugmenu_public.h"
 #include "ModuleList.hpp"
 #include "diagnostics.h"
+#include "menu_inject.h"
 #include <injector\hooking.hpp>
 #include <stdarg.h>
 #include <stdio.h>
@@ -44,6 +45,7 @@ bool iCanHasbuildingPipe = true;
 bool iCanHasvehiclePipe = true;
 bool iCanHasSunGlare = true;
 bool gHasExternalNormalMapPlugin = false;
+bool g_hasMoonLoader = false;  // Detected at startup for deferred hook installation
 
 
 
@@ -357,6 +359,18 @@ myDefaultCallback(RpAtomic *atomic)
 			dodual = 1;
 	}else if(pipe == skinPipe && config->dualPassPed)
 		dodual = 1;
+
+	// Override pAmbient with shared timecycle ambient for ped/skin rendering.
+	// All pipelines (buildings, vehicles, peds) now use the same ambient source.
+	RwRGBAReal savedAmb = {};
+	bool ambOverridden = false;
+	if(pipe == skinPipe && pAmbient){
+		savedAmb = pAmbient->color;
+		RwRGBAReal tcAmbient = GetTimecycleAmbient();
+		pAmbient->color = tcAmbient;
+		ambOverridden = true;
+	}
+
 	if(dodual){
 		RwRenderStateGet(rwRENDERSTATEALPHATESTFUNCTION, (void*)&alphatest);
 		RwRenderStateGet(rwRENDERSTATEALPHATESTFUNCTIONREF, (void*)&alpharef);
@@ -371,6 +385,12 @@ myDefaultCallback(RpAtomic *atomic)
 		RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTIONREF, (void*)alpharef);
 	}else
 		pipe = RxPipelineExecute(pipe, atomic, 1);
+
+	// Restore original ambient after ped rendering
+	if(ambOverridden && pAmbient){
+		pAmbient->color = savedAmb;
+	}
+
 	return pipe ? atomic : NULL;
 }
 
@@ -857,6 +877,10 @@ RenderScene_after(void*)
 void
 RenderScene_hook(void)
 {
+	// Frame counter for crash correlation
+	static int s_renderFrame = 0;
+	s_renderFrame++;
+
 	// Ctrl+4 to toggle debug menu
 	static bool s_f4Prev = false;
 	bool ctrlHeld = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
@@ -871,6 +895,10 @@ RenderScene_hook(void)
 			config->debugMenuOpen, config, &config->debugMenuOpen);
 	}
 	s_f4Prev = f4Now;
+
+	// Log first few frames for crash correlation
+	if(s_renderFrame <= 3)
+		dbglog("[RENDER] frame=%d world=%p camera=%p", s_renderFrame, Scene.world, Scene.camera);
 
 	// Process ragdoll motion BEFORE render so modified matrices are visible
 	g_ragdollMan.ProcessAllPeds(CTimer__ms_fTimeStep / 50.0f);
@@ -1239,7 +1267,6 @@ readIni(int n)
 		c->vehiclePipe = CAR_PC;
 		c->colorFilter = COLORFILTER_PC;
 		c->smaaEnable = 1;
-		c->smaaPreset = 0; // LOW
 		c->ssaoEnable = 0;
 		c->motionBlurEnable = 0;
 		c->sssPostProcessEnable = 0;
@@ -1265,7 +1292,6 @@ readIni(int n)
 		c->vehiclePipe = CAR_MODERN;
 		c->colorFilter = COLORFILTER_VCS;
 		c->smaaEnable = 1;
-		c->smaaPreset = 2; // HIGH
 		c->ssaoEnable = 1;
 		c->ssaoRadius = 0.8f;
 		c->ssaoPower = 1.5f;
@@ -1301,7 +1327,6 @@ readIni(int n)
 		// Do NOT override them here — qualityPreset only sets features, not pipes
 		c->colorFilter = COLORFILTER_VCS;
 		c->smaaEnable = 1;
-		c->smaaPreset = 3; // ULTRA
 		c->ssaoEnable = 1;
 		c->ssaoRadius = 1.0f;
 		c->ssaoPower = 2.0f;
@@ -1544,9 +1569,6 @@ readIni(int n)
 	c->ssaoSampleCount = readint(cfg.get("SkyGfx", "ssaoSampleCount", ""), 16);
 
 	c->smaaEnable = readint(cfg.get("SkyGfx", "smaaEnable", ""), 0);
-	c->smaaPreset = readint(cfg.get("SkyGfx", "smaaPreset", ""), 3); // ULTRA
-	c->smaaPredication = readint(cfg.get("SkyGfx", "smaaPredication", ""), 0);
-	c->smaaTemporal = readint(cfg.get("SkyGfx", "smaaTemporal", ""), 0);
 
 	// Faux Normal Buffer (stereo disparity)
 	c->normalBufferEnable = readint(cfg.get("SkyGfx", "normalBufferEnable", ""), 0);
@@ -1627,9 +1649,6 @@ readIni(int n)
 		cfg.set("SkyGfx", "ssaoKernelSize", "16");
 		cfg.set("SkyGfx", "ssaoSampleCount", "16");
 		cfg.set("SkyGfx", "smaaEnable", "0");
-		cfg.set("SkyGfx", "smaaPreset", "3");  // ULTRA
-		cfg.set("SkyGfx", "smaaPredication", "0");
-		cfg.set("SkyGfx", "smaaTemporal", "0");
 		cfg.set("SkyGfx", "motionBlurEnable", "1");
 		cfg.set("SkyGfx", "motionBlurStrength", "0.4");
 		cfg.set("SkyGfx", "sssPostProcessEnable", "1");
@@ -1670,9 +1689,6 @@ readIni(int n)
 		ADD_IF_MISSING("SkyGfx", "ssaoKernelSize", "16");
 		ADD_IF_MISSING("SkyGfx", "ssaoSampleCount", "16");
 		ADD_IF_MISSING("SkyGfx", "smaaEnable", "0");
-		ADD_IF_MISSING("SkyGfx", "smaaPreset", "3");
-		ADD_IF_MISSING("SkyGfx", "smaaPredication", "0");
-		ADD_IF_MISSING("SkyGfx", "smaaTemporal", "0");
 		ADD_IF_MISSING("SkyGfx", "motionBlurEnable", "1");
 		ADD_IF_MISSING("SkyGfx", "motionBlurStrength", "0.4");
 		ADD_IF_MISSING("SkyGfx", "sssPostProcessEnable", "1");
@@ -1849,11 +1865,8 @@ saveConfig(void)
 	cfg.set("SkyGfx", "ssaoBlurRadius", std::to_string(c->ssaoBlurRadius));
 	cfg.set("SkyGfx", "ssaoDepthThreshold", std::to_string(c->ssaoDepthThreshold));
 
-	// SMAA
+	// SMAA — single toggle
 	cfg.set("SkyGfx", "smaaEnable", std::to_string(c->smaaEnable));
-	cfg.set("SkyGfx", "smaaPreset", std::to_string(c->smaaPreset));
-	cfg.set("SkyGfx", "smaaPredication", std::to_string(c->smaaPredication));
-	cfg.set("SkyGfx", "smaaTemporal", std::to_string(c->smaaTemporal));
 
 	// Motion blur
 	cfg.set("SkyGfx", "motionBlurEnable", std::to_string(c->motionBlurEnable));
@@ -2034,9 +2047,6 @@ afterStreamIni(void)
 	X(ssaoKernelSize)			\
 	X(ssaoSampleCount)			\
 	X(smaaEnable)			\
-	X(smaaPreset)			\
-	X(smaaPredication)			\
-	X(smaaTemporal)			\
 	X(ivMode)				\
 	X(ivDesaturation)			\
 	X(ivGamma)				\
@@ -2074,14 +2084,27 @@ InjectDelayedPatches()
 	if(UG_mod)
 		UG_RegisterEventCallback = (void (*)(const char*, UG_EventHook))GetProcAddress(UG_mod, "RegisterEventCallback");
 
+	// Detect MoonLoader — keep hook compatible
+	g_hasMoonLoader = (GetModuleHandleA("MoonLoader.asi") != nullptr);
+	if(g_hasMoonLoader)
+		dbglog("  DETECT: MoonLoader — hooks will be installed immediately");
+
+	// Install all hooks immediately regardless of MoonLoader
 	if(UG_RegisterEventCallback){
 		dbglog("  UG EVENTS: initposteffects");
 		UG_RegisterEventCallback("EVENT_INITPOSTEFFECTS", CPostEffects::Initialise_skygfx);
 	}else{
-		dbglog("  InterceptCall Initialise at 0x5BD779");
+		dbglog("  HOOK: CPostEffects::Initialise -> 0x5BD779");
 		InterceptCall(&CPostEffects::Initialise_orig, CPostEffects::Initialise, 0x5BD779);
 	}
-	InterceptCall(&InitialiseGame, InitialiseGame_hook, 0x748CFB);
+
+	// Only hook InitialiseGame if MoonLoader is NOT present
+	if(!g_hasMoonLoader){
+		dbglog("  HOOK: InitialiseGame -> 0x748CFB (no MoonLoader)");
+		InterceptCall(&InitialiseGame, InitialiseGame_hook, 0x748CFB);
+	}else{
+		dbglog("  SKIP: InitialiseGame (MoonLoader handles this)");
+	}
 
 	installLCMV2Hooks();
 
@@ -2090,16 +2113,19 @@ InjectDelayedPatches()
 
 	explicitBuildingPipe = explicitBuildingPipe_tmp;
 
-	// Initialize normal map plugin BEFORE building pipe hooks
-	// This sets gHasExternalNormalMapPlugin so buildingPipe doesn't hook 0x5D7F40
+	dbglog("  HOOK: normalmap_init()");
 	normalmap_init();
 
-	if(iCanHasbuildingPipe)
+	if(iCanHasbuildingPipe){
+		dbglog("  HOOK: hookBuildingPipe()");
 		hookBuildingPipe();
-	if(iCanHasvehiclePipe)
+	}
+	if(iCanHasvehiclePipe){
+		dbglog("  HOOK: hookVehiclePipe()");
 		hookVehiclePipe();
+	}
 
-	// Initialize ragdoll physics manager
+	dbglog("  INIT: Ragdoll manager");
 	g_ragdollMan.Init();
 	dbglog("Ragdoll manager initialized (%d ragdolls in pool)", MAX_RAGDOLLS);
 
@@ -2153,6 +2179,10 @@ InjectDelayedPatches()
 		Patch(0x5901BD + 1, loadsc0);
 		Nop(0x748AA8, 0x748AE7-0x748AA8);
 	}
+
+	// Inject SkyGFX settings into native pause menu
+	// DISABLED: conflicts with MoonLoader's D3D9 hook (d3dhook::originalD3DDevice9 assertion)
+	// menu_inject_init();
 
 	installMenu();
 	dbglog("=== InjectDelayedPatches complete ===");

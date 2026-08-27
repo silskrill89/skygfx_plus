@@ -65,10 +65,11 @@ CustomBuildingPipeline__Update(void)
 {
 	CustomBuildingPipeline__Update_orig();
 
-	// Timecyc dictates everything — use timecyc ambient values directly, no hardcoded floors
-	buildingAmbient.red = CTimeCycle_GetAmbientRed() * CCoronas__LightsMult;
-	buildingAmbient.green = CTimeCycle_GetAmbientGreen() * CCoronas__LightsMult;
-	buildingAmbient.blue = CTimeCycle_GetAmbientBlue() * CCoronas__LightsMult;
+	// buildingAmbient still uses the old pattern for now
+	// UpdateTimecycleLighting() is called from RenderScene_hook instead
+	buildingAmbient = GetTimecycleAmbient();
+	// green already set by GetTimecycleAmbient()
+	// blue already set by GetTimecycleAmbient()
 
 	if(config->lightningIlluminatesWorld && CWeather__LightningFlash && !CPostEffects__IsVisionFXActive())
 		buildingAmbient = { 1.0, 1.0, 1.0, 0.0 };
