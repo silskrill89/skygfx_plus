@@ -27,7 +27,7 @@ static unsigned char g_fpTileData[FP_GRID_W * FP_GRID_H * 4]; // RGBA8
 
 // Best lights for GPU upload (top FP_MAX_LIGHTS_GPU)
 static ClusterLight g_fpGpuLights[FP_MAX_LIGHTS_GPU];
-static int g_fpGpuLightCount = 0;
+int g_fpGpuLightCount = 0;
 
 // Release D3D resources
 void ForwardPlus_ReleaseResources(void)
@@ -54,37 +54,52 @@ static void EnsureFPResources(IDirect3DDevice9 *dev, int screenW, int screenH)
 	dbglog("[ForwardPlus] textures created %dx%d for %dx%d screen", FP_GRID_W, FP_GRID_H, screenW, screenH);
 }
 
-// Collect lights from GTA SA's game systems
+// GTA SA point light structure (from gta-reversed / plugin-sdk)
+// CRegisteredPointLight at CPointLights::m_aPointLights
+struct CRegisteredPointLight {
+	float posX, posY, posZ;     // 0x00 world position
+	float dirX, dirY, dirZ;    // 0x0C direction (for spotlights)
+	float colorR, colorG, colorB, colorA; // 0x18 RGBA (floats, 0-1)
+	float radius;              // 0x28 attenuation radius
+	unsigned char type;        // 0x2C: 0=point, 1=spot
+	unsigned char fogType;     // 0x2D
+	unsigned char flags;       // 0x2E: bit 0 = check direction, bit 1 = cast shadow
+	unsigned char pad;         // 0x2F
+}; // 48 bytes per entry
+
+// GTA SA 1.0 US addresses
+static int *NumLights = (int*)0xC3A090;
+static CRegisteredPointLight *PointLights = (CRegisteredPointLight*)0xC3A0A0;
+#define MAX_GAME_LIGHTS 32
+
+// Collect lights from GTA SA's CPointLights system
 static void CollectLights(void)
 {
 	g_fpNumLights = 0;
-	
-	// GTA SA stores active point lights in CLights::m_aPointLights
-	// The array is at a known address, each entry has position, color, radius, type
-	// For now, hook into the game's light pool — this is a placeholder that
-	// the real implementation will fill with actual game light extraction.
-	
-	// TODO: Extract from CPointLights::m_aPointLights (up to 32 entries)
-	// TODO: Extract vehicle headlights, muzzle flashes, fire
-	// For Phase 1, we just collect from the game's existing light system
-	
-	// The game's point light pool structure (from gta-reversed):
-	// struct CRegisteredPointLight {
-	//     CVector position;
-	//     CVector direction;  // for spotlights
-	//     RwRGBAReal color;
-	//     float radius;
-	//     unsigned char type; // 0=point, 1=spot
-	//     unsigned char fogType;
-	//     // ... flags
-	// };
-	// Array at: CPointLights::m_aPointLights, count: CPointLights::NumLights
-	// We'll access this via the addresses from plugin-sdk or direct memory
-	
-	// For now, create a test light for validation
-	// (Remove this once real light extraction is hooked up)
-	// g_fpLights[0] = { 0, 5, 0, 20.0f, 1.0f, 0.8f, 0.6f, 2.0f };
-	// g_fpNumLights = 1;
+
+	int numLights = *NumLights;
+	if(numLights <= 0 || numLights > MAX_GAME_LIGHTS)
+		return;
+
+	for(int i = 0; i < numLights && g_fpNumLights < FP_MAX_LIGHTS; i++){
+		const CRegisteredPointLight &light = PointLights[i];
+
+		// Skip lights with zero radius or zero color
+		if(light.radius <= 0.0f) continue;
+		float brightness = light.colorR + light.colorG + light.colorB;
+		if(brightness < 0.001f) continue;
+
+		ClusterLight &cl = g_fpLights[g_fpNumLights];
+		cl.x = light.posX;
+		cl.y = light.posY;
+		cl.z = light.posZ;
+		cl.radius = light.radius;
+		cl.r = light.colorR;
+		cl.g = light.colorG;
+		cl.b = light.colorB;
+		cl.intensity = brightness; // use sum of RGB as intensity
+		g_fpNumLights++;
+	}
 }
 
 // Sphere-vs-AABB test (O3DE Atom approach)
@@ -272,6 +287,12 @@ void ForwardPlus_CullAndUpload(void)
 	
 	// Collect lights from game
 	CollectLights();
+
+	static int fpLogThrottle = 0;
+	if(++fpLogThrottle >= 60){
+		dbglog("[ForwardPlus] collected %d lights, gpu=%d", g_fpNumLights, g_fpGpuLightCount);
+		fpLogThrottle = 0;
+	}
 	
 	// Cull to tiles
 	CullLightsToTiles(w, h, viewMat, projMat);

@@ -670,6 +670,10 @@ void DrawUnifiedDebugMenu(IDirect3DDevice9 *device)
 					ImGui::Separator();
 					ImGui::Checkbox("Pipe Chain", RB(config->pipeChainEnable));
 					ImGui::SliderFloat("PC Intensity", &config->pipeChainIntensity, 0.0f, 1.0f);
+					ImGui::Separator();
+					ImGui::Checkbox("Forward+ Tiled Lighting", RB(config->forwardPlusEnable));
+					extern int g_fpGpuLightCount;
+					ImGui::Text("Active lights: %d", g_fpGpuLightCount);
 				}
 
 				ImGui::EndTabItem();
