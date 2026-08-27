@@ -325,7 +325,6 @@ void
 CPostEffects::Radiosity_VCS_init(void)
 {
 	dbglog("Radiosity_VCS_init: start");
-	if(!Scene.camera) return;
 	static float uOffsets[] = { -1.0f, 1.0f, 0.0f, 0.0f,   -1.0f, 1.0f, -1.0f, 1.0f };
 	static float vOffsets[] = { 0.0f, 0.0f, -1.0f, 1.0f,   -1.0f, -1.0f, 1.0f, 1.0f };
 	int i;
@@ -335,13 +334,10 @@ CPostEffects::Radiosity_VCS_init(void)
 
 	if(vcs_radiosity_target1)
 		RwRasterDestroy(vcs_radiosity_target1);
-	RwRaster *camRas = Scene.camera ? RwCameraGetRaster(Scene.camera) : NULL;
-	int rasDepth = camRas ? camRas->depth : 32;
-	vcs_radiosity_target1 = RwRasterCreate(256 * resMult, 128 * resMult, rasDepth, rwRASTERTYPECAMERATEXTURE);
+	vcs_radiosity_target1 = RwRasterCreate(256 * resMult, 128 * resMult, RwCameraGetRaster(Scene.camera)->depth, rwRASTERTYPECAMERATEXTURE);
 	if(vcs_radiosity_target2)
 		RwRasterDestroy(vcs_radiosity_target2);
-	vcs_radiosity_target2 = RwRasterCreate(256 * resMult, 128 * resMult, rasDepth, rwRASTERTYPECAMERATEXTURE);
-	if(!vcs_radiosity_target1 || !vcs_radiosity_target2) return;
+	vcs_radiosity_target2 = RwRasterCreate(256 * resMult, 128 * resMult, RwCameraGetRaster(Scene.camera)->depth, rwRASTERTYPECAMERATEXTURE);
 //	RwD3D9CreateVertexBuffer(stride, size, &vbuf, &offset);
 
 	w = 256 * resMult;
@@ -511,7 +507,6 @@ CPostEffects::Blur_VCS(void)
 		if(lastFrameBuffer)
 			RwRasterDestroy(lastFrameBuffer);
 		lastFrameBuffer = RwRasterCreate(bufw, bufh, CPostEffects::pRasterFrontBuffer->depth, rwRASTERTYPECAMERATEXTURE);
-		if(!lastFrameBuffer) return;
 		justInitialized = 1;
 		lastWidth = bufw;
 		lastHeight = bufh;
@@ -663,7 +658,6 @@ CPostEffects::Radiosity_shader(int intensityLimit, int filterPasses, int renderP
 		}
 	if(workBuffer == nil)
 		workBuffer = RwRasterCreate(pRasterFrontBuffer->width, pRasterFrontBuffer->height, pRasterFrontBuffer->depth, rwRASTERTYPECAMERATEXTURE);
-	if(!workBuffer) return;
 
 	RwRaster *drawBuffer = RwCameraGetRaster(Scene.camera);
 
@@ -797,7 +791,6 @@ CPostEffects::Radiosity(int intensityLimit, int filterPasses, int renderPasses, 
 		}
 	if(workBuffer == nil)
 		workBuffer = RwRasterCreate(pRasterFrontBuffer->width, pRasterFrontBuffer->height, pRasterFrontBuffer->depth, rwRASTERTYPECAMERATEXTURE);
-	if(!workBuffer) return;
 
 	RwRaster *renderBuffer, *textureBuffer;
 
