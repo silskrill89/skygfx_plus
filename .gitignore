@@ -70,6 +70,22 @@ hlsl_intro_extracted.txt
 shaderx2_extracted.txt
 rw_*.txt
 
+# Memory / knowledge harness
+.sadie/
+.serena/
+.harness-memory/
+
+# Knowledge tooling (local scripts, not shared)
+tools/agent_coordinator.py
+tools/memory-startup.py
+tools/memory_octree.py
+tools/obsidian-vaults.yaml
+
+# Generated/exploratory output
+shaders/graphify-out/
+src/graphify-out/
+docs/compose/spec/
+
 # Cache and secrets
 .cache/
 *.cache

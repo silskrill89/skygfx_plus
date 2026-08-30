@@ -1570,6 +1570,16 @@ readIni(int n)
 
 	c->smaaEnable = readint(cfg.get("SkyGfx", "smaaEnable", ""), 0);
 
+	// Motion Blur
+	c->motionBlurEnable = readint(cfg.get("SkyGfx", "motionBlurEnable", ""), 1);
+	c->motionBlurStrength = readfloat(cfg.get("SkyGfx", "motionBlurStrength", ""), 0.4f);
+	c->motionBlurRadial = readfloat(cfg.get("SkyGfx", "motionBlurRadial", ""), 0.2f);
+	c->motionBlurSpeedFactor = readfloat(cfg.get("SkyGfx", "motionBlurSpeedFactor", ""), 0.3f);
+	c->motionBlurCameraAware = readint(cfg.get("SkyGfx", "motionBlurCameraAware", ""), 1);
+
+	// Velocity Buffer
+	c->velocityBufferEnable = readint(cfg.get("SkyGfx", "velocityBufferEnable", ""), 1);
+
 	// Faux Normal Buffer (stereo disparity)
 	c->normalBufferEnable = readint(cfg.get("SkyGfx", "normalBufferEnable", ""), 0);
 	c->normalBufferOffset = readfloat(cfg.get("SkyGfx", "normalBufferOffset", ""), 0.5f);
@@ -2215,7 +2225,7 @@ DllMain(HINSTANCE hInst, DWORD reason, LPVOID)
 		GetModuleFileNameA(dllModule, logPath, MAX_PATH);
 		char *p = strrchr(logPath, '.');
 		if(p) strcpy(p, "_dbg.log");
-		else strcat(logPath, "_dbg.log");
+		else strncat(logPath, "_dbg.log", sizeof(logPath) - strlen(logPath) - 1);
 
 		diag_init(logPath);
 		diag_installVEH();
@@ -2384,6 +2394,8 @@ DllMain(HINSTANCE hInst, DWORD reason, LPVOID)
 	}
 
 	if(reason == DLL_PROCESS_DETACH){
+		shutdownTexDB();
+		dbglog("texdb shutdown complete");
 		ReleaseDefaultPoolResources();
 		dbglog("D3DPOOL_DEFAULT resources released");
 		ForwardPlus_ReleaseResources();

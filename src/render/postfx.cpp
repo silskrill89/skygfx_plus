@@ -2264,7 +2264,7 @@ CPostEffects::DrawSSAO(void)
 		float params[4] = { radius, power, noiseScale, 0.0f };
 		RwD3D9SetPixelShaderConstant(0, params, 1);
 
-		float screenSize[4] = { (float)w, (float)h, 1.0f/w, 1.0f/h };
+		float screenSize[4] = { (float)w, (float)h, 1.0f/max((float)w, 1e-7f), 1.0f/max((float)h, 1e-7f) };
 		RwD3D9SetPixelShaderConstant(1, screenSize, 1);
 
 		RwCamera *cam = Scene.camera;
@@ -2412,7 +2412,7 @@ static void DrawSSAO_Overhaul(void)
 		float c0Temporal[4] = { radius, power, noiseScale, g_ssaoHistoryValid ? config->ssaoTemporalBlend : 1.0f };
 		RwD3D9SetPixelShaderConstant(0, c0Temporal, 1);
 		// c1: {quarterW, quarterH, 1/quarterW, 1/quarterH}
-		float c1Temporal[4] = { (float)g_ssaoQuarterW, (float)g_ssaoQuarterH, 1.0f/g_ssaoQuarterW, 1.0f/g_ssaoQuarterH };
+		float c1Temporal[4] = { (float)g_ssaoQuarterW, (float)g_ssaoQuarterH, 1.0f/max((float)g_ssaoQuarterW, 1e-7f), 1.0f/max((float)g_ssaoQuarterH, 1e-7f) };
 		RwD3D9SetPixelShaderConstant(1, c1Temporal, 1);
 		// c2: projInfo
 		RwD3D9SetPixelShaderConstant(2, projInfo, 1);
@@ -2453,7 +2453,7 @@ static void DrawSSAO_Overhaul(void)
 			float c0BlurH[4] = { config->ssaoBlurRadius, config->ssaoDepthThreshold, 0.0f, 0.0f };
 			RwD3D9SetPixelShaderConstant(0, c0BlurH, 1);
 			// c1: {quarterW, quarterH, 1/quarterW, 1/quarterH}
-			float c1BlurH[4] = { (float)g_ssaoQuarterW, (float)g_ssaoQuarterH, 1.0f/g_ssaoQuarterW, 1.0f/g_ssaoQuarterH };
+			float c1BlurH[4] = { (float)g_ssaoQuarterW, (float)g_ssaoQuarterH, 1.0f/max((float)g_ssaoQuarterW, 1e-7f), 1.0f/max((float)g_ssaoQuarterH, 1e-7f) };
 			RwD3D9SetPixelShaderConstant(1, c1BlurH, 1);
 			// c2: projInfo
 			RwD3D9SetPixelShaderConstant(2, projInfo, 1);
@@ -2490,7 +2490,7 @@ static void DrawSSAO_Overhaul(void)
 			float c0BlurV[4] = { config->ssaoBlurRadius, config->ssaoDepthThreshold, 1.0f, 0.0f };
 			RwD3D9SetPixelShaderConstant(0, c0BlurV, 1);
 			// c1: {quarterW, quarterH, 1/quarterW, 1/quarterH}
-			float c1BlurV[4] = { (float)g_ssaoQuarterW, (float)g_ssaoQuarterH, 1.0f/g_ssaoQuarterW, 1.0f/g_ssaoQuarterH };
+			float c1BlurV[4] = { (float)g_ssaoQuarterW, (float)g_ssaoQuarterH, 1.0f/max((float)g_ssaoQuarterW, 1e-7f), 1.0f/max((float)g_ssaoQuarterH, 1e-7f) };
 			RwD3D9SetPixelShaderConstant(1, c1BlurV, 1);
 			// c2: projInfo
 			RwD3D9SetPixelShaderConstant(2, projInfo, 1);
@@ -2530,10 +2530,10 @@ static void DrawSSAO_Overhaul(void)
 		float c0Up[4] = { config->ssaoDepthThreshold, 0.0f, 0.0f, 0.0f };
 		RwD3D9SetPixelShaderConstant(0, c0Up, 1);
 		// c1: {fullW, fullH, 1/fullW, 1/fullH}
-		float c1Up[4] = { (float)w, (float)h, 1.0f/w, 1.0f/h };
+		float c1Up[4] = { (float)w, (float)h, 1.0f/max((float)w, 1e-7f), 1.0f/max((float)h, 1e-7f) };
 		RwD3D9SetPixelShaderConstant(1, c1Up, 1);
 		// c2: {quarterW, quarterH, 1/quarterW, 1/quarterH}
-		float c2Up[4] = { (float)g_ssaoQuarterW, (float)g_ssaoQuarterH, 1.0f/g_ssaoQuarterW, 1.0f/g_ssaoQuarterH };
+		float c2Up[4] = { (float)g_ssaoQuarterW, (float)g_ssaoQuarterH, 1.0f/max((float)g_ssaoQuarterW, 1e-7f), 1.0f/max((float)g_ssaoQuarterH, 1e-7f) };
 		RwD3D9SetPixelShaderConstant(2, c2Up, 1);
 
 		overrideIm2dPixelShader = SSAO_Upsample;
@@ -2668,7 +2668,8 @@ void RenderIBLBuffer(void)
 
 	// Get screen size
 	RwRaster *camRas = RwCameraGetRaster(Scene.camera);
-	float screenP[4] = { (float)camRas->width, (float)camRas->height, 1.0f/camRas->width, 1.0f/camRas->height };
+	if(!camRas){ dbglog("IBL: camRas is NULL, skipping"); return; }
+	float screenP[4] = { (float)camRas->width, (float)camRas->height, 1.0f/max((float)camRas->width, 1e-7f), 1.0f/max((float)camRas->height, 1e-7f) };
 	RwD3D9SetPixelShaderConstant(0, screenP, 1);
 
 	// Sky colors from timecycle (zenith = sky top, horizon = sky bottom)
@@ -2851,7 +2852,7 @@ void DrawNormalBufferToTexture(void)
 	RwD3D9SetPixelShaderConstant(0, depthP, 1);
 
 	// c1 = (screenW, screenH, 1/screenW, 1/screenH)
-	float screenP[4] = { screenW, screenH, 1.0f/screenW, 1.0f/screenH };
+	float screenP[4] = { screenW, screenH, 1.0f/max(screenW, 1e-7f), 1.0f/max(screenH, 1e-7f) };
 	RwD3D9SetPixelShaderConstant(1, screenP, 1);
 
 	// c2 = projection matrix diagonal for view-space reconstruction
@@ -2908,8 +2909,9 @@ void DrawPipeChain(void)
 	if(!dev) return;
 
 	RwRaster *camRas = RwCameraGetRaster(Scene.camera);
+	if(!camRas){ dbglog("pipeChainBlend: camRas is NULL, skipping"); return; }
 	float screenP[4] = { (float)camRas->width, (float)camRas->height,
-		1.0f/camRas->width, 1.0f/camRas->height };
+		1.0f/max((float)camRas->width, 1e-7f), 1.0f/max((float)camRas->height, 1e-7f) };
 	float projP[4] = { 1.0f, 1.0f, 1.0f, 0.0f };
 
 	CPostEffects::ImmediateModeRenderStatesStore();
@@ -3191,7 +3193,7 @@ CPostEffects::DrawSMAA(void)
 	static const int kSmaaPreset = 2; // HIGH
 	float smaaThreshold = thresholds[kSmaaPreset];
 	float smaaSearchSteps = maxSearchSteps[kSmaaPreset];
-	float screenParams[4] = { (float)w, (float)h, 1.0f/w, 1.0f/h };
+	float screenParams[4] = { (float)w, (float)h, 1.0f/max((float)w, 1e-7f), 1.0f/max((float)h, 1e-7f) };
 
 	// Save original camera raster (the draw buffer — back buffer)
 	RwRaster *drawBuffer = RwCameraGetRaster(Scene.camera);
@@ -3580,7 +3582,7 @@ static void DrawVelocityBuffer(void)
 	// Upload constants
 	RwD3D9SetPixelShaderConstant(0, &invCurVP, 4); // c0-c3: inverse current VP
 	RwD3D9SetPixelShaderConstant(4, &g_prevVPMatrix, 4); // c4-c7: previous VP
-	float screenParams[4] = { (float)w, (float)h, 1.0f/w, 1.0f/h };
+	float screenParams[4] = { (float)w, (float)h, 1.0f/max((float)w, 1e-7f), 1.0f/max((float)h, 1e-7f) };
 	RwD3D9SetPixelShaderConstant(8, screenParams, 1); // c8: screen params
 
 	// Render fullscreen quad
@@ -3715,7 +3717,7 @@ CPostEffects::DrawMotionBlur(void)
 	RwD3D9SetPixelShaderConstant(0, c0, 1);
 
 	// c1: (screenW, screenH, 1/screenW, 1/screenH)
-	float c1[4] = { (float)w, (float)h, 1.0f/w, 1.0f/h };
+	float c1[4] = { (float)w, (float)h, 1.0f/max((float)w, 1e-7f), 1.0f/max((float)h, 1e-7f) };
 	RwD3D9SetPixelShaderConstant(1, c1, 1);
 
 	// c2: (cameraVelocity, cameraRotation, deltaTime, 0)
@@ -3871,7 +3873,7 @@ DrawHeightFog(void)
 	RwD3D9SetPixelShaderConstant(2, c2, 1);
 
 	// c3: screenSize
-	float c3[4] = { (float)w, (float)h, 1.0f/w, 1.0f/h };
+	float c3[4] = { (float)w, (float)h, 1.0f/max((float)w, 1e-7f), 1.0f/max((float)h, 1e-7f) };
 	RwD3D9SetPixelShaderConstant(3, c3, 1);
 
 	// c4: camera position

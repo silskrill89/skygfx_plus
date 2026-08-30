@@ -254,7 +254,8 @@ pipeGetLeedsEnvMapMatrix(RpAtomic *atomic, float *out)
 	mat.pos.y = 0.0f;
 	mat.pos.z = 0.0f;
 	mat.at.z = 0.0f;
-	RwV3dNormalize(&mat.at, &mat.at);
+	if(RwV3dNormalize(&mat.at, &mat.at) == 0.0f)
+		mat.at.z = 1.0f;
 	mat.up.x = 0.0f;
 	mat.up.y = 0.0f;
 	mat.up.z = 1.0f;

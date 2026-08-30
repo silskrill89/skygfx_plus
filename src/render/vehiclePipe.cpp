@@ -574,7 +574,7 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_PS2(RwResEntry *repEntry, void *obj
 		float shininess;
 		float specularity;
 		float lightmult;
-	} fxParams;
+	} fxParams = {};
 	RwMatrix envmat;
 	RwV4d envXform;
 	RwMatrix specmat;
@@ -723,7 +723,7 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Specular(RwResEntry *repEntry, void
 		float shininess;
 		float specularity;
 		float lightmult;
-	} fxParams;
+	} fxParams = {};
 	RwMatrix envmat;
 	RwV4d envXform;
 	RwV3d eye;
@@ -1115,7 +1115,7 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_leeds(RwResEntry *repEntry, void *o
 		float shininess;
 		float specularity;
 		float lightmult;
-	} fxParams;
+	} fxParams = {};
 	float envmat[16];
 	RwV3d eye;
 	RwMatrix lightmat;
@@ -1239,7 +1239,7 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_mobile(RwResEntry *repEntry, void *
 		float shininess;
 		float specularity;
 		float lightmult;
-	} fxParams;
+	} fxParams = {};
 	RwV3d eye;
 	RwMatrix lightmat;
 	float transform[16];

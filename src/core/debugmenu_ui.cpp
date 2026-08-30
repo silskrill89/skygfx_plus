@@ -461,6 +461,7 @@ void DrawUnifiedDebugMenu(IDirect3DDevice9 *device)
 				// --- Post Processing ---
 				if(ImGui::CollapsingHeader("Post Processing")){
 					ImGui::Checkbox("Motion Blur", RB(config->motionBlurEnable));
+					ImGui::Checkbox("Velocity Buffer", RB(config->velocityBufferEnable));
 					ImGui::Checkbox("Radiosity", RB(config->doRadiosity));
 					ImGui::Checkbox("VCS Trails", RB(config->vcsTrails));
 				}

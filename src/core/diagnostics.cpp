@@ -293,7 +293,7 @@ diag_writeMinidump(EXCEPTION_POINTERS *ep)
 	strncpy(dumpPath, s_logPath, MAX_PATH - 1);
 	char *ext = strrchr(dumpPath, '.');
 	if(ext) strcpy(ext, "_crash.dmp");
-	else strcat(dumpPath, "_crash.dmp");
+	else strncat(dumpPath, "_crash.dmp", sizeof(dumpPath) - strlen(dumpPath) - 1);
 
 	HANDLE hFile = CreateFileA(dumpPath, GENERIC_WRITE, 0, NULL,
 		CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
