@@ -5,6 +5,8 @@
 //   - dbglog / dbglog_loc (debug file logging)
 //   - VEH crash handler (diagnostic-only, never suppresses exceptions)
 //   - Log file initialization and path management
+//   - Log ring buffer (last N messages) for crash dump context
+//   - Scope tag registry (address→function name for crash backtrace)
 
 #include "skygfx.h"
 #include <windows.h>
@@ -21,6 +23,77 @@ static int  s_logInit = 0;
 const char* diag_getLogPath(void) { return s_logPath; }
 
 static void diag_writeMinidump(EXCEPTION_POINTERS *ep);
+
+// ============================================================
+// Log ring buffer — lock-free, single writer (main thread)
+// ============================================================
+#define RING_SIZE 32
+#define RING_MSG_LEN 160
+static char s_ring[RING_SIZE][RING_MSG_LEN];
+static volatile int s_ringPos = 0;
+
+void diag_ringPut(const char *msg) {
+	int pos = s_ringPos;
+	s_ring[pos % RING_SIZE][0] = 0;
+	strncpy(s_ring[pos % RING_SIZE], msg, RING_MSG_LEN - 1);
+	s_ring[pos % RING_SIZE][RING_MSG_LEN - 1] = 0;
+	s_ringPos = pos + 1; // volatile store, single thread
+}
+
+void diag_ringDump(void) {
+	int count = s_ringPos;
+	if(count > RING_SIZE) count = RING_SIZE;
+	int start = (s_ringPos - count) % RING_SIZE;
+	// Always log to a file handle directly (recursive log would be bad during crash)
+	HANDLE h = CreateFileA(s_logPath, FILE_APPEND_DATA, FILE_SHARE_READ,
+		NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+	if(h == INVALID_HANDLE_VALUE) return;
+	char tmp[32];
+	_snprintf(tmp, sizeof(tmp), "--- LAST LOG ENTRIES ---\n");
+	DWORD w; WriteFile(h, tmp, (DWORD)strlen(tmp), &w, NULL);
+	for(int i = 0; i < count; i++) {
+		int idx = (start + i) % RING_SIZE;
+		WriteFile(h, s_ring[idx], (DWORD)strnlen(s_ring[idx], RING_MSG_LEN), &w, NULL);
+		WriteFile(h, "\n", 1, &w, NULL);
+	}
+	_snprintf(tmp, sizeof(tmp), "--- END LOG ENTRIES ---\n");
+	WriteFile(h, tmp, (DWORD)strlen(tmp), &w, NULL);
+	CloseHandle(h);
+}
+
+// ============================================================
+// Scope tag registry
+// ============================================================
+ScopeTag g_scopeTags[SCOPE_TAG_MAX];
+int g_scopeTagCount = 0;
+int g_scopeTagLock = 0;
+
+void diag_registerScope(const char *name, void *addr) {
+	if(g_scopeTagCount >= SCOPE_TAG_MAX) return;
+	g_scopeTags[g_scopeTagCount].name = name;
+	g_scopeTags[g_scopeTagCount].addr = addr;
+	g_scopeTagCount++;
+}
+
+void diag_lookupScope(void *eip, char *outName, int outSize, int *outOffset) {
+	outName[0] = 0;
+	*outOffset = 0;
+	uintptr_t addr = (uintptr_t)eip;
+	int best = -1;
+	int bestDist = 0x7FFFFFFF;
+	for(int i = 0; i < g_scopeTagCount; i++) {
+		int dist = (int)(addr - (uintptr_t)g_scopeTags[i].addr);
+		if(dist >= -0x400 && dist < 0x400 && abs(dist) < bestDist) {
+			bestDist = abs(dist);
+			best = i;
+			*outOffset = dist;
+		}
+	}
+	if(best >= 0) {
+		strncpy(outName, g_scopeTags[best].name, outSize - 1);
+		outName[outSize - 1] = 0;
+	}
+}
 
 // ============================================================
 // dbglog — file-based debug logging
@@ -53,6 +126,11 @@ dbglog_internal(LogLevel level, const char *file, int line, const char *func, co
 			shortFile, line, func, msg);
 	if(hlen < 0 || hlen >= sizeof(buf)) return;
 
+	// Also push to ring buffer (truncated to fit)
+	char ringMsg[RING_MSG_LEN];
+	_snprintf(ringMsg, RING_MSG_LEN, "%s", msg + 14); // skip timestamp prefix; keep level+func+msg
+	diag_ringPut(ringMsg);
+
 	HANDLE h = CreateFileA(s_logPath, FILE_APPEND_DATA, FILE_SHARE_READ,
 		NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 	if(h == INVALID_HANDLE_VALUE) return;
@@ -75,10 +153,11 @@ void
 dbglog_loc(LogLevel level, const char *file, int line, const char *func, const char *fmt, ...)
 {
 	va_list ap;
-	va_start(ap, fmt);
+	va_start(ap, level);
 	dbglog_internal(level, file, line, func, fmt, ap);
 	va_end(ap);
 }
+
 // ============================================================
 // VEH crash handler — matches original skygfx crashHandler
 // Logs crashes, auto-fixes known issues, suppresses rendering crashes
@@ -118,8 +197,15 @@ diag_crashHandler(EXCEPTION_POINTERS *ep)
 		if(accessType == 0) crashType = "READ";
 		else if(accessType == 1) crashType = "WRITE";
 		else if(accessType == 8) crashType = "DEP";
-		dbglog("CRASH[%d]: %s at 0x%08X (zone=%s) accessing 0x%08X",
-			crashCount, crashType, eip, crashZone, accessAddr);
+
+		// Enrich: NULL-pointer heuristic
+		if(accessAddr < 0x1000) {
+			dbglog("CRASH[%d]: %s at 0x%08X (zone=%s) accessing 0x%08X — NULL-pointer deref, offset +0x%X",
+				crashCount, crashType, eip, crashZone, accessAddr, accessAddr);
+		} else {
+			dbglog("CRASH[%d]: %s at 0x%08X (zone=%s) accessing 0x%08X",
+				crashCount, crashType, eip, crashZone, accessAddr);
+		}
 	} else {
 		dbglog("CRASH[%d]: code=0x%08X at 0x%08X (zone=%s)",
 			crashCount, code, eip, crashZone);
@@ -136,29 +222,30 @@ diag_crashHandler(EXCEPTION_POINTERS *ep)
 			sp[0], sp[1], sp[2], sp[3], sp[4], sp[5], sp[6], sp[7]);
 	}
 
-	// Auto-fixes must fire BEFORE pass-through check so they work during InitialiseGame
-	// Auto-fix: cascade crash in LoadCollisionFileFirstTime after corrupt COL model
-	if(code == 0xC0000005 && ctx->Eip == 0x5B5192 && ctx->Esi == 0){
-		dbglog("AUTO-FIX: skipping NULL CColModel store at 0x5B5192");
-		ctx->Eip += 3;
-		return EXCEPTION_CONTINUE_EXECUTION;
+	// Scope tag lookup: nearest skygfx function
+	char scopeName[128];
+	int scopeOff;
+	diag_lookupScope((void*)(uintptr_t)eip, scopeName, sizeof(scopeName), &scopeOff);
+	if(scopeName[0]) {
+		dbglog("  SKYGFX SCOPE: %s (+0x%X)", scopeName, scopeOff);
+	} else {
+		dbglog("  SKYGFX SCOPE: (none matched within 0x400)");
 	}
 
-	// Auto-fix: crash in model info lookup during CGame::Initialise
-	if(code == 0xC0000005 && ctx->Eip == 0x405CBC){
-		dbglog("AUTO-FIX: skipping model info refcount at 0x405CBC (EAX=%08X)", ctx->Eax);
-		ctx->Eip += 3;
-		return EXCEPTION_CONTINUE_EXECUTION;
-	}
+	// Dump the log ring buffer
+	diag_ringDump();
+
+	// CLASS 5: Removed EIP-skip auto-fixes — they silently mask corruption.
+	// Our diagnostics now pinpoint the crash with ring buffer + scope tags.
+	// Let real crashes surface so root causes are visible.
 
 	// During InitialiseGame call, let SEH handlers fire to get exact crash info
 	if(g_allowCrashPassThrough)
 		return EXCEPTION_CONTINUE_SEARCH;
 
-	// Handle our rendering crashes - suppress them (matches original skygfx)
-	if(code == 0xC0000005 || code == 0x40010006){
-		return EXCEPTION_EXECUTE_HANDLER;
-	}
+	// CLASS 5: Removed blanket EXCEPTION_EXECUTE_HANDLER for 0xC0000005.
+	// Previously swallowed all access violations, hiding real bugs.
+	// Now we let the crash propagate to the OS for full diagnostics.
 	return EXCEPTION_CONTINUE_SEARCH;
 }
 
@@ -177,7 +264,6 @@ void diag_heartbeat(void)
 static void diag_findGameWindow(void)
 {
 	if(s_gameHwnd) return;
-	// Find the game's main window by class name (GTA SA uses "LaunchUnrealUWindow" or gets a raw HWND)
 	struct EnumCtx { HWND found; } ctx = { NULL };
 	EnumWindows([](HWND hwnd, LPARAM lp) -> BOOL {
 		DWORD pid = 0;
@@ -196,7 +282,6 @@ static DWORD WINAPI watchdogThread(LPVOID)
 	InterlockedExchange(&s_watchdogRunning, 1);
 	dbglog("Watchdog: started (thread id=%08X)", GetCurrentThreadId());
 
-	// Wait for game to start producing heartbeats
 	Sleep(5000);
 
 	while(s_watchdogRunning){
@@ -204,7 +289,6 @@ static DWORD WINAPI watchdogThread(LPVOID)
 		DWORD now = GetTickCount();
 
 		if(last != 0 && (now - last) > 120000){
-			// 120 seconds with no heartbeat — game is likely frozen
 			dbglog("Watchdog: FREEZE DETECTED — no heartbeat for %u ms (last=%u now=%u)", now - last, last, now);
 
 			diag_findGameWindow();
@@ -220,12 +304,10 @@ static DWORD WINAPI watchdogThread(LPVOID)
 				"Click Cancel to terminate.",
 				s_logPath);
 
-			// Show on top of whatever is visible
 			int mbRet = MessageBoxA(s_gameHwnd, body, title, MB_ICONWARNING | MB_OKCANCEL | MB_TOPMOST);
 			if(mbRet == IDCANCEL)
 				TerminateProcess(GetCurrentProcess(), 0xDEAD);
 
-			// Reset heartbeat so we don't re-trigger immediately
 			InterlockedExchange(&s_heartbeat, GetTickCount());
 			Sleep(5000);
 		}
@@ -302,7 +384,6 @@ diag_writeMinidump(EXCEPTION_POINTERS *ep)
 		return;
 	}
 
-	// Use Windows MiniDumpWriteDump API
 	typedef BOOL (WINAPI *MiniDumpWriteDump_t)(HANDLE, DWORD, HANDLE, int, void*, void*, void*);
 	HMODULE dbgDll = GetModuleHandleA("dbghelp.dll");
 	if(!dbgDll) dbgDll = LoadLibraryA("dbghelp.dll");

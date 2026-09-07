@@ -95,9 +95,12 @@ readTxt(void)
 			start = end+1;
 		}
 		if(filename){
-			if(isdetail)
-				detailTextures[isdetail] = RwTextureRead(filename, nil);
-			else if(hasdetail || alphamode || hassibling || affiliate || stochastic){
+			if(isdetail){
+				if(isdetail < 100)
+					detailTextures[isdetail] = RwTextureRead(filename, nil);
+				else
+					dbglog("texdb: isdetail=%d out of bounds (max 99), skipping", isdetail);
+			}else if(hasdetail || alphamode || hassibling || affiliate || stochastic){
 				std::string s = filename;
 				strtolower(s);
 				// SAFETY: raw new — ownership held by global texdb map; needs RAII refactor
@@ -239,6 +242,11 @@ TexDbFindCB(char *name)
 static int
 storeTxdName(int ret/*return address on stack*/, char *txdname)
 {
+	// CLASS 4: Free existing entry before overwriting (prevents memory leak)
+	if(txdnames[txdslot]) {
+		free(txdnames[txdslot]);
+		txdnames[txdslot] = NULL;
+	}
 	txdnames[txdslot] = strdup(txdname);
 	return txdslot;
 }
@@ -246,7 +254,8 @@ storeTxdName(int ret/*return address on stack*/, char *txdname)
 static void
 setCurrentTxdName(void)
 {
-	strcpy(currentTxdName, txdnames[txdslot]);
+	strncpy(currentTxdName, txdnames[txdslot], sizeof(currentTxdName) - 1);
+	currentTxdName[sizeof(currentTxdName) - 1] = '\0';
 }
 
 static void __declspec(naked)
@@ -282,4 +291,29 @@ hooktexdb(void)
 
 	TxdStoreFindCB = *(RwTexture*(**)(char*))(0x731FD5+1);
 	Patch(0x731FD5+1, TexDbFindCB);
+}
+
+void
+shutdownTexDB(void)
+{
+	// CLASS 4: Free all txdnames entries
+	for(int i = 0; i < 65500; i++) {
+		if(txdnames[i]) {
+			free(txdnames[i]);
+			txdnames[i] = NULL;
+		}
+	}
+
+	for (auto &entry : texdb)
+	{
+		if (entry.second)
+		{
+			if (entry.second->name)
+				free(entry.second->name);
+			if (entry.second->affiliate)
+				free(entry.second->affiliate);
+			delete entry.second;
+		}
+	}
+	texdb.clear();
 }

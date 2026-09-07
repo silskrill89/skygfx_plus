@@ -158,7 +158,11 @@ CarPipe::RenderEnvTex(void)
 	RwCameraBeginUpdate(reflectionCam);
 	RwCamera *savedcam = Scene.camera;
 	Scene.camera = reflectionCam;	// they do some begin/end updates with this in the called functions :/
-	RenderReflectionScene();
+	// FIX 1: Qualify to CarPipe::RenderReflectionScene() so the env map includes
+	// vehicles (RenderEverythingBarRoads) + fading entities, not just roads+buildings.
+	// The unqualified call resolved to the GLOBAL RenderReflectionScene() in envmap.cpp
+	// which only renders roads+buildings → no vehicle reflections.
+	CarPipe::RenderReflectionScene();
 	Scene.camera = savedcam;
 
 	MakeScreenQuad();

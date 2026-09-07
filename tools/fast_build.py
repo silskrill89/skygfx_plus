@@ -16,6 +16,8 @@ Usage:
   python tools/fast_build.py --reset-env  # Invalidate VS env cache and re-cache
   python tools/fast_build.py --open       # Open game directory after deploy
   python tools/fast_build.py --no-deploy  # Build without deploying
+  python tools/fast_build.py --check-shaders  # Validate all shaders without building DLL
+  python tools/fast_build.py --check      # Build: abort before MSBuild if any shader fails validate
 
 Build Tiers:
   --fastest  : No detection. Compile shaders + MSBuild incremental + deploy. Fastest iteration.
@@ -23,6 +25,13 @@ Build Tiers:
   (default)  : Same as --fastest (always build). MSBuild handles C++ incremental compilation.
   --rebuild  : Delete outputs, clean + rebuild from scratch, deploy.
   --clean    : Alias for --rebuild.
+
+Validation:
+  --check-shaders  : Run FXC validation on every HLSL entry point (parallel), print pass/fail
+                     per shader, exit 1 if any fail. Never writes to resources/cso/.
+  --check          : Before building the DLL, run --check-shaders first. Aborts the entire
+                     build if any shader fails validation. Saves time by catching HLSL errors
+                     early without waiting for MSBuild.
 """
 
 import os
@@ -309,7 +318,35 @@ def compile_single_shader(args):
     if result.returncode == 0:
         return ('ok', hlsl_path, cache_key, hlsl_hash)
     else:
-        return ('fail', hlsl_path, result.stderr.strip().split('\n')[0] if result.stderr else 'Unknown error')
+        # Full error text for diagnosis
+        err_text = result.stderr.strip() if result.stderr else 'Unknown error'
+        return ('fail', hlsl_path, None, err_text)
+
+def validate_single_shader(args):
+    """Validate a shader by compiling to a temp target. Never writes to CSO dir.
+    Called by multiprocessing Pool. Returns (status, hlsl_path, entry, detail)."""
+    fxc, hlsl_path, _cso_path, profile, entry = args
+    name = Path(hlsl_path).name
+
+    # Compile to a temp file in system temp directory, then delete it
+    import tempfile
+    fd, tmp_path = tempfile.mkstemp(suffix='.cso')
+    os.close(fd)
+    try:
+        result = subprocess.run(
+            [fxc, '/T', profile, '/nologo', '/E', entry, '/Fo', tmp_path, hlsl_path],
+            capture_output=True, text=True
+        )
+        if result.returncode == 0:
+            return ('ok', hlsl_path, entry, None)
+        else:
+            err_text = result.stderr.strip() if result.stderr else 'Unknown error'
+            return ('fail', hlsl_path, entry, err_text)
+    finally:
+        try:
+            os.remove(tmp_path)
+        except Exception:
+            pass
 
 def get_shader_list():
     """Get list of all shaders to compile."""
@@ -320,8 +357,20 @@ def get_shader_list():
         shader_dir = SHADERS_DIR / subdir
         if not shader_dir.exists():
             continue
+        # Collect all HLSL stems at root level to detect subdir collisions
+        root_stems = set()
+        for f in shader_dir.glob('*.hlsl'):
+            root_stems.add(f.stem)
         for f in shader_dir.rglob('*.hlsl'):
             if 'GTAIV' in f.name and subdir == 'vs':
+                continue
+            # Skip files handled by multi_entry (dedicated entry points)
+            if f.name in ('VehiclePBR_Modern.hlsl', 'normMapVehiclePS.hlsl',
+                           'mobileVehiclePS.hlsl', 'mobileVehicleVS.hlsl'):
+                continue
+            # Skip subdirectrory files whose stem collides with a root file
+            # (root file takes priority; multi_entry handles redirects)
+            if f.parent != shader_dir and f.stem in root_stems:
                 continue
             cso_name = f.stem + '.cso'
             cso_path = CSO_DIR / cso_name
@@ -337,10 +386,14 @@ def get_shader_list():
         ('vs_3_0', 'vehiclePipeVS.hlsl', 'main_mobileVehicle', 'mobileVehicleVS.cso'),
         ('vs_3_0', 'vehiclePipeVS.hlsl', 'main_neoPass1', 'neoVehiclePass1VS.cso'),
         ('vs_3_0', 'vehiclePipeVS.hlsl', 'main_neoPass2', 'neoVehiclePass2VS.cso'),
-        ('ps_3_0', 'VehiclePBR_Modern.hlsl', 'main_specCarFx', 'specCarFxPS.cso'),
+        # VehiclePBR_Modern.hlsl — all 7 entry points from one file
+        ('ps_3_0', 'VehiclePBR_Modern.hlsl', 'main', 'VehiclePBR_Modern.cso'),
+        ('ps_3_0', 'VehiclePBR_Modern.hlsl', 'main_normMapVehicle', 'normMapVehiclePS.cso'),
         ('ps_3_0', 'VehiclePBR_Modern.hlsl', 'main_mobileVehicle', 'mobileVehiclePS.cso'),
+        ('ps_3_0', 'VehiclePBR_Modern.hlsl', 'main_specCarFx', 'specCarFxPS.cso'),
         ('ps_3_0', 'VehiclePBR_Modern.hlsl', 'main_building', 'BuildingPBRPS.cso'),
         ('ps_3_0', 'VehiclePBR_Modern.hlsl', 'main_rubber', 'Rubber_Vehicle_Modern.cso'),
+        ('ps_3_0', 'VehiclePBR_Modern.hlsl', 'main_ps2EnvSpecFx', 'ps2EnvSpecFxPS.cso'),
     ]
 
     for profile, src_file, entry, out_cso in multi_entry:
@@ -389,14 +442,64 @@ def compile_shaders_parallel():
                 results['skip'] += 1
             elif status == 'fail':
                 results['fail'] += 1
-                err = result[2] if len(result) > 2 else 'Unknown'
+                err = result[3] if len(result) > 3 else 'Unknown error'
                 failures.append((name, err))
-                print(f"  FAIL: {name} - {err}")
+                print(f"  FAIL: {name} - {err.split(chr(10))[0] if chr(10) in err else err}")
+                # Print full error block indented
+                for line in err.split('\n'):
+                    print(f"    {line}")
 
     # Write updated cache once after all workers finish
     _write_shader_hash_cache(updated_cache)
 
     print(f"  {results['ok']} compiled, {results['skip']} up-to-date, {results['fail']} failed")
+    if results['fail'] > 0:
+        print(f"\n  *** {results['fail']} shader(s) FAILED — see errors above ***")
+    timer.end()
+    return results['fail'] == 0
+
+def validate_shaders_parallel():
+    """Validate all shaders via FXC compilation to temp files (no CSO writes).
+    Returns True if all pass, False if any fail. Parallel workers."""
+    timer.begin("Shader Validation")
+
+    shaders = get_shader_list()
+
+    if not shaders:
+        print("  No shaders found to validate")
+        timer.end()
+        return True
+
+    num_workers = min(cpu_count(), len(shaders))
+    print(f"  Validating {len(shaders)} shader entry points with {num_workers} workers...")
+
+    results = {'ok': 0, 'fail': 0}
+    failures = []
+
+    with Pool(num_workers) as pool:
+        for result in pool.imap_unordered(validate_single_shader, shaders):
+            status = result[0]
+            name = Path(result[1]).name
+            entry = result[2]
+            if status == 'ok':
+                results['ok'] += 1
+                if entry and entry != 'main':
+                    print(f"  PASS: {name} [{entry}]")
+                else:
+                    print(f"  PASS: {name}")
+            elif status == 'fail':
+                results['fail'] += 1
+                err = result[3] if len(result) > 3 else 'Unknown error'
+                failures.append((name, entry, err))
+                if entry and entry != 'main':
+                    print(f"  FAIL: {name} [{entry}]")
+                else:
+                    print(f"  FAIL: {name}")
+                # Print full FXC error block indented for readability
+                for line in err.split('\n'):
+                    print(f"    {line}")
+
+    print(f"  {results['ok']} passed, {results['fail']} failed")
     timer.end()
     return results['fail'] == 0
 
@@ -628,6 +731,8 @@ def main():
     reset_env = '--reset-env' in args
     open_dir = '--open' in args
     no_deploy = '--no-deploy' in args
+    check_shaders = '--check-shaders' in args
+    check_before_build = '--check' in args
 
     print("=" * 50)
     print("  SkyGFX Plus - Fast Build")
@@ -635,9 +740,19 @@ def main():
 
     if reset_env:
         reset_env_cache()
-        if not any([fastest, fast, rebuild, shaders_only, deploy_only, watch]):
+        if not any([fastest, fast, rebuild, shaders_only, deploy_only, watch, check_shaders]):
             timer.summary()
             return
+
+    # Check-shaders-only mode: validate all shaders without building
+    if check_shaders:
+        ok = validate_shaders_parallel()
+        timer.summary()
+        if not ok:
+            print("\n  SHADER VALIDATION FAILED")
+            sys.exit(1)
+        print("\n  All shaders valid")
+        return
 
     # Deploy-only mode
     if deploy_only:
@@ -690,6 +805,25 @@ def main():
         timer.end()
 
     if do_build:
+        # Pre-build shader validation gate (--check): catch HLSL syntax errors early.
+        # When --check is on, validate before actual compilation so we fail fast.
+        # Also auto-validate when the shader set changed (nearly free — same FXC call).
+        do_validate = check_before_build
+        if not check_before_build and not fastest and not rebuild:
+            # In smart mode, validate if shaders changed (the real compile would hit them anyway)
+            try:
+                _, shd_changed, _ = check_changes()
+                do_validate = shd_changed
+            except Exception:
+                pass
+
+        if do_validate:
+            print("  PRE-BUILD SHADER VALIDATION:")
+            if not validate_shaders_parallel():
+                print("\n  SHADER VALIDATION FAILED — fix HLSL errors above before building")
+                sys.exit(1)
+            print("  Shader validation passed, proceeding to build")
+
         # Compile shaders
         if not compile_shaders_parallel():
             print("\n  SHADER COMPILATION FAILED")

@@ -38,7 +38,7 @@ float3 GetViewPos(float2 texCoord, float depth)
 {
     float2 ndc = texCoord * 2.0 - 1.0;
     ndc.y = -ndc.y;
-    float viewZ = projInfo.z / (depth - projInfo.w);
+    float viewZ = projInfo.z / max(depth - projInfo.w, 1e-7);
     float2 viewXY = ndc * viewZ * projInfo.xy;
     return float3(viewXY, viewZ);
 }
@@ -189,8 +189,13 @@ float4 main(PS_INPUT IN) : COLOR
         confidence = 1.0 - smoothstep(0.001, 0.05, depthDiff);
         confidence *= history.a;  // multiply by history confidence
 
+        // ---- Cloud-shadow-style exponential history blend ----
+        // Never fully discard history at any confidence level.
+        // Even complete disocclusion keeps a small history fraction,
+        // so portal/interior transitions blend smoothly over a few frames.
         float temporalBlend = ssaoParams.w;
-        occlusion = lerp(occlusion, historyOcclusion, temporalBlend * confidence);
+        float confidenceWeight = max(confidence, 0.1);  // floor: never below 10% history
+        occlusion = lerp(occlusion, historyOcclusion, temporalBlend * confidenceWeight);
     }
 
     // Clamp output

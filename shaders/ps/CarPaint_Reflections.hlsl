@@ -34,6 +34,9 @@ uniform float4 baseColor   : register(c1);
 uniform float4 paintParams : register(c2);
 uniform float4 envParams   : register(c3);
 uniform float4 screenSize  : register(c4);
+float3 viewRight    : register(c25); // view matrix row 0 (world→view rotation)
+float3 viewUp       : register(c26); // view matrix row 1
+float3 viewFwd      : register(c27); // view matrix row 2
 
 struct PS_INPUT
 {
@@ -77,10 +80,10 @@ float4 main(PS_INPUT IN) : COLOR
 {
     float2 tex = IN.texCoord;
 
-    float3 N = normalize(IN.normal);
-    float3 V = normalize(IN.viewDir);
-    float3 L = normalize(IN.lightDir);
-    float3 H = normalize(V + L);
+    float3 N = length(IN.normal) > 1e-6 ? normalize(IN.normal) : float3(0, 1, 0);
+    float3 V = length(IN.viewDir) > 1e-6 ? normalize(IN.viewDir) : float3(0, 0, 1);
+    float3 L = length(IN.lightDir) > 1e-6 ? normalize(IN.lightDir) : float3(0, 0, -1);
+    float3 H = length(V + L) > 1e-6 ? normalize(V + L) : float3(0, 1, 0);
 
     float NdotL = saturate(dot(N, L));
     float NdotV = saturate(dot(N, V));
@@ -125,11 +128,13 @@ float4 main(PS_INPUT IN) : COLOR
     float3 specular2 = spec2D * spec2V * specParams.w * NdotL;
 
     // ===== Environment Reflection =====
-    float3 R = reflect(-V, N);
-    float2 envUV = SphereEnvMapUV(R, V);
+    float3 R_world = reflect(-V, N);
+    float3 R_view = float3(dot(R_world, viewRight), dot(R_world, viewUp), dot(R_world, viewFwd));
+    float3 V_view = float3(dot(V, viewRight), dot(V, viewUp), dot(V, viewFwd));
+    float2 envUV = SphereEnvMapUV(R_view, V_view);
     float3 envReflection = tex2D(envMapTex, envUV).rgb;
 
-    float2 ssrUV = tex + R.xy * 0.03;
+    float2 ssrUV = tex + R_world.xy * 0.03;
     float3 ssrColor = tex2D(sceneTex, ssrUV).rgb;
     float ssrBlend = metallic * 0.3;
     envReflection = lerp(envReflection, ssrColor, ssrBlend);

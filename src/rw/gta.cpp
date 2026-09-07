@@ -218,4 +218,11 @@ WRAPPER void RtQuatSetupSlerpCache(RtQuat *qpFrom, RtQuat *qpTo, RtQuatSlerpCach
 
 // ---- Game helpers ----
 WRAPPER RpHAnimHierarchy *GetAnimHierarchyFromSkinClump(RpClump *clump) { EAXJMP(0x734A40); }
+
+// ---- RpSkin (skinning) — types not available in this translation unit, use void*
+WRAPPER void *RpSkinGeometryGetSkin(void *geometry) { EAXJMP(0x7C77A0); }
+WRAPPER unsigned int RpSkinGetNumBones(void *skin) { EAXJMP(0x7C77E0); }
+WRAPPER void *RpSkinGetVertexBoneWeights(void *skin) { EAXJMP(0x7C77F0); }
+WRAPPER const unsigned int *RpSkinGetVertexBoneIndices(void *skin) { EAXJMP(0x7C7800); }
+WRAPPER const void *RpSkinGetSkinToBoneMatrices(void *skin) { EAXJMP(0x7C7810); }
 }

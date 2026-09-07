@@ -10,6 +10,8 @@ IDR_VEHICLEVS           RCDATA "cso/vehicleVS.cso"
 
 // GTAIV
 IDR_GTAIVPS             RCDATA "cso/GTAIV_ps20.cso"
+IDR_GTAIVVEHICLEVS      RCDATA "cso/GTAIVVehicle_vs.cso"
+IDR_GTAIVVEHICLEPS      RCDATA "cso/GTAIVVehicle_ps.cso"
 
 // SMAA
 IDR_SSAOPS              RCDATA "cso/SSAO_ps20.cso"

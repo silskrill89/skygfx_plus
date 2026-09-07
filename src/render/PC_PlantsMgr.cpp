@@ -448,7 +448,7 @@ static uint32 nLocTriDrawn[CPLANT_NUM_PLANT_SLOTS] = {0};
 		CDebug::PrintToScreenCoors(txt, START_X, START_Y+5);
 
 //		CPlantMgr::DbgCountLocTrisAndPlants(4, &nLocTrisCountAll, &nPlantsCountAll);
-//		::sprintf(txt, "LocTris[4]: All=%d (Plants=%d)", nLocTrisCountAll, nPlantsCountAll);
+//		::snprintf(txt, sizeof(txt), "LocTris[4]: All=%d (Plants=%d)", nLocTrisCountAll, nPlantsCountAll);
 //		CDebug::PrintToScreenCoors(txt, START_X, START_Y+6);
 	}
 

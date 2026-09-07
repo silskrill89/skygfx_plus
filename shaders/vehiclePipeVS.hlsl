@@ -87,8 +87,10 @@ VS_OUTPUT_VPBR main_vehiclePBR(VS_INPUT_VEH IN)
     OUT.Color = saturate(OUT.Color) * matCol;
 
     float4 WorldPos = mul(IN.Position, world);
-    float3 WorldNormal = normalize(mul(IN.Normal, (float3x3)world));
-    float3 ViewVector = normalize(WorldPos.xyz - eyePos);
+    float3 wn = mul(IN.Normal, (float3x3)world);
+    float3 WorldNormal = length(wn) > 1e-6 ? normalize(wn) : float3(0, 1, 0);
+    float3 vv = WorldPos.xyz - eyePos;
+    float3 ViewVector = length(vv) > 1e-6 ? normalize(vv) : float3(0, 0, 1);
     OUT.WorldPos = WorldPos;
     OUT.WorldNormal = WorldNormal;
     OUT.ViewDir = ViewVector;
@@ -157,7 +159,7 @@ VS_OUTPUT_PS2 main_ps2CarFx(VS_INPUT_VEH IN)
 float4   fxParams_spec  : register(c30);
 float4   envXform_spec  : register(c31);
 float3x3 envmat_spec    : register(c32);
-float3   eyePos_spec    : register(c35);
+float3   eyePos_spec    : register(c36);
 
 #define shininess_spec (fxParams_spec.y)
 #define specularity_spec (fxParams_spec.z)
@@ -188,7 +190,8 @@ VS_OUTPUT_SPEC main_specCarFx(VS_INPUT_VEH IN)
     }
     OUT.Envcolor = float4(192.0, 192.0, 192.0, 0.0) / 128.0 * shininess_spec * lightmult_spec;
 
-    float3 V = normalize(eyePos_spec - IN.Position.xyz);
+    float3 ve = eyePos_spec - IN.Position.xyz;
+    float3 V = length(ve) > 1e-6 ? normalize(ve) : float3(0, 0, 1);
     float spec = pow(saturate(dot(IN.Normal, normalize(V + -directDir[0]))), 16);
     OUT.Speccolor.rgb = spec * 3 * float3(0.75, 0.75, 0.75) * specularity_spec * lightmult_spec;
     OUT.Speccolor.a = 1.0;
@@ -273,7 +276,7 @@ VS_OUTPUT_XB main_xboxCar(VS_INPUT_XB IN)
 // ============================================================
 float4    fxParams_leeds : register(c30);
 float3x3  envmat_leeds   : register(c32);
-float4x4  texmat_leeds   : register(c36);
+float4x4  texmat_leeds   : register(c40);
 
 #define shininess_leeds (fxParams_leeds.y)
 #define lightmult_leeds (fxParams_leeds.w)
@@ -300,7 +303,7 @@ VS_OUTPUT_LEEDS main_leedsCarFx(VS_INPUT_VEH IN)
 // ============================================================
 float4   fxParams_mob   : register(c30);
 float4x4 worldmat       : register(c31);
-float3   campos          : register(c35);
+float3   campos          : register(c36);
 
 #define surfAmb_mob    (surfProps.x)
 #define surfDiff_mob   (surfProps.z)
@@ -325,7 +328,8 @@ VS_OUTPUT_MOB main_mobileVehicle(VS_INPUT_VEH IN)
 
     float4 WorldPos = mul(IN.Position, worldmat);
     float3 WorldNormal = mul(IN.Normal, (float3x3)worldmat);
-    float3 ReflVector = normalize(WorldPos.xyz - campos);
+    float3 rv = WorldPos.xyz - campos;
+    float3 ReflVector = length(rv) > 1e-6 ? normalize(rv) : float3(0, 0, 1);
     ReflVector = ReflVector - 2.0 * dot(ReflVector, WorldNormal) * WorldNormal;
     OUT.Texcoord1 = ReflVector;
 
@@ -378,8 +382,10 @@ VS_OUTPUT_NEO1 main_neoPass1(VS_INPUT_VEH IN)
     VS_OUTPUT_NEO1 Out;
     Out.position = mul(IN.Position, combined);
     Out.texcoord0 = IN.Texcoord0;
-    float3 N = normalize(mul(IN.Normal, (float3x3)world_neo).xyz);
-    float3 V = normalize(eye_neo - mul(IN.Position, world_neo).xyz);
+    float3 wn2 = mul(IN.Normal, (float3x3)world_neo).xyz;
+    float3 N = length(wn2) > 1e-6 ? normalize(wn2) : float3(0, 1, 0);
+    float3 vn = eye_neo - mul(IN.Position, world_neo).xyz;
+    float3 V = length(vn) > 1e-6 ? normalize(vn) : float3(0, 0, 1);
 
     float3 c = saturate(dot(N, -directDir_neo)) * surfDiff_neo;
     c += ambient_neo * surfAmb_neo;
@@ -421,7 +427,8 @@ VS_OUTPUT_NEO2 main_neoPass2(VS_INPUT_VEH IN)
 {
     VS_OUTPUT_NEO2 Out;
     Out.position = mul(IN.Position, combined);
-    float3 V = normalize(eye_neo - mul(IN.Position, world_neo).xyz);
+    float3 vn2 = eye_neo - mul(IN.Position, world_neo).xyz;
+    float3 V = length(vn2) > 1e-6 ? normalize(vn2) : float3(0, 0, 1);
     float3 N = mul(IN.Normal, (float3x3)world_neo).xyz;
 
     Out.color = float4((directSpec_neo2 * specTerm2(N, -directDir_neo, V, power_neo)).rgb, 1.0);

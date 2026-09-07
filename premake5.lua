@@ -18,10 +18,13 @@ workspace "skygfx"
 	files { "src/extras/*.*" }
 	files { "src/render/*.*" }
 	files { "src/rw/*.*" }
-	files { "E:/SDKs/imgui-master/*.cpp" }
+files { "E:/SDKs/imgui-master/*.cpp" }
 	files { "E:/SDKs/imgui-master/backends/imgui_impl_dx9.cpp" }
 	files { "E:/SDKs/imgui-master/backends/imgui_impl_win32.cpp" }
-   
+
+	-- Bullet Physics (vendored)
+	files { "third_party/bullet/src/**.*" }
+
 	includedirs { "external/injector/include" }
 	includedirs { "external" }
 	includedirs { "resources" }
@@ -32,6 +35,7 @@ workspace "skygfx"
 	includedirs { "src/extras" }
 	includedirs { "src/render" }
 	includedirs { "src/Core" }
+	includedirs { "third_party/bullet/src" }
 	includedirs { "E:/SDKs/imgui-master" }
 	includedirs { "E:/SDKs/imgui-master/backends" }
 	includedirs { "E:/SDKs/plugin-sdk-master/plugin_sa/game_sa" }
@@ -64,6 +68,7 @@ project "skygfx"
 	systemversion "10.0.26100.0"
 
 	defines { "_CRT_USE_MM_LOADU_SI64=0" }
+	defines { "_CRT_NONSTDC_NO_WARNINGS", "_CRT_SECURE_NO_WARNINGS" }
 	buildoptions { "/FS", "/Zc:threadSafeInit-" }
 
 	links { "d3dx9" }

@@ -1,4 +1,5 @@
 #include "skygfx.h"
+#include "neo.h"
 
 #ifdef DEBUG
 //#define DEBUGENVTEX
@@ -34,7 +35,12 @@ MakeEnvmapRasters(void)
 	if(envZB) RwRasterDestroy(envZB);
 	envFB = RwRasterCreate(config->envMapSize, config->envMapSize, 0, rwRASTERTYPECAMERATEXTURE);
 	envZB = RwRasterCreate(config->envMapSize, config->envMapSize, 0, rwRASTERTYPEZBUFFER);
-	if(!envFB || !envZB) return;
+	if(!envFB || !envZB){
+		// Symmetric cleanup: if either failed, release both and NULL the camera
+		if(envFB){ RwRasterDestroy(envFB); envFB = NULL; }
+		if(envZB){ RwRasterDestroy(envZB); envZB = NULL; }
+		return;
+	}
 	if(reflectionCam){
 		RwCameraSetRaster(reflectionCam, envFB);
 		RwCameraSetZRaster(reflectionCam, envZB);
@@ -440,17 +446,7 @@ DrawEnvMapCoronas(RwV3d at)
 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
 }
 
-void
-DrawDebugEnvMap(void)
-{
-	if(GetAsyncKeyState(VK_F3) & 0x8000)
-		return;
-#ifdef DEBUGENVTEX
-	MakeScreenQuad();
-	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, reflectionTex->raster);
-	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, screenQuad, 4, screenindices, 6);
-#endif
-}
+/* CLASS 6: DrawDebugEnvMap removed — dead code, F3 key check with empty body */
 
 void
 RenderReflectionMap_leeds(void)
@@ -555,7 +551,14 @@ RenderSphereReflections(void)
 		gRenderingSpheremap = true;
 		CRenderer__ConstructRenderList();
 		RwCameraBeginUpdate(cam);
-		RenderReflectionScene();
+		// FIX 1+2: Use CarPipe::RenderReflectionScene() so the env map includes vehicles
+		// (RenderEverythingBarRoads) + fading entities, not just roads+buildings.
+		// The global RenderReflectionScene() only renders roads+buildings.
+		// This fix also ensures the reflection scene is rendered BEFORE the main scene
+		// via the CRenderer__ConstructRenderList hook, avoiding the state corruption
+		// that occurred when CarPipe::RenderEnvTex re-rendered the env map mid-frame
+		// from RenderScene_after.
+		CarPipe::RenderReflectionScene();
 		RwCameraEndUpdate(cam);
 		gRenderingSpheremap = false;
 		bFudgeNow = false;

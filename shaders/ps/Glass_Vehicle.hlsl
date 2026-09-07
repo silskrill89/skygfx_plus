@@ -28,6 +28,9 @@ float4 surfProps   : register(c0);
 float4 fxParams    : register(c1);
 float4 glassParams : register(c22);  // { tintR, tintG, tintB, opacity }
 float4 lightParams : register(c23);  // { isLight, lightBoost, tintStrength, 0 }
+float3 viewRight    : register(c25); // view matrix row 0 (world→view rotation)
+float3 viewUp       : register(c26); // view matrix row 1
+float3 viewFwd      : register(c27); // view matrix row 2
 
 struct PS_INPUT{
     float2 texcoord0 : TEXCOORD0;
@@ -52,10 +55,11 @@ float4 main(PS_INPUT IN) : COLOR
     float3 F0 = float3(0.04, 0.04, 0.04);
     float fresnel = SchlickFresnelScalar(NdotV, 0.04);
 
-    // Env map reflection — stable sphere map (NO viewDir offset to prevent warping)
-    float3 R = reflect(-V, N);
-    float m = 2.0 * sqrt(dot(R.xy, R.xy) + (R.z + 1.0) * (R.z + 1.0));
-    float2 envUV = R.xy / m + 0.5;
+    // Env map reflection — stable sphere map (view-space R for camera-rendered sphere map)
+    float3 R_world = reflect(-V, N);
+    float3 R_view = float3(dot(R_world, viewRight), dot(R_world, viewUp), dot(R_world, viewFwd));
+    float3 V_view = float3(dot(V, viewRight), dot(V, viewUp), dot(V, viewFwd));
+    float2 envUV = SphereEnvMapUV(R_view, V_view);
     float4 env = tex2D(envMapTex, envUV);
     // Glass env reflection: boosted from 8% to 18% to make windows less opaque.
     // Balance between subtle reflections and visible tint.

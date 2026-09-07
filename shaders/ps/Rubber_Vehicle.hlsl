@@ -44,9 +44,9 @@ struct PS_INPUT{
 
 float4 main(PS_INPUT IN) : COLOR
 {
-    float3 N = normalize(IN.WorldNormal);
-    float3 V = normalize(IN.ViewDir);
-    float3 L = normalize(IN.SunDir);
+    float3 N = length(IN.WorldNormal) > 1e-6 ? IN.WorldNormal / length(IN.WorldNormal) : float3(0, 1, 0);
+    float3 V = length(IN.ViewDir) > 1e-6 ? IN.ViewDir / length(IN.ViewDir) : float3(0, 0, 1);
+    float3 L = length(IN.SunDir) > 1e-6 ? IN.SunDir / length(IN.SunDir) : float3(0, 0, -1);
 
     float4 diff = tex2D(diffuseTex, IN.texcoord0);
     float3 baseColor = diff.rgb * IN.color.rgb * matCol.rgb;

@@ -110,8 +110,18 @@ void waterPipe_setRenderState(void)
     float camTime[4] = {camPos.x, camPos.y, camPos.z, g_waterTime};
     RwD3D9SetVertexShaderConstant(8, camTime, 1);
 
-    float *sunDir = (float*)0xC812CC;
-    float sunDirNeg[4] = {-sunDir[0], -sunDir[1], -sunDir[2], 3.0f};
+    // Sun direction from pDirect (directional light), matching vehiclePipe pattern
+    extern RpLight *&pDirect;
+    RwV3d sunDirVec = {0, 0, 0};
+    if(pDirect){
+        RwFrame *sunFrame = RpLightGetFrame(pDirect);
+        if(sunFrame){
+            RwMatrix *sunLTM = RwFrameGetLTM(sunFrame);
+            if(sunLTM)
+                sunDirVec = *RwMatrixGetAt(sunLTM);
+        }
+    }
+    float sunDirNeg[4] = {-sunDirVec.x, -sunDirVec.y, -sunDirVec.z, 3.0f};
     RwD3D9SetVertexShaderConstant(9, sunDirNeg, 1);
 
     float w1[4] = {g_waves[0].dirX, g_waves[0].dirY, g_waves[0].steepness, 0.0f};

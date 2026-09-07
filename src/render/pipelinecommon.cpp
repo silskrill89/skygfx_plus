@@ -59,6 +59,33 @@ RwRGBAReal GetTimecycleAmbient(void)
 	return out;
 }
 
+RwRGBAReal GetTimecycleAmbientPBR(void)
+{
+	// Pass-through to GetTimecycleAmbient() by default — no ambient floor/boost.
+	// The floor is only active when config->pbrAmbientFloor > 0.0 (opt-in tunable).
+	// Pre-regression verified-good build (1,807,872) had no floor at all — peds and
+	// vehicles relied on direct lights + IBL + headlights at night, and buildings
+	// used baked vertex lighting. Any ambient manipulation here must be tested
+	// across all times of day to avoid reintroducing the sepia-veil/black-ped bugs.
+	RwRGBAReal out = GetTimecycleAmbient();
+	if(config && config->pbrAmbientFloor > 0.0f){
+		float floorLum = config->pbrAmbientFloor;
+		float luma = 0.2126f*out.red + 0.7152f*out.green + 0.0722f*out.blue;
+		if(luma < floorLum){
+			float k = floorLum / (luma > 1e-7f ? luma : 1e-7f);
+			out.red = min(out.red * k, 1.0f);
+			out.green = min(out.green * k, 1.0f);
+			out.blue = min(out.blue * k, 1.0f);
+		}
+	}
+	if(dbglog_throttle("pbr_ambient"))
+		dbglog("[PBR-Ambient] final=(%.3f,%.3f,%.3f) floor=%.3f raw=(%.3f,%.3f,%.3f)",
+			out.red, out.green, out.blue,
+			config ? config->pbrAmbientFloor : 0.0f,
+			s_tcAmbient.red, s_tcAmbient.green, s_tcAmbient.blue);
+	return out;
+}
+
 RwRGBAReal GetTimecycleAmbientRaw(void)
 {
 	// Return pure timecycle ambient (no multiplier)
@@ -496,34 +523,7 @@ makeVS(int res, void **sh)
 	}
 }
 
-void
-makeVSfromFile(char* fileName, void** sh)
-{
-	if (*sh == NULL) {
-		char* path = getpath("shaders\\test.fx");
-		if (path == NULL)
-			return;
-
-		RwUInt32 ppShader;
-
-		int buildResult = D3DXCompileShaderFromFileA(path, NULL, NULL, "main", "vs_2_0", 1, &ppShader, NULL, NULL);
-
-		if (buildResult == D3D_OK)
-		{
-			//int v6 = (*(int(__stdcall**)(int, void*))(*(RwUInt32*)ppShader + 12))(ppShader, &xboxBuildingWindVS);
-			int v177 = (*(int(__stdcall**)(int))(*(RwUInt32*)ppShader + 12))(ppShader);
-			//RwD3D9CreateVertexShader((RwUInt32 *)shaderData, sh);
-			if (buildResult || *sh == NULL) {
-				MessageBox(nil, "Fail RwD3D9CreateVertexShader", "Error", MB_ICONERROR | MB_OK);
-			}
-		}
-		else {
-			//xboxBuildingWindVS = nullptr;
-			MessageBox(nil, "Fail D3DXCompileShaderFromFileA", "Error", MB_ICONERROR | MB_OK);
-		}
-
-	}
-}
+/* CLASS 6: makeVSfromFile removed — dead code, unreferenced, broken D3DXCompileShaderFromFileA call */
 
 extern void dbglog(const char *fmt, ...);
 
@@ -605,6 +605,11 @@ CreateShaders(void)
 	makeVS(IDR_LEEDSCARFXVS, &leedsCarFxVS);
 	makeVS(IDR_MOBILEVEHICLEVS, &mobileVehiclePipeVS);
 	makePS(IDR_MOBILEVEHICLEPS, &mobileVehiclePipePS);
+	makeVS(IDR_GTAIVVEHICLEVS, &gtaivVehicleVS);
+	makePS(IDR_GTAIVVEHICLEPS, &gtaivVehiclePS);
+	if(gtaivVehicleVS == NULL || gtaivVehiclePS == NULL)
+		dbglog("  WARNING: gtaivVehicleVS/PS not created (VS=%p PS=%p) — ivMode vehicle path will render with null shaders",
+			gtaivVehicleVS, gtaivVehiclePS);
 
 	// Building legacy
 	makeVS(IDR_PS2BUILDINGVS, &ps2BuildingVS);
@@ -624,6 +629,8 @@ CreateShaders(void)
 	// Log PBR shader handle status for debugging
 	dbglog("CreateShaders PBR handles: VehiclePBR_Modern=%p buildingPBRVS=%p buildingPBRPS=%p",
 		VehiclePBR_Modern, buildingPBRVS, buildingPBRPS);
+	dbglog("CreateShaders GTAIV vehicle handles: gtaivVehicleVS=%p gtaivVehiclePS=%p",
+		gtaivVehicleVS, gtaivVehiclePS);
 	dbglog("CreateShaders PBR handles: vehiclePBRVS=%p Glass_Vehicle=%p Rubber_Vehicle_Modern=%p",
 		vehiclePBRVS, Glass_Vehicle, Rubber_Vehicle_Modern);
 	dbglog("CreateShaders PBR handles: PBR_Lighting=%p CarPaint_Reflections=%p",

@@ -130,3 +130,7 @@ __pycache__/
 
 # Node
 node_modules/
+third_party/bullet/
+/-nologo
+archive/
+temp_bullet/

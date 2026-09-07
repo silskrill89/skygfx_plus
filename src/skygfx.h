@@ -54,6 +54,11 @@ inline void perfInit(){
 	}
 }
 inline double perfNow(){
+	// Self-initialize on first call (perfFreq is zero-initialized at file scope)
+	if(!perfFreq.QuadPart){
+		QueryPerformanceFrequency(&perfFreq);
+		perfFreqInv = 1.0 / (double)perfFreq.QuadPart;
+	}
 	LARGE_INTEGER t;
 	QueryPerformanceCounter(&t);
 	return (double)t.QuadPart * perfFreqInv * 1000.0;
@@ -80,6 +85,50 @@ inline bool dbglog_throttle(const char *tag) {
 	lastTime[idx] = now;
 	return true;
 }
+
+// ---- First-run-only guard: logs exactly once per tag ----
+inline bool dbglog_first(const char *tag) {
+	static bool fired[64] = {};
+	int idx = 0;
+	for(const char *p = tag; *p; p++) idx = idx * 31 + (unsigned char)*p;
+	idx = (idx & 0x7FFFFFFF) % 64;
+	if(fired[idx]) return false;
+	fired[idx] = true;
+	return true;
+}
+
+// ---- Scope tag registry: maps address→name for crash backtrace hints ----
+#define SCOPE_TAG_MAX 64
+struct ScopeTag {
+	const char *name;
+	void *addr;
+};
+extern ScopeTag g_scopeTags[SCOPE_TAG_MAX];
+extern int g_scopeTagCount;
+extern int g_scopeTagLock; // simple volatile int used as spinlock from single thread
+
+void diag_registerScope(const char *name, void *addr);
+void diag_lookupScope(void *addr, char *outName, int outSize, int *outOffset);
+
+// Logger ring buffer for crash dump
+void diag_ringPut(const char *msg);
+void diag_ringDump(void);
+
+// First-run-only guard macros for pass lifecycle
+#define DBGLOG_ENTER(name) do { \
+	static bool _entered = false; \
+	if(!_entered) { _entered = true; dbglog("%s enter", name); } \
+} while(0)
+
+#define DBGLOG_EXIT_OK(name) do { \
+	static bool _exited = false; \
+	if(!_exited) { _exited = true; dbglog("%s exit ok", name); } \
+} while(0)
+
+#define DBGLOG_BAIL(name, reason) do { \
+	static bool _bailed = false; \
+	if(!_bailed) { _bailed = true; dbglog("%s exit BAIL: %s", name, reason); } \
+} while(0)
 
 #define nil NULL
 #define VERSION 0x370
@@ -203,8 +252,8 @@ struct Config {
 	// these are at fixed offsets
 	int version;			// for other modules
 	int preset;				// GamePreset enum (-1 = custom/manual)
-	RwBool fixGrassPlacement;	// fixed for fixSeed in main.cpp
-	RwBool doglare;			// fixed for doglare in main.cpp
+	RwBool fixGrassPlacement;	// offset +8, pinned: fixSeed asm reads [ecx+8] in main.cpp
+	RwBool doglare;			// offset +12, pinned: doglare asm reads [ecx+12] in main.cpp
 
 	// Unified Pipeline - single setting controls all asset types
 	int pipeline;			// Pipeline enum (PBR, PS2, Xbox, Mobile, GTAIV)
@@ -492,6 +541,9 @@ struct Config {
 	RwBool grainEnable;			// 0=disable film grain
 	int pipelineOverride;		// -1=use normal pipeline, 0-4=force specific pipeline
 
+	// Debug dump — when 1, saves BMP checkpoints of key surfaces on first 5 frames
+	RwBool postfxDumpDebug;		// 0=off, 1=on (default 0)
+
 	// Atmospheric: Height Fog (Crytek exponential)
 	RwBool heightFogEnable;		// 0=disable height fog
 	float heightFogDensity;		// fog density (default 0.002)
@@ -513,7 +565,25 @@ struct Config {
 
 	// Forward+ Tiled Lighting (O3DE Atom-inspired 16×16 screen tiles)
 	RwBool forwardPlusEnable;		// 0=disable forward+ lighting
+
+	// INTZ Direct-Binding Depth Hook (DXVK compatibility)
+	// When enabled, hooks SetDepthStencilSurface to bind an INTZ texture as
+	// the scene depth-stencil, eliminating all StretchRect depth copies.
+	RwBool depthHookEnable;			// 0=disable, 1=enable (default)
+
+	// Death ragdoll — verlet-based ragdoll for dead peds (src/extras/ragdoll_death.cpp)
+	RwBool ragdollEnable;			// 0=disable, 1=enable (default 1)
+
+	// PBR ambient floor — minimum ambient luminance for ped/vehicle PBR paths.
+	// Keeps peds/vehicles visible at night without a gray veil (0.0-1.0, default 0.12)
+	float pbrAmbientFloor;
+	// Tonemap black-level lift — preserves deep shadow detail (sRGB domain).
+	// Small value only affects near-black (0.0-0.05, default 0.015)
+	float tonemapBlackLift;
 };
+static_assert(offsetof(Config, version) == 0, "pinned: asm reads in main.cpp");
+static_assert(offsetof(Config, fixGrassPlacement) == 8, "pinned: fixSeed asm in main.cpp");
+static_assert(offsetof(Config, doglare) == 12, "pinned: doglare asm in main.cpp");
 extern int numConfigs;
 extern int currentConfig;
 extern Config *config, configs[10];
@@ -724,6 +794,7 @@ struct TexInfo
 TexInfo *RwTextureGetTexDBInfo(RwTexture *tex);
 int TexDBPluginAttach(void);
 void initTexDB(void);
+void shutdownTexDB(void);
 
 extern bool gRenderingSpheremap;
 extern CVector reflectionCamPos;
@@ -818,6 +889,14 @@ extern void *HeightFog;
 extern void *GodRays;
 extern void *VelocityReconstruct;
 
+// INTZ Direct-Binding Depth Hook (DXVK compatibility)
+extern struct IDirect3DTexture9 *g_intzTex;
+extern struct IDirect3DSurface9 *g_intzSurf;
+void DepthHook_Install(struct IDirect3DDevice9 *device);
+void DepthHook_Suspend(void);
+void DepthHook_Restore(void);
+void DepthHook_ReleaseResources(void);
+
 // Vehicle legacy
 extern void *vehiclePipeVS;
 extern void *vehiclePBRVS;
@@ -826,9 +905,11 @@ extern void *specCarFxVS, *specCarFxPS;
 extern void *xboxCarVS;
 
 // Wheel extender
-#include "wheels_extender.h"
 extern void *leedsCarFxVS;
 extern void *mobileVehiclePipeVS, *mobileVehiclePipePS;
+
+// GTAIV vehicle (ivMode path)
+extern void *gtaivVehicleVS, *gtaivVehiclePS;
 
 // Building legacy
 extern void *ps2BuildingVS, *ps2BuildingFxVS, *ps2BuildingWindVS;
@@ -911,6 +992,7 @@ void pipeUploadPBR(float glossiness, float specular, float c22_3, float c22_4,
 // ============================================================
 RwRGBAReal GetTimecycleAmbient(void);       // ambient WITH lightsMult applied
 RwRGBAReal GetTimecycleAmbientRaw(void);    // pure timecycle ambient (no multiplier)
+RwRGBAReal GetTimecycleAmbientPBR(void);    // ambient WITH lightsMult + PBR floor (ped/vehicle)
 float GetLightsMult(void);                  // CCoronas__LightsMult
 void UpdateTimecycleLighting(void);         // call once per frame from buildingPipe
 
@@ -937,3 +1019,11 @@ const PresetConfig* PCPatchedMode_GetPreset(void);
 
 void CustomMode_ApplyDefaults(Config *c);
 const PresetConfig* CustomMode_GetPreset(void);
+
+// Death ragdoll (src/extras/ragdoll_death.cpp)
+void Ragdoll_Init(void);
+void Ragdoll_Update(void);
+bool Ragdoll_Activate(void *pPed);
+void Ragdoll_Deactivate(void *pPed);
+void Ragdoll_Shutdown(void);
+extern bool g_ragdollDeathEnable;

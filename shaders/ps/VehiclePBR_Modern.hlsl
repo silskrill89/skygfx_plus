@@ -172,11 +172,15 @@ float4 main(PS_INPUT IN) : COLOR
     // Real paint: light passes through clearcoat, reflects off base paint, gets tinted on exit.
     // At grazing angles Fresnel dominates and reflection becomes white (like a mirror).
     float3 reflTint = lerp(matCol.rgb, float3(1,1,1), envMask * 0.6);
-    // Multiply env by diffuse texture — preserves baked AO, dirt, panel lines.
-    // Dark areas in texture (shadows, dirt) dim the reflection naturally.
-    // Small floor keeps clearcoat visible even on dark/black paint.
-    float3 envTexMod = max(diff.rgb, float3(0.05, 0.05, 0.05));
-    float3 layer2 = iblBlend * envMask * reflTint * envTexMod;
+    // Env intensity boost (×2, tunable) — skygfx envCarPS.hlsl: env * lightmult * 2
+    const float ENV_BOOST = 2.0;
+    float3 envTerm = iblBlend * envMask * reflTint * ENV_BOOST;
+    // Lerp-replace: at grazing angles, env reflection replaces diffuse (real paint behavior).
+    // Normal incidence: envBlend ≈ envMask (subtle reflection visible through clearcoat).
+    // Grazing: envBlend → 1.0 (full reflection, paint color disappears).
+    // This matches skygfx envCarPS.hlsl: lerp(diffuseLayer, envTerm, saturate(envMask + clearcoatFresnel * k)).
+    float envBlend = saturate(envMask + clearcoatFresnel * 0.5);
+    float3 layer2 = lerp(layer1, envTerm, envBlend);
 
     // ---- Specular: GGX/Smith for direct sun highlight ----
     // glTF KHR_materials_pbrSpecularGlossiness: D_GGX and V_SmithCorrelated
@@ -268,8 +272,9 @@ float4 main(PS_INPUT IN) : COLOR
 
     // ---- COMPOSITE ----
     // layer1 = VS game lighting (ambient + 7 directional × matCol, matches building pipe)
-    // layer2 = clearcoat Fresnel-driven env reflection
-    float3 color = layer1 + layer2;
+    // layer2 = lerp-replace: env reflection replaces diffuse at grazing angles (clearcoat behavior)
+    // specTotal and rimLight are additive on top
+    float3 color = layer2;  // layer2 already contains lerp(layer1, envTerm, envBlend)
     color += specTotal;                                // specular highlights (base + clearcoat)
     color += rimLight;                                 // Fresnel rim on top of clearcoat
 
@@ -339,7 +344,7 @@ float4 main_mobileVehicle(PS_INPUT_MOBILE IN) : COLOR
 {
     float4 col = tex2D(diffuseTex, IN.texcoord0) * IN.color;
 
-    float2 ReflPos = normalize(IN.texcoord1.xy) * (IN.texcoord1.z * 0.5 + 0.5);
+    float2 ReflPos = (length(IN.texcoord1.xy) > 1e-6 ? normalize(IN.texcoord1.xy) : float2(0, 0)) * (IN.texcoord1.z * 0.5 + 0.5);
     ReflPos = ReflPos * float2(0.5, -0.5) + float2(0.5, 0.5);
     float4 ReflCol = tex2D(envMapTex, ReflPos);
     col.rgb = lerp(col.rgb, ReflCol.rgb, fxParams.y);
@@ -365,11 +370,18 @@ struct PS_INPUT_NORMMAP {
 float4 main_normMapVehicle(PS_INPUT_NORMMAP IN) : COLOR
 {
     float4 diff = tex2D(diffuseTex, IN.texcoord0) * IN.color;
-    float4 env = tex2D(envMapTex, IN.texcoord0);
-    float4 color = lerp(diff, env * IN.envColor, IN.envColor.a) + diff;
+    // Compute view-space reflection vector for camera-rendered sphere map
+    float3 N = length(IN.WorldNormal) > 1e-6 ? IN.WorldNormal / length(IN.WorldNormal) : float3(0, 1, 0);
+    float3 V = float3(0, 0, 1);  // approximate view dir in view space
+    float3 R_world = reflect(-V, N);
+    float3 R_view = float3(dot(R_world, viewRight), dot(R_world, viewUp), dot(R_world, viewFwd));
+    float2 envUV = SphereEnvMapUV(R_view, V);
+    float4 env = tex2D(envMapTex, envUV);
+    // Lerp-replace: env replaces diffuse at grazing angles (clearcoat behavior)
+    float envBlend = saturate(IN.envColor.a * 0.8);
+    float3 color = lerp(diff.rgb, env.rgb * IN.envColor.rgb, envBlend);
     color.rgb = saturate(color.rgb);
-    color.a = diff.a;
-    return color;
+    return float4(color.rgb, diff.a);
 }
 
 // ============================================================

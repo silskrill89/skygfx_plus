@@ -22,11 +22,14 @@ enum {
 	REG_envmat	= 32,
 
 	// spec tex
-	REG_specmat	= 35,
+	REG_specmat	= 35,	// 3 regs: c35-c37 (PS2 cb)
 	REG_lightdir	= 38,
 
 	// spec light
-	REG_eye		= 35,
+	REG_eye		= 36,	// c36 per AGENTS.md register map (PBR VS convention)
+
+	// leeds env tex matrix (main_leedsCarFx texmat_leeds)
+	REG_envtexmat	= 40,	// 4 regs: c40-c43; relocated from c36 (now claimed by REG_eye)
 };
 
 void *vehiclePipeVS;
@@ -69,7 +72,7 @@ CCustomCarEnvMapPipeline__AllocEnvMapPipeAtomicData(RpAtomic *atomic)
 	CustomEnvMapPipeAtomicData *atmEnvData = *GETENVMAPATM(atomic);
 	if(atmEnvData == NULL){
 		atmEnvData = new CustomEnvMapPipeAtomicData;
-		// TODO: do we always have this?
+		// POD struct: new leaves fields uninitialized, so zero the used fields explicitly.
 		atmEnvData->trans = 0;
 		atmEnvData->posx = 0;
 		atmEnvData->posy = 0;
@@ -89,6 +92,22 @@ CCustomCarEnvMapPipeline__Init(void)
 	s_vehiclePipeInitialized = true;
 	dbglog("CCustomCarEnvMapPipeline__Init: first-time init");
 
+	// Log the active pipe mapping for debugging
+	static const char* pipeNames[] = {"PS2", "PC", "Xbox", "Specular", "Mobile", "Neo", "Leeds", "VCS", "Env", "GTAIV", "Modern"};
+	int pipeIdx = config->vehiclePipe;
+	if(pipeIdx >= 0 && pipeIdx < 11)
+		dbglog("[PIPE] vehiclePipe=%d (%s) → CCustomCarEnvMapPipeline__CustomPipeRenderCB_%s",
+			pipeIdx, pipeNames[pipeIdx],
+			pipeIdx == CAR_MODERN ? "Env (PBR)" :
+			pipeIdx == CAR_ENV ? "Env" :
+			pipeIdx == CAR_NEO ? "NeoCallback" :
+			pipeIdx == CAR_GTAIV ? "GTAIV" : "Switch");
+	static const char* buildPipeNames[] = {"PS2", "Xbox", "GTAIV", "PBR"};
+	if(config->buildingPipe >= 0 && config->buildingPipe < 4)
+		dbglog("[PIPE] buildingPipe=%d (%s) → shader=%s",
+			config->buildingPipe, buildPipeNames[config->buildingPipe],
+			config->buildingPipe == BUILDING_PBR ? "buildingPBRPS" : "legacy");
+
 	// Null-guard: ensure D3D device is available before any D3D calls
 	if(!d3d9device){
 		dbglog("CCustomCarEnvMapPipeline__Init: d3d9device is NULL, aborting");
@@ -103,10 +122,6 @@ CCustomCarEnvMapPipeline__Init(void)
 	char *lastSlash = strrchr(gameDir, '\\');
 	if(lastSlash) *lastSlash = '\0';
 	VehShaders_Init(gameDir);
-
-	// Initialize wheel extender (load wheel DFFs from models/wheels/)
-	extern void WheelsExtender_Init(const char *gameDir);
-	WheelsExtender_Init(gameDir);
 
 	// Initialize weather system (multi-timecyc)
 	extern void Weather_Init(const char *gameDir);
@@ -131,6 +146,11 @@ CCustomCarEnvMapPipeline__Init(void)
 	MakeNormalCam();
 
 	CreateShaders();
+
+	// PBR pipeline does not depend on Neo car tweaking table data.
+	// Ensure the Neo flag is set so CAR_MODERN/CAR_ENV render paths
+	// fire even when neo\carTweakingTable.dat is absent.
+	iCanHasNeoCar = 1;
 
 	if(carfx_env1Frame == NULL){
 		carfx_env1Frame = RwFrameCreate();
@@ -440,8 +460,9 @@ uploadLights(RwMatrix *lightmat)
 	if(!lightmat){ uploadNoLights(); return; }
 
 	// Use shared timecycle ambient (single source of truth for all pipelines)
-	// This ensures vehicles get the same ambient as buildings and peds
-	RwRGBAReal tcAmbient = GetTimecycleAmbient();
+	// This ensures vehicles get the same ambient as buildings and peds.
+	// PBR floor applied so vehicles never drop to a black silhouette at night.
+	RwRGBAReal tcAmbient = GetTimecycleAmbientPBR();
 	// 0.85 scale is applied in GetTimecycleAmbient() for consistency
 
 	// Interior/garage dampening: reduce ambient in sheltered areas
@@ -479,6 +500,7 @@ uploadNoLights(void)
 
 struct VehicleRenderState {
 	int alphafunc, src, dst, fog;
+	DWORD texturefactor;
 };
 
 // ResEntry setup: extracts header, instanced data, sets indices/streams/declaration
@@ -502,6 +524,7 @@ static void vehiclePipe_saveRenderState(VehicleRenderState *state)
 	RwRenderStateGet(rwRENDERSTATESRCBLEND, &state->src);
 	RwRenderStateGet(rwRENDERSTATEDESTBLEND, &state->dst);
 	RwRenderStateGet(rwRENDERSTATEFOGCOLOR, &state->fog);
+	d3d9device->GetRenderState(D3DRS_TEXTUREFACTOR, &state->texturefactor);
 }
 
 // Cleanup: unbind shaders, textures, disable TSS
@@ -515,6 +538,23 @@ static void vehiclePipe_cleanup()
 	RwD3D9SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
 	RwD3D9SetTextureStageState(1, D3DTSS_TEXCOORDINDEX, 1);
 	RwD3D9SetTextureStageState(1, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_DISABLE);
+	// Reset sampler 3 states (IBL sampler)
+	d3d9device->SetSamplerState(3, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP);
+	d3d9device->SetSamplerState(3, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
+	d3d9device->SetSamplerState(3, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+	d3d9device->SetSamplerState(3, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+	// Unbind sampler 4 (normal buffer) and 5 (forward+ index) to prevent
+	// texture leaks into subsequent game/HUD draws
+	RwD3D9SetTexture(NULL, 4);
+	RwD3D9SetTexture(NULL, 5);
+	d3d9device->SetSamplerState(4, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP);
+	d3d9device->SetSamplerState(4, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
+	d3d9device->SetSamplerState(4, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+	d3d9device->SetSamplerState(4, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+	d3d9device->SetSamplerState(5, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP);
+	d3d9device->SetSamplerState(5, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
+	d3d9device->SetSamplerState(5, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+	d3d9device->SetSamplerState(5, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
 }
 
 // FX additive blend pass: sets states, renders, restores
@@ -533,6 +573,7 @@ static void vehiclePipe_fxAdditiveBlend(RxD3D9ResEntryHeader *header,
 	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)state->src);
 	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)state->dst);
 	RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION, (void*)state->alphafunc);
+	d3d9device->SetRenderState(D3DRS_TEXTUREFACTOR, state->texturefactor);
 }
 
 // Material common setup: alpha check, texture, matcol, surfProps
@@ -644,7 +685,8 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_PS2(RwResEntry *repEntry, void *obj
 		hasEnv2  = !!(materialFlags & 2);
 		hasSpec  = !!(materialFlags & 4) && !renderingWheel;
 if(betaEnvmaptest) hasSpec = false;
-		// TODO: is this even needed?
+		// Needed: materialFlags bits can be set even when the matFX effect is not
+		// envmap (bump/other effects); without this guard envData below would be invalid.
 		if(RpMatFXMaterialGetEffects(material) != rpMATFXEFFECTENVMAP){
 			hasEnv1 = false;
 			hasEnv2 = false;
@@ -679,6 +721,10 @@ if(betaEnvmaptest){
 			RwRenderStateSet(rwRENDERSTATETEXTUREADDRESS, (void*)rwTEXTUREADDRESSWRAP);	// is this needed?
 			RwD3D9SetTexture(envData->texture, 1);
 			atmEnvData = CCustomCarEnvMapPipeline__AllocEnvMapPipeAtomicData(atomic);
+			if(!atmEnvData){
+				dbglog("PS2_CB: atmEnvData NULL (pool full), skipping env2 for atomic %p", atomic);
+				goto skip_fx_ps2;
+			}
 			CCustomCarEnvMapPipeline__Env2Xform(atomic, &envmat, envData, atmEnvData, &envXform.x);
 			envXform.z = envData->GetScaleX();
 			envXform.w = envData->GetScaleY();
@@ -700,6 +746,8 @@ if(betaEnvmaptest){
 
 			vehiclePipe_fxAdditiveBlend(resEntryHeader, instancedData, &state);
 		}
+	skip_fx_ps2:
+		;
 	}
 	vehiclePipe_cleanup();
 }
@@ -815,6 +863,10 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Specular(RwResEntry *repEntry, void
 			RwRenderStateSet(rwRENDERSTATETEXTUREADDRESS, (void*)rwTEXTUREADDRESSWRAP);	// is this needed?
 			RwD3D9SetTexture(envData->texture, 1);
 			atmEnvData = CCustomCarEnvMapPipeline__AllocEnvMapPipeAtomicData(atomic);
+			if(!atmEnvData){
+				dbglog("SPEC_CB: atmEnvData NULL (pool full), skipping env2 for atomic %p", atomic);
+				goto skip_fx_spec;
+			}
 			CCustomCarEnvMapPipeline__Env2Xform(atomic, &envmat, envData, atmEnvData, &envXform.x);
 			envXform.z = envData->GetScaleX();
 			envXform.w = envData->GetScaleY();
@@ -835,6 +887,8 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Specular(RwResEntry *repEntry, void
 
 			vehiclePipe_fxAdditiveBlend(resEntryHeader, instancedData, &state);
 		}
+	skip_fx_spec:
+		;
 	}
 	vehiclePipe_cleanup();
 }
@@ -1039,6 +1093,10 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *ob
 
 			RwRenderStateSet(rwRENDERSTATETEXTUREADDRESS, (void*)rwTEXTUREADDRESSWRAP);
 			atmEnvData = CCustomCarEnvMapPipeline__AllocEnvMapPipeAtomicData(atomic);
+			if(!atmEnvData){
+				dbglog("XBOX_CB: atmEnvData NULL (pool full), skipping env2 for atomic %p", atomic);
+				goto skip_fx_xbox;
+			}
 			CCustomCarEnvMapPipeline__Env2Xform_PC(atomic, envData, atmEnvData, trans);
 			texMat._11 = 1.0f;
 			texMat._22 = 1.0f;
@@ -1060,6 +1118,7 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *ob
 			RwD3D9SetTextureStageState(1, D3DTSS_TEXCOORDINDEX, 1);
 			RwD3D9SetTextureStageState(2, D3DTSS_COLOROP, D3DTOP_DISABLE);
 		}
+	skip_fx_xbox:
 
 		RwD3D9SetVertexShaderConstant(LOC_envSwitch, (void*)&envSwitch, 1);
 
@@ -1159,7 +1218,7 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_leeds(RwResEntry *repEntry, void *o
 
 	pipeGetLeedsEnvMapMatrix(atomic, envmat);
 	RwD3D9SetVertexShaderConstant(REG_envmat, &envmat, 3);
-	RwD3D9SetVertexShaderConstant(36, &envtexmat, 4);
+	RwD3D9SetVertexShaderConstant(REG_envtexmat, &envtexmat, 4);
 
 	for(; numMeshes--; instancedData++){
 		if(!vehiclePipe_setupMaterial(instancedData, flags, &material, &hasAlpha))
@@ -1787,12 +1846,17 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 			ambientPS[3] = 1.0f;  // flag: normal buffer available
 		}
 
-		// Object ambient from timecycle (PS c24) — ambientObj is the game's own
-		// ambient for objects (peds/vehicles), separate from world ambient.
-		// This matches how the game's default pipeline lights peds correctly.
-		ambientPS[0] = CTimeCycle__m_CurrentColours.ambientObjR;
-		ambientPS[1] = CTimeCycle__m_CurrentColours.ambientObjG;
-		ambientPS[2] = CTimeCycle__m_CurrentColours.ambientObjB;
+		// Object ambient from timecycle (PS c24) — use the same ambient as the
+		// building PBR pipe (GetTimecycleAmbient), which is the proven working
+		// path. Previously used ambientObjR/G/B which are the game's separate
+		// object ambient values — typically much lower than the world ambient,
+		// causing vehicles to render as near-black silhouettes in PBR mode.
+		{
+			RwRGBAReal tcAmbient = GetTimecycleAmbientPBR();
+			ambientPS[0] = tcAmbient.red;
+			ambientPS[1] = tcAmbient.green;
+			ambientPS[2] = tcAmbient.blue;
+		}
 		RwD3D9SetPixelShaderConstant(24, ambientPS, 1);
 
 		// View matrix rotation for sphere map UV computation (PS c25-c27)
@@ -1889,11 +1953,15 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Switch(RwResEntry *repEntry, void *
 	case CAR_ENV:
 		if(iCanHasbuildingPipe && iCanHasNeoCar)
 			CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(repEntry, object, type, flags);
+		else if(dbglog_throttle("VehicleSkipped:ENV"))
+			dbglog("[VEHICLE] CAR_ENV skipped: buildingPipe=%d neoCar=%d", iCanHasbuildingPipe, iCanHasNeoCar);
 		break;
 	case CAR_MODERN:
 		// PBR modern pipeline with glass shader, 4 color channels, GGX specular
 		if(iCanHasNeoCar)
 			CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(repEntry, object, type, flags);
+		else if(dbglog_throttle("VehicleSkipped:MODERN"))
+			dbglog("[VEHICLE] CAR_MODERN skipped: neoCar=%d", iCanHasNeoCar);
 		break;
 	case CAR_GTAIV:
 		// GTA IV: uses CarPipe class (neoCarpipe.cpp) with gtaivVehicleVS/PS
@@ -1923,9 +1991,9 @@ CVisibilityPlugins__RenderWheelAtomicCB(RpAtomic *atomic)
 
 int CCarFXRenderer__IsCCPCPipelineAttached(RpAtomic *atomic)
 {
-	// Temporary to disable car pipeline and fall back to MatFX
+	// CLASS 6: Simplified — always returns false (car pipe disabled via hook at 0x5D5B80)
+	(void)atomic;
 	return false;
-//	return GetPipelineID(atomic) == RSPIPE_PC_CustomCarEnvMap_PipeID;
 }
 
 #include "debugmenu_public.h"

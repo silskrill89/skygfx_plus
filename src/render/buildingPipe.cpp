@@ -65,6 +65,20 @@ CustomBuildingPipeline__Update(void)
 {
 	CustomBuildingPipeline__Update_orig();
 
+	// NOTE: UpdateTimecycleLighting() is deliberately NOT called here.
+	// When wired into any per-frame hook, GetTimecycleAmbient() returns
+	// the game's raw ambient values which include timecycle ambient that
+	// may be near-zero at certain hours or under certain weather/interior
+	// conditions. The working build (1,807,872) had no call site for
+	// UpdateTimecycleLighting() — s_tcAmbient stayed {0,0,0} and
+	// buildingAmbient was set from GetTimecycleAmbient() (which was 0).
+	// The building pipe's baked vertex lighting compensates, and the
+	// vehicle/ped/vehicle PBR paths survived via IBL/env/headlights.
+	// Calling UpdateTimecycleLighting() introduces live timecycle values
+	// that break the existing tuned balance. If re-enabling in future,
+	// validate against the "good" reference (white car visible at 01:28,
+	// peds visible in daytime, no sepia veil) at each time of day.
+
 	// buildingAmbient still uses the old pattern for now
 	// UpdateTimecycleLighting() is called from RenderScene_hook instead
 	buildingAmbient = GetTimecycleAmbient();
@@ -980,32 +994,39 @@ DNInstance_PS2(void *object, RxD3D9ResEntryHeader *resEntryHeader, RwBool reinst
 					resEntryHeader->totalNumVertex,
 					resEntryHeader->vertexStream[dcl[i].Stream].stride);
 			}
-			if(isPrelit && (lastLocked & rpGEOMETRYLOCKPRELIGHT)){
-				for(i = 0; dcl[i].Usage != D3DDECLUSAGE_COLOR || dcl[i].UsageIndex != 0; ++i)
-					;
-				for(j = 0; dcl[j].Usage != D3DDECLUSAGE_COLOR || dcl[j].UsageIndex != 1; ++j)
-					;
-				// If no extra colors, use regular colors
-				// TODO: only instance one set in this case
-				if(night == NULL)
-					night = day;
-				assert(day);
-				assert(night);
-				numMeshes = resEntryHeader->numMeshes;
-				instData = (RxD3D9InstanceData*)(resEntryHeader+1);
-				while(numMeshes--){
-					instData->vertexAlpha = _rpD3D9VertexDeclarationInstColor(
-					          (RwUInt8*)vertexData + dcl[i].Offset + resEntryHeader->vertexStream[dcl[i].Stream].stride*instData->minVert,
-					          night + instData->minVert,
-					          instData->numVertices,
-					          resEntryHeader->vertexStream[dcl[i].Stream].stride);
+if(isPrelit && (lastLocked & rpGEOMETRYLOCKPRELIGHT)){
+			for(i = 0; dcl[i].Usage != D3DDECLUSAGE_COLOR || dcl[i].UsageIndex != 0; ++i)
+				;
+			// Scan for COLOR1 with bounds check (D3DDECL_END has Stream==0xFF)
+			int color1Idx = -1;
+			for(j = 0; dcl[j].Stream != 0xFF; ++j){
+				if(dcl[j].Usage == D3DDECLUSAGE_COLOR && dcl[j].UsageIndex == 1){
+					color1Idx = j;
+					break;
+				}
+			}
+			// If no extra colors, use regular colors
+			if(night == NULL)
+				night = day;
+			assert(day);
+			assert(night);
+			numMeshes = resEntryHeader->numMeshes;
+			instData = (RxD3D9InstanceData*)(resEntryHeader+1);
+			while(numMeshes--){
+				instData->vertexAlpha = _rpD3D9VertexDeclarationInstColor(
+				          (RwUInt8*)vertexData + dcl[i].Offset + resEntryHeader->vertexStream[dcl[i].Stream].stride*instData->minVert,
+				          night + instData->minVert,
+				          instData->numVertices,
+				          resEntryHeader->vertexStream[dcl[i].Stream].stride);
+				if(color1Idx >= 0){
 					instData->vertexAlpha |= _rpD3D9VertexDeclarationInstColor(
-					          (RwUInt8*)vertexData + dcl[j].Offset + resEntryHeader->vertexStream[dcl[j].Stream].stride*instData->minVert,
+					          (RwUInt8*)vertexData + dcl[color1Idx].Offset + resEntryHeader->vertexStream[dcl[color1Idx].Stream].stride*instData->minVert,
 					          day + instData->minVert,
 					          instData->numVertices,
-					          resEntryHeader->vertexStream[dcl[j].Stream].stride);
-					instData++;
+					          resEntryHeader->vertexStream[dcl[color1Idx].Stream].stride);
 				}
+				instData++;
+			}
 			}else if(lastLocked & rpGEOMETRYLOCKPRELIGHT){
 				for(i = 0; dcl[i].Usage != D3DDECLUSAGE_COLOR || dcl[i].UsageIndex != 0; ++i)
 					;

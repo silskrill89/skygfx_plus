@@ -59,8 +59,8 @@
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
-      <PreprocessorDefinitions>rsc_CompanyName="aap";rsc_LegalCopyright="";rsc_FileVersion="4.2.0.0";rsc_ProductVersion="4.2.0.0";rsc_InternalName="skygfx";rsc_ProductName="skygfx";rsc_OriginalFilename="skygfx.dll";rsc_FileDescription="https://github.com/aap";rsc_UpdateUrl="https://github.com/aap/skygfx";NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>E:\SDKs\imgui-master;E:\SDKs\imgui-master\backends;E:\SDKs\plugin-sdk-master\plugin_sa;E:\SDKs\normalmap_byDK_1.01\normalmap_byDK_1.01\sources;E:\dev(dave)\Sa_dev\GTASource\GTA SA RE\source;..\external\injector\include;..\external;..\external\d3d9;..\resources;..\shaders;..\src;..\src\rw;..\src\render;..\src\core;..\src\entities;..\src\extras;E:\SDKs\Renderware 3.7 SDK (For Windows) Full\RWSDK37\Graphics\rwsdk\include\d3d9;C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include;C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\um;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>rsc_CompanyName="aap";rsc_LegalCopyright="";rsc_FileVersion="4.2.0.0";rsc_ProductVersion="4.2.0.0";rsc_InternalName="skygfx";rsc_ProductName="skygfx";rsc_OriginalFilename="skygfx.dll";rsc_FileDescription="https://github.com/aap";rsc_UpdateUrl="https://github.com/aap/skygfx";NDEBUG;_CRT_NONSTDC_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\third_party\bullet\src;E:\SDKs\imgui-master;E:\SDKs\imgui-master\backends;E:\SDKs\plugin-sdk-master\plugin_sa;E:\SDKs\normalmap_byDK_1.01\normalmap_byDK_1.01\sources;E:\dev(dave)\Sa_dev\GTASource\GTA SA RE\source;..\external\injector\include;..\external;..\external\d3d9;..\resources;..\shaders;..\src;..\src\rw;..\src\render;..\src\core;..\src\entities;..\src\extras;E:\SDKs\Renderware 3.7 SDK (For Windows) Full\RWSDK37\Graphics\rwsdk\include\d3d9;C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include;C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\um;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -96,8 +96,8 @@
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
-      <PreprocessorDefinitions>rsc_CompanyName="aap";rsc_LegalCopyright="";rsc_FileVersion="4.2.0.0";rsc_ProductVersion="4.2.0.0";rsc_InternalName="skygfx";rsc_ProductName="skygfx";rsc_OriginalFilename="skygfx.dll";rsc_FileDescription="https://github.com/aap";rsc_UpdateUrl="https://github.com/aap/skygfx";DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>E:\SDKs\imgui-master;E:\SDKs\imgui-master\backends;E:\SDKs\plugin-sdk-master\plugin_sa;E:\SDKs\normalmap_byDK_1.01\normalmap_byDK_1.01\sources;E:\dev(dave)\Sa_dev\GTASource\GTA SA RE\source;..\external\injector\include;..\external;..\external\d3d9;..\resources;..\shaders;..\src;..\src\rw;..\src\render;..\src\core;..\src\entities;..\src\extras;E:\SDKs\Renderware 3.7 SDK (For Windows) Full\RWSDK37\Graphics\rwsdk\include\d3d9;C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include;C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\um;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>rsc_CompanyName="aap";rsc_LegalCopyright="";rsc_FileVersion="4.2.0.0";rsc_ProductVersion="4.2.0.0";rsc_InternalName="skygfx";rsc_ProductName="skygfx";rsc_OriginalFilename="skygfx.dll";rsc_FileDescription="https://github.com/aap";rsc_UpdateUrl="https://github.com/aap/skygfx";DEBUG;_CRT_NONSTDC_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\third_party\bullet\src;E:\SDKs\imgui-master;E:\SDKs\imgui-master\backends;E:\SDKs\plugin-sdk-master\plugin_sa;E:\SDKs\normalmap_byDK_1.01\normalmap_byDK_1.01\sources;E:\dev(dave)\Sa_dev\GTASource\GTA SA RE\source;..\external\injector\include;..\external;..\external\d3d9;..\resources;..\shaders;..\src;..\src\rw;..\src\render;..\src\core;..\src\entities;..\src\extras;E:\SDKs\Renderware 3.7 SDK (For Windows) Full\RWSDK37\Graphics\rwsdk\include\d3d9;C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include;C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\um;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
@@ -106,7 +106,7 @@
     </ClCompile>
     <ResourceCompile>
       <PreprocessorDefinitions>rsc_CompanyName=\"aap\";rsc_LegalCopyright=\"\";rsc_FileVersion=\"4.2.0.0\";rsc_ProductVersion=\"4.2.0.0\";rsc_InternalName=\"skygfx\";rsc_ProductName=\"skygfx\";rsc_OriginalFilename=\"skygfx.dll\";rsc_FileDescription=\"https://github.com/aap\";rsc_UpdateUrl=\"https://github.com/aap/skygfx\";DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>E:\SDKs\imgui-master;E:\SDKs\imgui-master\backends;E:\SDKs\plugin-sdk-master\plugin_sa;E:\SDKs\normalmap_byDK_1.01\normalmap_byDK_1.01\sources;E:\dev(dave)\Sa_dev\GTASource\GTA SA RE\source;..\external\injector\include;..\external;..\external\d3d9;..\resources;..\shaders;..\src;..\src\rw;..\src\render;..\src\core;..\src\entities;..\src\extras;E:\SDKs\Renderware 3.7 SDK (For Windows) Full\RWSDK37\Graphics\rwsdk\include\d3d9;C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\third_party\bullet\src;E:\SDKs\imgui-master;E:\SDKs\imgui-master\backends;E:\SDKs\plugin-sdk-master\plugin_sa;E:\SDKs\normalmap_byDK_1.01\normalmap_byDK_1.01\sources;E:\dev(dave)\Sa_dev\GTASource\GTA SA RE\source;..\external\injector\include;..\external;..\external\d3d9;..\resources;..\shaders;..\src;..\src\rw;..\src\render;..\src\core;..\src\entities;..\src\extras;E:\SDKs\Renderware 3.7 SDK (For Windows) Full\RWSDK37\Graphics\rwsdk\include\d3d9;C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -127,20 +127,21 @@
     <ClInclude Include="..\external\ini_parser.hpp" />
     <ClInclude Include="..\resources\VersionInfo.h" />
     <ClInclude Include="..\resources\resource.h" />
-    <ClInclude Include="..\src\HLSL_hook.h" />
-    <ClInclude Include="..\src\LinkList.h" />
-    <ClInclude Include="..\src\MemoryMgr.h" />
-    <ClInclude Include="..\src\ModuleList.hpp" />
-    <ClInclude Include="..\src\Pools.h" />
-    <ClInclude Include="..\src\SMAA.h" />
-    <ClInclude Include="..\src\debugmenu_public.h" />
-    <ClInclude Include="..\src\gta.h" />
-    <ClInclude Include="..\src\neo.h" />
-    <ClInclude Include="..\src\PC_GrassRenderer.h" />
-    <ClInclude Include="..\src\postfx.h" />
+    <ClInclude Include="..\src\rw\HLSL_hook.h" />
+    <ClInclude Include="..\src\rw\LinkList.h" />
+    <ClInclude Include="..\src\rw\MemoryMgr.h" />
+    <ClInclude Include="..\src\rw\ModuleList.hpp" />
+    <ClInclude Include="..\src\rw\Pools.h" />
+    <ClInclude Include="..\src\rw\gta.h" />
+    <ClInclude Include="..\src\render\SMAA.h" />
+    <ClInclude Include="..\src\extras\debugmenu_public.h" />
+    <ClInclude Include="..\src\render\neo.h" />
+    <ClInclude Include="..\src\render\PC_GrassRenderer.h" />
+    <ClInclude Include="..\src\render\postfx.h" />
     <ClInclude Include="..\src\skygfx.h" />
     <ClInclude Include="..\src\entities\Ragdoll.h" />
     <ClInclude Include="..\src\core\menu_inject.h" />
+    <ClInclude Include="..\src\extras\dismember.h" />
   </ItemGroup>
   <ItemGroup>
     <!-- All source paths point to new subdirectory layout after merge restructure -->
@@ -153,6 +154,7 @@
     <!-- <ClCompile Include="..\src\core\config.cpp" /> -->
     <ClCompile Include="..\src\render\custom_mode.cpp" />
     <ClCompile Include="..\src\rw\defaultFuncs.cpp" />
+    <ClCompile Include="..\src\render\depthhook.cpp" />
     <ClCompile Include="..\src\render\envmap.cpp" />
     <ClCompile Include="..\src\rw\extendedplg.cpp" />
     <ClCompile Include="..\src\render\forwardplus.cpp" />
@@ -174,13 +176,14 @@
     <ClCompile Include="..\src\render\ps2_mode.cpp" />
     <ClCompile Include="..\src\core\test.cpp" />
     <ClCompile Include="..\src\extras\texdb.cpp" />
+    <ClCompile Include="..\src\extras\ragdoll_death.cpp" />
     <ClCompile Include="..\src\render\vehiclePipe.cpp" />
     <ClCompile Include="..\src\extras\vehicles.cpp" />
     <ClCompile Include="..\src\extras\veh_shaders.cpp" />
     <ClCompile Include="..\src\render\waterPipe.cpp" />
     <ClCompile Include="..\src\core\weather.cpp" />
     <ClCompile Include="..\src\extras\wheels.cpp" />
-    <ClCompile Include="..\src\extras\wheels_extender.cpp" />
+    <ClCompile Include="..\src\extras\dismember.cpp" />
     <ClCompile Include="..\src\render\xbox_mode.cpp" />
     <ClCompile Include="..\src\core\debugmenu_ui.cpp" />
     <ClCompile Include="E:\SDKs\imgui-master\imgui.cpp" />
@@ -191,6 +194,124 @@
     <ClCompile Include="E:\SDKs\imgui-master\backends\imgui_impl_win32.cpp" />
     <!-- <ClCompile Include="..\src\rw\normalmap_plugin.cpp" /> -->
     <!-- <ClCompile Include="..\src\render\SMAA.cpp" /> -->
+    <!-- ============================================================ -->
+    <!-- Bullet Physics (vendored v2.87, SM3.0 compatible, no double) -->
+    <!-- ============================================================ -->
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\BroadphaseCollision\btAxisSweep3.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\BroadphaseCollision\btBroadphaseProxy.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\BroadphaseCollision\btCollisionAlgorithm.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\BroadphaseCollision\btDbvt.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\BroadphaseCollision\btDbvtBroadphase.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\BroadphaseCollision\btDispatcher.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\BroadphaseCollision\btOverlappingPairCache.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\BroadphaseCollision\btQuantizedBvh.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\BroadphaseCollision\btSimpleBroadphase.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionDispatch\SphereTriangleDetector.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionDispatch\btActivatingCollisionAlgorithm.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionDispatch\btBox2dBox2dCollisionAlgorithm.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionDispatch\btBoxBoxCollisionAlgorithm.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionDispatch\btBoxBoxDetector.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionDispatch\btCollisionDispatcher.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionDispatch\btCollisionDispatcherMt.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionDispatch\btCollisionObject.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionDispatch\btCollisionWorld.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionDispatch\btCollisionWorldImporter.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionDispatch\btCompoundCollisionAlgorithm.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionDispatch\btCompoundCompoundCollisionAlgorithm.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionDispatch\btConvex2dConvex2dAlgorithm.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionDispatch\btConvexConcaveCollisionAlgorithm.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionDispatch\btConvexConvexAlgorithm.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionDispatch\btConvexPlaneCollisionAlgorithm.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionDispatch\btDefaultCollisionConfiguration.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionDispatch\btEmptyCollisionAlgorithm.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionDispatch\btGhostObject.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionDispatch\btHashedSimplePairCache.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionDispatch\btInternalEdgeUtility.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionDispatch\btManifoldResult.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionDispatch\btSimulationIslandManager.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionDispatch\btSphereBoxCollisionAlgorithm.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionDispatch\btSphereSphereCollisionAlgorithm.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionDispatch\btSphereTriangleCollisionAlgorithm.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionDispatch\btUnionFind.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionShapes\btBox2dShape.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionShapes\btBoxShape.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionShapes\btBvhTriangleMeshShape.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionShapes\btCapsuleShape.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionShapes\btCollisionShape.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionShapes\btCompoundShape.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionShapes\btConcaveShape.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionShapes\btConeShape.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionShapes\btConvex2dShape.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionShapes\btConvexHullShape.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionShapes\btConvexInternalShape.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionShapes\btConvexPointCloudShape.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionShapes\btConvexPolyhedron.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionShapes\btConvexShape.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionShapes\btConvexTriangleMeshShape.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionShapes\btCylinderShape.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionShapes\btEmptyShape.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionShapes\btHeightfieldTerrainShape.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionShapes\btMinkowskiSumShape.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionShapes\btMultiSphereShape.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionShapes\btMultimaterialTriangleMeshShape.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionShapes\btOptimizedBvh.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionShapes\btPolyhedralConvexShape.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionShapes\btScaledBvhTriangleMeshShape.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionShapes\btShapeHull.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionShapes\btSphereShape.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionShapes\btStaticPlaneShape.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionShapes\btStridingMeshInterface.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionShapes\btTetrahedronShape.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionShapes\btTriangleBuffer.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionShapes\btTriangleCallback.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionShapes\btTriangleIndexVertexArray.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionShapes\btTriangleIndexVertexMaterialArray.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionShapes\btTriangleMesh.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionShapes\btTriangleMeshShape.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\CollisionShapes\btUniformScalingShape.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\NarrowPhaseCollision\btContinuousConvexCollision.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\NarrowPhaseCollision\btConvexCast.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\NarrowPhaseCollision\btGjkConvexCast.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\NarrowPhaseCollision\btGjkEpa2.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\NarrowPhaseCollision\btGjkEpaPenetrationDepthSolver.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\NarrowPhaseCollision\btGjkPairDetector.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\NarrowPhaseCollision\btMinkowskiPenetrationDepthSolver.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\NarrowPhaseCollision\btPersistentManifold.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\NarrowPhaseCollision\btPolyhedralContactClipping.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\NarrowPhaseCollision\btRaycastCallback.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\NarrowPhaseCollision\btSubSimplexConvexCast.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletCollision\NarrowPhaseCollision\btVoronoiSimplexSolver.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletDynamics\ConstraintSolver\btConeTwistConstraint.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletDynamics\ConstraintSolver\btContactConstraint.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletDynamics\ConstraintSolver\btFixedConstraint.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletDynamics\ConstraintSolver\btGearConstraint.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletDynamics\ConstraintSolver\btGeneric6DofConstraint.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletDynamics\ConstraintSolver\btGeneric6DofSpring2Constraint.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletDynamics\ConstraintSolver\btGeneric6DofSpringConstraint.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletDynamics\ConstraintSolver\btHinge2Constraint.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletDynamics\ConstraintSolver\btHingeConstraint.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletDynamics\ConstraintSolver\btNNCGConstraintSolver.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletDynamics\ConstraintSolver\btPoint2PointConstraint.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletDynamics\ConstraintSolver\btSequentialImpulseConstraintSolver.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletDynamics\ConstraintSolver\btSliderConstraint.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletDynamics\ConstraintSolver\btSolve2LinearConstraint.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletDynamics\ConstraintSolver\btTypedConstraint.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletDynamics\ConstraintSolver\btUniversalConstraint.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletDynamics\Dynamics\btDiscreteDynamicsWorld.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletDynamics\Dynamics\btDiscreteDynamicsWorldMt.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletDynamics\Dynamics\btRigidBody.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletDynamics\Dynamics\btSimpleDynamicsWorld.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\BulletDynamics\Dynamics\btSimulationIslandManagerMt.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\LinearMath\btAlignedAllocator.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\LinearMath\btConvexHull.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\LinearMath\btConvexHullComputer.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\LinearMath\btGeometryUtil.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\LinearMath\btPolarDecomposition.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\LinearMath\btQuickprof.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\LinearMath\btSerializer.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\LinearMath\btSerializer64.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\LinearMath\btThreads.cpp" />
+    <ClCompile Include="..\third_party\bullet\src\LinearMath\btVector3.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\resources\Resource.aps" />

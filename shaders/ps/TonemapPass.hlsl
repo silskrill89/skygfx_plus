@@ -9,7 +9,7 @@
 //
 // c5 = tonemapParams (timecycle-driven):
 //   x = exposure (brightness slider × sceneLuma × carcols × sun dampening)
-//   y = toeStrength (0.05-0.25, driven by sceneLuma + timecycle shadowStrength)
+//   y = toeStrength (0.06-0.30, night~0.10 for shadow lift, midday~0.17 solid blacks)
 //   z = sceneLuma (ambient + directional luminance from timecycle, 0-1)
 //   w = flags (bit0=isInterior, bit1=isCutscene)
 //
@@ -18,10 +18,15 @@
 //   y = contrast (1.15-1.40, from timecycle shadowStrength × fogStart)
 //   z = lift (0.00-0.025, from timecycle cloudAlpha + fogStart)
 //   w = curves blend (0.25-0.50, from timecycle sceneLuma)
+//
+// c7 = blackLiftParams:
+//   x = blackLift (0.0-0.05, sRGB black-level lift to preserve shadow detail)
+//   yzw = unused
 
 uniform sampler2D tex : register(s0);
 uniform float4 tonemapParams : register(c5);
 uniform float4 gradeParams : register(c6);
+uniform float4 blackLiftParams : register(c7);
 
 struct PS_INPUT
 {
@@ -163,6 +168,10 @@ float4 main(PS_INPUT IN) : COLOR
 	// Filmic color grading: warm shadows, warm highlights, mid-tone saturation,
 	// highlight desaturation — matches Xbox SA press kit rendering intent
 	c = FilmicGrading(c, tonemapParams.z);
+
+	// Black-level lift: preserve deep shadow detail without a gray veil.
+	// Small constant (0.015-0.02) only affects near-black; midtones untouched.
+	c = c * (1.0f - blackLiftParams.x) + blackLiftParams.x;
 
 	return float4(c, 1.0f);
 }

@@ -32,8 +32,8 @@ int g_fpGpuLightCount = 0;
 // Release D3D resources
 void ForwardPlus_ReleaseResources(void)
 {
-	if(g_fpIndexTex){ g_fpIndexTex->Release(); g_fpIndexTex = NULL; }
-	if(g_fpIndexTexB){ g_fpIndexTexB->Release(); g_fpIndexTexB = NULL; }
+	if(g_fpIndexTex){ dbglog("ForwardPlus: Release indexTex=%p", g_fpIndexTex); g_fpIndexTex->Release(); g_fpIndexTex = NULL; }
+	if(g_fpIndexTexB){ dbglog("ForwardPlus: Release indexTexB=%p", g_fpIndexTexB); g_fpIndexTexB->Release(); g_fpIndexTexB = NULL; }
 }
 
 // Initialize textures if needed
@@ -52,6 +52,11 @@ static void EnsureFPResources(IDirect3DDevice9 *dev, int screenW, int screenH)
 		return;
 	}
 	dbglog("[ForwardPlus] textures created %dx%d for %dx%d screen", FP_GRID_W, FP_GRID_H, screenW, screenH);
+
+	// Register scope tags for crash backtrace
+	diag_registerScope("ForwardPlus_CullAndUpload", (void*)ForwardPlus_CullAndUpload);
+	diag_registerScope("ForwardPlus_ReleaseResources", (void*)ForwardPlus_ReleaseResources);
+	diag_registerScope("ForwardPlus_SetConstants", (void*)ForwardPlus_SetConstants);
 }
 
 // GTA SA point light structure (from gta-reversed / plugin-sdk)
@@ -222,6 +227,13 @@ static void UploadTileTexture(IDirect3DDevice9 *dev)
 }
 
 // Upload light data as PS constants (c29-c44)
+// PS register mapping (VehiclePBR_Modern.hlsl):
+//   c29-c36: clusterLightPos[8] — contiguous block (pos.xyz, radius)
+//   c37-c44: clusterLightCol[8] — contiguous block (col.rgb*intensity, 0)
+//   c45:     clusterParams — (gridOffsetX, gridOffsetZ, tileSize, lightCount)
+// NOTE: c29-c44 are dedicated to Forward+ cluster lights in the PS.
+// No overlap with: c0-c4 (surf/fx/eye/ibl/cloud), c5-c18 (lights),
+// c19 (matCol), c22-c24 (pbr/paintNoise/ambient), c25-c28 (view basis/sky).
 static void UploadLightConstants(void)
 {
 	// Sort lights by brightness (intensity * 1/radius²) and take top FP_MAX_LIGHTS_GPU
@@ -250,12 +262,12 @@ static void UploadLightConstants(void)
 	
 	for(int i = 0; i < g_fpGpuLightCount; i++){
 		const ClusterLight &light = g_fpLights[scores[i].idx];
-		// c29 + 2*i = position.xyz + radius
+		// c29 + i = position.xyz + radius (contiguous block c29-c36)
 		float posData[4] = { light.x, light.y, light.z, light.radius };
-		// c30 + 2*i = color.rgb * intensity
+		// c37 + i = color.rgb * intensity (contiguous block c37-c44)
 		float colData[4] = { light.r * light.intensity, light.g * light.intensity, light.b * light.intensity, 0.0f };
-		RwD3D9SetPixelShaderConstant(29 + i*2, posData, 1);
-		RwD3D9SetPixelShaderConstant(30 + i*2, colData, 1);
+		RwD3D9SetPixelShaderConstant(29 + i, posData, 1);
+		RwD3D9SetPixelShaderConstant(37 + i, colData, 1);
 	}
 	
 	// Upload cluster params at c45: (gridOffsetX, gridOffsetZ, tileSize, lightCount)
@@ -266,6 +278,7 @@ static void UploadLightConstants(void)
 // Main entry point — call each frame before rendering
 void ForwardPlus_CullAndUpload(void)
 {
+	DBGLOG_ENTER("ForwardPlus_CullAndUpload");
 	if(!config || !config->forwardPlusEnable)
 		return;
 	

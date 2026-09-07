@@ -4,12 +4,14 @@
 #include "waterPipe.h"
 #include "chars.h"
 #include "weather.h"
-#include "Ragdoll.h"
+#include "Ragdoll.h"  // living-ped secondary motion
+#include "extras/ragdoll_death.h"  // death ragdoll (bullet)
 #include "ini_parser.hpp"
 #include "debugmenu_public.h"
 #include "ModuleList.hpp"
 #include "diagnostics.h"
 #include "menu_inject.h"
+#include "postfx.h"
 #include <injector\hooking.hpp>
 #include <stdarg.h>
 #include <stdio.h>
@@ -362,13 +364,17 @@ myDefaultCallback(RpAtomic *atomic)
 
 	// Override pAmbient with shared timecycle ambient for ped/skin rendering.
 	// All pipelines (buildings, vehicles, peds) now use the same ambient source.
+	// PBR floor applied so peds never drop to a black silhouette at night.
 	RwRGBAReal savedAmb = {};
 	bool ambOverridden = false;
 	if(pipe == skinPipe && pAmbient){
 		savedAmb = pAmbient->color;
-		RwRGBAReal tcAmbient = GetTimecycleAmbient();
+		RwRGBAReal tcAmbient = GetTimecycleAmbientPBR();
 		pAmbient->color = tcAmbient;
 		ambOverridden = true;
+		if(dbglog_throttle("ped_ambient"))
+			dbglog("[Ped] pAmbient override: (%.3f,%.3f,%.3f)",
+				tcAmbient.red, tcAmbient.green, tcAmbient.blue);
 	}
 
 	if(dodual){
@@ -550,7 +556,7 @@ fixSeed(void)
 	_asm{
 	// 0x5DADB7
 		mov	ecx, [config]
-		cmp	[ecx+4], 0	// fixGrassPlacement
+		cmp	[ecx+8], 0	// fixGrassPlacement
 		jle	dontfix
 		mov	ecx, [esp+54h]
 		mov	ebx, [ecx+eax*4]
@@ -712,7 +718,7 @@ void __declspec(naked) doglare(void)
 {
 	_asm {
 		mov	ecx, [config]
-		cmp	[ecx+8], 0	// doglare
+		cmp	[ecx+12], 0	// doglare
 		jle	noglare
 		mov	ecx,esi
 		call	CVehicle__DoSunGlare
@@ -837,7 +843,7 @@ WRAPPER void RenderScene(void) { VARJMP(RenderScene_A); }
 
 void RenderReflectionMap_leeds(void);
 void RenderReflectionScene(void);
-void DrawDebugEnvMap(void);
+// DrawDebugEnvMap removed — CLASS 6: dead code, empty body
 
 bool
 RenderScene_before(void*)
@@ -845,12 +851,33 @@ RenderScene_before(void*)
 	static int callCount = 0;
 	if(callCount++ < 5)
 		dbglog("RenderScene_before: frame %d", callCount);
+
+	// Lazily install INTZ depth hook on first frame where d3d9device is valid.
+	// Must be here (not in RenderScene_hook) because RenderScene_before is
+	// called from both RenderScene_hook AND the UG mod callback path, but
+	// RenderScene_hook itself may not be called if UG mod handles events.
+	static bool s_depthHookInstalled = false;
+	if(!s_depthHookInstalled && d3d9device) {
+		DepthHook_Install(d3d9device);
+		s_depthHookInstalled = true;
+	}
+
+	// Deferred SMAA raster init: force-create D3D9 surfaces for CAMERATEXTURE
+	// rasters. Must run OUTSIDE the main camera's BeginUpdate because RW 3.6's
+	// D3D9 driver crashes when creating render-target textures mid-frame.
+	SMAATryInitRasters();
+
 	// Do this because far and fog plane are set AFTER calling BeingUpdate in Idle()
 	RwCameraEndUpdate(Scene.camera);
 	RwCameraBeginUpdate(Scene.camera);
 
 	// Forward+ tiled light culling (before scene render)
 	ForwardPlus_CullAndUpload();
+
+	// V7: Apply ragdoll hierarchy pose BEFORE rendering so bone
+	// matrices are live when the scene draws. This fixes the 1-frame
+	// stale pose that occurred when writing in RenderScene_after.
+	Ragdoll_ApplyPose();
 
 	// update wind
 	float freq = 0.01f;
@@ -867,11 +894,28 @@ float cloudAnimTimer = 0.0f;
 bool
 RenderScene_after(void*)
 {
+	// Debug dump: capture camera raster after scene render (INI-gated)
+	PostFX_DumpSceneCamera();
+
+	// Death ragdoll simulation + gib rendering — runs after game
+	// anim processing. Hierarchy write-back moved to Ragdoll_ApplyPose
+	// in RenderScene_before to avoid 1-frame stale poses.
+	// V7: Ragdoll_Simulate is frame-gated internally.
+	Ragdoll_Simulate();
+
+	// Render sphere env map for pipelines that use CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env
+	// (CAR_ENV, CAR_MODERN) or CarPipe::RenderCallback (CAR_NEO).
+	// NOTE: For CAR_ENV and CAR_MODERN, the env map is already rendered by
+	// RenderSphereReflections (hooked on CRenderer__ConstructRenderList at 0x53E9F9,
+	// envmap.cpp:652), which runs BEFORE the main scene render. That path handles
+	// camera state properly (save/restore raster, view window, far/fog planes).
+	// The redundant CarPipe::RenderEnvTex call here was corrupting D3D9 state
+	// mid-frame (causing stretched/missing vehicle geometry and broken reflections).
+	// CAR_NEO uses a different env map pipeline that needs RenderEnvTex.
 	if(config->vehiclePipe == CAR_NEO)
 		CarPipe::RenderEnvTex();
 	else if(config->vehiclePipe == CAR_LCS || config->vehiclePipe == CAR_VCS)
 		RenderReflectionMap_leeds();
-	DrawDebugEnvMap();
 	return true;
 }
 void
@@ -1234,6 +1278,9 @@ readIni(int n)
 	// 0=LOW (PS2 classic), 1=MEDIUM (PC classic), 2=HIGH (Enhanced), 3=ULTRA (Full PBR)
 	int preset = readint(cfg.get("SkyGfx", "qualityPreset", ""), 3);  // default to ULTRA
 
+	// CLASS 1 FIX: After preset block, unconditional reads use c->field as default
+	// so absent keys preserve the preset value instead of clobbering with hardcoded default.
+
 	// Apply preset defaults — individual INI values override these
 	switch(preset){
 	case 0: // LOW - PS2 classic
@@ -1415,8 +1462,8 @@ readIni(int n)
 	if(vpOverride >= 0)
 		c->vehiclePipe = vpOverride;
 
-	c->detailMaps = readint(cfg.get("SkyGfx", "detailMaps", ""), 0);
-	c->stochastic = readint(cfg.get("SkyGfx", "stochasticTexturing", ""), 0);
+	c->detailMaps = readint(cfg.get("SkyGfx", "detailMaps", ""), c->detailMaps);
+	c->stochastic = readint(cfg.get("SkyGfx", "stochasticTexturing", ""), c->stochastic);
 
 	c->ps2ModulateBuilding = readint(cfg.get("SkyGfx", "ps2ModulateBuilding", ""), config->ps2ModulateGlobal);
 	c->dualPassBuilding = readint(cfg.get("SkyGfx", "dualPassBuilding", ""), config->dualPassGlobal);
@@ -1429,11 +1476,11 @@ readIni(int n)
 	c->envSpecularityMult = readfloat(cfg.get("SkyGfx", "envSpecularityMult", ""), 1.0);
 	c->envPower = readfloat(cfg.get("SkyGfx", "envPower", ""), 20.0);
 	c->envFresnel = readfloat(cfg.get("SkyGfx", "envFresnel", ""), 0.7f);
-	c->envMapSize = readint(cfg.get("SkyGfx", "envMapSize", ""), 256);
+	c->envMapSize = readint(cfg.get("SkyGfx", "envMapSize", ""), c->envMapSize);
 	int i = 1;
 	while(i < c->envMapSize) i *= 2;
 	c->envMapSize = i;
-	c->envMapFarClipMult = readfloat(cfg.get("SkyGfx", "envMapFarClipMult", ""), 1.0);
+	c->envMapFarClipMult = readfloat(cfg.get("SkyGfx", "envMapFarClipMult", ""), c->envMapFarClipMult);
 	c->envMapUseLODs = readint(cfg.get("SkyGfx", "envMapUseLODs", ""), 0);
 
 	// Normal mapping
@@ -1562,23 +1609,26 @@ readIni(int n)
 	c->crOffset     = readfloat(cfg.get("SkyGfx", "CrOffset", ""), 0.0f);
 
 	// SSAO
-	c->ssaoEnable = readint(cfg.get("SkyGfx", "ssaoEnable", ""), 0);
-	c->ssaoRadius = readfloat(cfg.get("SkyGfx", "ssaoRadius", ""), 0.8f);
-	c->ssaoPower = readfloat(cfg.get("SkyGfx", "ssaoPower", ""), 1.5f);
-	c->ssaoKernelSize = readfloat(cfg.get("SkyGfx", "ssaoKernelSize", ""), 16.0f);
-	c->ssaoSampleCount = readint(cfg.get("SkyGfx", "ssaoSampleCount", ""), 16);
+	c->ssaoEnable = readint(cfg.get("SkyGfx", "ssaoEnable", ""), c->ssaoEnable);
+	c->ssaoRadius = readfloat(cfg.get("SkyGfx", "ssaoRadius", ""), c->ssaoRadius);
+	c->ssaoPower = readfloat(cfg.get("SkyGfx", "ssaoPower", ""), c->ssaoPower);
+	c->ssaoKernelSize = readfloat(cfg.get("SkyGfx", "ssaoKernelSize", ""), c->ssaoKernelSize);
+	c->ssaoSampleCount = readint(cfg.get("SkyGfx", "ssaoSampleCount", ""), c->ssaoSampleCount);
 
-	c->smaaEnable = readint(cfg.get("SkyGfx", "smaaEnable", ""), 0);
+	c->smaaEnable = readint(cfg.get("SkyGfx", "smaaEnable", ""), c->smaaEnable);
 
 	// Motion Blur
-	c->motionBlurEnable = readint(cfg.get("SkyGfx", "motionBlurEnable", ""), 1);
-	c->motionBlurStrength = readfloat(cfg.get("SkyGfx", "motionBlurStrength", ""), 0.4f);
-	c->motionBlurRadial = readfloat(cfg.get("SkyGfx", "motionBlurRadial", ""), 0.2f);
-	c->motionBlurSpeedFactor = readfloat(cfg.get("SkyGfx", "motionBlurSpeedFactor", ""), 0.3f);
-	c->motionBlurCameraAware = readint(cfg.get("SkyGfx", "motionBlurCameraAware", ""), 1);
+	c->motionBlurEnable = readint(cfg.get("SkyGfx", "motionBlurEnable", ""), c->motionBlurEnable);
+	c->motionBlurStrength = readfloat(cfg.get("SkyGfx", "motionBlurStrength", ""), c->motionBlurStrength);
+	c->motionBlurRadial = readfloat(cfg.get("SkyGfx", "motionBlurRadial", ""), c->motionBlurRadial);
+	c->motionBlurSpeedFactor = readfloat(cfg.get("SkyGfx", "motionBlurSpeedFactor", ""), c->motionBlurSpeedFactor);
+	c->motionBlurCameraAware = readint(cfg.get("SkyGfx", "motionBlurCameraAware", ""), c->motionBlurCameraAware);
 
 	// Velocity Buffer
 	c->velocityBufferEnable = readint(cfg.get("SkyGfx", "velocityBufferEnable", ""), 1);
+
+	// Depth Hook (INTZ direct-binding, DXVK compatibility)
+	c->depthHookEnable = readint(cfg.get("SkyGfx", "depthHookEnable", ""), 1);
 
 	// Faux Normal Buffer (stereo disparity)
 	c->normalBufferEnable = readint(cfg.get("SkyGfx", "normalBufferEnable", ""), 0);
@@ -1593,21 +1643,99 @@ readIni(int n)
 	c->colorFilterEnable = readint(cfg.get("SkyGfx", "colorFilterEnable", ""), 1);
 	c->radiosityEnable = readint(cfg.get("SkyGfx", "radiosityEnable", ""), 1);
 	c->grainEnable = readint(cfg.get("SkyGfx", "grainEnable", ""), 1);
+	c->postfxDumpDebug = readint(cfg.get("SkyGfx", "postfxDumpDebug", ""), 0);
 
 	// GTA IV Mode
 	c->ivMode = readint(cfg.get("SkyGfx", "ivMode", ""), 0);
-	c->ivDesaturation = readfloat(cfg.get("SkyGfx", "ivDesaturation", ""), 1.0f);
-	c->ivGamma = readfloat(cfg.get("SkyGfx", "ivGamma", ""), 1.0f);
-	c->ivSaturation = readfloat(cfg.get("SkyGfx", "ivSaturation", ""), 0.0f);
-	c->ivCurves = readfloat(cfg.get("SkyGfx", "ivCurves", ""), 0.0f);
-	c->ivVignetteIntensity = readfloat(cfg.get("SkyGfx", "ivVignetteIntensity", ""), 0.0f);
-	c->ivVignetteRadius = readfloat(cfg.get("SkyGfx", "ivVignetteRadius", ""), 0.75f);
-	c->ivVignetteContrast = readfloat(cfg.get("SkyGfx", "ivVignetteContrast", ""), 1.5f);
-	c->ivBloomIntensity = readfloat(cfg.get("SkyGfx", "ivBloomIntensity", ""), 0.0f);
-	c->ivExposure = readfloat(cfg.get("SkyGfx", "ivExposure", ""), 1.0f);
+	c->ivDesaturation = readfloat(cfg.get("SkyGfx", "ivDesaturation", ""), c->ivDesaturation);
+	c->ivGamma = readfloat(cfg.get("SkyGfx", "ivGamma", ""), c->ivGamma);
+	c->ivSaturation = readfloat(cfg.get("SkyGfx", "ivSaturation", ""), c->ivSaturation);
+	c->ivCurves = readfloat(cfg.get("SkyGfx", "ivCurves", ""), c->ivCurves);
+	c->ivVignetteIntensity = readfloat(cfg.get("SkyGfx", "ivVignetteIntensity", ""), c->ivVignetteIntensity);
+	c->ivVignetteRadius = readfloat(cfg.get("SkyGfx", "ivVignetteRadius", ""), c->ivVignetteRadius);
+	c->ivVignetteContrast = readfloat(cfg.get("SkyGfx", "ivVignetteContrast", ""), c->ivVignetteContrast);
+	c->ivBloomIntensity = readfloat(cfg.get("SkyGfx", "ivBloomIntensity", ""), c->ivBloomIntensity);
+	c->ivExposure = readfloat(cfg.get("SkyGfx", "ivExposure", ""), c->ivExposure);
 
 	privateHooks = readint(cfg.get("SkyGfx", "privateHooks", ""), 0);
 	if (readint(cfg.get("SkyGfx", "forceWindShader", ""), 0) == 1) forceWindShader = true;
+
+	// Death ragdoll
+	c->ragdollEnable = readint(cfg.get("SkyGfx", "ragdollEnable", ""), 1);
+	g_ragdollDeathEnable = c->ragdollEnable != 0;
+
+	// PBR ambient floor / tonemap black lift (opt-in; 0.0 = off)
+	c->pbrAmbientFloor = readfloat(cfg.get("SkyGfx", "pbrAmbientFloor", ""), 0.0f);
+	c->tonemapBlackLift = readfloat(cfg.get("SkyGfx", "tonemapBlackLift", ""), 0.0f);
+	
+	// CLASS 2: Missing INI reads (write-only keys, never read back)
+	// Height Fog
+	c->heightFogEnable = readint(cfg.get("SkyGfx", "heightFogEnable", ""), c->heightFogEnable);
+	c->heightFogDensity = readfloat(cfg.get("SkyGfx", "heightFogDensity", ""), c->heightFogDensity);
+	c->heightFogHeightFalloff = readfloat(cfg.get("SkyGfx", "heightFogHeightFalloff", ""), c->heightFogHeightFalloff);
+	c->heightFogStartHeight = readfloat(cfg.get("SkyGfx", "heightFogStartHeight", ""), c->heightFogStartHeight);
+	c->heightFogR = readfloat(cfg.get("SkyGfx", "heightFogR", ""), c->heightFogR);
+	c->heightFogG = readfloat(cfg.get("SkyGfx", "heightFogG", ""), c->heightFogG);
+	c->heightFogB = readfloat(cfg.get("SkyGfx", "heightFogB", ""), c->heightFogB);
+	c->heightFogTimecycleScale = readfloat(cfg.get("SkyGfx", "heightFogTimecycleScale", ""), c->heightFogTimecycleScale);
+	
+	// God Rays
+	c->godRaysEnable = readint(cfg.get("SkyGfx", "godRaysEnable", ""), c->godRaysEnable);
+	c->godRaysExposure = readfloat(cfg.get("SkyGfx", "godRaysExposure", ""), c->godRaysExposure);
+	c->godRaysDecay = readfloat(cfg.get("SkyGfx", "godRaysDecay", ""), c->godRaysDecay);
+	c->godRaysDensity = readfloat(cfg.get("SkyGfx", "godRaysDensity", ""), c->godRaysDensity);
+	c->godRaysWeight = readfloat(cfg.get("SkyGfx", "godRaysWeight", ""), c->godRaysWeight);
+	c->godRaysNumSamples = readint(cfg.get("SkyGfx", "godRaysNumSamples", ""), c->godRaysNumSamples);
+	
+	// SSAO overhaul
+	c->ssaoTemporalEnable = readint(cfg.get("SkyGfx", "ssaoTemporalEnable", ""), c->ssaoTemporalEnable);
+	c->ssaoTemporalBlend = readfloat(cfg.get("SkyGfx", "ssaoTemporalBlend", ""), c->ssaoTemporalBlend);
+	c->ssaoBlurPasses = readint(cfg.get("SkyGfx", "ssaoBlurPasses", ""), c->ssaoBlurPasses);
+	c->ssaoBlurRadius = readfloat(cfg.get("SkyGfx", "ssaoBlurRadius", ""), c->ssaoBlurRadius);
+	c->ssaoDepthThreshold = readfloat(cfg.get("SkyGfx", "ssaoDepthThreshold", ""), c->ssaoDepthThreshold);
+	
+	// SSS post-process
+	c->sssPostProcessRadius = readfloat(cfg.get("SkyGfx", "sssPostProcessRadius", ""), c->sssPostProcessRadius);
+	c->sssPostProcessThreshold = readfloat(cfg.get("SkyGfx", "sssPostProcessThreshold", ""), c->sssPostProcessThreshold);
+	
+	// Skin enhancement
+	c->skinWrapFactor = readfloat(cfg.get("SkyGfx", "skinWrapFactor", ""), c->skinWrapFactor);
+	c->skinSpecularPower = readfloat(cfg.get("SkyGfx", "skinSpecularPower", ""), c->skinSpecularPower);
+	c->skinSpecularStrength = readfloat(cfg.get("SkyGfx", "skinSpecularStrength", ""), c->skinSpecularStrength);
+	c->skinSSSStrength = readfloat(cfg.get("SkyGfx", "skinSSSStrength", ""), c->skinSSSStrength);
+	
+	// Hair enhancement
+	c->hairAnisotropicPower = readfloat(cfg.get("SkyGfx", "hairAnisotropicPower", ""), c->hairAnisotropicPower);
+	c->hairAnisotropicStrength = readfloat(cfg.get("SkyGfx", "hairAnisotropicStrength", ""), c->hairAnisotropicStrength);
+	c->hairSSSStrength = readfloat(cfg.get("SkyGfx", "hairSSSStrength", ""), c->hairSSSStrength);
+	
+	// Vegetation enhancement
+	c->vegetationSSSStrength = readfloat(cfg.get("SkyGfx", "vegetationSSSStrength", ""), c->vegetationSSSStrength);
+	c->vegetationAmbientBoost = readfloat(cfg.get("SkyGfx", "vegetationAmbientBoost", ""), c->vegetationAmbientBoost);
+	
+	// Edge tessellation
+	c->edgeTessEnable = readint(cfg.get("SkyGfx", "edgeTessEnable", ""), c->edgeTessEnable);
+	c->edgeTessStrength = readfloat(cfg.get("SkyGfx", "edgeTessStrength", ""), c->edgeTessStrength);
+	c->edgeTessThreshold = readfloat(cfg.get("SkyGfx", "edgeTessThreshold", ""), c->edgeTessThreshold);
+	
+	// Forward+ tiled lighting
+	c->forwardPlusEnable = readint(cfg.get("SkyGfx", "forwardPlusEnable", ""), c->forwardPlusEnable);
+	
+	// Sun corona
+	c->sunCoronaIntensity = readfloat(cfg.get("SkyGfx", "sunCoronaIntensity", ""), c->sunCoronaIntensity);
+	c->sunCoreIntensity = readfloat(cfg.get("SkyGfx", "sunCoreIntensity", ""), c->sunCoreIntensity);
+	c->sunStreakIntensity = readfloat(cfg.get("SkyGfx", "sunStreakIntensity", ""), c->sunStreakIntensity);
+	c->sunStreakSize = readfloat(cfg.get("SkyGfx", "sunStreakSize", ""), c->sunStreakSize);
+	
+	// Normal buffer
+	c->normalBufferOffset = readfloat(cfg.get("SkyGfx", "normalBufferOffset", ""), c->normalBufferOffset);
+	c->normalBufferScale = readfloat(cfg.get("SkyGfx", "normalBufferScale", ""), c->normalBufferScale);
+	
+	// Pipe chain
+	c->pipeChainIntensity = readfloat(cfg.get("SkyGfx", "pipeChainIntensity", ""), c->pipeChainIntensity);
+	
+	// Debug toggles (already read above, but ensure they use c->field default)
+
 
 	if(!iniExisted){
 		// ===== Brand new INI - write all defaults =====
@@ -1706,7 +1834,7 @@ readIni(int n)
 		ADD_IF_MISSING("SkyGfx", "skinEnhanceEnable", "1");
 		ADD_IF_MISSING("SkyGfx", "hairEnhanceEnable", "1");
 		ADD_IF_MISSING("SkyGfx", "vegetationEnhanceEnable", "1");
-		ADD_IF_MISSING("SkyGfx", "enableNormalMaps", "0");
+		ADD_IF_MISSING("SkyGfx", "normalMapEnable", "0");
 		ADD_IF_MISSING("SkyGfx", "ivMode", "0");
 		ADD_IF_MISSING("SkyGfx", "ivDesaturation", "0.15");
 		ADD_IF_MISSING("SkyGfx", "ivGamma", "1.0");
@@ -1717,6 +1845,16 @@ readIni(int n)
 		ADD_IF_MISSING("SkyGfx", "ivVignetteContrast", "1.5");
 		ADD_IF_MISSING("SkyGfx", "ivBloomIntensity", "0.05");
 		ADD_IF_MISSING("SkyGfx", "ivExposure", "2.5");
+		ADD_IF_MISSING("SkyGfx", "ragdollEnable", "1");
+		ADD_IF_MISSING("SkyGfx", "depthHookEnable", "1");
+		ADD_IF_MISSING("SkyGfx", "forwardPlusEnable", "0");
+		ADD_IF_MISSING("SkyGfx", "velocityBufferEnable", "1");
+		ADD_IF_MISSING("SkyGfx", "normalBufferEnable", "0");
+		ADD_IF_MISSING("SkyGfx", "pipeChainEnable", "0");
+		ADD_IF_MISSING("SkyGfx", "postfxDumpDebug", "0");
+		ADD_IF_MISSING("SkyGfx", "pbrAmbientFloor", "0.0");
+		ADD_IF_MISSING("SkyGfx", "tonemapBlackLift", "0.0");
+
 		
 		#undef ADD_IF_MISSING
 	}
@@ -1947,6 +2085,9 @@ saveConfig(void)
 	// Velocity buffer
 	cfg.set("SkyGfx", "velocityBufferEnable", std::to_string(c->velocityBufferEnable));
 
+	// Depth Hook
+	cfg.set("SkyGfx", "depthHookEnable", std::to_string(c->depthHookEnable));
+
 	// Forward+ tiled lighting
 	cfg.set("SkyGfx", "forwardPlusEnable", std::to_string(c->forwardPlusEnable));
 
@@ -1963,6 +2104,7 @@ saveConfig(void)
 	cfg.set("SkyGfx", "colorFilterEnable", std::to_string(c->colorFilterEnable));
 	cfg.set("SkyGfx", "radiosityEnable", std::to_string(c->radiosityEnable));
 	cfg.set("SkyGfx", "grainEnable", std::to_string(c->grainEnable));
+	cfg.set("SkyGfx", "postfxDumpDebug", std::to_string(c->postfxDumpDebug));
 
 	// Blur offsets
 	cfg.set("SkyGfx", "blurLeft", std::to_string(c->offLeft));
@@ -1976,6 +2118,11 @@ saveConfig(void)
 	// rgb multipliers
 	cfg.set("SkyGfx", "rgb1Mult", std::to_string(c->rgb1Mult));
 	cfg.set("SkyGfx", "rgb2Mult", std::to_string(c->rgb2Mult));
+
+	// Death ragdoll
+	cfg.set("SkyGfx", "ragdollEnable", std::to_string(c->ragdollEnable));
+	cfg.set("SkyGfx", "pbrAmbientFloor", std::to_string(c->pbrAmbientFloor));
+	cfg.set("SkyGfx", "tonemapBlackLift", std::to_string(c->tonemapBlackLift));
 
 	cfg.write_file(modulePath);
 	dbglog("skygfx: config saved to INI");
@@ -2139,6 +2286,9 @@ InjectDelayedPatches()
 	g_ragdollMan.Init();
 	dbglog("Ragdoll manager initialized (%d ragdolls in pool)", MAX_RAGDOLLS);
 
+	dbglog("  INIT: Death ragdoll");
+	Ragdoll_Init();
+
 	InjectHook(0x5E675E, &FX::GetFxQuality_ped);
 	InjectHook(0x5E676D, &FX::GetFxQuality_ped);
 	InjectHook(0x706BC4, &FX::GetFxQuality_ped);
@@ -2193,6 +2343,14 @@ InjectDelayedPatches()
 	// Inject SkyGFX settings into native pause menu
 	// DISABLED: conflicts with MoonLoader's D3D9 hook (d3dhook::originalD3DDevice9 assertion)
 	// menu_inject_init();
+
+	// Water pipe hooks � intercept CWaterLevel::RenderAndEmptyRenderBuffer
+	// at all four call sites to inject custom water rendering.
+	dbglog("  HOOK: WaterLevel ::RenderAndEmptyRenderBuffer (4 sites)");
+	InterceptCall(&CWaterLevel__RenderAndEmptyRenderBuffer, CWaterLevel__RenderAndEmptyRenderBuffer_hook, 0x6E8790);
+	InterceptCall(&CWaterLevel__RenderAndEmptyRenderBuffer, CWaterLevel__RenderAndEmptyRenderBuffer_hook, 0x6E8EF1);
+	InterceptCall(&CWaterLevel__RenderAndEmptyRenderBuffer, CWaterLevel__RenderAndEmptyRenderBuffer_hook, 0x6E91E4);
+	InterceptCall(&CWaterLevel__RenderAndEmptyRenderBuffer, CWaterLevel__RenderAndEmptyRenderBuffer_hook, 0x6E9963);
 
 	installMenu();
 	dbglog("=== InjectDelayedPatches complete ===");
@@ -2394,14 +2552,42 @@ DllMain(HINSTANCE hInst, DWORD reason, LPVOID)
 	}
 
 	if(reason == DLL_PROCESS_DETACH){
-		shutdownTexDB();
+		// NOTE: At DLL_PROCESS_DETACH, the game's RW/D3D9 engine may already
+		// be torn down. RwRasterDestroy calls into RW internals (game-exe code)
+		// that may be invalid → crash. Wrap all cleanup in __try/__except and
+		// skip ReleaseDefaultPoolResources entirely (OS reclaims all memory).
+		// DepthHook_ReleaseResources is also skipped — the device is gone.
+		// shutdownTexDB is safe (frees strdup'd strings, no RW/D3D9 calls).
+		__try {
+			shutdownTexDB();
+		} __except(EXCEPTION_EXECUTE_HANDLER) {
+			dbglog("DLL_DETACH: shutdownTexDB crashed, continuing");
+		}
 		dbglog("texdb shutdown complete");
-		ReleaseDefaultPoolResources();
-		dbglog("D3DPOOL_DEFAULT resources released");
-		ForwardPlus_ReleaseResources();
-		dbglog("Forward+ resources released");
-		g_ragdollMan.Exit();
-		dbglog("Ragdoll manager shut down");
+
+		// Forward+ resources are raw D3D9 textures — the device may be gone.
+		// Skip to avoid Release on invalid device.
+		if(d3d9device) {
+			__try {
+				ForwardPlus_ReleaseResources();
+			} __except(EXCEPTION_EXECUTE_HANDLER) {
+				dbglog("DLL_DETACH: ForwardPlus_ReleaseResources crashed, continuing");
+			}
+		}
+
+		// Ragdoll shutdown is pure CPU (Bullet physics) — safe.
+		__try {
+			g_ragdollMan.Exit();
+		} __except(EXCEPTION_EXECUTE_HANDLER) {
+			dbglog("DLL_DETACH: ragdollMan.Exit crashed, continuing");
+		}
+		__try {
+			Ragdoll_Shutdown();
+		} __except(EXCEPTION_EXECUTE_HANDLER) {
+			dbglog("DLL_DETACH: Ragdoll_Shutdown crashed, continuing");
+		}
+
+		dbglog("DLL_DETACH complete");
 	}
 
 	return TRUE;
