@@ -1830,14 +1830,24 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 		pipeSetTexture(CarPipe::reflectionMask, 2);
 
 		// IBL on stage 3 (raw D3D9 — no RW wrapper)
+		// c3 = {specular, glossiness, tanHalfFovX, tanHalfFovY} — the PS projects
+		// reflection vectors with the main camera's view window to sample the
+		// perspective-rendered env map (see main() in VehiclePBR_Modern.hlsl).
+		{
+			float tanX = 0.65f, tanY = 0.45f;
+			if(Scene.camera){
+				tanX = Scene.camera->viewWindow.x;
+				tanY = Scene.camera->viewWindow.y;
+			}
+			float iblParams[4] = { specular, glossiness, tanX, tanY };
+			RwD3D9SetPixelShaderConstant(3, iblParams, 1);
+		}
 		if(dev && g_iblTex){
 			dev->SetTexture(3, g_iblTex);
 			dev->SetSamplerState(3, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
 			dev->SetSamplerState(3, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
 			dev->SetSamplerState(3, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
 			dev->SetSamplerState(3, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
-			float iblParams[4] = { specular, glossiness, 0.0f, 0.0f };
-			RwD3D9SetPixelShaderConstant(3, iblParams, 1);
 			extern float cloudAnimTimer;
 			float cloudShadow[4] = { 0.0f, cloudAnimTimer * 0.01f, 1.0f, 0.0f };
 			extern RpLight *&pDirect;

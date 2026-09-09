@@ -145,11 +145,16 @@ float4 main(PS_INPUT IN) : COLOR
     // ---- Environment Reflection: clearcoat Fresnel drives visibility ----
     // Car paint has a clearcoat — env reflections visible at all angles, stronger at grazing
     float3 R_world = reflect(-V, N);
-    // Transform R from world space to view space — the sphere map was rendered
-    // from the camera's viewpoint, so UVs must be computed in camera space.
+    // The env map is a PERSPECTIVE render from the camera's viewpoint (60m clip),
+    // so sample it by projecting the world-space reflection vector with the main
+    // camera's view window (c3.zw = tanHalfFovX/Y). Upward faces now reflect the
+    // sky (top half of the env render) and side faces reflect the world, instead
+    // of the geometrically-arbitrary patches the sphere-map formula produced.
     float3 R_view = float3(dot(R_world, viewRight), dot(R_world, viewUp), dot(R_world, viewFwd));
-    float3 V_view = float3(dot(V, viewRight), dot(V, viewUp), dot(V, viewFwd));
-    float2 envReflUV = SphereEnvMapUV(R_view, V_view);
+    float rz = max(R_view.z, 0.05);
+    float2 envReflUV = saturate(float2(
+        0.5 + 0.5 * clamp(R_view.x / (rz * iblParams.z), -1.2, 1.2),
+        0.5 - 0.5 * clamp(R_view.y / (rz * iblParams.w), -1.2, 1.2)));
     float3 envRefl = tex2D(envMapTex, envReflUV).rgb;
     float3 iblSample = tex2D(iblTex, envReflUV).rgb;
     // Blend env with subtle IBL tint for depth
