@@ -948,6 +948,12 @@ RenderScene_hook(void)
 	g_ragdollMan.ProcessAllPeds(CTimer__ms_fTimeStep / 50.0f);
 	g_ragdollMan.Update(CTimer__ms_fTimeStep / 50.0f);
 
+	// Blend custom weathers2.dat timecyc into m_CurrentColours.
+	// Must run AFTER CTimeCycle::Update() (already done at this point in the frame)
+	// but BEFORE any rendering reads the values. This was previously never called,
+	// so the alternate timecyc loaded but never applied (garages not black, dir ~0.05).
+	Weather_Update();
+
 	// Apply sun config multipliers (corona, core, streaks) to m_CurrentColours.
 	// Must run AFTER CTimeCycle::Update() (already done at this point in the frame)
 	// but BEFORE any rendering reads the values.

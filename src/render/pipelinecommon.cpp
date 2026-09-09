@@ -51,11 +51,19 @@ static float s_lightsMult = 1.0f;                 // CCoronas__LightsMult
 
 RwRGBAReal GetTimecycleAmbient(void)
 {
-	// Return ambient WITH multiplier applied (for backward compat)
+	// Return ambient WITH multiplier applied (for backward compat).
+	// Read DIRECTLY from the game's timecycle functions instead of the
+	// s_tcAmbient/s_lightsMult statics, because UpdateTimecycleLighting()
+	// is deliberately NEVER called (hard rule) — so those statics stay
+	// {0,0,0}/1.0 and peds/vehicles would get a flat 0 ambient regardless
+	// of time of day. Weather_Update() now populates m_CurrentColours, so
+	// CTimeCycle_GetAmbient*() returns the real blended timecycle ambient.
+	extern float &CCoronas__LightsMult;
+	float mult = (CCoronas__LightsMult > 0.0f) ? CCoronas__LightsMult : 1.0f;
 	RwRGBAReal out;
-	out.red = s_tcAmbient.red * s_lightsMult * 0.85f;
-	out.green = s_tcAmbient.green * s_lightsMult * 0.85f;
-	out.blue = s_tcAmbient.blue * s_lightsMult * 0.85f;
+	out.red   = (float)CTimeCycle_GetAmbientRed()   * mult * 0.85f;
+	out.green = (float)CTimeCycle_GetAmbientGreen() * mult * 0.85f;
+	out.blue  = (float)CTimeCycle_GetAmbientBlue()  * mult * 0.85f;
 	return out;
 }
 
@@ -72,10 +80,13 @@ RwRGBAReal GetTimecycleAmbientPBR(void)
 		float floorLum = config->pbrAmbientFloor;
 		float luma = 0.2126f*out.red + 0.7152f*out.green + 0.0722f*out.blue;
 		if(luma < floorLum){
-			float k = floorLum / (luma > 1e-7f ? luma : 1e-7f);
-			out.red = min(out.red * k, 1.0f);
-			out.green = min(out.green * k, 1.0f);
-			out.blue = min(out.blue * k, 1.0f);
+			// FIX: scale-up (out*k) can never lift a true zero (0*k=0) — with
+			// s_tcAmbient={0,0,0} the floor was a silent no-op. Additive lift
+			// toward the floor preserves any existing color contribution.
+			float add = floorLum - luma;
+			out.red   = min(out.red   + add, 1.0f);
+			out.green = min(out.green + add, 1.0f);
+			out.blue  = min(out.blue  + add, 1.0f);
 		}
 	}
 	if(dbglog_throttle("pbr_ambient"))

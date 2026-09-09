@@ -1306,8 +1306,13 @@ CPostEffects::ColourFilter_Modern(RwRGBA rgba1, RwRGBA rgba2)
 		bool isCutscene = CCutsceneMgr__ms_running;
 
 		// --- Timecycle signals (normalized 0-1 where applicable) ---
-		float tcAmbientLuma  = (0.299f*tc.ambientR + 0.587f*tc.ambientG + 0.114f*tc.ambientB) / 255.0f;
-		float tcDirLuma      = (0.299f*tc.directionalR + 0.587f*tc.directionalG + 0.114f*tc.directionalB) / 255.0f;
+		// NOTE: SA CColourSet stores ambient/directional as floats ALREADY in 0-1
+		// range (game divides timecyc.dat values by 255; weather.cpp blends them
+		// with altR/255.0f and clamps to [0,1] — same convention). Do NOT divide
+		// by 255 here: doing so collapsed sceneLuma to ~0.003, which clamped
+		// exposure to 1.5 + toe to 0.33 → the permanent gray veil, day and night.
+		float tcAmbientLuma  = 0.299f*tc.ambientR + 0.587f*tc.ambientG + 0.114f*tc.ambientB;
+		float tcDirLuma      = 0.299f*tc.directionalR + 0.587f*tc.directionalG + 0.114f*tc.directionalB;
 		float sceneLuma      = tcAmbientLuma + tcDirLuma * 0.5f;
 		float shadowNorm     = max(0.0f, min(1.0f, (float)tc.shadowStrength / 255.0f));
 		float fogFactor      = max(0.0f, min(1.0f, tc.fogStart / 500.0f));       // less fog = 1, heavy fog = 0
@@ -1374,8 +1379,15 @@ CPostEffects::ColourFilter_Modern(RwRGBA rgba1, RwRGBA rgba2)
 		static unsigned int tonemapLogCounter = 0;
 		float blackLift = config ? config->tonemapBlackLift : 0.015f;
 		if(tonemapLogCounter++ % 3600 == 0){
-			dbglog("[Tonemap] TC sceneLuma=%.3f shadow=%d fog=%.0f cloud=%.2f sun=%.2f street=%.2f cutscene=%d interior=%d",
-				sceneLuma, tc.shadowStrength, tc.fogStart, clouds, sunBright, streetLights, isCutscene, isInterior);
+			extern int16 &CWeather__OldWeatherType;
+			extern int16 &CWeather__NewWeatherType;
+			extern float &CWeather__InterpolationValue;
+			extern uint8 &CClock__ms_nGameClockHours;
+			dbglog("[Tonemap] TC sceneLuma=%.3f amb=(%.3f,%.3f,%.3f) dir=(%.3f,%.3f,%.3f) shadow=%d fog=%.0f cloud=%.2f sun=%.2f street=%.2f hour=%d wOld=%d wNew=%d wInterp=%.2f cutscene=%d interior=%d",
+				sceneLuma, tc.ambientR, tc.ambientG, tc.ambientB, tc.directionalR, tc.directionalG, tc.directionalB,
+				tc.shadowStrength, tc.fogStart, clouds, sunBright, streetLights,
+				CClock__ms_nGameClockHours, CWeather__OldWeatherType, CWeather__NewWeatherType, CWeather__InterpolationValue,
+				isCutscene, isInterior);
 			dbglog("[Tonemap] VAL exp=%.3f toe=%.3f bl=%.4f ct=%.2f br=%.3f lift=%.3f curve=%.2f",
 				exposure, toeStrength, blackLift, gradeContrast, gradeBrightness, gradeLift, gradeCurve);
 		}

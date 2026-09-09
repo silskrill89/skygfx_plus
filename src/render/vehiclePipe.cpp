@@ -1485,6 +1485,16 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 		dbglog("[VehiclePBR] atomic=%p flags=%X", atomic, flags);
 		dbglog("[VehiclePBR] shaders: VS=%p PS=%p", vehiclePBRVS, VehiclePBR_Modern);
 		dbglog("[VehiclePBR] iCanHasNeoCar=%d iCanHasbuildingPipe=%d", iCanHasNeoCar, iCanHasbuildingPipe);
+		// Env map texture diagnostics
+		extern RwTexture *reflectionTex;
+		extern RwRaster *envFB;
+		if(reflectionTex){
+			RwRaster *r = RwTextureGetRaster(reflectionTex);
+			dbglog("[VehiclePBR] refTex=%p raster=%p %dx%d", reflectionTex, r, r ? r->width : 0, r ? r->height : 0);
+		}else{
+			dbglog("[VehiclePBR] refTex=NULL");
+		}
+		dbglog("[VehiclePBR] envFB=%p %dx%d", envFB, envFB ? envFB->width : 0, envFB ? envFB->height : 0);
 	}
 
 	float colorscale = 1.0f;
@@ -1625,7 +1635,11 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 		float glassFxPS[4] = { 0, 0, fxParams.lightmult, 0 };
 		RwD3D9SetPixelShaderConstant(1, glassFxPS, 1);
 
-		pipeSetTexture(reflectionTex, 1);
+		// Env map on stage 1 — guard against D3D9 feedback loop during sphere render
+		if(!gRenderingSpheremap)
+			pipeSetTexture(reflectionTex, 1);
+		else
+			pipeSetTexture(NULL, 1);
 		RwRenderStateSet(rwRENDERSTATETEXTUREADDRESS, (void*)rwTEXTUREADDRESSWRAP);
 		RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION, (void*)rwALPHATESTFUNCTIONALWAYS);
 		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
@@ -1806,7 +1820,11 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 		IDirect3DDevice9 *dev = d3d9device;
 
 		// Env map on stage 1 (s1 = envMapTex in shader)
-		pipeSetTexture(reflectionTex, 1);
+		// Guard: skip during sphere map render to avoid D3D9 feedback loop
+		if(!gRenderingSpheremap)
+			pipeSetTexture(reflectionTex, 1);
+		else
+			pipeSetTexture(NULL, 1);
 
 		// Reflection mask on stage 2 (RwTexture)
 		pipeSetTexture(CarPipe::reflectionMask, 2);
@@ -1858,6 +1876,25 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 			ambientPS[2] = tcAmbient.blue;
 		}
 		RwD3D9SetPixelShaderConstant(24, ambientPS, 1);
+
+		// PS light constants (c5-c18): sun color/direction + 6 extra directional lights
+		// The VS uploads these to VS registers via uploadLights(), but the PS has its
+		// own independent constant registers. Without these, directCol (c5) and
+		// directDir (c12) are stale/zero → no specular highlights and wrong L vector.
+		// Mirror what the glass path does at lines 1552-1560.
+		{
+		extern RpLight *&pDirect;
+		pipeUploadLightColorForcePS(pDirect, REG_directCol);
+		pipeUploadLightDirectionForcePS(pDirect, REG_directDir);
+		}
+		for(int i = 0; i < 6; i++)
+			if(i < NumExtraDirLightsInWorld && RpLightGetType(pExtraDirectionals[i]) == rpLIGHTDIRECTIONAL){
+				pipeUploadLightColorPS(pExtraDirectionals[i], REG_directCol+i+1);
+				pipeUploadLightDirectionPS(pExtraDirectionals[i], REG_directDir+i+1);
+			}else{
+				pipeUploadZeroPS(REG_directCol+i+1);
+				pipeUploadZeroPS(REG_directDir+i+1);
+			}
 
 		// View matrix rotation for sphere map UV computation (PS c25-c27)
 		// The sphere map is rendered from the camera's viewpoint, so reflection

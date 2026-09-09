@@ -157,30 +157,28 @@ float4 main(PS_INPUT IN) : COLOR
     // Sky contribution: upward-facing surfaces reflect sky color from the top of the sphere map
     float skyBlend = saturate(N.y) * skyParams.w;
     iblBlend = lerp(iblBlend, skyParams.rgb, skyBlend * 0.5);
-    // Clearcoat Fresnel: carcols shininess drives roughness→env intensity mapping
-    // High shininess (shiny paint) = strong reflections at all angles
-    // Low shininess (matte) = roughness kills reflections faster
-    // Replaces split-sum LUT — carcols data IS the LUT
-    // fxParams.y = envData->GetShininess() * 8 * envShininessMult (from carcols)
+    // Clearcoat Fresnel: carcols shininess drives env gloss intensity
+    // fxParams.w = envData->GetShininess() * 8 * envShininessMult — the same carcols
+    // value the VS bakes into IN.envColor.a (which the glass shader reads).
+    // fxParams.y is envPower (≈20) and saturates to 1.0 — it must NOT drive gloss.
     float clearcoatFresnel = SchlickFresnelScalar(NdotV, 0.04);
-    float carcolsShine = saturate(fxParams.y);  // 0..1 normalized carcols shininess
-    float roughnessResponse = lerp(1.0, 0.05, (1.0 - carcolsShine) * (1.0 - glossiness));
-    float envMask = lerp(0.15, 0.50, clearcoatFresnel) * roughnessResponse;
+    float carcolsShine = saturate(fxParams.w);  // 0..1 normalized carcols shininess
+    // Fresnel-weighted gloss strength: subtle face-on, strong at grazing angles.
+    float envIntensity = max(carcolsShine, 0.15) * (0.25 + 0.55 * clearcoatFresnel);
     // Metallic paints boost env reflection — metals are inherently reflective
-    envMask = lerp(envMask, envMask * 1.5, metallicFactor);
+    envIntensity = lerp(envIntensity, envIntensity * 1.5, metallicFactor);
     // Paint tinting: reflection tinted by paint color at normal incidence, white at grazing.
     // Real paint: light passes through clearcoat, reflects off base paint, gets tinted on exit.
     // At grazing angles Fresnel dominates and reflection becomes white (like a mirror).
-    float3 reflTint = lerp(matCol.rgb, float3(1,1,1), envMask * 0.6);
+    float3 reflTint = lerp(matCol.rgb, float3(1,1,1), clearcoatFresnel);
     // Env intensity boost (×2, tunable) — skygfx envCarPS.hlsl: env * lightmult * 2
     const float ENV_BOOST = 2.0;
-    float3 envTerm = iblBlend * envMask * reflTint * ENV_BOOST;
-    // Lerp-replace: at grazing angles, env reflection replaces diffuse (real paint behavior).
-    // Normal incidence: envBlend ≈ envMask (subtle reflection visible through clearcoat).
-    // Grazing: envBlend → 1.0 (full reflection, paint color disappears).
-    // This matches skygfx envCarPS.hlsl: lerp(diffuseLayer, envTerm, saturate(envMask + clearcoatFresnel * k)).
-    float envBlend = saturate(envMask + clearcoatFresnel * 0.5);
-    float3 layer2 = lerp(layer1, envTerm, envBlend);
+    float3 envTerm = iblBlend * reflTint * envIntensity * ENV_BOOST;
+    // ADDITIVE gloss (glass layering): env reflection sits ON TOP of the lit
+    // paint instead of replacing it. Slightly stronger at grazing angles where
+    // the clearcoat catches the world. The old lerp-replace made the paint
+    // vanish into envTerm and read as flat/opaque.
+    float3 layer2 = layer1 + envTerm * (0.5 + 0.5 * clearcoatFresnel);
 
     // ---- Specular: GGX/Smith for direct sun highlight ----
     // glTF KHR_materials_pbrSpecularGlossiness: D_GGX and V_SmithCorrelated
@@ -272,9 +270,9 @@ float4 main(PS_INPUT IN) : COLOR
 
     // ---- COMPOSITE ----
     // layer1 = VS game lighting (ambient + 7 directional × matCol, matches building pipe)
-    // layer2 = lerp-replace: env reflection replaces diffuse at grazing angles (clearcoat behavior)
+    // layer2 = layer1 + additive env gloss (glass-style: env × intensity, added on top)
     // specTotal and rimLight are additive on top
-    float3 color = layer2;  // layer2 already contains lerp(layer1, envTerm, envBlend)
+    float3 color = layer2;
     color += specTotal;                                // specular highlights (base + clearcoat)
     color += rimLight;                                 // Fresnel rim on top of clearcoat
 

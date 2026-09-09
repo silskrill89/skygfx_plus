@@ -28,7 +28,7 @@ CVector &CWeather__WindDir = *(CVector*)(0xC813E0);
 float &CWeather__UnderWaterness = *(float*)(0xC8132C);
 bool &CCutsceneMgr__ms_running = *(bool*)(0xB5F851);
 bool &CMenuManager__m_bMenuActive = *(bool*)(0xBA67AC);
-int &CMenuManager__m_PrefsBrightness = *(int*)(0xBA6780);
+int &CMenuManager__m_PrefsBrightness = *(int*)(0xBA6784);
 int* CGame__currArea = (int*)0xB72914;
 int* CEntryExitManager__ms_exitEnterState = (int*)0x96A7CC;
 

@@ -564,6 +564,16 @@ RenderSphereReflections(void)
 		bFudgeNow = false;
 		sphereRadius = 0.0f;
 
+		// Diagnostic: confirm env map rendered and log envFB state
+		{
+			static int envLogCount = 0;
+			if(envLogCount++ % 300 == 0){
+				dbglog("[EnvMap] RenderSphereReflections done: envFB=%p %dx%d refTex=%p raster=%p",
+					envFB, envFB ? envFB->width : 0, envFB ? envFB->height : 0,
+					reflectionTex, reflectionTex ? RwTextureGetRaster(reflectionTex) : NULL);
+			}
+		}
+
 		if (config->envMapUseLODs) {
 			ms_lowLodDistScale = lowLodDistScale;
 			ms_lodDistScale = lodDistScale;

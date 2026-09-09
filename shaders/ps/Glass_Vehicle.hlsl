@@ -61,9 +61,11 @@ float4 main(PS_INPUT IN) : COLOR
     float3 V_view = float3(dot(V, viewRight), dot(V, viewUp), dot(V, viewFwd));
     float2 envUV = SphereEnvMapUV(R_view, V_view);
     float4 env = tex2D(envMapTex, envUV);
-    // Glass env reflection: boosted from 8% to 18% to make windows less opaque.
-    // Balance between subtle reflections and visible tint.
-    float envIntensity = max(IN.envColor.a, 0.1) * 0.18;
+    // Env sample multiplied by the VS fresnel-weighted shininess (IN.envColor.a).
+    // SINGLE attenuation factor — the old 0.18 pre-scale compounded with the
+    // per-path strength below (0.05-0.20) and killed reflections entirely
+    // (total 1-4%). Fresnel shaping now happens only in the per-path strengths.
+    float envIntensity = max(IN.envColor.a, 0.1);
     float3 envCol = env.rgb * envIntensity;
 
     // Sun contribution
@@ -124,9 +126,9 @@ float4 main(PS_INPUT IN) : COLOR
     float3 glassBase = diff.rgb * IN.color.rgb * diffConservation;
 
     // LAYER 2: Env reflection — glossy glass surface on top of texture
-    // Fresnel-driven: face-on = 5% reflection, grazing = 20% reflection
-    // Real car windows are noticeably reflective at oblique angles
-    float envStrength = lerp(0.05, 0.20, fresnel);
+    // Fresnel-driven: face-on ≈ 15% reflection, grazing ≈ 45% reflection.
+    // This is the ONLY attenuation on the env sample (see envCol above).
+    float envStrength = lerp(0.15, 0.45, fresnel);
     float3 reflLayer = envCol * envStrength;
 
     // Combine: glass texture + subtle reflection (car body shows through via alpha)
