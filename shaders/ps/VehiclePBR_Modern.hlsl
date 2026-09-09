@@ -163,26 +163,22 @@ float4 main(PS_INPUT IN) : COLOR
     // fxParams.y is envPower (≈20) and saturates to 1.0 — it must NOT drive gloss.
     float clearcoatFresnel = SchlickFresnelScalar(NdotV, 0.04);
     float carcolsShine = saturate(fxParams.w);  // 0..1 normalized carcols shininess
-    // Fresnel-weighted gloss strength: subtle face-on, stronger at grazing.
-    // Tuned so additive env reads as a sheen (~5% face-on, ~40-60% grazing) —
-    // the previous 0.25-0.8 × 2.0 range added up to 1.6 of sky light and
-    // desaturated the paint toward white.
-    float envIntensity = max(carcolsShine, 0.12) * (0.10 + 0.35 * clearcoatFresnel);
+    // Gloss strength: visible env reflection at all angles (0.45 base), stronger
+    // at grazing. v3 (0.10 base × 1.5 boost × 0.15 grazing weight) put face-on
+    // env at ~2% — invisible. v1 (0.25-0.8 × 2.0 × 0.5) white-washed dark paint.
+    // This sits between: ~0.2 added face-on on a 0.3 paint, ~0.6 at grazing.
+    float envIntensity = max(carcolsShine, 0.35) * (0.45 + 0.85 * clearcoatFresnel);
     // Metallic paints boost env reflection — metals are inherently reflective
     envIntensity = lerp(envIntensity, envIntensity * 1.5, metallicFactor);
     // Paint tinting: reflection tinted by paint color at normal incidence, white at grazing.
     // Real paint: light passes through clearcoat, reflects off base paint, gets tinted on exit.
     // At grazing angles Fresnel dominates and reflection becomes white (like a mirror).
     float3 reflTint = lerp(matCol.rgb, float3(1,1,1), clearcoatFresnel);
-    // Env boost (×1.5, tunable)
-    const float ENV_BOOST = 1.5;
+    // Env boost (×2, tunable)
+    const float ENV_BOOST = 2.0;
     float3 envTerm = iblBlend * reflTint * envIntensity * ENV_BOOST;
-    // ADDITIVE gloss (glass layering) — bisect result: layer1 (VS-lit paint)
-    // renders correctly alone, so the earlier flat-white wash came from the
-    // additive layers swamping dark paint. Face-on env is now nearly free
-    // (~15% of an already small term); reflections live at grazing angles,
-    // where real paint shows the world anyway (mirror edges).
-    float3 layer2 = layer1 + envTerm * (0.15 + 0.85 * clearcoatFresnel);
+    // ADDITIVE gloss (glass layering) — paint holds color face-on, edges mirror.
+    float3 layer2 = layer1 + envTerm * (0.35 + 0.65 * clearcoatFresnel);
 
     // ---- Specular: GGX/Smith for direct sun highlight ----
     // glTF KHR_materials_pbrSpecularGlossiness: D_GGX and V_SmithCorrelated
