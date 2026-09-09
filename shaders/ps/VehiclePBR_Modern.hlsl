@@ -277,6 +277,12 @@ float4 main(PS_INPUT IN) : COLOR
     color += specTotal;                                // specular highlights (base + clearcoat)
     color += rimLight;                                 // Fresnel rim on top of clearcoat
 
+    // TEMP DEBUG (paint bisect): output ONLY the lit paint (layer1).
+    // If the car shows correct paint + directional shading here, the VS paint
+    // path is fine and env/spec layers are the problem. If it is still a flat
+    // singular color, the VS vertex-color path is broken. Remove when done.
+    return float4(layer1, diff.a);
+
     // Output linear HDR — PostFX TonemapPass handles everything
     return float4(max(color, 0.0), diff.a);
 }

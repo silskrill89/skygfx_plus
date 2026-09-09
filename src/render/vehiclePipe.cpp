@@ -1929,6 +1929,17 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 			dbglog("[VehiclePBR] MESH@frame=%u: surfProps amb=%.2f diff=%.2f spec=%.2f", frame, surfProps.ambient, surfProps.diffuse, surfProps.specular);
 			extern IDirect3DTexture9 *g_normalBufferTex;
 			dbglog("[VehiclePBR] MESH@frame=%u: normalBuf=%p dualPass=%d", frame, g_normalBufferTex, config->dualPassVehicle);
+			// Paint bisect diagnostics: which VS color terms are active
+			dbglog("[VehiclePBR] MESH@frame=%u: bits PRELIT=%d LIGHT=%d MODULATE=%d", frame,
+				!!(flags & rpGEOMETRYPRELIT), !!(flags & rpGEOMETRYLIGHT), !!(flags & rpGEOMETRYMODULATEMATERIALCOLOR));
+			{
+				RwRGBAReal tcDbg = GetTimecycleAmbientPBR();
+				extern RpLight *&pDirect;
+				RwRGBAReal sunDbg; sunDbg.red = 0; sunDbg.green = 0; sunDbg.blue = 0; sunDbg.alpha = 0;
+				if(pDirect) sunDbg = pDirect->color;
+				dbglog("[VehiclePBR] MESH@frame=%u: tcAmb=(%.2f,%.2f,%.2f) sunCol=(%.2f,%.2f,%.2f) nExtra=%d",
+					frame, tcDbg.red, tcDbg.green, tcDbg.blue, sunDbg.red, sunDbg.green, sunDbg.blue, NumExtraDirLightsInWorld);
+			}
 		}
 
 		D3D9RenderDual(config->dualPassVehicle, resEntryHeader, instancedData);
