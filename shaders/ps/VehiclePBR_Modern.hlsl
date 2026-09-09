@@ -167,7 +167,7 @@ float4 main(PS_INPUT IN) : COLOR
     // at grazing. v3 (0.10 base × 1.5 boost × 0.15 grazing weight) put face-on
     // env at ~2% — invisible. v1 (0.25-0.8 × 2.0 × 0.5) white-washed dark paint.
     // This sits between: ~0.2 added face-on on a 0.3 paint, ~0.6 at grazing.
-    float envIntensity = max(carcolsShine, 0.35) * (0.45 + 0.85 * clearcoatFresnel);
+    float envIntensity = max(carcolsShine, 0.75) * (0.55 + 1.1 * clearcoatFresnel);
     // Metallic paints boost env reflection — metals are inherently reflective
     envIntensity = lerp(envIntensity, envIntensity * 1.5, metallicFactor);
     // Paint tinting: reflection tinted by paint color at normal incidence, white at grazing.
@@ -175,10 +175,10 @@ float4 main(PS_INPUT IN) : COLOR
     // At grazing angles Fresnel dominates and reflection becomes white (like a mirror).
     float3 reflTint = lerp(matCol.rgb, float3(1,1,1), clearcoatFresnel);
     // Env boost (×2, tunable)
-    const float ENV_BOOST = 2.0;
+    const float ENV_BOOST = 2.5;
     float3 envTerm = iblBlend * reflTint * envIntensity * ENV_BOOST;
     // ADDITIVE gloss (glass layering) — paint holds color face-on, edges mirror.
-    float3 layer2 = layer1 + envTerm * (0.35 + 0.65 * clearcoatFresnel);
+    float3 layer2 = layer1 + envTerm * (0.5 + 0.5 * clearcoatFresnel);
 
     // ---- Specular: GGX/Smith for direct sun highlight ----
     // glTF KHR_materials_pbrSpecularGlossiness: D_GGX and V_SmithCorrelated
@@ -193,8 +193,8 @@ float4 main(PS_INPUT IN) : COLOR
         float3 F = F_SchlickLH(LdotH, F0);
         specTotal += D * F * Vis * NdotL_sun * sunContrib;
         // Clearcoat specular: white dielectric highlight on top of paint
-        float D_cc = D_GGX(NdotH, 0.05);  // very smooth clearcoat
-        float Vis_cc = V_SmithCorrelated(NdotV, NdotL_sun, 0.05);
+        float D_cc = D_GGX(NdotH, 0.25);  // very smooth clearcoat
+        float Vis_cc = V_SmithCorrelated(NdotV, NdotL_sun, 0.25);
         float3 F_cc = F_SchlickLH(LdotH, float3(0.04, 0.04, 0.04));  // clearcoat F0
         specTotal += D_cc * F_cc * Vis_cc * NdotL_sun * sunContrib * 0.6;
     }
@@ -210,8 +210,8 @@ float4 main(PS_INPUT IN) : COLOR
             float3 F = F_SchlickLH(LdotH, F0);
             specTotal += D * F * Vis * NdotL * lightCol[i].rgb;
             // Clearcoat per-light
-            float D_cc_l = D_GGX(NdotH, 0.05);
-            float Vis_cc_l = V_SmithCorrelated(NdotV, NdotL, 0.05);
+            float D_cc_l = D_GGX(NdotH, 0.25);
+            float Vis_cc_l = V_SmithCorrelated(NdotV, NdotL, 0.25);
             float3 F_cc_l = F_SchlickLH(LdotH, float3(0.04, 0.04, 0.04));
             specTotal += D_cc_l * F_cc_l * Vis_cc_l * NdotL * lightCol[i].rgb * 0.6;
         }
@@ -266,7 +266,9 @@ float4 main(PS_INPUT IN) : COLOR
     // Edge highlight: subtle Fresnel rim catches sun at grazing angles.
     // Reduced from 0.45 — game lighting already has edge detail from VS.
     float rimFresnel = pow(1.0 - saturate(NdotV), 2.0);
-    float3 rimLight = sunContrib * rimFresnel * 0.10;
+    float3 rimLight = sunContrib * rimFresnel * 0.18;
+
+    specTotal *= 1.5;  // visible sun glints
 
     // ---- COMPOSITE ----
     // layer1 = VS game lighting (ambient + 7 directional × matCol, matches building pipe)
