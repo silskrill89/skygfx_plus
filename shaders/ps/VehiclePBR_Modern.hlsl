@@ -156,29 +156,30 @@ float4 main(PS_INPUT IN) : COLOR
     float3 iblBlend = lerp(envRefl, envRefl + iblSample * 0.08, 0.4);
     // Sky contribution: upward-facing surfaces reflect sky color from the top of the sphere map
     float skyBlend = saturate(N.y) * skyParams.w;
-    iblBlend = lerp(iblBlend, skyParams.rgb, skyBlend * 0.5);
+    iblBlend = lerp(iblBlend, skyParams.rgb, skyBlend * 0.3);
     // Clearcoat Fresnel: carcols shininess drives env gloss intensity
     // fxParams.w = envData->GetShininess() * 8 * envShininessMult — the same carcols
     // value the VS bakes into IN.envColor.a (which the glass shader reads).
     // fxParams.y is envPower (≈20) and saturates to 1.0 — it must NOT drive gloss.
     float clearcoatFresnel = SchlickFresnelScalar(NdotV, 0.04);
     float carcolsShine = saturate(fxParams.w);  // 0..1 normalized carcols shininess
-    // Fresnel-weighted gloss strength: subtle face-on, strong at grazing angles.
-    float envIntensity = max(carcolsShine, 0.15) * (0.25 + 0.55 * clearcoatFresnel);
+    // Fresnel-weighted gloss strength: subtle face-on, stronger at grazing.
+    // Tuned so additive env reads as a sheen (~5% face-on, ~40-60% grazing) —
+    // the previous 0.25-0.8 × 2.0 range added up to 1.6 of sky light and
+    // desaturated the paint toward white.
+    float envIntensity = max(carcolsShine, 0.12) * (0.10 + 0.35 * clearcoatFresnel);
     // Metallic paints boost env reflection — metals are inherently reflective
     envIntensity = lerp(envIntensity, envIntensity * 1.5, metallicFactor);
     // Paint tinting: reflection tinted by paint color at normal incidence, white at grazing.
     // Real paint: light passes through clearcoat, reflects off base paint, gets tinted on exit.
     // At grazing angles Fresnel dominates and reflection becomes white (like a mirror).
     float3 reflTint = lerp(matCol.rgb, float3(1,1,1), clearcoatFresnel);
-    // Env intensity boost (×2, tunable) — skygfx envCarPS.hlsl: env * lightmult * 2
-    const float ENV_BOOST = 2.0;
+    // Env boost (×1.5, tunable)
+    const float ENV_BOOST = 1.5;
     float3 envTerm = iblBlend * reflTint * envIntensity * ENV_BOOST;
     // ADDITIVE gloss (glass layering): env reflection sits ON TOP of the lit
-    // paint instead of replacing it. Slightly stronger at grazing angles where
-    // the clearcoat catches the world. The old lerp-replace made the paint
-    // vanish into envTerm and read as flat/opaque.
-    float3 layer2 = layer1 + envTerm * (0.5 + 0.5 * clearcoatFresnel);
+    // paint. Grazing-weighted so face-on stays subtle and edges catch the world.
+    float3 layer2 = layer1 + envTerm * (0.35 + 0.65 * clearcoatFresnel);
 
     // ---- Specular: GGX/Smith for direct sun highlight ----
     // glTF KHR_materials_pbrSpecularGlossiness: D_GGX and V_SmithCorrelated
