@@ -177,9 +177,12 @@ float4 main(PS_INPUT IN) : COLOR
     // Env boost (×1.5, tunable)
     const float ENV_BOOST = 1.5;
     float3 envTerm = iblBlend * reflTint * envIntensity * ENV_BOOST;
-    // ADDITIVE gloss (glass layering): env reflection sits ON TOP of the lit
-    // paint. Grazing-weighted so face-on stays subtle and edges catch the world.
-    float3 layer2 = layer1 + envTerm * (0.35 + 0.65 * clearcoatFresnel);
+    // ADDITIVE gloss (glass layering) — bisect result: layer1 (VS-lit paint)
+    // renders correctly alone, so the earlier flat-white wash came from the
+    // additive layers swamping dark paint. Face-on env is now nearly free
+    // (~15% of an already small term); reflections live at grazing angles,
+    // where real paint shows the world anyway (mirror edges).
+    float3 layer2 = layer1 + envTerm * (0.15 + 0.85 * clearcoatFresnel);
 
     // ---- Specular: GGX/Smith for direct sun highlight ----
     // glTF KHR_materials_pbrSpecularGlossiness: D_GGX and V_SmithCorrelated
@@ -276,12 +279,6 @@ float4 main(PS_INPUT IN) : COLOR
     float3 color = layer2;
     color += specTotal;                                // specular highlights (base + clearcoat)
     color += rimLight;                                 // Fresnel rim on top of clearcoat
-
-    // TEMP DEBUG (paint bisect): output ONLY the lit paint (layer1).
-    // If the car shows correct paint + directional shading here, the VS paint
-    // path is fine and env/spec layers are the problem. If it is still a flat
-    // singular color, the VS vertex-color path is broken. Remove when done.
-    return float4(layer1, diff.a);
 
     // Output linear HDR — PostFX TonemapPass handles everything
     return float4(max(color, 0.0), diff.a);
