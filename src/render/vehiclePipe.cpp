@@ -1933,7 +1933,7 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 
 		if(vehLogThisFrame){
 			RwUInt32 frame = RWSRCGLOBAL(renderFrame);
-			dbglog("[VehiclePBR] MESH@frame=%u: glossiness=%.2f specular=%.2f specTintR=%.2f", frame, glossiness, specular, specularTintR);
+			dbglog("[VehiclePBR] MESH@frame=%u: glossiness=%.2f specular=%.2f specTintR=%.2f carcolsShine=%.2f", frame, glossiness, specular, specularTintR, fxParams.shininess);
 			dbglog("[VehiclePBR] MESH@frame=%u: ambientPS=(%.2f,%.2f,%.2f,%.2f) iblTex=%p", frame, ambientPS[0], ambientPS[1], ambientPS[2], ambientPS[3], g_iblTex);
 			dbglog("[VehiclePBR] MESH@frame=%u: tex=%p matCol=(%.2f,%.2f,%.2f,%.2f) flags=0x%X", frame, material->texture, matColRGBA.red, matColRGBA.green, matColRGBA.blue, matColRGBA.alpha, flags);
 			dbglog("[VehiclePBR] MESH@frame=%u: surfProps amb=%.2f diff=%.2f spec=%.2f", frame, surfProps.ambient, surfProps.diffuse, surfProps.specular);

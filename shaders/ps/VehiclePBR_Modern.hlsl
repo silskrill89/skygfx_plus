@@ -172,18 +172,16 @@ float4 main(PS_INPUT IN) : COLOR
     // at grazing. v3 (0.10 base × 1.5 boost × 0.15 grazing weight) put face-on
     // env at ~2% — invisible. v1 (0.25-0.8 × 2.0 × 0.5) white-washed dark paint.
     // This sits between: ~0.2 added face-on on a 0.3 paint, ~0.6 at grazing.
-    float envIntensity = max(carcolsShine, 0.75) * (0.55 + 1.1 * clearcoatFresnel);
-    // Metallic paints boost env reflection — metals are inherently reflective
-    envIntensity = lerp(envIntensity, envIntensity * 1.5, metallicFactor);
     // Paint tinting: reflection tinted by paint color at normal incidence, white at grazing.
-    // Real paint: light passes through clearcoat, reflects off base paint, gets tinted on exit.
-    // At grazing angles Fresnel dominates and reflection becomes white (like a mirror).
     float3 reflTint = lerp(matCol.rgb, float3(1,1,1), clearcoatFresnel);
-    // Env boost (×2, tunable)
-    const float ENV_BOOST = 2.5;
-    float3 envTerm = iblBlend * reflTint * envIntensity * ENV_BOOST;
-    // ADDITIVE gloss (glass layering) — paint holds color face-on, edges mirror.
-    float3 layer2 = layer1 + envTerm * (0.5 + 0.5 * clearcoatFresnel);
+    float3 envTerm = iblBlend * reflTint * 1.2;
+    // Energy-conserving clearcoat blend (carcols-shade safe):
+    // paint dominates face-on (kr ~0.15), world mirrors at grazing (kr -> ~0.7+).
+    // carcols shininess widens the reflection band for shiny paints.
+    // Pure additive env (previous versions) always lifted/washed the paint.
+    float kr = saturate(clearcoatFresnel * (1.0 + 2.0 * carcolsShine) + 0.05);
+    kr = lerp(kr, saturate(kr * 1.5), metallicFactor);
+    float3 layer2 = lerp(layer1, envTerm, kr);
 
     // ---- Specular: GGX/Smith for direct sun highlight ----
     // glTF KHR_materials_pbrSpecularGlossiness: D_GGX and V_SmithCorrelated
