@@ -1625,32 +1625,7 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 		float glassFxPS[4] = { 0, 0, fxParams.lightmult, 0 };
 		RwD3D9SetPixelShaderConstant(1, glassFxPS, 1);
 
-		// Skip env map binding during sphere map render (feedback loop guard)
-		// Glass: use pre-baked sphere map when available, dynamic fallback otherwise
-		if(!gRenderingSpheremap){
-			if(hasEnv1 && envData && envData->texture)
-				pipeSetTexture(envData->texture, 1);  // Pre-baked sphere map
-			else
-				pipeSetTexture(reflectionTex, 1);  // Dynamic env map fallback
-		}else{
-			pipeSetTexture(NULL, 1);
-		}
-
-		// View matrix rotation for sphere map UV computation (PS c25-c27)
-		// Glass_Vehicle.hlsl reads viewRight/viewUp/viewFwd to transform
-		// reflection vector to view space for SphereEnvMapUV.
-		// Without this, R_view=0 → degenerate UVs → env map returns black.
-		{
-			D3DMATRIX viewMat;
-			RwD3D9GetTransform(D3DTS_VIEW, &viewMat);
-			float viewRot[12] = {
-				viewMat._11, viewMat._12, viewMat._13, 0.0f,
-				viewMat._21, viewMat._22, viewMat._23, 0.0f,
-				viewMat._31, viewMat._32, viewMat._33, 0.0f
-			};
-			RwD3D9SetPixelShaderConstant(25, viewRot, 3);
-		}
-
+		pipeSetTexture(reflectionTex, 1);
 		RwRenderStateSet(rwRENDERSTATETEXTUREADDRESS, (void*)rwTEXTUREADDRESSWRAP);
 		RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION, (void*)rwALPHATESTFUNCTIONALWAYS);
 		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
@@ -1791,22 +1766,11 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 		float noiseScale, edgeBlend;
 		VehShaders_GetPaintPBR(paintType, &specular, &glossiness, &specularTintR, &specularTintG, &specularTintB, &noiseScale, &edgeBlend);
 
-		// Derive shininess from paint glossiness when no MatFX env-map provides it.
-		// PS uses fxParams.y as carcolsShine to drive reflection intensity.
-		// Without this, most vehicle paint gets shininess=0 → invisible reflections.
-		if(fxParams.shininess < 0.01f){
-			fxParams.shininess = glossiness;
-		}
-
 		// Per-mesh variation from material data
 		if(fxParams.shininess > 0.2f){
 			glossiness = min(glossiness + fxParams.shininess * 0.1f, 0.95f);
 			specular = min(specular + fxParams.shininess * 0.1f, 1.0f);
 		}
-
-		// Re-upload fxParams with corrected shininess (initial upload at line ~1756 had stale value)
-		RwD3D9SetVertexShaderConstant(21, &fxParams, 1);
-		RwD3D9SetPixelShaderConstant(1, &fxParams, 1);
 
 		// ================================================================
 		// Unified BRDF: blend paint with per-material surface type
@@ -1842,18 +1806,7 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 		IDirect3DDevice9 *dev = d3d9device;
 
 		// Env map on stage 1 (s1 = envMapTex in shader)
-		// Use pre-baked sphere map (envData->texture) when available — matches
-		// what PS2/Xbox/PC/Spec/Neo/Leeds pipes do. Only fall back to the
-		// dynamically rendered reflectionTex when the material has no env data.
-		// Skip during sphere map render to avoid D3D9 feedback loop.
-		if(!gRenderingSpheremap){
-			if(hasEnv1 && envData && envData->texture)
-				pipeSetTexture(envData->texture, 1);  // Pre-baked sphere map
-			else
-				pipeSetTexture(reflectionTex, 1);  // Dynamic env map fallback
-		}else{
-			pipeSetTexture(NULL, 1);
-		}
+		pipeSetTexture(reflectionTex, 1);
 
 		// Reflection mask on stage 2 (RwTexture)
 		pipeSetTexture(CarPipe::reflectionMask, 2);
@@ -1939,8 +1892,6 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 			dbglog("[VehiclePBR] MESH@frame=%u: surfProps amb=%.2f diff=%.2f spec=%.2f", frame, surfProps.ambient, surfProps.diffuse, surfProps.specular);
 			extern IDirect3DTexture9 *g_normalBufferTex;
 			dbglog("[VehiclePBR] MESH@frame=%u: normalBuf=%p dualPass=%d", frame, g_normalBufferTex, config->dualPassVehicle);
-			dbglog("[VehiclePBR] MESH@frame=%u: fxParams=(%.2f,%.2f,%.2f,%.2f) refTex=%p", frame, fxParams.fresnel, fxParams.power, fxParams.lightmult, fxParams.shininess, reflectionTex);
-			dbglog("[VehiclePBR] MESH@frame=%u: viewRot c25=(%.2f,%.2f,%.2f) c26=(%.2f,%.2f,%.2f) c27=(%.2f,%.2f,%.2f)", frame, viewRot[0], viewRot[1], viewRot[2], viewRot[4], viewRot[5], viewRot[6], viewRot[8], viewRot[9], viewRot[10]);
 		}
 
 		D3D9RenderDual(config->dualPassVehicle, resEntryHeader, instancedData);
