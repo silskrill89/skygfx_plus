@@ -30,7 +30,12 @@ main(VS_INPUT IN)
 	OUT.Texcoord0 = IN.Texcoord0;
 
 	OUT.Color = float4(IN.Color.rgb*isPrelit, 1.0);
-	OUT.Color.xyz += ambient*surfAmb;
+	// AmbienCe floor: SA car materials often carry a near-zero surfaceProps.ambient,
+	// which zeroed the timecycle ambient and left vehicles pure black in daytime
+	// shade. Clamp the ambient reflectivity to a small minimum so shadowed paint
+	// stays dark-but-tinted (peds receive timecycle ambient unscaled, so this keeps
+	// the pipes in step). Materials already at/above the floor are unaffected.
+	OUT.Color.xyz += ambient*max(surfAmb, 0.4);
 	for(int i = 0; i < 7; i++){
 		float l = max(0.0, dot(IN.Normal, -directDir[i]));
 		OUT.Color.xyz += l*directCol[i]*surfDiff;

@@ -58,7 +58,9 @@ float3 SkyHemisphereAmbient(float3 N){
     float2 uv = float2(0.5, saturate(N.y * 0.5 + 0.5));
     float3 skyCol = tex2D(iblTex, uv).rgb;
     if(dot(skyCol, skyCol) <= 1e-6) return float3(0.0, 0.0, 0.0); // unbound/black guard
-    return (skyCol - ambientColor.rgb) * iblAmbient.x;
+    // 0.15 base scale keeps the sky deviation at the LEVEL OF the timecycle ambient
+    // (~tenths) instead of overpowering the surface. iblAmbient.x is the tuning knob.
+    return (skyCol - ambientColor.rgb) * (iblAmbient.x * 0.15);
 }
 
 float whiteNoise(float2 p){
@@ -192,6 +194,10 @@ float4 main(PS_INPUT IN) : COLOR
     // Sky contribution: upward-facing surfaces reflect sky color from the top of the sphere map
     float skyBlend = saturate(N.y) * skyParams.w;
     iblBlend = lerp(iblBlend, skyParams.rgb, skyBlend * 0.3 * LF(5));
+    // Universal sky ambient folded into the REFLECTION/cloud layer (not the global
+    // composite): it tints what the surface mirrors — cloud/sky — and is modulated by
+    // reflectivity (kr) below, instead of washing out the whole car.
+    iblBlend += SkyHemisphereAmbient(N);
     // Clearcoat Fresnel: carcols shininess drives env gloss intensity
     // fxParams.w = envData->GetShininess() * 8 * envShininessMult — the same carcols
     // value the VS bakes into IN.envColor.a (which the glass shader reads).
@@ -316,7 +322,6 @@ float4 main(PS_INPUT IN) : COLOR
     float3 color = layer2;
     color += specTotal;                                // specular highlights (base + clearcoat)
     color += rimLight;                                 // Fresnel rim on top of clearcoat
-    color += SkyHemisphereAmbient(N);                  // universal dynamic-sky ambient
 
     // Output linear HDR — PostFX TonemapPass handles everything
     return float4(max(color, 0.0), diff.a);
