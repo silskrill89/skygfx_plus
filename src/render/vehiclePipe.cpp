@@ -1800,11 +1800,25 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 		float noiseScale, edgeBlend;
 		VehShaders_GetPaintPBR(paintType, &specular, &glossiness, &specularTintR, &specularTintG, &specularTintB, &noiseScale, &edgeBlend);
 
+		// Derive carcols shininess from paint glossiness when the material has no
+		// MatFX env-map flag — true for MOST GTA SA vehicle paint. Without this
+		// the PS carcolsShine collapses to 0 and reflections go invisible.
+		// (Plan: docs/superpowers/plans/2026-09-08-vehicle-reflection-fix.md —
+		// this fallback was specified but never applied.)
+		if(fxParams.shininess < 0.01f){
+			fxParams.shininess = glossiness;
+		}
+
 		// Per-mesh variation from material data
 		if(fxParams.shininess > 0.2f){
 			glossiness = min(glossiness + fxParams.shininess * 0.1f, 0.95f);
 			specular = min(specular + fxParams.shininess * 0.1f, 1.0f);
 		}
+
+		// Re-upload fxParams now that shininess is corrected — the upload earlier
+		// in this block carried shininess=0 for most paint materials.
+		RwD3D9SetVertexShaderConstant(21, &fxParams, 1);
+		RwD3D9SetPixelShaderConstant(1, &fxParams, 1);
 
 		// ================================================================
 		// Unified BRDF: blend paint with per-material surface type
