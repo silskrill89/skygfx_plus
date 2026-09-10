@@ -94,3 +94,7 @@
 
 // Velocity
 #define IDR_VELOCITYRECONSTRUCT     252
+
+// Unified tonemap (frame-adaptive exposure)
+#define IDR_LUMINANCEREDUCE         253
+#define IDR_LUMINANCEADAPT          254

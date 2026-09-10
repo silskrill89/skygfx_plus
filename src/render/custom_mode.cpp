@@ -149,6 +149,13 @@ CustomMode_ApplyDefaults(Config *c)
 	c->envSpecularityMult = 1.0f;
 	c->envPower = 128.0f;
 	c->envFresnel = 0.95f;
+	c->vehEnvIntensity = 1.0f;
+	c->vehChromeEnvThreshold = 0.0f;
+	c->tonemapAutoExposure = 1;
+	c->tonemapAdaptSpeed = 0.12f;
+	c->tonemapKeyStrength = 1.0f;
+	c->tonemapMinExposure = 0.5f;
+	c->tonemapMaxExposure = 2.0f;
 }
 
 const PresetConfig*

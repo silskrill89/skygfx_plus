@@ -404,6 +404,146 @@ struct Grade
 	float r, g, b, a;
 };
 void *gradingPS, *contrastPS, *tonemapPassPS;
+void *luminanceReducePS, *luminanceAdaptPS;
+
+// --- Unified tonemap: frame-adaptive exposure resources ---
+// 8x8 luminance measure target + two 1x1 temporal eye-adaptation targets.
+// Allocated lazily, released in ReleaseDefaultPoolResources().
+static IDirect3DTexture9 *g_lumaMeasTex = NULL;
+static IDirect3DSurface9 *g_lumaMeasSurf = NULL;
+static IDirect3DTexture9 *g_lumaAdaptTexA = NULL;
+static IDirect3DSurface9 *g_lumaAdaptSurfA = NULL;
+static IDirect3DTexture9 *g_lumaAdaptTexB = NULL;
+static IDirect3DSurface9 *g_lumaAdaptSurfB = NULL;
+static int g_lumaAdaptFlip = 0;   // 0 = current A (prev B), 1 = current B (prev A)
+
+// Lazily allocate the luminance measure/adapt targets. Returns true if ready.
+static bool EnsureLuminanceTargets(void)
+{
+	if(g_lumaMeasTex && g_lumaAdaptTexA && g_lumaAdaptTexB)
+		return true;
+	IDirect3DDevice9 *dev = d3d9device;
+	if(!dev || !luminanceReducePS || !luminanceAdaptPS)
+		return false;
+
+	// A16B16G16R16F is a linear floating-point target (no sRGB decode).
+	if(!g_lumaMeasTex){
+		if(FAILED(dev->CreateTexture(8, 8, 1, D3DUSAGE_RENDERTARGET, D3DFMT_A16B16G16R16F, D3DPOOL_DEFAULT, &g_lumaMeasTex, NULL))){
+			dbglog("[Tonemap] luma measure RT create FAILED");
+			return false;
+		}
+		g_lumaMeasTex->GetSurfaceLevel(0, &g_lumaMeasSurf);
+	}
+	if(!g_lumaAdaptTexA){
+		if(FAILED(dev->CreateTexture(1, 1, 1, D3DUSAGE_RENDERTARGET, D3DFMT_A16B16G16R16F, D3DPOOL_DEFAULT, &g_lumaAdaptTexA, NULL))){
+			dbglog("[Tonemap] luma adapt RT A create FAILED");
+			return false;
+		}
+		g_lumaAdaptTexA->GetSurfaceLevel(0, &g_lumaAdaptSurfA);
+	}
+	if(!g_lumaAdaptTexB){
+		if(FAILED(dev->CreateTexture(1, 1, 1, D3DUSAGE_RENDERTARGET, D3DFMT_A16B16G16R16F, D3DPOOL_DEFAULT, &g_lumaAdaptTexB, NULL))){
+			dbglog("[Tonemap] luma adapt RT B create FAILED");
+			return false;
+		}
+		g_lumaAdaptTexB->GetSurfaceLevel(0, &g_lumaAdaptSurfB);
+	}
+	return true;
+}
+
+// Render one fullscreen pass into a raw D3D9 target using a scene raster or an
+// explicit stage-0 texture. Mirrors the proven DrawNormalBuffer idiom.
+static void RenderLumaPass(IDirect3DSurface9 *dst, int w, int h,
+                           void *ps, RwRaster *sceneRaster, IDirect3DTexture9 *tex0)
+{
+	IDirect3DDevice9 *dev = d3d9device;
+	if(!dev || !dst || !ps)
+		return;
+
+	IDirect3DSurface9 *oldRT = NULL;
+	IDirect3DSurface9 *oldDS = NULL;
+	D3DVIEWPORT9 oldVP;
+	dev->GetRenderTarget(0, &oldRT);
+	dev->GetDepthStencilSurface(&oldDS);
+	dev->GetViewport(&oldVP);
+
+	dev->SetRenderTarget(0, dst);
+	dev->SetDepthStencilSurface(NULL);
+	D3DVIEWPORT9 vp = { 0, 0, (DWORD)w, (DWORD)h, 0.0f, 1.0f };
+	dev->SetViewport(&vp);
+
+	if(sceneRaster){
+		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)sceneRaster);
+		dev->SetTexture(0, NULL);
+	} else if(tex0){
+		dev->SetTexture(0, tex0);
+		dev->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+		dev->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+		dev->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+		dev->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+	}
+
+	CPostEffects::ImmediateModeRenderStatesStore();
+	CPostEffects::ImmediateModeRenderStatesSet();
+	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
+	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
+	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
+	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
+	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
+
+	overrideIm2dPixelShader = ps;
+	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
+	overrideIm2dPixelShader = nil;
+
+	CPostEffects::ImmediateModeRenderStatesReStore();
+
+	// Raw SetTexture bypasses RW's render-state cache; explicitly clear the cached
+	// texture-raster too so the next pass reliably rebinds stage 0 (otherwise the
+	// tonemap pass samples a NULL stage 0 and the whole frame goes black).
+	dev->SetTexture(0, NULL);
+	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)NULL);
+
+	dev->SetViewport(&oldVP);
+	dev->SetRenderTarget(0, oldRT);
+	dev->SetDepthStencilSurface(oldDS);
+	if(oldRT) oldRT->Release();
+	if(oldDS) oldDS->Release();
+}
+
+// Measure the current graded frame, run temporal eye adaptation, and return the
+// adapt texture to bind on the tonemap pass (or NULL on failure).
+static IDirect3DTexture9 *RunFrameExposure(float adaptSpeed)
+{
+	if(!EnsureLuminanceTargets())
+		return NULL;
+
+	// 1) Full-res graded frame -> 8x8 luminance measure
+	RenderLumaPass(g_lumaMeasSurf, 8, 8, luminanceReducePS,
+	               CPostEffects::pRasterFrontBuffer, NULL);
+
+	// 2) 8x8 measure + previous 1x1 -> current 1x1 eye adaptation
+	IDirect3DTexture9 *curTex  = g_lumaAdaptFlip ? g_lumaAdaptTexB : g_lumaAdaptTexA;
+	IDirect3DSurface9 *curSurf = g_lumaAdaptFlip ? g_lumaAdaptSurfB : g_lumaAdaptSurfA;
+	IDirect3DTexture9 *prevTex = g_lumaAdaptFlip ? g_lumaAdaptTexA : g_lumaAdaptTexB;
+
+	IDirect3DDevice9 *dev = d3d9device;
+	if(dev){
+		dev->SetTexture(0, g_lumaMeasTex);
+		dev->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+		dev->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+		dev->SetTexture(1, prevTex);
+		dev->SetSamplerState(1, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+		dev->SetSamplerState(1, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+	}
+	float adaptP[4] = { adaptSpeed, 0.0f, 0.0f, 0.0f };
+	RwD3D9SetPixelShaderConstant(0, adaptP, 1);
+
+	RenderLumaPass(curSurf, 1, 1, luminanceAdaptPS, NULL, g_lumaMeasTex);
+	if(dev) dev->SetTexture(1, NULL);
+
+	g_lumaAdaptFlip ^= 1;
+	return curTex;
+}
 #define NUMHOURS 8
 #define NUMWEATHERS 23
 #define EXTRASTART 21
@@ -1284,6 +1424,17 @@ CPostEffects::ColourFilter_Modern(RwRGBA rgba1, RwRGBA rgba2)
 	// Copy graded linear output to pRasterFrontBuffer for tonemap input
 	UpdateFrontBuffer();
 
+	// --- Unified tonemap: measure the graded frame for adaptive exposure ---
+	// timecyc supplies COLOUR (pass 1 above); the rendered frame supplies
+	// BRIGHTNESS here, so exposure is frame-consistent across all pipes.
+	// Only runs when the feature is enabled; otherwise the legacy timecyc-only
+	// exposure path below is used unchanged.
+	bool autoExposureOn = (config && config->tonemapAutoExposure && luminanceReducePS && luminanceAdaptPS);
+	float adaptSpeed = config ? config->tonemapAdaptSpeed : 0.12f;
+	IDirect3DTexture9 *frameLumaTex = autoExposureOn ? RunFrameExposure(adaptSpeed) : NULL;
+	if(autoExposureOn && !frameLumaTex)
+		autoExposureOn = false;
+
 	// Pass 2: Hable/Uncharted 2 filmic tonemap + sRGB gamma encode
 	if(tonemapPassPS){
 		// Re-setup render states for tonemap pass (reads pRasterFrontBuffer)
@@ -1347,7 +1498,12 @@ CPostEffects::ColourFilter_Modern(RwRGBA rgba1, RwRGBA rgba2)
 		float carcolsAdapt = 0.95f + envMult * 0.05f;
 		// Bright sun → slightly less exposure (prevent highlight blowout)
 		float sunDampen = 1.0f - max(0.0f, min(0.08f, sunBright * 0.05f));
-		exposure = baseExposure * sceneExposure * carcolsAdapt * sunDampen * garageDampen;
+		// Mood exposure (prefs brightness + carcols + sun + garage). When
+		// auto-exposure is on, the frame-derived term inside TonemapPass supplies
+		// brightness, so the timecyc reciprocal is dropped here (no double-apply).
+		exposure = baseExposure * carcolsAdapt * sunDampen * garageDampen;
+		if(!autoExposureOn)
+			exposure *= sceneExposure;
 
 		// Interior: timecycle encodes the correct mood, no extra dampening
 
@@ -1392,22 +1548,39 @@ CPostEffects::ColourFilter_Modern(RwRGBA rgba1, RwRGBA rgba2)
 				exposure, toeStrength, blackLift, gradeContrast, gradeBrightness, gradeLift, gradeCurve);
 		}
 
-		// Pack into c5: {exposure, toeStrength, sceneLuma, flags}
-		// flags: bit0=isInterior, bit1=isCutscene
-		float tonemapP[4] = { exposure, toeStrength, sceneLuma, (isInterior ? 1.0f : 0.0f) + (isCutscene ? 2.0f : 0.0f) };
+		// Pack into c5: {exposure, toeStrength, sceneLuma, autoExposureFlag}
+		// c5.w is the frame-adaptive exposure flag read by TonemapPass.
+		float tonemapP[4] = { exposure, toeStrength, sceneLuma, autoExposureOn ? 1.0f : 0.0f };
 		RwD3D9SetPixelShaderConstant(5, tonemapP, 1);
 
 		// Pack into c6: {brightness, contrast, lift, curveBlend} — all timecycle-driven
 		float gradeP[4] = { gradeBrightness, gradeContrast, gradeLift, gradeCurve };
 		RwD3D9SetPixelShaderConstant(6, gradeP, 1);
 
-		// Pack into c7: {blackLift, 0, 0, 0} — Hable curve black-level lift
-		float blackP[4] = { blackLift, 0.0f, 0.0f, 0.0f };
+		// Pack into c7: {blackLift, minExposure, maxExposure, keyStrength}
+		// The auto-exposure clamp + key blend are only read when c5.w >= 0.5.
+		float blackP[4] = {
+			blackLift,
+			autoExposureOn ? (config ? config->tonemapMinExposure : 0.5f) : 0.0f,
+			autoExposureOn ? (config ? config->tonemapMaxExposure : 2.0f) : 0.0f,
+			autoExposureOn ? (config ? config->tonemapKeyStrength : 1.0f) : 0.0f
+		};
 		RwD3D9SetPixelShaderConstant(7, blackP, 1);
+
+		// Bind the frame luminance (s1) for frame-adaptive exposure.
+		IDirect3DDevice9 *cfDev = d3d9device;
+		if(autoExposureOn && frameLumaTex && cfDev){
+			cfDev->SetTexture(1, frameLumaTex);
+			cfDev->SetSamplerState(1, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+			cfDev->SetSamplerState(1, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+			cfDev->SetSamplerState(1, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+			cfDev->SetSamplerState(1, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+		}
 
 		overrideIm2dPixelShader = tonemapPassPS;
 		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
 		overrideIm2dPixelShader = nil;
+		if(cfDev) cfDev->SetTexture(1, NULL);
 	}
 
 	// Restore all render states (match ColourFilter_PC pattern + FOG=TRUE)
@@ -2291,6 +2464,15 @@ void ReleaseDefaultPoolResources(void)
 	if(g_pipeChainSurfA){ g_pipeChainSurfA->Release(); g_pipeChainSurfA = NULL; }
 	if(g_pipeChainTexB){ g_pipeChainTexB->Release(); g_pipeChainTexB = NULL; }
 	if(g_pipeChainSurfB){ g_pipeChainSurfB->Release(); g_pipeChainSurfB = NULL; }
+
+	// Unified tonemap luminance targets (D3DPOOL_DEFAULT)
+	if(g_lumaMeasTex){ g_lumaMeasTex->Release(); g_lumaMeasTex = NULL; }
+	if(g_lumaMeasSurf){ g_lumaMeasSurf->Release(); g_lumaMeasSurf = NULL; }
+	if(g_lumaAdaptTexA){ g_lumaAdaptTexA->Release(); g_lumaAdaptTexA = NULL; }
+	if(g_lumaAdaptSurfA){ g_lumaAdaptSurfA->Release(); g_lumaAdaptSurfA = NULL; }
+	if(g_lumaAdaptTexB){ g_lumaAdaptTexB->Release(); g_lumaAdaptTexB = NULL; }
+	if(g_lumaAdaptSurfB){ g_lumaAdaptSurfB->Release(); g_lumaAdaptSurfB = NULL; }
+	g_lumaAdaptFlip = 0;
 
 	// RW rasters are managed by RW, not our responsibility
 
