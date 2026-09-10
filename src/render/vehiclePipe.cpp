@@ -1605,6 +1605,13 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 			RwD3D9SetPixelShaderConstant(22, glassP, 1);
 			float lightP[4] = { 1.0f, isTaillight ? 1.5f : 1.2f, 0.0f, 0.0f };
 			RwD3D9SetPixelShaderConstant(23, lightP, 1);
+			// Diagnostic: which path/tint the light mesh actually took
+			{
+				static int lgtLog = 0;
+				if(lgtLog++ % 300 == 0)
+					dbglog("[VehLight] frame=%u tex='%s' head=%d tail=%d tint=(%.2f,%.2f,%.2f) alpha=%d",
+						RWSRCGLOBAL(renderFrame), texName ? texName : "", isHeadlight, isTaillight, ltR, ltG, ltB, material->color.alpha);
+			}
 		}else{
 			float gtR, gtG, gtB, gtStr;
 			VehShaders_GetGlassTint(modelIndex, &gtR, &gtG, &gtB, &gtStr);
@@ -1613,6 +1620,15 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 			RwD3D9SetPixelShaderConstant(22, glassP, 1);
 			float lightP[4] = { 0.0f, 0.0f, gtStr, 0.0f };
 			RwD3D9SetPixelShaderConstant(23, lightP, 1);
+			// Diagnostic: flag light-looking textures that were classified GLASS
+			// (they'd get the window tint — the coupling we're hunting)
+			{
+				static int glsLog = 0;
+				bool looksLight = texName && (strstr(texName, "light") || strstr(texName, "Light"));
+				if(looksLight && glsLog++ % 300 == 0)
+					dbglog("[VehGlass] frame=%u GLASS-CLASSIFIED-LIGHT tex='%s' alpha=%d tint=(%.2f,%.2f,%.2f)",
+						RWSRCGLOBAL(renderFrame), texName, material->color.alpha, gtR, gtG, gtB);
+			}
 		}
 
 		pipeUploadMatCol(flags, material, REG_matCol);
@@ -1630,7 +1646,11 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 		RwD3D9SetVertexShaderConstant(REG_surfProps, &surfProps, 1);
 		RwD3D9SetPixelShaderConstant(0, &surfProps, 1);
 
-		float glassFxVS[4] = { config->envFresnel, 0, 0, config->envPower };
+		// VS c21 = {fresnel, 0, 0, shininess}. The VS multiplies its env fresnel
+		// rim by .w (EnvColor.a) and the glass/lights PS reads that as env
+		// intensity. Uploading envPower (~20) here blew glass/lights out to white;
+		// a shininess-scale 1.0 keeps EnvColor.a in the 0..1 range.
+		float glassFxVS[4] = { config->envFresnel, 0, 0, 1.0f };
 		RwD3D9SetVertexShaderConstant(21, glassFxVS, 1);
 		float glassFxPS[4] = { 0, 0, fxParams.lightmult, 0 };
 		RwD3D9SetPixelShaderConstant(1, glassFxPS, 1);

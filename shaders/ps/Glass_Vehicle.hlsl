@@ -61,11 +61,9 @@ float4 main(PS_INPUT IN) : COLOR
     float3 V_view = float3(dot(V, viewRight), dot(V, viewUp), dot(V, viewFwd));
     float2 envUV = SphereEnvMapUV(R_view, V_view);
     float4 env = tex2D(envMapTex, envUV);
-    // Env sample multiplied by the VS fresnel-weighted shininess (IN.envColor.a).
-    // SINGLE attenuation factor — the old 0.18 pre-scale compounded with the
-    // per-path strength below (0.05-0.20) and killed reflections entirely
-    // (total 1-4%). Fresnel shaping now happens only in the per-path strengths.
-    float envIntensity = max(IN.envColor.a, 0.1);
+    // Clamp guards against a mis-scaled VS shininess (envPower in the .w slot)
+    // blowing the gloss to white — the env sample would otherwise be ×20.
+    float envIntensity = clamp(IN.envColor.a, 0.1, 1.5);
     float3 envCol = env.rgb * envIntensity;
 
     // Sun contribution
