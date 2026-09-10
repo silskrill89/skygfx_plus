@@ -560,11 +560,16 @@ float4 main_building(PS_INPUT_BUILDING IN) : COLOR
         }
     }
 
-    // IBL (ambient) — fallback to flat ambient when iblTex not bound
+    // IBL (sky ambient). The sky capture is blue; a FLAT add tinted every building
+    // and washed out shadowed faces — the "permanent blue tinge". Vehicles/peds get
+    // their ambient solely from timecycle (baked into IN.color by the VS), so weight
+    // the sky term by how lit the surface is: sun-facing/grazing faces pick up a hint
+    // of sky, shadowed faces stay dark. If the cubemap is unbound (SM3.0 returns
+    // black) add nothing — baseColor already carries the shared timecycle ambient.
     float2 iblUV = N.xy * 0.5 + 0.5;
     float3 iblSample = tex2D(iblTex, iblUV).rgb;
-    // SM3.0 returns black for unbound textures — use ambient as fill
-    float3 ibl = (dot(iblSample, iblSample) > 1e-6) ? iblSample * 0.15 : baseColor * surfProps.x * 0.5;
+    float iblLit = saturate(NdotL * 0.7 + 0.3);
+    float3 ibl = (dot(iblSample, iblSample) > 1e-6) ? iblSample * (0.08 * iblLit) : float3(0.0, 0.0, 0.0);
 
     // Composite: vertex color AS diffuse (VS already baked ambient + directional),
     // plus PBR specular and IBL for per-pixel detail.
