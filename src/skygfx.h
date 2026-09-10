@@ -611,6 +611,13 @@ struct Config {
 	// Auto-exposure clamp bounds (0.2-4.0, defaults 0.5 / 2.0).
 	float tonemapMinExposure;
 	float tonemapMaxExposure;
+
+	// Universal dynamic-sky hemisphere ambient weight (0=off, 0.5 default, 1=full).
+	// Samples the per-frame DynamicSky capture by surface normal and adds the
+	// ZERO-CENTERED deviation from the flat timecycle ambient (already baked into
+	// vertex color) so buildings/vehicles share one ambient PBR timeline with no
+	// double-ambient or global brightening. Set 0 to reproduce the previous look.
+	float pbrIblAmbientWeight;
 };
 static_assert(offsetof(Config, version) == 0, "pinned: asm reads in main.cpp");
 static_assert(offsetof(Config, fixGrassPlacement) == 8, "pinned: fixSeed asm in main.cpp");

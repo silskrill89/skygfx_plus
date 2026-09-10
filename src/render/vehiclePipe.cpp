@@ -1949,6 +1949,10 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 		}
 		RwD3D9SetPixelShaderConstant(24, ambientPS, 1);
 
+		// Universal dynamic-sky ambient weight (PS c20) — shared with the building path.
+		float iblAmbient[4] = { config->pbrIblAmbientWeight, 0.0f, 0.0f, 0.0f };
+		RwD3D9SetPixelShaderConstant(20, iblAmbient, 1);
+
 		// PS light constants (c5-c18): sun color/direction + 6 extra directional lights
 		// The VS uploads these to VS registers via uploadLights(), but the PS has its
 		// own independent constant registers. Without these, directCol (c5) and

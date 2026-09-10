@@ -150,6 +150,7 @@ CustomMode_ApplyDefaults(Config *c)
 	c->envPower = 128.0f;
 	c->envFresnel = 0.95f;
 	c->vehEnvIntensity = 1.0f;
+	c->pbrIblAmbientWeight = 0.5f;
 	c->vehChromeEnvThreshold = 0.0f;
 	c->tonemapAutoExposure = 1;
 	c->tonemapAdaptSpeed = 0.12f;

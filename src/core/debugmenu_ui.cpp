@@ -32,6 +32,7 @@ extern bool iCanHasNeoDrops;
 	X(envFresnel)			\
 	X(vehEnvIntensity)		\
 	X(vehChromeEnvThreshold)	\
+	X(pbrIblAmbientWeight)		\
 	X(tonemapAutoExposure)	\
 	X(tonemapAdaptSpeed)	\
 	X(tonemapKeyStrength)	\
@@ -211,6 +212,7 @@ DebugMenuEntrySetWrap(menu.buildingPipe, true);
 		menu.envFresnel = DebugMenuAddVar("SkyGFX|Misc", "Env Car Fresnel", &config->envFresnel, nil, 0.1f, 0.0f, 10.0f);
 		menu.vehEnvIntensity = DebugMenuAddVar("SkyGFX|Misc", "Env Reflection Intensity", &config->vehEnvIntensity, nil, 0.1f, 0.0f, 10.0f);
 		menu.vehChromeEnvThreshold = DebugMenuAddVar("SkyGFX|Misc", "Chrome Env Threshold", &config->vehChromeEnvThreshold, nil, 0.1f, 0.0f, 10.0f);
+		menu.pbrIblAmbientWeight = DebugMenuAddVar("SkyGFX|Misc", "IBL Ambient Weight", &config->pbrIblAmbientWeight, nil, 0.05f, 0.0f, 2.0f);
 		menu.tonemapAutoExposure = DebugMenuAddVarBool32("SkyGFX|Misc", "Frame-adaptive Tonemap", (int32*)&config->tonemapAutoExposure, nil);
 		menu.tonemapAdaptSpeed = DebugMenuAddVar("SkyGFX|Misc", "Tonemap Adapt Speed", &config->tonemapAdaptSpeed, nil, 0.01f, 0.01f, 1.0f);
 		menu.tonemapKeyStrength = DebugMenuAddVar("SkyGFX|Misc", "Tonemap Key Strength", &config->tonemapKeyStrength, nil, 0.05f, 0.0f, 1.0f);
@@ -534,6 +536,7 @@ void DrawUnifiedDebugMenu(IDirect3DDevice9 *device)
 					ImGui::SliderFloat("Env Fresnel", &config->envFresnel, 0.0f, 10.0f);
 					ImGui::SliderFloat("Env Intensity", &config->vehEnvIntensity, 0.0f, 10.0f);
 					ImGui::SliderFloat("Chrome Env Threshold", &config->vehChromeEnvThreshold, 0.0f, 10.0f);
+					ImGui::SliderFloat("IBL Ambient Weight", &config->pbrIblAmbientWeight, 0.0f, 2.0f);
 					ImGui::Checkbox("Frame-adaptive Tonemap", RB(config->tonemapAutoExposure));
 					ImGui::SliderFloat("Tonemap Adapt Speed", &config->tonemapAdaptSpeed, 0.01f, 1.0f);
 					ImGui::SliderFloat("Tonemap Key Strength", &config->tonemapKeyStrength, 0.0f, 1.0f);

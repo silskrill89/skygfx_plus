@@ -727,6 +727,25 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 	float ambientPS[4] = { buildingAmbient.red, buildingAmbient.green, buildingAmbient.blue, 0.0f };
 	RwD3D9SetPixelShaderConstant(24, ambientPS, 1);
 
+	// Universal dynamic-sky ambient weight (PS c20) — shared with the vehicle path.
+	float iblAmbient[4] = { config->pbrIblAmbientWeight, 0.0f, 0.0f, 0.0f };
+	RwD3D9SetPixelShaderConstant(20, iblAmbient, 1);
+
+	// Bind the dynamic-sky IBL capture to stage 3 (raw D3D9, same as the proven
+	// vehicle path). Without this, main_building's iblTex sample reads stale/black
+	// state. Stage 0 stays RW-cached, so no rwRENDERSTATETEXTURERASTER resync needed.
+	{
+		extern IDirect3DTexture9 *g_iblTex;
+		IDirect3DDevice9 *dev = d3d9device;
+		if(dev && g_iblTex){
+			dev->SetTexture(3, g_iblTex);
+			dev->SetSamplerState(3, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+			dev->SetSamplerState(3, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+			dev->SetSamplerState(3, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+			dev->SetSamplerState(3, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+		}
+	}
+
 	BuildingRenderState rs;
 	buildingPipe_saveRenderState(&rs);
 
