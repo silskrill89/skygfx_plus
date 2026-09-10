@@ -98,12 +98,13 @@ float4 main(PS_INPUT IN) : COLOR
         // so alpha MUST be 1.0 to prevent see-through/culling bug
         float3 interior = diff.rgb * lightBoost * lightTint;
 
-        // LAYER 2: Glossy glass cover ON TOP of the opaque lens
-        // Subtle env reflection: face-on = 0%, grazing = 15%
-        float3 glossLayer = envCol * fresnel * 0.15;
+        // LAYER 2: Glossy cover glass ON TOP of the opaque lens.
+        // Tinted by the lens colour — untinted white env/sun gloss washed the
+        // lens (and the whole light) toward white; the cover must stay in hue.
+        float3 glossLayer = envCol * lightTint * fresnel * 0.15;
 
-        // LAYER 3: Sun specular highlight on the glass cover
-        float3 glossSpec = sunContrib * 0.20;
+        // LAYER 3: Sun specular highlight on the cover glass (lens-tinted too)
+        float3 glossSpec = sunContrib * lightTint * 0.20;
 
         // Composite: opaque interior + gloss overlay on top
         float3 color = interior + glossLayer + glossSpec;

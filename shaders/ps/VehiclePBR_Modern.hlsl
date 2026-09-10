@@ -42,11 +42,19 @@ float4 skyParams    : register(c28); // xyz=skyTop color (0-1), w=skyReflect str
 // Forward+ clustered lights
 sampler2D clusterTex : register(s5);   // 128x128 RGBA8 tile light index texture
 float4 clusterParams : register(c45);  // (gridOffsetX, gridOffsetZ, tileSize, lightCount)
+float4 layerCfg   : register(c46);  // x = vehPBRLayers layer bitmask
 float4 clusterLightPos[8] : register(c29);  // (pos.x, pos.y, pos.z, radius) per light
 float4 clusterLightCol[8] : register(c37);  // (col.r*intensity, col.g*intensity, col.b*intensity, 0) per light
 
 float whiteNoise(float2 p){
     return frac(sin(dot(p, float2(12.9898, 78.233))) * 43758.5453);
+}
+
+// PBR layer toggle decode: 1 when the given bit is set in c46.x, else 0.
+// bit0=base,1=env,2=spec,3=rim,4=ibl,5=sky,6=clearcoat,7=normalbuf
+float LF(float bit){
+    float v = floor(layerCfg.x / exp2(bit));
+    return frac(v * 0.5) * 2.0;
 }
 
 
@@ -87,7 +95,7 @@ float4 main(PS_INPUT IN) : COLOR
 
     // Blend with screen-space normal (if available)
     // ambientColor.w > 0 means normal buffer is bound and valid
-    if(ambientColor.w > 0.5){
+    if(LF(7) > 0.5 && ambientColor.w > 0.5){
         float3 ssNormal = tex2D(normalBufTex, IN.texcoord0).rgb * 2.0 - 1.0;
         if(dot(ssNormal, ssNormal) > 0.25)
             N = normalize(lerp(N, ssNormal, 0.3));
@@ -136,7 +144,7 @@ float4 main(PS_INPUT IN) : COLOR
     // Ambient + 7 directional lights baked into IN.color.rgb by the VS.
     // PBR specular and env reflection layer ON TOP of game-lit base.
     // Matches building pipe approach (main_building line 366).
-    float3 layer1 = baseColor;
+    float3 layer1 = baseColor * LF(0);
 
     // Sun direction for specular (from PS c12, same as buildings)
     float3 sunContrib = directCol.rgb;
@@ -158,10 +166,10 @@ float4 main(PS_INPUT IN) : COLOR
     float3 envRefl = tex2D(envMapTex, envReflUV).rgb;
     float3 iblSample = tex2D(iblTex, envReflUV).rgb;
     // Blend env with subtle IBL tint for depth
-    float3 iblBlend = lerp(envRefl, envRefl + iblSample * 0.08, 0.4);
+    float3 iblBlend = lerp(envRefl, envRefl + iblSample * 0.08 * LF(4), 0.4);
     // Sky contribution: upward-facing surfaces reflect sky color from the top of the sphere map
     float skyBlend = saturate(N.y) * skyParams.w;
-    iblBlend = lerp(iblBlend, skyParams.rgb, skyBlend * 0.3);
+    iblBlend = lerp(iblBlend, skyParams.rgb, skyBlend * 0.3 * LF(5));
     // Clearcoat Fresnel: carcols shininess drives env gloss intensity
     // fxParams.w = envData->GetShininess() * 8 * envShininessMult — the same carcols
     // value the VS bakes into IN.envColor.a (which the glass shader reads).
@@ -179,7 +187,7 @@ float4 main(PS_INPUT IN) : COLOR
     // paint dominates face-on (kr ~0.15), world mirrors at grazing (kr -> ~0.7+).
     // carcols shininess widens the reflection band for shiny paints.
     // Pure additive env (previous versions) always lifted/washed the paint.
-    float kr = saturate(clearcoatFresnel * (1.0 + 2.0 * carcolsShine) + 0.05);
+    float kr = saturate(clearcoatFresnel * (1.0 + 2.0 * carcolsShine) + 0.05) * LF(1);
     kr = lerp(kr, saturate(kr * 1.5), metallicFactor);
     float3 layer2 = lerp(layer1, envTerm, kr);
 
@@ -199,7 +207,7 @@ float4 main(PS_INPUT IN) : COLOR
         float D_cc = D_GGX(NdotH, 0.25);  // very smooth clearcoat
         float Vis_cc = V_SmithCorrelated(NdotV, NdotL_sun, 0.25);
         float3 F_cc = F_SchlickLH(LdotH, float3(0.04, 0.04, 0.04));  // clearcoat F0
-        specTotal += D_cc * F_cc * Vis_cc * NdotL_sun * sunContrib * 0.6;
+        specTotal += D_cc * F_cc * Vis_cc * NdotL_sun * sunContrib * 0.6 * LF(6);
     }
     for(int i = 0; i < 6; i++){
         float3 Ll = -lightDir[i];
@@ -216,7 +224,7 @@ float4 main(PS_INPUT IN) : COLOR
             float D_cc_l = D_GGX(NdotH, 0.25);
             float Vis_cc_l = V_SmithCorrelated(NdotV, NdotL, 0.25);
             float3 F_cc_l = F_SchlickLH(LdotH, float3(0.04, 0.04, 0.04));
-            specTotal += D_cc_l * F_cc_l * Vis_cc_l * NdotL * lightCol[i].rgb * 0.6;
+            specTotal += D_cc_l * F_cc_l * Vis_cc_l * NdotL * lightCol[i].rgb * 0.6 * LF(6);
         }
     }
 
@@ -269,9 +277,9 @@ float4 main(PS_INPUT IN) : COLOR
     // Edge highlight: subtle Fresnel rim catches sun at grazing angles.
     // Reduced from 0.45 — game lighting already has edge detail from VS.
     float rimFresnel = pow(1.0 - saturate(NdotV), 2.0);
-    float3 rimLight = sunContrib * rimFresnel * 0.18;
+    float3 rimLight = sunContrib * rimFresnel * 0.18 * LF(3);
 
-    specTotal *= 1.5;  // visible sun glints
+    specTotal *= 1.5 * LF(2);  // visible sun glints
 
     // ---- COMPOSITE ----
     // layer1 = VS game lighting (ambient + 7 directional × matCol, matches building pipe)

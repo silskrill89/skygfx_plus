@@ -580,6 +580,12 @@ struct Config {
 	// Tonemap black-level lift — preserves deep shadow detail (sRGB domain).
 	// Small value only affects near-black (0.0-0.05, default 0.015)
 	float tonemapBlackLift;
+
+	// PBR vehicle layer toggles — bitmask for modular layer isolation/tuning.
+	// bit0=base diffuse, bit1=env reflection, bit2=sun/light specular,
+	// bit3=rim light, bit4=IBL blend, bit5=sky tint, bit6=clearcoat spec,
+	// bit7=normal buffer. Default 255 = all layers on.
+	int vehPBRLayers;
 };
 static_assert(offsetof(Config, version) == 0, "pinned: asm reads in main.cpp");
 static_assert(offsetof(Config, fixGrassPlacement) == 8, "pinned: fixSeed asm in main.cpp");

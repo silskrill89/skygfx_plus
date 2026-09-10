@@ -1482,6 +1482,8 @@ readIni(int n)
 	c->envSpecularityMult = readfloat(cfg.get("SkyGfx", "envSpecularityMult", ""), 1.0);
 	c->envPower = readfloat(cfg.get("SkyGfx", "envPower", ""), 20.0);
 	c->envFresnel = readfloat(cfg.get("SkyGfx", "envFresnel", ""), 0.7f);
+	// PBR vehicle layer bitmask (bit0=base,1=env,2=spec,3=rim,4=ibl,5=sky,6=clearcoat,7=normbuf)
+	c->vehPBRLayers = readint(cfg.get("SkyGfx", "vehPBRLayers", ""), 255);
 	c->envMapSize = readint(cfg.get("SkyGfx", "envMapSize", ""), c->envMapSize);
 	int i = 1;
 	while(i < c->envMapSize) i *= 2;
@@ -1939,6 +1941,7 @@ saveConfig(void)
 	cfg.set("SkyGfx", "ps2ModulateBuilding", std::to_string(c->ps2ModulateBuilding));
 	cfg.set("SkyGfx", "dualPassBuilding", std::to_string(c->dualPassBuilding));
 	cfg.set("SkyGfx", "dualPassVehicle", std::to_string(c->dualPassVehicle));
+	cfg.set("SkyGfx", "vehPBRLayers", std::to_string(c->vehPBRLayers));
 	cfg.set("SkyGfx", "dualPassGrass", std::to_string(c->dualPassGrass));
 	cfg.set("SkyGfx", "dualPassDefault", std::to_string(c->dualPassDefault));
 	cfg.set("SkyGfx", "dualPassPed", std::to_string(c->dualPassPed));

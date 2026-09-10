@@ -1842,6 +1842,11 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 			float iblParams[4] = { specular, glossiness, tanX, tanY };
 			RwD3D9SetPixelShaderConstant(3, iblParams, 1);
 		}
+		// c46.x = PBR layer bitmask — modular layer toggles (config->vehPBRLayers)
+		{
+			float layerCfg[4] = { (float)config->vehPBRLayers, 0.0f, 0.0f, 0.0f };
+			RwD3D9SetPixelShaderConstant(46, layerCfg, 1);
+		}
 		if(dev && g_iblTex){
 			dev->SetTexture(3, g_iblTex);
 			dev->SetSamplerState(3, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
