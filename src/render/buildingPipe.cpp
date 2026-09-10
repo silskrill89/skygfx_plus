@@ -79,11 +79,13 @@ CustomBuildingPipeline__Update(void)
 	// validate against the "good" reference (white car visible at 01:28,
 	// peds visible in daytime, no sepia veil) at each time of day.
 
-	// buildingAmbient still uses the old pattern for now
-	// UpdateTimecycleLighting() is called from RenderScene_hook instead
-	buildingAmbient = GetTimecycleAmbient();
-	// green already set by GetTimecycleAmbient()
-	// blue already set by GetTimecycleAmbient()
+	// Unified ambient: use the SAME helper as vehicles (uploadLights) and peds
+	// (myDefaultCallback pAmbient override) so all three pipes receive the exact
+	// same timecycle ambient in the same amount. GetTimecycleAmbientPBR() is a
+	// pass-through of GetTimecycleAmbient() plus the opt-in pbrAmbientFloor, so
+	// this is identical to the old call when the floor is off (default) but keeps
+	// buildings consistent if the floor is ever enabled.
+	buildingAmbient = GetTimecycleAmbientPBR();
 
 	if(config->lightningIlluminatesWorld && CWeather__LightningFlash && !CPostEffects__IsVisionFXActive())
 		buildingAmbient = { 1.0, 1.0, 1.0, 0.0 };
