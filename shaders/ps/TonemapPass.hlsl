@@ -7,11 +7,11 @@
 //
 // Reads graded linear HDR from pRasterFrontBuffer, outputs gamma-corrected LDR.
 //
-// c5 = tonemapParams (timecycle-driven):
-//   x = exposure (brightness slider × sceneLuma × carcols × sun dampening)
+// c5 = tonemapParams (timecycle COLOUR + exposure bias):
+//   x = exposure bias (brightness slider × carcols × sun dampening × garage dampen)
 //   y = toeStrength (0.06-0.30, night~0.10 for shadow lift, midday~0.17 solid blacks)
-//   z = sceneLuma (ambient + directional luminance from timecycle, 0-1)
-//   w = flags (bit0=isInterior, bit1=isCutscene)
+//   z = timecycle sceneLuma (fallback when auto-exposure is off)
+//   w = flags (1.0 = auto-exposure ON -> brightness taken from the rendered frame)
 //
 // c6 = gradeParams (fully timecycle-driven from CColourSet):
 //   x = brightness (0.03-0.07, from timecycle lightsOnGroundBrightness)
@@ -21,9 +21,12 @@
 //
 // c7 = blackLiftParams:
 //   x = blackLift (0.0-0.05, sRGB black-level lift to preserve shadow detail)
-//   yzw = unused
+//   y = minExposure (auto-exposure clamp low)
+//   z = maxExposure (auto-exposure clamp high)
+//   w = keyStrength (0 = pure timecycle exposure, 1 = full frame-adaptive)
 
 uniform sampler2D tex : register(s0);
+uniform sampler2D lumTex : register(s1);
 uniform float4 tonemapParams : register(c5);
 uniform float4 gradeParams : register(c6);
 uniform float4 blackLiftParams : register(c7);
@@ -149,8 +152,22 @@ float4 main(PS_INPUT IN) : COLOR
 {
 	float3 c = tex2D(tex, IN.texcoord0.xy);
 
-	// Adaptive exposure from timecycle scene luminance
-	c *= tonemapParams.x;
+	// === Unified exposure: timecycle supplies COLOUR, the frame supplies BRIGHTNESS ===
+	// Base bias always applies (menu brightness, carcols adapt, sun/garage dampening).
+	float exposure = tonemapParams.x;
+	float sceneLuma = tonemapParams.z;
+	if (tonemapParams.w >= 0.5)
+	{
+		// CryEngine-style auto-exposure (mode 2): scene key from measured luminance.
+		float lum = max(tex2D(lumTex, float2(0.5, 0.5)).r, 1e-4);
+		float key = 1.03 - 2.0 / (2.0 + log2(lum + 1.0));
+		float autoExp = clamp(key / lum, blackLiftParams.y, blackLiftParams.z);
+		exposure *= lerp(1.0, autoExp, saturate(blackLiftParams.w));
+		// Grading intensity follows the measured frame, keeping day/night consistent.
+		sceneLuma = saturate(lum * 2.0);
+	}
+
+	c *= exposure;
 
 	// Pre-compress extreme highlights so filmic tonemap can spread them
 	c = SoftKnee(c);

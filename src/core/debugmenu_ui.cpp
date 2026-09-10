@@ -30,6 +30,13 @@ extern bool iCanHasNeoDrops;
 	X(envSpecularityMult)			\
 	X(envPower)			\
 	X(envFresnel)			\
+	X(vehEnvIntensity)		\
+	X(vehChromeEnvThreshold)	\
+	X(tonemapAutoExposure)	\
+	X(tonemapAdaptSpeed)	\
+	X(tonemapKeyStrength)	\
+	X(tonemapMinExposure)	\
+	X(tonemapMaxExposure)	\
 	X(doglare)						\
 	X(sunCoronaIntensity)			\
 	X(sunCoreIntensity)				\
@@ -202,6 +209,13 @@ DebugMenuEntrySetWrap(menu.buildingPipe, true);
 		menu.envSpecularityMult = DebugMenuAddVar("SkyGFX|Misc", "Env Car Specularity", &config->envSpecularityMult, nil, 0.1f, 0.0f, 10.0f);
 		menu.envPower = DebugMenuAddVar("SkyGFX|Misc", "Env Car Power", &config->envPower, nil, 1.0f, 0.0f, 2000.0f);
 		menu.envFresnel = DebugMenuAddVar("SkyGFX|Misc", "Env Car Fresnel", &config->envFresnel, nil, 0.1f, 0.0f, 10.0f);
+		menu.vehEnvIntensity = DebugMenuAddVar("SkyGFX|Misc", "Env Reflection Intensity", &config->vehEnvIntensity, nil, 0.1f, 0.0f, 10.0f);
+		menu.vehChromeEnvThreshold = DebugMenuAddVar("SkyGFX|Misc", "Chrome Env Threshold", &config->vehChromeEnvThreshold, nil, 0.1f, 0.0f, 10.0f);
+		menu.tonemapAutoExposure = DebugMenuAddVarBool32("SkyGFX|Misc", "Frame-adaptive Tonemap", (int32*)&config->tonemapAutoExposure, nil);
+		menu.tonemapAdaptSpeed = DebugMenuAddVar("SkyGFX|Misc", "Tonemap Adapt Speed", &config->tonemapAdaptSpeed, nil, 0.01f, 0.01f, 1.0f);
+		menu.tonemapKeyStrength = DebugMenuAddVar("SkyGFX|Misc", "Tonemap Key Strength", &config->tonemapKeyStrength, nil, 0.05f, 0.0f, 1.0f);
+		menu.tonemapMinExposure = DebugMenuAddVar("SkyGFX|Misc", "Tonemap Min Exposure", &config->tonemapMinExposure, nil, 0.05f, 0.2f, 4.0f);
+		menu.tonemapMaxExposure = DebugMenuAddVar("SkyGFX|Misc", "Tonemap Max Exposure", &config->tonemapMaxExposure, nil, 0.05f, 0.2f, 4.0f);
 		menu.fixGrassPlacement = DebugMenuAddVarBool32("SkyGFX|Misc", "Fix Grass Placement", &config->fixGrassPlacement, nil);
 		menu.lightningIlluminatesWorld = DebugMenuAddVar("SkyGFX|Misc", "Lightning illuminates", &config->lightningIlluminatesWorld, nil, 1, 0, 1, lightningStr);
 		DebugMenuEntrySetWrap(menu.lightningIlluminatesWorld, true);
@@ -518,6 +532,13 @@ void DrawUnifiedDebugMenu(IDirect3DDevice9 *device)
 					ImGui::SliderFloat("Env Specularity", &config->envSpecularityMult, 0.0f, 10.0f);
 					ImGui::SliderFloat("Env Power", &config->envPower, 0.0f, 2000.0f);
 					ImGui::SliderFloat("Env Fresnel", &config->envFresnel, 0.0f, 10.0f);
+					ImGui::SliderFloat("Env Intensity", &config->vehEnvIntensity, 0.0f, 10.0f);
+					ImGui::SliderFloat("Chrome Env Threshold", &config->vehChromeEnvThreshold, 0.0f, 10.0f);
+					ImGui::Checkbox("Frame-adaptive Tonemap", RB(config->tonemapAutoExposure));
+					ImGui::SliderFloat("Tonemap Adapt Speed", &config->tonemapAdaptSpeed, 0.01f, 1.0f);
+					ImGui::SliderFloat("Tonemap Key Strength", &config->tonemapKeyStrength, 0.0f, 1.0f);
+					ImGui::SliderFloat("Tonemap Min Exposure", &config->tonemapMinExposure, 0.2f, 4.0f);
+					ImGui::SliderFloat("Tonemap Max Exposure", &config->tonemapMaxExposure, 0.2f, 4.0f);
 				}
 
 				// --- Grass ---

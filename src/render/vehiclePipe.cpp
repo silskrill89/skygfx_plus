@@ -1839,9 +1839,31 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 			specularTintB = matBRDF->specularTintB;
 		}
 
+		// Optional chrome promotion: stock SA assigns a MatFX env map to ALL car
+		// paint, so name-only classification misses untextured chrome trim. When
+		// vehChromeEnvThreshold > 0, body materials whose env-map shininess is at
+		// least that value are treated as chrome (mirror Fresnel + white tint).
+		if(config->vehChromeEnvThreshold > 0.0f && surfType == SURFACE_CAR_BODY &&
+		   !noFx && (hasEnv1 || hasEnv2) && fxParams.shininess >= config->vehChromeEnvThreshold){
+			surfType = SURFACE_CAR_CHROME;
+			const BRDFMaterial *chromeBRDF = GetBRDF(surfType);
+			specular = chromeBRDF->specular;
+			glossiness = chromeBRDF->glossiness;
+			specularTintR = chromeBRDF->specularTintR;
+			specularTintG = chromeBRDF->specularTintG;
+			specularTintB = chromeBRDF->specularTintB;
+		}
+
+		// Metalness for the PS env-reflection path: chrome/wheel get a mirror
+		// Fresnel F0 and neutral (white) reflection tint; paint stays dielectric.
+		float metallicness = 0.0f;
+		if(surfType == SURFACE_CAR_CHROME)     metallicness = 1.0f;
+		else if(surfType == SURFACE_CAR_WHEEL) metallicness = 0.6f;
+
 		// Unified PBR upload (c22/c23 layout defined in pipeUploadPBR)
-		// c22 = {glossiness, specular, specTint, envFresnel}
-		pipeUploadPBR(glossiness, specular, specularTintR, 1.0f,
+		// c22 = {glossiness, specular, specTint, metallicness}
+		// Metals use a neutral specular tint so F0 isn't paint-coloured.
+		pipeUploadPBR(glossiness, specular, specularTintR * (1.0f - metallicness), metallicness,
 		              (float)renderingWheel, noiseScale, edgeBlend);
 
 		// PBR textures via RW (not raw D3D9)
@@ -1864,16 +1886,17 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 		pipeSetTexture(CarPipe::reflectionMask, 2);
 
 		// IBL on stage 3 (raw D3D9 — no RW wrapper)
-		// c3 = {specular, glossiness, tanHalfFovX, tanHalfFovY} — the PS projects
-		// reflection vectors with the main camera's view window to sample the
-		// perspective-rendered env map (see main() in VehiclePBR_Modern.hlsl).
+		// c3 = {envIntensity, glossiness, tanHalfFovX, tanHalfFovY} — .zw let the
+		// PS project reflection vectors with the main camera's view window to
+		// sample the perspective-rendered env map. .x is the env-reflection
+		// strength knob (was the dead specular slot).
 		{
 			float tanX = 0.65f, tanY = 0.45f;
 			if(Scene.camera){
 				tanX = Scene.camera->viewWindow.x;
 				tanY = Scene.camera->viewWindow.y;
 			}
-			float iblParams[4] = { specular, glossiness, tanX, tanY };
+			float iblParams[4] = { config->vehEnvIntensity, glossiness, tanX, tanY };
 			RwD3D9SetPixelShaderConstant(3, iblParams, 1);
 		}
 		// c46.x = PBR layer bitmask — modular layer toggles (config->vehPBRLayers)

@@ -93,3 +93,7 @@ IDR_GODRAYS              RCDATA "cso/GodRays.cso"
 
 // Velocity
 IDR_VELOCITYRECONSTRUCT  RCDATA "cso/VelocityReconstruct.cso"
+
+// Unified tonemap (frame-adaptive exposure)
+IDR_LUMINANCEREDUCE      RCDATA "cso/LuminanceReduce.cso"
+IDR_LUMINANCEADAPT       RCDATA "cso/LuminanceAdapt.cso"

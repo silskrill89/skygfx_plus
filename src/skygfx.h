@@ -586,6 +586,31 @@ struct Config {
 	// bit3=rim light, bit4=IBL blend, bit5=sky tint, bit6=clearcoat spec,
 	// bit7=normal buffer. Default 255 = all layers on.
 	int vehPBRLayers;
+
+	// PBR vehicle env-reflection strength multiplier (0=off, 1=default).
+	// Scales the env reflection term in VehiclePBR_Modern.hlsl main().
+	float vehEnvIntensity;
+
+	// Optional chrome promotion by MatFX env-map strength. Stock SA assigns an
+	// env map to ALL car paint, so name-only classification misses untextured
+	// chrome trim; when > 0, body materials whose env-map shininess is >= this
+	// value are promoted to SURFACE_CAR_CHROME (metal reflection path).
+	// 0 = disabled (default), try 1.5-3.0.
+	float vehChromeEnvThreshold;
+
+	// Unified tonemap (CryEngine-style): timecyc supplies COLOUR, the rendered
+	// frame supplies BRIGHTNESS via a GPU luminance measure + temporal eye
+	// adaptation. 1 = frame-adaptive exposure on, 0 = timecyc-only exposure.
+	int tonemapAutoExposure;
+	// Eye-adaptation speed (0.01-1.0, default 0.12) — how fast exposure follows
+	// frame luminance changes. Lower = slower/more cinematic.
+	float tonemapAdaptSpeed;
+	// Key strength (0-1, default 1.0) — blend between timecyc exposure and the
+	// frame-derived auto exposure. 0 = timecyc only, 1 = full auto.
+	float tonemapKeyStrength;
+	// Auto-exposure clamp bounds (0.2-4.0, defaults 0.5 / 2.0).
+	float tonemapMinExposure;
+	float tonemapMaxExposure;
 };
 static_assert(offsetof(Config, version) == 0, "pinned: asm reads in main.cpp");
 static_assert(offsetof(Config, fixGrassPlacement) == 8, "pinned: fixSeed asm in main.cpp");
@@ -862,6 +887,7 @@ extern void *simplePS;
 extern void *vcTrailsPS;
 extern void *modernColorFilterPS;
 extern void *gradingPS, *contrastPS, *tonemapPassPS;
+extern void *luminanceReducePS, *luminanceAdaptPS;
 extern void *blurPS, *radiosityPS;
 extern void *SMAA;
 extern void *SMAA_Edge;

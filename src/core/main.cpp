@@ -1484,6 +1484,13 @@ readIni(int n)
 	c->envFresnel = readfloat(cfg.get("SkyGfx", "envFresnel", ""), 0.7f);
 	// PBR vehicle layer bitmask (bit0=base,1=env,2=spec,3=rim,4=ibl,5=sky,6=clearcoat,7=normbuf)
 	c->vehPBRLayers = readint(cfg.get("SkyGfx", "vehPBRLayers", ""), 255);
+	c->vehEnvIntensity = readfloat(cfg.get("SkyGfx", "vehEnvIntensity", ""), 1.0f);
+	c->vehChromeEnvThreshold = readfloat(cfg.get("SkyGfx", "vehChromeEnvThreshold", ""), 0.0f);
+	c->tonemapAutoExposure = readint(cfg.get("SkyGfx", "tonemapAutoExposure", ""), 1);
+	c->tonemapAdaptSpeed = readfloat(cfg.get("SkyGfx", "tonemapAdaptSpeed", ""), 0.12f);
+	c->tonemapKeyStrength = readfloat(cfg.get("SkyGfx", "tonemapKeyStrength", ""), 1.0f);
+	c->tonemapMinExposure = readfloat(cfg.get("SkyGfx", "tonemapMinExposure", ""), 0.5f);
+	c->tonemapMaxExposure = readfloat(cfg.get("SkyGfx", "tonemapMaxExposure", ""), 2.0f);
 	c->envMapSize = readint(cfg.get("SkyGfx", "envMapSize", ""), c->envMapSize);
 	int i = 1;
 	while(i < c->envMapSize) i *= 2;
@@ -1978,6 +1985,13 @@ saveConfig(void)
 	cfg.set("SkyGfx", "envSpecularityMult", std::to_string(c->envSpecularityMult));
 	cfg.set("SkyGfx", "envPower", std::to_string(c->envPower));
 	cfg.set("SkyGfx", "envFresnel", std::to_string(c->envFresnel));
+	cfg.set("SkyGfx", "vehEnvIntensity", std::to_string(c->vehEnvIntensity));
+	cfg.set("SkyGfx", "vehChromeEnvThreshold", std::to_string(c->vehChromeEnvThreshold));
+	cfg.set("SkyGfx", "tonemapAutoExposure", std::to_string(c->tonemapAutoExposure));
+	cfg.set("SkyGfx", "tonemapAdaptSpeed", std::to_string(c->tonemapAdaptSpeed));
+	cfg.set("SkyGfx", "tonemapKeyStrength", std::to_string(c->tonemapKeyStrength));
+	cfg.set("SkyGfx", "tonemapMinExposure", std::to_string(c->tonemapMinExposure));
+	cfg.set("SkyGfx", "tonemapMaxExposure", std::to_string(c->tonemapMaxExposure));
 	cfg.set("SkyGfx", "envMapSize", std::to_string(c->envMapSize));
 	cfg.set("SkyGfx", "envMapFarClipMult", std::to_string(c->envMapFarClipMult));
 	cfg.set("SkyGfx", "envMapUseLODs", std::to_string(c->envMapUseLODs));

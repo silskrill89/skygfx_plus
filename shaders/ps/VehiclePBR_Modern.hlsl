@@ -31,7 +31,7 @@ float4 lightCol[6] : register(c6);
 float3 directDir   : register(c12);
 float3 lightDir[6] : register(c13);
 float4 matCol      : register(c19);
-float4 pbrParams   : register(c22); // {glossiness, specular, specTint, envFresnel}
+float4 pbrParams   : register(c22); // {glossiness, specular, specTint, metallicness}
 float4 paintNoise  : register(c23); // x=wheel, y=noiseScale, z=edgeBlend
 float4 ambientColor : register(c24); // xyz=ambient rgb from timecycle, w=normalBuf enable (0/1)
 float3 viewRight    : register(c25); // view matrix row 0 (world→view rotation)
@@ -102,11 +102,11 @@ float4 main(PS_INPUT IN) : COLOR
     }
 
     // ---- PBR material properties (KHR_materials_pbrSpecularGlossiness workflow) ----
-    // Everything is dielectric. No metalness.
+    // Everything is dielectric. No metallicness.
     // pbrParams.x = glossiness (1=smooth/shiny, 0=rough) — PRIMARY variable
     // pbrParams.y = specular reflectance (F0 at normal incidence, ~0.04 for dielectrics)
     // pbrParams.z = specular color tint (0=white, 1=tinted by paint)
-    // pbrParams.w = envFresnel
+    // pbrParams.w = metallicness (0=dielectric paint, 1=chrome/metal)
     // glTF KHR_materials_pbrSpecularGlossiness:
     //   α = (1 - glossiness)^2  — our D_GGX/V_SmithCorrelated square internally,
     //   so we pass (1 - glossiness) as σ, giving α² correctly.
@@ -114,7 +114,11 @@ float4 main(PS_INPUT IN) : COLOR
     float glossiness  = pbrParams.x;
     float specularF0  = pbrParams.y;
     float specTint    = pbrParams.z;
-    float envFresnel  = pbrParams.w;
+    // Metalness drives the env-reflection Fresnel F0 and the neutral reflection
+    // tint. 0 = paint (dielectric, F0~0.04, paint-tinted reflections); >0 = chrome
+    // / wheel metal (high F0, white mirror reflections). Set in vehiclePipe.cpp
+    // from the BRDF surface type so metallic trim reads as metal, not tinted paint.
+    float metallicness   = saturate(pbrParams.w);
 
     // Wheel roughness override: reduce glossiness for wheels (tires are rough)
     float isWheel = paintNoise.x;
@@ -153,6 +157,9 @@ float4 main(PS_INPUT IN) : COLOR
     // ---- Environment Reflection: clearcoat Fresnel drives visibility ----
     // Car paint has a clearcoat — env reflections visible at all angles, stronger at grazing
     float3 R_world = reflect(-V, N);
+    // Env reflection strength knob. iblParams.x was the (dead) specular slot;
+    // it is now repurposed so reflection tuning needs no extra register.
+    float envIntensity = max(iblParams.x, 0.0);
     // The env map is a PERSPECTIVE render from the camera's viewpoint (60m clip),
     // so sample it by projecting the world-space reflection vector with the main
     // camera's view window (c3.zw = tanHalfFovX/Y). Upward faces now reflect the
@@ -174,21 +181,27 @@ float4 main(PS_INPUT IN) : COLOR
     // fxParams.w = envData->GetShininess() * 8 * envShininessMult — the same carcols
     // value the VS bakes into IN.envColor.a (which the glass shader reads).
     // fxParams.y is envPower (≈20) and saturates to 1.0 — it must NOT drive gloss.
-    float clearcoatFresnel = SchlickFresnelScalar(NdotV, 0.04);
+    // Fresnel F0 rises from dielectric (0.04) toward the material F0 for metals,
+    // so chrome/wheel gain a strong grazing-to-normal mirror band.
+    float clearcoatFresnel = SchlickFresnelScalar(NdotV, lerp(0.04, max(specularF0, 0.04), metallicness));
     float carcolsShine = saturate(fxParams.w);  // 0..1 normalized carcols shininess
     // Gloss strength: visible env reflection at all angles (0.45 base), stronger
     // at grazing. v3 (0.10 base × 1.5 boost × 0.15 grazing weight) put face-on
     // env at ~2% — invisible. v1 (0.25-0.8 × 2.0 × 0.5) white-washed dark paint.
     // This sits between: ~0.2 added face-on on a 0.3 paint, ~0.6 at grazing.
     // Paint tinting: reflection tinted by paint color at normal incidence, white at grazing.
-    float3 reflTint = lerp(matCol.rgb, float3(1,1,1), clearcoatFresnel);
-    float3 envTerm = iblBlend * reflTint * 1.2;
+    // Metals reflect neutrally (white); paint reflections stay paint-tinted.
+    float3 reflTint = lerp(matCol.rgb, float3(1,1,1), max(clearcoatFresnel, metallicness));
+    float3 envTerm = iblBlend * reflTint * (1.2 * envIntensity);
     // Energy-conserving clearcoat blend (carcols-shade safe):
     // paint dominates face-on (kr ~0.15), world mirrors at grazing (kr -> ~0.7+).
     // carcols shininess widens the reflection band for shiny paints.
     // Pure additive env (previous versions) always lifted/washed the paint.
     float kr = saturate(clearcoatFresnel * (1.0 + 2.0 * carcolsShine) + 0.05) * LF(1);
     kr = lerp(kr, saturate(kr * 1.5), metallicFactor);
+    // Chrome/wheel: guarantee a visible mirror band regardless of paint carcols,
+    // so metallic trim reads as metal instead of dark tinted paint.
+    kr = saturate(max(kr, metallicness * 0.55));
     float3 layer2 = lerp(layer1, envTerm, kr);
 
     // ---- Specular: GGX/Smith for direct sun highlight ----
