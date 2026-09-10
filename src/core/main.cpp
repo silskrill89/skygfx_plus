@@ -1681,6 +1681,7 @@ readIni(int n)
 
 	// PBR ambient floor / tonemap black lift (opt-in; 0.0 = off)
 	c->pbrAmbientFloor = readfloat(cfg.get("SkyGfx", "pbrAmbientFloor", ""), 0.0f);
+	c->pbrIblAmbientWeight = readfloat(cfg.get("SkyGfx", "pbrIblAmbientWeight", ""), 0.5f);
 	c->tonemapBlackLift = readfloat(cfg.get("SkyGfx", "tonemapBlackLift", ""), 0.0f);
 	
 	// CLASS 2: Missing INI reads (write-only keys, never read back)
@@ -1868,6 +1869,7 @@ readIni(int n)
 		ADD_IF_MISSING("SkyGfx", "pipeChainEnable", "0");
 		ADD_IF_MISSING("SkyGfx", "postfxDumpDebug", "0");
 		ADD_IF_MISSING("SkyGfx", "pbrAmbientFloor", "0.0");
+		ADD_IF_MISSING("SkyGfx", "pbrIblAmbientWeight", "0.5");
 		ADD_IF_MISSING("SkyGfx", "tonemapBlackLift", "0.0");
 
 		
@@ -2145,6 +2147,7 @@ saveConfig(void)
 	// Death ragdoll
 	cfg.set("SkyGfx", "ragdollEnable", std::to_string(c->ragdollEnable));
 	cfg.set("SkyGfx", "pbrAmbientFloor", std::to_string(c->pbrAmbientFloor));
+	cfg.set("SkyGfx", "pbrIblAmbientWeight", std::to_string(c->pbrIblAmbientWeight));
 	cfg.set("SkyGfx", "tonemapBlackLift", std::to_string(c->tonemapBlackLift));
 
 	cfg.write_file(modulePath);

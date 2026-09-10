@@ -45,6 +45,21 @@ float4 clusterParams : register(c45);  // (gridOffsetX, gridOffsetZ, tileSize, l
 float4 layerCfg   : register(c46);  // x = vehPBRLayers layer bitmask
 float4 clusterLightPos[8] : register(c29);  // (pos.x, pos.y, pos.z, radius) per light
 float4 clusterLightCol[8] : register(c37);  // (col.r*intensity, col.g*intensity, col.b*intensity, 0) per light
+float4 iblAmbient : register(c20);  // x = sky hemisphere ambient weight (config->pbrIblAmbientWeight)
+
+// Universal dynamic-sky hemisphere ambient, shared by the vehicle and building PBR
+// paths so both sit on one ambient/IBL timeline. Samples the per-frame DynamicSky
+// capture (s3) by ELEVATION only — zenith (N.y=+1) at the top, horizon at the bottom,
+// azimuth ignored so the sun disc can never smear into a directional splotch — and
+// returns the ZERO-CENTERED deviation from the flat timecycle ambient that the VS
+// already baked into vertex color. Zero-centered => directional sky tint (cool roofs,
+// warm/ground undersides) with NO global brightening and no double-ambient.
+float3 SkyHemisphereAmbient(float3 N){
+    float2 uv = float2(0.5, saturate(N.y * 0.5 + 0.5));
+    float3 skyCol = tex2D(iblTex, uv).rgb;
+    if(dot(skyCol, skyCol) <= 1e-6) return float3(0.0, 0.0, 0.0); // unbound/black guard
+    return (skyCol - ambientColor.rgb) * iblAmbient.x;
+}
 
 float whiteNoise(float2 p){
     return frac(sin(dot(p, float2(12.9898, 78.233))) * 43758.5453);
@@ -301,6 +316,7 @@ float4 main(PS_INPUT IN) : COLOR
     float3 color = layer2;
     color += specTotal;                                // specular highlights (base + clearcoat)
     color += rimLight;                                 // Fresnel rim on top of clearcoat
+    color += SkyHemisphereAmbient(N);                  // universal dynamic-sky ambient
 
     // Output linear HDR — PostFX TonemapPass handles everything
     return float4(max(color, 0.0), diff.a);
@@ -560,16 +576,9 @@ float4 main_building(PS_INPUT_BUILDING IN) : COLOR
         }
     }
 
-    // IBL (sky ambient). The sky capture is blue; a FLAT add tinted every building
-    // and washed out shadowed faces — the "permanent blue tinge". Vehicles/peds get
-    // their ambient solely from timecycle (baked into IN.color by the VS), so weight
-    // the sky term by how lit the surface is: sun-facing/grazing faces pick up a hint
-    // of sky, shadowed faces stay dark. If the cubemap is unbound (SM3.0 returns
-    // black) add nothing — baseColor already carries the shared timecycle ambient.
-    float2 iblUV = N.xy * 0.5 + 0.5;
-    float3 iblSample = tex2D(iblTex, iblUV).rgb;
-    float iblLit = saturate(NdotL * 0.7 + 0.3);
-    float3 ibl = (dot(iblSample, iblSample) > 1e-6) ? iblSample * (0.08 * iblLit) : float3(0.0, 0.0, 0.0);
+    // Universal dynamic-sky ambient — the SAME zero-centered helper the vehicle path
+    // uses, so buildings and vehicles share one IBL/ambient PBR timeline.
+    float3 ibl = SkyHemisphereAmbient(N);
 
     // Composite: vertex color AS diffuse (VS already baked ambient + directional),
     // plus PBR specular and IBL for per-pixel detail.
