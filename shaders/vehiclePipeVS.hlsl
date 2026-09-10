@@ -89,14 +89,21 @@ VS_OUTPUT_VPBR main_vehiclePBR(VS_INPUT_VEH IN)
     float4 WorldPos = mul(IN.Position, world);
     float3 wn = mul(IN.Normal, (float3x3)world);
     float3 WorldNormal = length(wn) > 1e-6 ? normalize(wn) : float3(0, 1, 0);
-    float3 vv = WorldPos.xyz - eyePos;
+    // View direction: surface -> camera (matches buildingPBRVS convention).
+    // Previously WorldPos - eyePos (camera->surface) made NdotV = max(dot(N,V),0)
+    // evaluate to 0 in the PS: clearcoatFresnel clamped to 1, kr collapsed to 1,
+    // and layer2 = lerp(layer1, envTerm, 1) replaced the base texture with the env
+    // reflection — the base paint vanished. Also corrupted reflect(-V, N).
+    float3 vv = eyePos - WorldPos.xyz;
     float3 ViewVector = length(vv) > 1e-6 ? normalize(vv) : float3(0, 0, 1);
     OUT.WorldPos = WorldPos;
     OUT.WorldNormal = WorldNormal;
     OUT.ViewDir = ViewVector;
     OUT.SunDir = -directDir[0];
 
-    float b = 1.0 - saturate(dot(-ViewVector, WorldNormal));
+    // Grazing rim for glass env intensity: b = 1 - NdotV (ViewVector is now
+    // surface->camera, so dot(ViewVector, WorldNormal) is the positive NdotV).
+    float b = 1.0 - saturate(dot(ViewVector, WorldNormal));
     OUT.EnvColor = lerp(1.0f, b * b * b * b * b, fresnel) * shininess;
 
     return OUT;
