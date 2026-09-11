@@ -1514,9 +1514,13 @@ CPostEffects::ColourFilter_Modern(RwRGBA rgba1, RwRGBA rgba2)
 		// The minimum of 0.05 was causing a permanent "gray veil" shadow lift even
 		// in bright scenes. Raised to 0.15 for midday to keep blacks solid.
 		// Night scenes still get up to 0.35 for gentle shadow detail.
-		float toeFromLuma   = 0.25f - sceneLuma * 0.8f;
-		float toeFromShadow = shadowNorm * 0.10f;  // deeper shadows → more lift
-		toeStrength = max(0.15f, min(0.35f, toeFromLuma + toeFromShadow));
+		// D RISES with daylight: in the Hable/Uncharted2 curve, HIGHER D = tighter toe =
+		// solid blacks; LOWER D = more shadow lift. The old form drove D down to its
+		// 0.15 floor at midday (max gray veil) and up to ~0.26 at night — inverted, so
+		// daylight washed out and shadows vanished. Now night keeps the proven gentle
+		// lift (~0.27) and midday clamps high (tight toe, blacks stay black).
+		float toeStrengthVal = 0.22f + sceneLuma * 1.0f + shadowNorm * 0.08f;
+		toeStrength = max(0.18f, min(0.55f, toeStrengthVal));
 
 		// --- Grade params: fully timecycle-driven ---
 		// Contrast: shadow strength × fog clearance (deep shadows + clear sky = max contrast)

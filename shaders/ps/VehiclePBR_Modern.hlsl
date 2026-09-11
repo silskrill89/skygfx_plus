@@ -47,20 +47,20 @@ float4 clusterLightPos[8] : register(c29);  // (pos.x, pos.y, pos.z, radius) per
 float4 clusterLightCol[8] : register(c37);  // (col.r*intensity, col.g*intensity, col.b*intensity, 0) per light
 float4 iblAmbient : register(c20);  // x = sky hemisphere ambient weight (config->pbrIblAmbientWeight)
 
-// Universal dynamic-sky hemisphere ambient, shared by the vehicle and building PBR
-// paths so both sit on one ambient/IBL timeline. Samples the per-frame DynamicSky
-// capture (s3) by ELEVATION only — zenith (N.y=+1) at the top, horizon at the bottom,
-// azimuth ignored so the sun disc can never smear into a directional splotch — and
-// returns the ZERO-CENTERED deviation from the flat timecycle ambient that the VS
-// already baked into vertex color. Zero-centered => directional sky tint (cool roofs,
-// warm/ground undersides) with NO global brightening and no double-ambient.
-float3 SkyHemisphereAmbient(float3 N){
+// Universal dynamic-sky hemisphere ambient tint, shared by the vehicle and building
+// PBR paths so both sit on one ambient/IBL timeline. Samples the per-frame DynamicSky
+// capture (s3) by ELEVATION only (zenith top, horizon bottom; azimuth ignored so the
+// sun disc can't smear) and returns a MULTIPLICATIVE ratio skyCol/ambientColor centered
+// at 1.0. Modulating the surface preserves shadows (near-black stays near-black) and
+// can never lift blacks the way an additive deviation did. sky==ambient -> 1.0 -> no
+// double-ambient. iblAmbient.x (config pbrIblAmbientWeight) is the tuning knob.
+float3 SkyHemisphereTint(float3 N){
     float2 uv = float2(0.5, saturate(N.y * 0.5 + 0.5));
     float3 skyCol = tex2D(iblTex, uv).rgb;
-    if(dot(skyCol, skyCol) <= 1e-6) return float3(0.0, 0.0, 0.0); // unbound/black guard
-    // 0.15 base scale keeps the sky deviation at the LEVEL OF the timecycle ambient
-    // (~tenths) instead of overpowering the surface. iblAmbient.x is the tuning knob.
-    return (skyCol - ambientColor.rgb) * (iblAmbient.x * 0.15);
+    if(dot(skyCol, skyCol) <= 1e-6) return float3(1.0, 1.0, 1.0); // guard: no-op
+    float3 ambientSafe = max(ambientColor.rgb, 1e-4);
+    float3 ratio = skyCol / ambientSafe;
+    return lerp(float3(1.0, 1.0, 1.0), ratio, iblAmbient.x * 0.15);
 }
 
 float whiteNoise(float2 p){
@@ -194,10 +194,10 @@ float4 main(PS_INPUT IN) : COLOR
     // Sky contribution: upward-facing surfaces reflect sky color from the top of the sphere map
     float skyBlend = saturate(N.y) * skyParams.w;
     iblBlend = lerp(iblBlend, skyParams.rgb, skyBlend * 0.3 * LF(5));
-    // Universal sky ambient folded into the REFLECTION/cloud layer (not the global
-    // composite): it tints what the surface mirrors — cloud/sky — and is modulated by
-    // reflectivity (kr) below, instead of washing out the whole car.
-    iblBlend += SkyHemisphereAmbient(N);
+    // Universal sky tint folded into the REFLECTION/cloud layer (not the global
+    // composite): it MODULATES what the surface mirrors — cloud/sky — so it can tint
+    // without lifting blacks. (Multiplicative; shadows preserved.)
+    iblBlend *= SkyHemisphereTint(N);
     // Clearcoat Fresnel: carcols shininess drives env gloss intensity
     // fxParams.w = envData->GetShininess() * 8 * envShininessMult — the same carcols
     // value the VS bakes into IN.envColor.a (which the glass shader reads).
@@ -581,17 +581,14 @@ float4 main_building(PS_INPUT_BUILDING IN) : COLOR
         }
     }
 
-    // Universal dynamic-sky ambient — the SAME zero-centered helper the vehicle path
-    // uses, so buildings and vehicles share one IBL/ambient PBR timeline.
-    float3 ibl = SkyHemisphereAmbient(N);
+    // Universal dynamic-sky ambient tint — MULTIPLICATIVE (see SkyHemisphereTint):
+    // modulates the surface so black stays black and shadows are preserved.
+    float3 ibl = SkyHemisphereTint(N);
 
-    // Composite: vertex color AS diffuse (VS already baked ambient + directional),
-    // plus PBR specular and IBL for per-pixel detail.
-    // Xbox pipe: tex * vertexColor * 10.0 — vertex color IS the lighting.
-    // Same approach: baseColor contains full lit result from VS, don't attenuate it.
-    float3 color = baseColor;
+    // Composite: modulate the VS-lit base by the sky tint (multiplicative => shadows
+    // preserved), then add PBR specular and cluster lights.
+    float3 color = baseColor * ibl;
     color += specTotal;
-    color += ibl;
     color += clusterDiffuse;
 
     // Output linear HDR — PostFX TonemapPass handles tonemapping uniformly
