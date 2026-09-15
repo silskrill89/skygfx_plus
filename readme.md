@@ -44,7 +44,6 @@ A rewrite of [SkyGFX](https://github.com/aap/skygfx) by aap, bringing modern ren
 - **Skin Enhancement** - wrap lighting for SSS approximation
 - **Hair Enhancement** - anisotropic highlights (Kajiya-Kay)
 - **Vegetation Enhancement** - SSS-like translucency for grass
-- **Edge Tessellation** - vertex displacement at edges
 
 ### Presets
 - `gtaiv_modern.ini` - GTA IV style with PBR, all modern features

@@ -35,6 +35,11 @@ static bool g_intzChecked = false;     // true after CheckDeviceFormat attempted
 static bool g_depthSuspended = false;  // true between Suspend/Restore
 static DWORD g_savedZenable = TRUE;    // ZENABLE state saved in Suspend, restored in Restore
 
+// First-frame stability: defer INTZ substitution until cam dims stabilize
+static int s_lastDsW = 0;
+static int s_lastDsH = 0;
+static int s_dsStableCount = 0;
+
 // Original vtable function pointers
 typedef HRESULT (STDMETHODCALLTYPE *SetDSType)(IDirect3DDevice9*, IDirect3DSurface9*);
 typedef HRESULT (STDMETHODCALLTYPE *ResetType)(IDirect3DDevice9*, D3DPRESENT_PARAMETERS*);
@@ -99,6 +104,22 @@ static HRESULT STDMETHODCALLTYPE hook_SetDS(IDirect3DDevice9 *dev, IDirect3DSurf
 		return orig_SetDS(dev, pDS);
 	}
 
+	// First-frame stability: track cam dims.  Defer INTZ substitution
+	// until same dims seen on 2+ consecutive SetDS calls.
+	{
+		RwRaster *camRas = Scene.camera ? RwCameraGetRaster(Scene.camera) : NULL;
+		if(camRas && camRas->width > 0 && camRas->height > 0) {
+			if(camRas->width == s_lastDsW && camRas->height == s_lastDsH) {
+				if(s_dsStableCount < 999) s_dsStableCount++;
+			} else {
+				s_lastDsW = camRas->width;
+				s_lastDsH = camRas->height;
+				s_dsStableCount = 1;
+			}
+		}
+	}
+	bool dimsStable = (s_dsStableCount >= 2);
+
 	// Lazy recreate INTZ after device Reset: if we need substitution but
 	// INTZ was released, recreate it now. Guards against device-lost.
 	if(!g_intzSurf && g_hookInstalled && g_intzSupported) {
@@ -122,8 +143,8 @@ static HRESULT STDMETHODCALLTYPE hook_SetDS(IDirect3DDevice9 *dev, IDirect3DSurf
 		}
 	}
 
-	// If this is the cached game DS → substitute INTZ
-	if(pDS == g_gameDS && g_intzSurf) {
+	// If this is the cached game DS → substitute INTZ (only when stable)
+	if(pDS == g_gameDS && g_intzSurf && dimsStable) {
 		return orig_SetDS(dev, g_intzSurf);
 	}
 
@@ -137,12 +158,12 @@ static HRESULT STDMETHODCALLTYPE hook_SetDS(IDirect3DDevice9 *dev, IDirect3DSurf
 		D3DSURFACE_DESC desc;
 		if(SUCCEEDED(pDS->GetDesc(&desc))) {
 			if((int)desc.Width == cw && (int)desc.Height == ch) {
-				// This is the main scene DS. Cache and substitute.
+				// This is the main scene DS.  Cache always, substitute only when stable.
 				if(g_gameDS) g_gameDS->Release();
 				g_gameDS = pDS;
 				g_gameDS->AddRef();
 
-				if(g_intzSurf) {
+				if(g_intzSurf && dimsStable) {
 					return orig_SetDS(dev, g_intzSurf);
 				}
 			}

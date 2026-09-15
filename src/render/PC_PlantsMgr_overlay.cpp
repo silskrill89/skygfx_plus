@@ -322,7 +322,7 @@ bool8 LoadGeometryForPlantSlot(RpAtomic **pDestModelsTab, char **models_fnames)
 	for(int32 i=0; i<CPLANT_SLOT_NUM_MODELS; i++)
 	{
 		char _fname[128];
-		::sprintf(_fname, GRASS_MODELS_DIR"%s", models_fnames[i]);
+		::snprintf(_fname, sizeof(_fname), GRASS_MODELS_DIR"%s", models_fnames[i]);
 		RpClump	*pPlantModelClump = LoadPlantClump(_fname);
 		ASSERT(pPlantModelClump);
 
@@ -918,8 +918,8 @@ bool8 CPlantSurfPropMgr::LoadPlantsDat(const char *pFilename)
 						// bad name / data?
 						if(nSurfaceType == 0)
 						{
-							char msg[128];
-							::sprintf(msg, "Unknown surface name '%s' in 'Plants.dat' (line %d)! See Andrzej to fix this.", token, lineCount);
+						char msg[128];
+						::snprintf(msg, sizeof(msg), "Unknown surface name '%s' in 'Plants.dat' (line %d)! See Andrzej to fix this.", token, lineCount);
 							ASSERTMSG(FALSE, msg);
 							return(FALSE);
 						}

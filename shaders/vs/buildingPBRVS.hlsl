@@ -74,9 +74,18 @@ VS_OUTPUT main(in VS_INPUT IN)
 	float sunLen = length(directDir[0]);
 	OUT.SunDir = sunLen > 1e-6 ? -directDir[0] / sunLen : float3(0, 0, -1);
 
-	// Vertex color: day/night blend + lighting (same as xboxBuildingVS)
+	// Vertex color: baked day/night prelight + LIVE timecycle sun (mirrors vehicleVS).
+	// directDir is WORLD-space here (buildingPipe.cpp pipeUploadLightDirectionForce),
+	// so NdotL uses worldNormal, not the object-space IN.Normal. saturate() is required
+	// now that sun is added (sunlit faces can otherwise exceed 1.0).
 	float4 prelight = IN.DayColor * dayparam + IN.NightColor * nightparam;
-	OUT.Color = (prelight * surfDiff + float4(ambient, 0.0) * surfAmb) * matCol;
+	OUT.Color = prelight * surfDiff;
+	OUT.Color.xyz += ambient * surfAmb;
+	for (int i = 0; i < 7; i++){
+		float l = max(0.0, dot(worldNormal, -directDir[i]));
+		OUT.Color.xyz += l * directCol[i] * surfDiff;
+	}
+	OUT.Color = saturate(OUT.Color) * matCol;
 
 	// Env/Fresnel params for PBR specular
 	float3 V = normalize(eyePos - worldPos.xyz);

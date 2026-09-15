@@ -138,12 +138,8 @@ CCustomCarEnvMapPipeline__Init(void)
 	reflectionTex = RwTextureCreate(nil);
 	RwTextureSetFilterMode(reflectionTex, rwFILTERLINEAR);
 
-	normalTex = RwTextureCreate(nil);
-	RwTextureSetFilterMode(normalTex, rwFILTERLINEAR);
-
 	MakeEnvmapCam();
 	MakeEnvmapRasters();
-	MakeNormalCam();
 
 	CreateShaders();
 
@@ -1725,6 +1721,57 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 		RwD3D9SetPixelShaderConstant(22, tireParams, 1);
 		RwD3D9SetPixelShaderConstant(23, tireParams2, 1);
 
+		// main_rubber consumes the same shared per-vehicle state as the opaque
+		// path: c46 (layer bitmask via LF(4)), s3 (iblTex), c24 (ambientColor)
+		// and the Forward+ cluster block (c45/c48-c111 + s5 tile texture).
+		// Mirror the opaque branch uploads so tires don't read stale/undefined
+		// D3D9 state. Order follows the opaque path: c46 -> s3 -> Forward+ -> c24.
+		extern IDirect3DTexture9 *g_iblTex;
+		IDirect3DDevice9 *dev = d3d9device;
+
+		// c46.x = PBR layer bitmask — modular layer toggles (config->vehPBRLayers)
+		{
+			float layerCfg[4] = { (float)config->vehPBRLayers, 0.0f, 0.0f, 0.0f };
+			RwD3D9SetPixelShaderConstant(46, layerCfg, 1);
+		}
+
+		// IBL on stage 3 (raw D3D9 — no RW wrapper) + cloud shadow (c4)
+		if(dev && g_iblTex){
+			dev->SetTexture(3, g_iblTex);
+			dev->SetSamplerState(3, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+			dev->SetSamplerState(3, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+			dev->SetSamplerState(3, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+			dev->SetSamplerState(3, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+			extern float cloudAnimTimer;
+			float cloudShadow[4] = { 0.0f, cloudAnimTimer * 0.01f, 1.0f, 0.0f };
+			extern RpLight *&pDirect;
+			if(pDirect){
+				RwFrame *sunFrame = RpLightGetFrame(pDirect);
+				if(sunFrame){
+					RwMatrix *sunLTM = RwFrameGetLTM(sunFrame);
+					if(sunLTM){
+						cloudShadow[0] = sunLTM->at.x;
+						cloudShadow[1] = sunLTM->at.y;
+						cloudShadow[2] = sunLTM->at.z;
+					}
+				}
+			}
+			RwD3D9SetPixelShaderConstant(4, cloudShadow, 1);
+		}else if(dev){
+			dev->SetTexture(3, NULL);
+		}
+
+		// Forward+ clustered point lights: bind the tile index texture (s5) and
+		// upload c45/c48-c111 — main_rubber reads all of these for street lights.
+		ForwardPlus_SetConstants();
+
+		// Object ambient from timecycle (PS c24) — same source as the opaque path.
+		{
+			RwRGBAReal tcAmbient = GetTimecycleAmbientPBR();
+			float ambientPS[4] = { tcAmbient.red, tcAmbient.green, tcAmbient.blue, 0.0f };
+			RwD3D9SetPixelShaderConstant(24, ambientPS, 1);
+		}
+
 		RwD3D9SetVertexShader(vehiclePBRVS);
 		RwD3D9SetPixelShader(Rubber_Vehicle_Modern);
 		D3D9Render(resEntryHeader, instancedData);
@@ -1868,10 +1915,10 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 
 		// PBR textures via RW (not raw D3D9)
 		// s0 = diffuse (already set above)
-		// s1 = normal buffer (raw D3D9 — no RW wrapper for IDirect3DTexture9*)
+		// s1 = env map / reflection (RwTexture)
 		// s2 = mask / reflection mask
 		// s3 = IBL (raw D3D9)
-		// s4 = env map / reflection
+		// s4 = normal buffer (raw D3D9 — no RW wrapper for IDirect3DTexture9*)
 		extern IDirect3DTexture9 *g_iblTex;
 		IDirect3DDevice9 *dev = d3d9device;
 
@@ -1935,6 +1982,21 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 			dev->SetTexture(4, g_normalBufferTex);
 			ambientPS[3] = 1.0f;  // flag: normal buffer available
 		}
+
+		// c29 = (screenW, screenH, 1/screenW, 1/screenH) — lets the PS convert
+		// VPOS pixels to screen UV for sampling the half-res normal buffer.
+		{
+			RwRaster *camRas = Scene.camera ? RwCameraGetRaster(Scene.camera) : NULL; // NULL camera → 0x7FAD4D-class fault
+			if(camRas){
+				float sw = (float)camRas->width, sh = (float)camRas->height;
+				float screenP[4] = { sw, sh, 1.0f/max(sw, 1e-7f), 1.0f/max(sh, 1e-7f) };
+				RwD3D9SetPixelShaderConstant(29, screenP, 1);
+			}
+		}
+
+		// Forward+ clustered point lights: bind the tile index texture (s5) and
+		// its POINT/CLAMP sampler. Lights arrive as PS constants c48-c111.
+		ForwardPlus_SetConstants();
 
 		// Object ambient from timecycle (PS c24) — use the same ambient as the
 		// building PBR pipe (GetTimecycleAmbient), which is the proven working

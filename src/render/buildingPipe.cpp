@@ -102,8 +102,8 @@ CustomBuildingEnvMapPipeline__SetupEnv(RpAtomic *atomic, RwFrame *envframe, RwMa
 	RpClump *clump;
 	RwFrame *frame;
 
-	if(envframe == NULL)
-		envframe = RwCameraGetFrame(RWSRCGLOBAL(curCamera));
+	if(envframe == NULL){ RwCamera *cam = (RwCamera*)RWSRCGLOBAL(curCamera); if(cam) envframe = RwCameraGetFrame(cam); }
+	// NULL curCamera faults our image at RVA 0x4D5A reading [NULL+4]
 
 	clump = RpAtomicGetClump(atomic);
 
@@ -327,7 +327,8 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PS2(RwResEntry *repEntry, void *ob
 	RwFrame* frame = (RwFrame*)atomic->object.object.parent;
 	if(!frame) return;
 
-	_rwD3D9EnableClippingIfNeeded(object, type);
+	if (RWSRCGLOBAL(curCamera)) { _rwD3D9EnableClippingIfNeeded(object, type); }
+	// NULL curCamera → 0x7FAD4D fault
 
 	pipeGetComposedTransformMatrix(atomic, transform);
 	RwD3D9SetVertexShaderConstant(REG_transform, transform, 4);
@@ -470,7 +471,8 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *o
 	RwFrame* frame = (RwFrame*)atomic->object.object.parent;
 	if(!frame) return;
 
-	_rwD3D9EnableClippingIfNeeded(object, type);
+	if (RWSRCGLOBAL(curCamera)) { _rwD3D9EnableClippingIfNeeded(object, type); }
+	// NULL curCamera → 0x7FAD4D fault
 
 	colorScale = 1.0f;
 	RwD3D9SetPixelShaderConstant(0, &colorScale, 1);
@@ -572,7 +574,8 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Sphere(RwResEntry *repEntry, void 
 	BuildingRenderState rs;
 	buildingPipe_saveRenderState(&rs);
 
-	_rwD3D9EnableClippingIfNeeded(object, type);
+	if (RWSRCGLOBAL(curCamera)) { _rwD3D9EnableClippingIfNeeded(object, type); }
+	// NULL curCamera → 0x7FAD4D fault
 
 	RwD3D9SetPixelShaderConstant(0, &spheremapfog, 1);
 
@@ -580,12 +583,17 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Sphere(RwResEntry *repEntry, void 
 	RwD3D9SetVertexShaderConstant(REG_transform, transform, 4);
 
 
-	RwCamera *cam = (RwCamera*)RWSRCGLOBAL(curCamera);
-	float fog[2];
-	fog[0] = RwCameraGetFarClipPlane(cam);
-	fog[1] = fog[0] - RwCameraGetFogDistance(cam);
-//	RwD3D9SetVertexShaderConstant(45, fog, 1);
-	RwD3D9SetPixelShaderConstant(2, fog, 1);
+	if (RWSRCGLOBAL(curCamera)) {
+		RwCamera *cam = (RwCamera*)RWSRCGLOBAL(curCamera);
+		float fog[2];
+		fog[0] = RwCameraGetFarClipPlane(cam);
+		fog[1] = fog[0] - RwCameraGetFogDistance(cam);
+		RwD3D9SetPixelShaderConstant(2, fog, 1);
+	} else {
+		// NULL curCamera → 0x7FAD4D fault when camera not begun
+		float fog[2] = { 1000.0f, 1000.0f };
+		RwD3D9SetPixelShaderConstant(2, fog, 1);
+	}
 
 	buildingPipe_setupResEntry(repEntry, &resEntryHeader, &instancedData);
 
@@ -639,8 +647,17 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 		static RwUInt32 lastIBLFrame = 0;
 		RwUInt32 curFrame = RWSRCGLOBAL(renderFrame);
 		if(curFrame != lastIBLFrame){
-			extern void RenderIBLBuffer(void);
-			RenderIBLBuffer();
+			// Gate on valid camera state: on frame 1 the game renders
+			// building atomics before any RwCameraBeginUpdate has run,
+			// so the exe-side Im2D dispatch reads a NULL camera global
+			// and faults (crash 0x7FBD4A). Defer to a later frame;
+			// the previous/stale IBL stays in use until then.
+			if(Scene.camera && RwCameraGetRaster(Scene.camera)){
+				extern void RenderIBLBuffer(void);
+				RenderIBLBuffer();
+			}else if(dbglog_throttle("ibl_nocam")){
+				dbglog("RenderIBL: skip, camera not ready (frame %d)", curFrame);
+			}
 			lastIBLFrame = curFrame;
 		}
 	}
@@ -656,7 +673,9 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 
 	RwFrame* frame = (RwFrame*)atomic->object.object.parent;
 	if(!frame) return;
-	_rwD3D9EnableClippingIfNeeded(object, type);
+	if (RWSRCGLOBAL(curCamera)) { _rwD3D9EnableClippingIfNeeded(object, type); }
+	// NULL curCamera before first BeginUpdate or during scene teardown causes 0x7FAD4D fault;
+	// clipping is meaningless without a camera
 
 	// Transform (WVP + world matrix for PBR)
 	float transform[16];
@@ -745,6 +764,31 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 			dev->SetSamplerState(3, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
 		}
 	}
+
+	// Bind the half-res normal buffer on stage 4 (s4 = normalBufTex in
+	// main_building) — mirrors the vehicle pipe. ambientPS[3] gates the shader
+	// via c24.w (1.0 when bound, 0.0 otherwise; old shaders ignore the flag).
+	{
+		extern IDirect3DTexture9 *g_normalBufferTex;
+		IDirect3DDevice9 *dev = d3d9device;
+		if(dev && g_normalBufferTex){
+			dev->SetTexture(4, g_normalBufferTex);
+			ambientPS[3] = 1.0f;
+			RwD3D9SetPixelShaderConstant(24, ambientPS, 1);
+		}
+
+		// c29 = (screenW, screenH, 1/screenW, 1/screenH) — lets main_building
+		// convert VPOS pixels to screen UV for sampling the half-res normal buffer.
+		RwRaster *camRas = Scene.camera ? RwCameraGetRaster(Scene.camera) : NULL; // NULL camera → 0x7FAD4D-class fault
+		if(camRas){
+			float sw = (float)camRas->width, sh = (float)camRas->height;
+			float screenP[4] = { sw, sh, 1.0f/max(sw, 1e-7f), 1.0f/max(sh, 1e-7f) };
+			RwD3D9SetPixelShaderConstant(29, screenP, 1);
+		}
+	}
+
+	// Forward+ clustered point lights: bind the tile index texture (s5).
+	ForwardPlus_SetConstants();
 
 	BuildingRenderState rs;
 	buildingPipe_saveRenderState(&rs);

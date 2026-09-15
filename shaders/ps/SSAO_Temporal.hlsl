@@ -21,10 +21,13 @@ uniform sampler2D noiseTexture   : register(s1);
 uniform sampler2D normalTexture  : register(s2);
 uniform sampler2D velocityTexture : register(s3);
 uniform sampler2D historyTexture : register(s4);
+uniform sampler2D prevDepthTexture : register(s5);
+uniform sampler2D prevNormalTexture : register(s6);
 
 uniform float4 ssaoParams : register(c0);  // x=radius, y=power, z=noiseScale, w=temporalBlend
 uniform float4 screenSize : register(c1);  // x=quarterW, y=quarterH, z=1/quarterW, w=1/quarterH
 uniform float4 projInfo   : register(c2);  // recipViewWindow, -n*f/(f-n), f/(f-n)
+uniform float4 histFlags  : register(c4);  // x=prevDepthAvail, y=disocclusionThreshold, z=prevNormalAvail, w=0
 
 struct PS_INPUT
 {
@@ -188,6 +191,36 @@ float4 main(PS_INPUT IN) : COLOR
         float depthDiff = abs(centerDepth - prevDepth);
         confidence = 1.0 - smoothstep(0.001, 0.05, depthDiff);
         confidence *= history.a;  // multiply by history confidence
+
+        // ---- T5: Depth-aware disocclusion using previous-frame depth (s5) ----
+        // Gate on histFlags.x (prevDepthAvail)
+        if (histFlags.x > 0.5)
+        {
+            float prevFrameDepth = tex2D(prevDepthTexture, prevUV).r;
+            // Linearize both depths using same reconstruction as GetViewPos
+            float curViewZ  = projInfo.z / max(centerDepth - projInfo.w, 1e-7);
+            float prevViewZ = projInfo.z / max(prevFrameDepth - projInfo.w, 1e-7);
+            float depthDelta = abs(curViewZ - prevViewZ);
+            // Normalize by current viewZ with epsilon guard
+            float normDepthDelta = depthDelta / max(abs(curViewZ), 1e-7);
+            // If disoccluded (depth jump exceeds threshold), push blend toward current frame
+            if (normDepthDelta > histFlags.y)
+            {
+                confidence = 0.0;
+            }
+        }
+
+        // ---- T7: Normal history rejection using previous-frame normal (s6) ----
+        // Gate on histFlags.z (prevNormalAvail)
+        if (histFlags.z > 0.5)
+        {
+            float3 prevNormal = tex2D(prevNormalTexture, prevUV).rgb * 2.0 - 1.0;
+            float normalDiff = 1.0 - saturate(dot(normal, prevNormal));
+            if (normalDiff > 0.5)
+            {
+                confidence *= 0.25;  // heavily reduce history weight
+            }
+        }
 
         // ---- Cloud-shadow-style exponential history blend ----
         // Never fully discard history at any confidence level.

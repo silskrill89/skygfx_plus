@@ -20,11 +20,6 @@ RwTexture *reflectionTex;
 static RwRaster *envFB_prev = NULL;
 static int envTemporalFrame = 0;
 
-// Normal buffer (stereo disparity)
-RwCamera *normalCam;
-RwRaster *normalFB, *normalZB;
-RwTexture *normalTex;
-
 /* Create envmap rasters as we need them and attach them to cam */
 void
 MakeEnvmapRasters(void)
@@ -97,7 +92,7 @@ MakeEnvmapCam(void)
 	reflectionCam = RwCameraCreate();
 	if(!reflectionCam) return;
 	RwFrame *frame = RwFrameCreate();
-	if(!frame) return;
+	if(!frame){ RwCameraDestroy(reflectionCam); reflectionCam = NULL; return; }
 	RwCameraSetFrame(reflectionCam, frame);
 	RwCameraSetNearClipPlane(reflectionCam, 0.1f);
 	RwCameraSetFarClipPlane(reflectionCam, 250.0f * config->envMapFarClipMult);
@@ -106,44 +101,6 @@ MakeEnvmapCam(void)
 	RwCameraSetViewWindow(reflectionCam, &vw);
 	if(Scene.world)
 		RpWorldAddCamera(Scene.world, reflectionCam);
-}
-
-void
-MakeNormalCam(void)
-{
-	normalCam = RwCameraCreate();
-	if(!normalCam) return;
-	RwFrame *frame = RwFrameCreate();
-	if(!frame) return;
-	RwCameraSetFrame(normalCam, frame);
-	RwCameraSetNearClipPlane(normalCam, 0.1f);
-	RwCameraSetFarClipPlane(normalCam, 250.0f * config->envMapFarClipMult);
-	RwV2d vw;
-	vw.x = vw.y = 0.4f;
-	RwCameraSetViewWindow(normalCam, &vw);
-	if(Scene.world)
-		RpWorldAddCamera(Scene.world, normalCam);
-}
-
-void
-MakeNormalRasters(void)
-{
-	RwRaster *camRas = RwCameraGetRaster(Scene.camera);
-	if(!camRas) return;
-	int w = camRas->width / 2;
-	int h = camRas->height / 2;
-	if(w < 1 || h < 1) return;
-	if(normalFB && normalFB->width == w && normalFB->height == h)
-		return;
-	if(normalFB) RwRasterDestroy(normalFB);
-	if(normalZB) RwRasterDestroy(normalZB);
-	normalFB = RwRasterCreate(w, h, 0, rwRASTERTYPECAMERATEXTURE);
-	normalZB = RwRasterCreate(w, h, 0, rwRASTERTYPEZBUFFER);
-	if(!normalFB || !normalZB) return;
-	RwCameraSetRaster(normalCam, normalFB);
-	RwCameraSetZRaster(normalCam, normalZB);
-	if(normalTex)
-		RwTextureSetRaster(normalTex, normalFB);
 }
 
 #ifdef DEBUGENVTEX
@@ -372,10 +329,12 @@ static int numCoronaVerts, numCoronaIndices;
 static void
 AddCorona(float x, float y, float sz)
 {
+	RwCamera *cam = (RwCamera*)RWSRCGLOBAL(curCamera); // NULL curCamera faults (same class as 0x7FAD4D)
+	if(!cam) return;
 	float nearz, recipz;
 	RwIm2DVertex *v;
 	nearz = RwIm2DGetNearScreenZ();
-	recipz = 1.0f / RwCameraGetNearClipPlane((RwCamera*)RWSRCGLOBAL(curCamera));
+	recipz = 1.0f / RwCameraGetNearClipPlane(cam);
 
 	v = &coronaVerts[numCoronaVerts];
 	RwIm2DVertexSetScreenX(&v[0], x);
@@ -423,6 +382,7 @@ AddCorona(float x, float y, float sz)
 void
 DrawEnvMapCoronas(RwV3d at)
 {
+	if(!reflectionTex || !reflectionTex->raster) return;
 	const float BIG = 89.0f * reflectionTex->raster->width/128.0f;
 	const float SMALL = 38.0f * reflectionTex->raster->height/128.0f;
 
@@ -444,6 +404,7 @@ DrawEnvMapCoronas(RwV3d at)
 	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
 	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
+	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, NULL);
 }
 
 /* CLASS 6: DrawDebugEnvMap removed — dead code, F3 key check with empty body */
@@ -452,9 +413,11 @@ void
 RenderReflectionMap_leeds(void)
 {
 	RwCamera *cam = Scene.camera;
+	if(!cam) return; // NULL camera → 0x7FAD4D-class fault
 	RwCameraEndUpdate(cam);
 
 	MakeEnvmapRasters();
+	if(!reflectionCam){ RwCameraBeginUpdate(cam); return; }
 
 	RwCameraSetViewWindow(reflectionCam, &cam->viewWindow);
 
@@ -503,8 +466,10 @@ RenderSphereReflections(void)
 
 	if(iCanHasbuildingPipe && (config->vehiclePipe == CAR_MOBILE || config->vehiclePipe == CAR_ENV || config->vehiclePipe == CAR_MODERN)){
 		MakeEnvmapRasters();
+		if(!reflectionCam) return;
 
-		RwCamera *cam = Scene.camera;
+		RwCamera *cam = Scene.camera; // NULL curCamera faults (same class as 0x7FAD4D)
+		if(!cam) return;
 		float farplane, fog, lowLodDistScale, lodDistScale;
 		RwRaster *fb, *zb;
 
@@ -587,72 +552,23 @@ RenderSphereReflections(void)
 }
 
 void
-RenderNormalBuffer(void)
+ShutdownEnvMap(void)
 {
-	if(!config->normalBufferEnable || !normalCam)
-		return;
-	if(!Scene.camera) return;
+	// Destroy the env map texture (created via RwTextureCreate in vehiclePipe init)
+	if(reflectionTex){ RwTextureDestroy(reflectionTex); reflectionTex = NULL; }
 
-	MakeNormalRasters();
-	if(!normalFB || !normalZB) return;
+	// Destroy env map rasters (created in MakeEnvmapRasters)
+	if(envFB){ RwRasterDestroy(envFB); envFB = NULL; }
+	if(envZB){ RwRasterDestroy(envZB); envZB = NULL; }
+	if(envFB_prev){ RwRasterDestroy(envFB_prev); envFB_prev = NULL; }
 
-	RwCamera *cam = Scene.camera;
-	float farplane, fog;
-	RwRaster *fb, *zb;
-
-	// Get camera right vector for lateral offset
-	RwMatrix *camLTM = NULL;
-	RwFrame *camFrame = cam ? RwCameraGetFrame(cam) : NULL;
-	if(camFrame)
-		camLTM = RwFrameGetLTM(camFrame);
-	
-	if(!camLTM) return;  // Can't render normal buffer without camera
-	
-	float offset = config->normalBufferOffset;
-
-	// Position normal cam offset along right vector
-	RwFrame *nFrame = RwCameraGetFrame(normalCam);
-	if(!nFrame) return;
-	RwMatrix *nLTM = RwFrameGetMatrix(nFrame);
-	*nLTM = *RwFrameGetMatrix(RwCameraGetFrame(cam));
-	nLTM->pos.x += camLTM->right.x * offset;
-	nLTM->pos.y += camLTM->right.y * offset;
-	nLTM->pos.z += camLTM->right.z * offset;
-	RwMatrixUpdate(nLTM);
-	RwFrameUpdateObjects(nFrame);
-
-	// Set far clip to VLOD distance
-	float farclip = 250.0f * config->envMapFarClipMult;
-	RwCameraSetFarClipPlane(normalCam, farclip);
-
-	// Save main camera state
-	fb = RwCameraGetRaster(cam);
-	zb = RwCameraGetZRaster(cam);
-	farplane = RwCameraGetFarClipPlane(cam);
-	fog = RwCameraGetFogDistance(cam);
-
-	// Point main camera rasters at normal buffer
-	RwCameraSetRaster(cam, RwCameraGetRaster(normalCam));
-	RwCameraSetZRaster(cam, RwCameraGetZRaster(normalCam));
-	RwCameraSetFarClipPlane(cam, farclip);
-	RwCameraSetFogDistance(cam, farclip * 0.75f);
-
-	// Clear
-	RwRGBA color = { 128, 128, 255, 255 };
-	RwCameraClear(cam, &color, rwCAMERACLEARIMAGE | rwCAMERACLEARZ);
-
-	// CRASH at 0x7F98DF: Scene re-rendering for the normal buffer is disabled.
-	// RenderScene_after re-enters the vehicle pipe while still inside the
-	// render loop, corrupting shared D3D9 state (render targets, viewports).
-	// The normal buffer is filled with flat normal (128,128,255) = straight up
-	// instead of re-rendering geometry. TODO: Reconstruct normals from the
-	// depth buffer via a fullscreen pass rather than re-rendering the scene.
-
-	// Restore main camera
-	RwCameraSetRaster(cam, fb);
-	RwCameraSetZRaster(cam, zb);
-	RwCameraSetFarClipPlane(cam, farplane);
-	RwCameraSetFogDistance(cam, fog);
+	// Destroy the reflection camera and its frame (created in MakeEnvmapCam)
+	if(reflectionCam){
+		RwFrame *frame = RwCameraGetFrame(reflectionCam);
+		if(frame){ RwFrameDestroy(frame); }
+		RwCameraDestroy(reflectionCam);
+		reflectionCam = NULL;
+	}
 }
 
 void

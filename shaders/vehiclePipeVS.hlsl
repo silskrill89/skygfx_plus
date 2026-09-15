@@ -1,7 +1,7 @@
 // vehiclePipeVS.hlsl - Consolidated vehicle vertex shaders
 // Entry points: main_vehicle, main_vehiclePBR, main_ps2CarFx, main_specCarFx,
 //               main_xboxCar, main_leedsCarFx, main_mobileVehicle,
-//               main_neoPass1, main_neoPass2, main_edgeTessellation
+//               main_neoPass1, main_neoPass2
 // Compile with /E <entry> for each pass
 
 // ============================================================
@@ -445,9 +445,3 @@ VS_OUTPUT_NEO2 main_neoPass2(VS_INPUT_VEH IN)
 
     return Out;
 }
-
-// ============================================================
-// Pass 9: Edge tessellation VS (optional, smooths jagged edges)
-// ============================================================
-// This is a modern feature - kept for compatibility but not actively used
-// when edgeTessEnable is false in config

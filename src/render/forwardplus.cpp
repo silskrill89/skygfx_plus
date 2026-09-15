@@ -11,7 +11,7 @@
 #define FP_GRID_H        128    // tile grid height
 #define FP_MAX_LIGHTS    256    // max lights to collect per frame
 #define FP_LIGHTS_PER_TILE 4    // RGBA8 = 4 channels
-#define FP_MAX_LIGHTS_GPU 8     // max lights uploaded as PS constants
+#define FP_MAX_LIGHTS_GPU 32    // max lights uploaded as PS constants (all game lights)
 
 // D3D resources
 static IDirect3DTexture9 *g_fpIndexTex = NULL;    // tile light index texture (128×128 RGBA8)
@@ -25,7 +25,8 @@ static int g_fpNumLights = 0;
 // Tile data (per-tile light indices)
 static unsigned char g_fpTileData[FP_GRID_W * FP_GRID_H * 4]; // RGBA8
 
-// Best lights for GPU upload (top FP_MAX_LIGHTS_GPU)
+// Lights forwarded to the GPU — uploaded in g_fpLights order so the 1-based
+// indices stored in the tile texture map 1:1 onto the constant arrays.
 static ClusterLight g_fpGpuLights[FP_MAX_LIGHTS_GPU];
 int g_fpGpuLightCount = 0;
 
@@ -52,6 +53,19 @@ static void EnsureFPResources(IDirect3DDevice9 *dev, int screenW, int screenH)
 		return;
 	}
 	dbglog("[ForwardPlus] textures created %dx%d for %dx%d screen", FP_GRID_W, FP_GRID_H, screenW, screenH);
+
+	// Zero-init both buffers. SetConstants reads the PREVIOUS frame's texture
+	// (double-buffer), so without this the first frame after enabling would
+	// sample uninitialized indices and could apply random lights.
+	for(int b = 0; b < 2; b++){
+		IDirect3DTexture9 *tex = b ? g_fpIndexTexB : g_fpIndexTex;
+		D3DLOCKED_RECT lr;
+		if(SUCCEEDED(tex->LockRect(0, &lr, NULL, 0))){
+			for(int y = 0; y < FP_GRID_H; y++)
+				memset((BYTE*)lr.pBits + y * lr.Pitch, 0, FP_GRID_W * 4);
+			tex->UnlockRect(0);
+		}
+	}
 
 	// Register scope tags for crash backtrace
 	diag_registerScope("ForwardPlus_CullAndUpload", (void*)ForwardPlus_CullAndUpload);
@@ -226,52 +240,29 @@ static void UploadTileTexture(IDirect3DDevice9 *dev)
 	tex->UnlockRect(0);
 }
 
-// Upload light data as PS constants (c29-c44)
+// Upload light data as PS constants (c48-c111)
 // PS register mapping (VehiclePBR_Modern.hlsl):
-//   c29-c36: clusterLightPos[8] — contiguous block (pos.xyz, radius)
-//   c37-c44: clusterLightCol[8] — contiguous block (col.rgb*intensity, 0)
-//   c45:     clusterParams — (gridOffsetX, gridOffsetZ, tileSize, lightCount)
-// NOTE: c29-c44 are dedicated to Forward+ cluster lights in the PS.
-// No overlap with: c0-c4 (surf/fx/eye/ibl/cloud), c5-c18 (lights),
-// c19 (matCol), c22-c24 (pbr/paintNoise/ambient), c25-c28 (view basis/sky).
+//   c48-c79:  clusterLightPos[32] — contiguous (pos.xyz, radius)
+//   c80-c111: clusterLightCol[32] — contiguous (col.rgb*intensity, 0)
+//   c45:      clusterParams — (tileSize, gridW, gridH, lightCount)
+// Lights MUST be uploaded in g_fpLights order: the tile texture stores 1-based
+// indices into g_fpLights, so sorting here would silently mis-match them.
+// c48+ is verified free — the highest PS constant used elsewhere is c46.
 static void UploadLightConstants(void)
 {
-	// Sort lights by brightness (intensity * 1/radius²) and take top FP_MAX_LIGHTS_GPU
-	// Simple selection sort — fine for small N
-	struct LightScore { int idx; float score; };
-	LightScore scores[FP_MAX_LIGHTS];
-	for(int i = 0; i < g_fpNumLights; i++){
-		scores[i].idx = i;
-		float r2 = g_fpLights[i].radius * g_fpLights[i].radius;
-		scores[i].score = g_fpLights[i].intensity / fmaxf(r2, 1.0f);
-	}
-	// Partial sort — find top FP_MAX_LIGHTS_GPU
-	for(int i = 0; i < FP_MAX_LIGHTS_GPU && i < g_fpNumLights; i++){
-		int bestIdx = i;
-		for(int j = i + 1; j < g_fpNumLights; j++){
-			if(scores[j].score > scores[bestIdx].score) bestIdx = j;
-		}
-		if(bestIdx != i){
-			LightScore tmp = scores[i];
-			scores[i] = scores[bestIdx];
-			scores[bestIdx] = tmp;
-		}
-	}
-	
 	g_fpGpuLightCount = (g_fpNumLights < FP_MAX_LIGHTS_GPU) ? g_fpNumLights : FP_MAX_LIGHTS_GPU;
-	
+
 	for(int i = 0; i < g_fpGpuLightCount; i++){
-		const ClusterLight &light = g_fpLights[scores[i].idx];
-		// c29 + i = position.xyz + radius (contiguous block c29-c36)
+		const ClusterLight &light = g_fpLights[i];
 		float posData[4] = { light.x, light.y, light.z, light.radius };
-		// c37 + i = color.rgb * intensity (contiguous block c37-c44)
 		float colData[4] = { light.r * light.intensity, light.g * light.intensity, light.b * light.intensity, 0.0f };
-		RwD3D9SetPixelShaderConstant(29 + i, posData, 1);
-		RwD3D9SetPixelShaderConstant(37 + i, colData, 1);
+		RwD3D9SetPixelShaderConstant(48 + i, posData, 1);
+		RwD3D9SetPixelShaderConstant(80 + i, colData, 1);
 	}
-	
-	// Upload cluster params at c45: (gridOffsetX, gridOffsetZ, tileSize, lightCount)
-	float clusterParams[4] = { 0.0f, 0.0f, (float)FP_TILE_SIZE, (float)g_fpGpuLightCount };
+
+	// (tileSize, gridW, gridH, lightCount) — the shader derives the screen-space
+	// tile from VPOS: floor(vpos.xy / tileSize), relative to a 128x128 texture.
+	float clusterParams[4] = { (float)FP_TILE_SIZE, (float)FP_GRID_W, (float)FP_GRID_H, (float)g_fpGpuLightCount };
 	RwD3D9SetPixelShaderConstant(45, clusterParams, 1);
 }
 
@@ -279,8 +270,15 @@ static void UploadLightConstants(void)
 void ForwardPlus_CullAndUpload(void)
 {
 	DBGLOG_ENTER("ForwardPlus_CullAndUpload");
-	if(!config || !config->forwardPlusEnable)
+	if(!config || !config->forwardPlusEnable){
+		// Defensive: keep the shader gate closed even if the feature was toggled
+		// off after a frame where it was on (c45 would otherwise stay non-zero).
+		if(d3d9device){
+			float zeroParams[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+			RwD3D9SetPixelShaderConstant(45, zeroParams, 1);
+		}
 		return;
+	}
 	
 	IDirect3DDevice9 *dev = d3d9device;
 	if(!dev) return;
@@ -295,12 +293,28 @@ void ForwardPlus_CullAndUpload(void)
 	// Ensure textures exist
 	EnsureFPResources(dev, w, h);
 	if(!g_fpIndexTex) return;
-	
+
+	// Dims-stability guard: when camera dims change, run EnsureFPResources
+	// (done above) but skip collect/cull/upload/swap until dims repeat.
+	static int s_fpLastW = 0;
+	static int s_fpLastH = 0;
+	static int s_fpStableCount = 0;
+	if(w != s_fpLastW || h != s_fpLastH) {
+		s_fpLastW = w;
+		s_fpLastH = h;
+		s_fpStableCount = 1;
+		return;  // dims just changed — wait for stable repeat
+	}
+	if(s_fpStableCount < 2) {
+		s_fpStableCount++;
+		return;  // same dims but not yet repeated enough
+	}
+
 	// Get view/proj matrices
 	D3DMATRIX viewMat, projMat;
 	dev->GetTransform(D3DTS_VIEW, &viewMat);
 	dev->GetTransform(D3DTS_PROJECTION, &projMat);
-	
+
 	// Collect lights from game
 	CollectLights();
 
@@ -314,22 +328,37 @@ void ForwardPlus_CullAndUpload(void)
 	CullLightsToTiles(w, h, viewMat, projMat);
 	
 	// Upload to GPU — write into current buffer, then swap so SetConstants
-	// (called later from render callbacks) reads the PREVIOUS frame's buffer
+	// (called later from render callbacks) reads the PREVIOUS frame's buffer.
+	// NOTE (2026-09-14 crash fix): UploadLightConstants uses
+	// RwD3D9SetPixelShaderConstant, which is only valid inside the frame
+	// render (pipe callbacks). Calling it here in RenderScene_before
+	// derefs null RW state -> READ crash at 0x7FBD4A (+0x60). Tile texture
+	// upload is pure D3D9 and safe here; constants move to SetConstants.
 	UploadTileTexture(dev);
-	UploadLightConstants();
+	// UploadLightConstants(); -- deferred to ForwardPlus_SetConstants
 	g_fpCurrentBuffer = 1 - g_fpCurrentBuffer;
 }
 
 // Called from vehicle/building pipe render callbacks to bind cluster texture
 void ForwardPlus_SetConstants(void)
 {
-	if(!config || !config->forwardPlusEnable)
-		return;
-	if(!g_fpIndexTex) return;
-	
 	IDirect3DDevice9 *dev = d3d9device;
+	if(!config || !config->forwardPlusEnable || !g_fpIndexTex){
+		// Defensive: clear stale tile gate (c45) and cluster texture (s5)
+		// so shaders fall back to 7-light path instead of magnifying garbage.
+		if(dev){
+			float zeroParams[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+			RwD3D9SetPixelShaderConstant(45, zeroParams, 1);
+			dev->SetTexture(5, NULL);
+		}
+		return;
+	}
 	if(!dev) return;
-	
+
+	// Upload cluster light constants (c45, c48-c111). Valid here because
+	// pipe callbacks run inside the frame render where RW shader state exists.
+	UploadLightConstants();
+
 	// Bind index texture on s5 with POINT filtering
 	IDirect3DTexture9 *tex = g_fpCurrentBuffer ? g_fpIndexTexB : g_fpIndexTex;
 	dev->SetTexture(5, tex);

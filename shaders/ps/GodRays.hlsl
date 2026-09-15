@@ -1,5 +1,10 @@
 // GodRays.hlsl - Screen-space god rays / crepuscular rays (ps_3_0)
-// Radial blur toward sun position for volumetric light ray effect
+// Radial blur toward sun position for volumetric light ray effect.
+//
+// IMPORTANT: this pass is drawn with ADDITIVE blending (src=ONE, dst=ONE).
+// It must therefore output ONLY the ray contribution. The scene colour is
+// already preserved by the blend (dst += src); returning scene + rays here
+// would add the whole frame onto itself and blow out every scene.
 
 sampler2D sceneTex : register(s0);
 
@@ -18,7 +23,7 @@ float4 main(PS_INPUT IN) : COLOR
     float2 sunScreenPos = sunPos.xy;
 
     // Parameters
-    float exposure = rayParams.x;     // brightness per sample (default 0.0034)
+    float exposure = rayParams.x;     // brightness per sample (e.g. 0.0034)
     float decay = rayParams.y;        // falloff per sample (default 1.0)
     float density = rayParams.z;      // ray density (default 0.84)
     float weight = rayParams.w;       // ray weight (default 1.0)
@@ -28,18 +33,21 @@ float4 main(PS_INPUT IN) : COLOR
     numSamples = max(numSamples, 1);
     density = max(density, 0.0);
 
+    // No exposure => no contribution (do not emit scene colour: additive pass).
+    if(exposure <= 0.0)
+        return float4(0, 0, 0, 0);
+
     // Direction from current pixel to sun
     float2 deltaTexCoord = (texCoord - sunScreenPos) * density / (float)numSamples;
 
-    // Reduce effect when sun is far outside [0,1] (behind camera)
+    // Reduce effect when sun is far outside the viewport
     float sunVis = 1.0 - saturate(max(
         abs(sunScreenPos.x - 0.5) - 0.5,
         abs(sunScreenPos.y - 0.5) - 0.5) * 2.0);
+    if(sunVis <= 0.0)
+        return float4(0, 0, 0, 0);
 
-    // Original scene color
-    float3 color = tex2D(sceneTex, texCoord).rgb;
-
-    // Radial blur accumulation
+    // Radial blur accumulation (rays only)
     float3 result = float3(0, 0, 0);
     float illuminationDecay = 1.0;
     float2 sampleCoord = texCoord;
@@ -51,20 +59,19 @@ float4 main(PS_INPUT IN) : COLOR
 
         sampleCoord -= deltaTexCoord;
 
-        // Clamp sample coord to valid UV range
-        float2 clampedCoord = clamp(sampleCoord, 0.0, 1.0);
+        // Fade toward screen edges instead of clamping. Hard-clamping the
+        // sample coord smeared the border texel into long bright streaks.
+        float2 edge = saturate(min(sampleCoord, 1.0 - sampleCoord) * 12.0);
+        float edgeFade = edge.x * edge.y;
 
+        float2 clampedCoord = clamp(sampleCoord, 0.0, 1.0);
         float3 samp = tex2D(sceneTex, clampedCoord).rgb;
-        samp *= illuminationDecay * weight;
-        result += samp;
+        result += samp * (illuminationDecay * weight * edgeFade);
         illuminationDecay *= decay;
     }
 
-    // Scale by exposure and sun visibility
     result *= exposure * sunVis;
 
-    // Additive blend with original scene
-    float3 finalColor = color + result;
-
-    return float4(finalColor, 1.0);
+    // Additive blend: emit the ray contribution only (no scene colour).
+    return float4(result, 1.0);
 }

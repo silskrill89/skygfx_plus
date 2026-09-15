@@ -672,8 +672,8 @@ CreateShaders(void)
 // c22 = {glossiness, specular, pipeParam3, pipeParam4}
 // c23 = {pipeParam5, pipeParam6, pipeParam7, 0}
 //
-// Vehicle:  c22 = {glossiness, specular, specularTintR, envFresnel}
-//           c23 = {renderingWheel, noiseScale, edgeBlend, 0}
+// Vehicle:  c22 = {glossiness, specular, specTint, metallicness}
+//           c23 = {wheelFlag, noiseScale, edgeBlend, 0}
 // Building: c22 = {glossiness, specular, clearcoat, subsurface}
 //           c23 = {specularTintR, specularTintG, specularTintB, 0}
 // ============================================================

@@ -177,6 +177,8 @@ WRAPPER RwFrame *RwFrameCreate(void) { EAXJMP(0x7F0410); }
 WRAPPER void _rwObjectHasFrameSetFrame(void*, RwFrame*) { EAXJMP(0x804EF0); }
 WRAPPER RwCamera *RwCameraClear(RwCamera*, RwRGBA*, RwInt32) { EAXJMP(0x7EE340); }
 WRAPPER RwCamera *RwCameraCreate(void) { EAXJMP(0x7EE4F0); }
+WRAPPER RwBool RwCameraDestroy(RwCamera *camera) { EAXJMP(0x7EE4B0); }
+WRAPPER RwBool RwFrameDestroy(RwFrame *frame) { EAXJMP(0x7F05A0); }
 WRAPPER RwCamera *RwCameraSetViewWindow(RwCamera*, const RwV2d*) { EAXJMP(0x7EE410); }
 WRAPPER RwCamera *RwCameraSetNearClipPlane(RwCamera*, RwReal) { EAXJMP(0x7EE1D0); }
 WRAPPER RwCamera *RwCameraSetFarClipPlane(RwCamera*, RwReal) { EAXJMP(0x7EE2A0); }

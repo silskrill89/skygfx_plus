@@ -250,14 +250,6 @@ Preset defaults are applied first, then individual INI values override them.
 | `normalBufferOffset` | float | `0.5` | config.cpp | Stereo disparity offset |
 | `normalBufferScale` | float | `1.0` | config.cpp | Normal scale |
 
-## Edge Tessellation
-
-| Key | Type | Default | Parsed In | Notes |
-|-----|------|---------|-----------|-------|
-| `edgeTessEnable` | int | `0` | config.cpp | Enable edge tessellation |
-| `edgeTessStrength` | float | `0.01` | config.cpp | Displacement strength |
-| `edgeTessThreshold` | float | `0.1` | config.cpp | Edge detection threshold |
-
 ## Pipe Chain (4-Pass)
 
 | Key | Type | Default | Parsed In | Notes |
