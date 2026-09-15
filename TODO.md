@@ -58,7 +58,7 @@
 
 ### E. Housekeeping
 - [x] **Full roadmap plan** — `docs/plans/2026-08-01-remaining-roadmap.md` (Phases 0-5, 25 safety issues, all TODOs consolidated)
-- [ ] **Update PLAN.md** — mark P2/P3 done, add visual refinement tracking.
+- [x] **Update PLAN.md** — mark P2/P3 done, add visual refinement tracking.
 
 ---
 
@@ -71,12 +71,12 @@
 - [x] **Screen-space god rays** — GodRays.hlsl + DrawGodRays() in postfx.cpp, INI 6 fields, radial blur toward sun
 - [x] **PostFX chain wired** — ColourFilter→MotionBlur→HeightFog→GodRays→UpdateFrontBuffer→SSS
 - [x] **INI config** — 13 new fields parsed in config.cpp with sensible defaults
-- [ ] **Code review** — dispatched to oracle, awaiting result
+- [x] **Code review** — completed, SHIP verdict (2 warnings: misleading comment, scratch cam leak)
 - [x] **debugmenu_ui.cpp** — Add "Atmospheric" collapsing header with 13 ImGui sliders (done: lines 626-643)
 - [x] **Stencil shadow port** — game already has stencil shadows; skygfx hooks GetFxQuality_stencil (0x7113B8, 0x711D95, 0x70F9B8) + z-offset patches
 - [x] **Volumetric clouds** — DynamicSky.hlsl integrated via RenderIBLBuffer() in buildingPipe, procedural cloud clumps + layered clouds
 - [x] **Cloud ground shadows** — ComputeCloudShadow() in colorSpace.hlsl + PBR_cloudFBM() in PBR_Common.hlsl for vehicles
-- [ ] Update docs/plans with atmospheric roadmap
+- [x] Update docs/plans with atmospheric roadmap
 
 ---
 

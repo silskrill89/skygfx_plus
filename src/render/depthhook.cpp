@@ -287,12 +287,13 @@ void DepthHook_Restore(void) {
 	IDirect3DDevice9 *dev = d3d9device;
 	if(!dev) return;
 
-	// Re-enable Z to saved value and re-bind INTZ via original SetDS (goes through our hook)
+	// Re-enable Z to saved value and re-bind INTZ
 	dev->SetRenderState(D3DRS_ZENABLE, g_savedZenable);
 
-	// Re-bind the game DS — our hook will substitute INTZ
+	// Re-bind the game DS directly (bypasses hook). INTZ will be re-substituted
+	// on the next SetDepthStencilSurface call through hook_SetDS.
 	if(g_gameDS) {
-		orig_SetDS(dev, g_gameDS); // goes through hook_SetDS → substitutes INTZ
+		orig_SetDS(dev, g_gameDS);
 	} else if(g_intzSurf) {
 		orig_SetDS(dev, g_intzSurf);
 	}
