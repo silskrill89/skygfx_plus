@@ -83,10 +83,10 @@ strncat(path, filename, sizeof(path) - strlen(path) - 1);
 ### 0.5 — Raw new without delete (3 sites)
 
 **Files:**
-- `src/rw/normalmap_plugin.cpp` — new without delete
-- `src/extras/texdb.cpp:822,1146,103,167` — raw new, no RAII
+- `src/rw/normalmap_plugin.cpp:822,1147` — raw new, but paired with `delete[]` on lines 828,1156 (functional, needs RAII refactor)
+- `src/extras/texdb.cpp:107,172` — raw new `TexInfo`, cleaned up by `shutdownTexDB()` at line 297 (functional, needs RAII refactor)
 
-**Fix:** Replace with `std::unique_ptr` or add matching delete in destructor/cleanup.
+**Fix:** Replace with `std::unique_ptr` or add matching delete in destructor/cleanup. NOTE: Both sites currently have matching cleanup — not leaking, just non-RAII.
 
 ### 0.6 — Unused variable (1 site)
 
@@ -138,9 +138,9 @@ Each pipe must render without crash and produce correct output:
 
 | Stub | Location | Issue | Fix |
 |------|----------|-------|-----|
-| `UploadUnifiedConstants` | `debugmenu_ui.cpp:307` | Returns immediately, full impl below never runs | Remove early return or delete dead code |
-| Wheel extender swap | `wheels_extender.cpp:330-349` | Geometry swap disabled, Install empty | Implement or remove |
-| Env map normals | `envmap.cpp:622-636` | Normal buffer cleared flat, re-render disabled (crash 0x7F98DF) | Fix crash or remove dead path |
+| `UploadUnifiedConstants` | `debugmenu_ui.cpp:346` | Returns immediately, full impl below never runs | Remove early return or delete dead code |
+| ~~Wheel extender swap~~ | ~~`wheels_extender.cpp:330-349`~~ | ~~Geometry swap disabled, Install empty~~ | **DELETED (commit 18f5303). wheels.cpp now only contains metadata DB.** |
+| ~~Env map normals~~ | ~~`envmap.cpp:622-636`~~ | ~~Normal buffer cleared flat, re-render disabled (crash 0x7F98DF)~~ | **Resolved: crash-4 guard at envmap.cpp:414; normal buffer now handled via postfx.cpp:2017-2018** |
 | Mobile light mult | `vehiclePipe.cpp` | Unreachable mobile branch | Remove or fix |
 
 ### 1.4 — Restore YCbCr Filter
