@@ -288,6 +288,15 @@ static RwRaster *s_smaaInitZRas = NULL;
 void ReleaseSMAAStaticResources(void)
 {
 	dbglog("ReleaseSMAAStaticResources: releasing...");
+
+	// Release scratch camera created by SMAATryInitRasters()
+	if(s_smaaInitZRas){ RwRasterDestroy(s_smaaInitZRas); s_smaaInitZRas = NULL; }
+	if(s_smaaInitCam){
+		RwFrame *f = RwCameraGetFrame(s_smaaInitCam);
+		if(f){ RwFrameDestroy(f); }
+		RwCameraDestroy(s_smaaInitCam);
+		s_smaaInitCam = NULL;
+	}
 	if(g_smaaBlendTexRW){ RwTextureDestroy(g_smaaBlendTexRW); g_smaaBlendTexRW = NULL; }
 	if(g_smaaPrevFrameTexRW){ RwTextureDestroy(g_smaaPrevFrameTexRW); g_smaaPrevFrameTexRW = NULL; }
 	if(g_smaaEdgeRaster){ UntrackRaster(g_smaaEdgeRaster); RwRasterDestroy(g_smaaEdgeRaster); g_smaaEdgeRaster = NULL; }
@@ -3942,6 +3951,21 @@ static bool DrawSMAA_EdgeDetect(float smaaThreshold, float cameraMovement, const
 	return ok;
 }
 
+static bool SMAA_DrawPass(IDirect3DPixelShader9 *shader)
+{
+	bool ok = true;
+	__try {
+		overrideIm2dPixelShader = shader;
+		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
+		overrideIm2dPixelShader = nil;
+	} __except(EXCEPTION_EXECUTE_HANDLER){
+		overrideIm2dPixelShader = nil;
+		dbglog("[SMAA-DIAG] EXCEPTION in SMAA pass (Im2D fault shader=%p code=0x%08X) — SMAA disabled this frame", shader, GetExceptionCode());
+		ok = false;
+	}
+	return ok;
+}
+
 void
 CPostEffects::DrawSMAA(void)
 {
@@ -4292,9 +4316,11 @@ CPostEffects::DrawSMAA(void)
 	float blendP[4] = {0.0f, smaaSearchSteps, 0.0f, 0.0f};
 	RwD3D9SetPixelShaderConstant(0, blendP, 1);
 	RwD3D9SetPixelShaderConstant(1, screenParams, 1);
-	overrideIm2dPixelShader = SMAA_BlendWeight;
-	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
-	overrideIm2dPixelShader = nil;
+	if(!SMAA_DrawPass((IDirect3DPixelShader9*)SMAA_BlendWeight)){
+		dev->SetViewport(&vpSaved);
+		ImmediateModeRenderStatesReStore();
+		return;
+	}
 
 	// Clean up texture stages after Pass 1
 	if(dev){
@@ -4334,9 +4360,11 @@ CPostEffects::DrawSMAA(void)
 
 	// Set neighborhood blend shader
 	RwD3D9SetPixelShaderConstant(1, screenParams, 1);
-	overrideIm2dPixelShader = SMAA_BlendNeighbor;
-	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
-	overrideIm2dPixelShader = nil;
+	if(!SMAA_DrawPass((IDirect3DPixelShader9*)SMAA_BlendNeighbor)){
+		dev->SetViewport(&vpSaved);
+		ImmediateModeRenderStatesReStore();
+		return;
+	}
 
 	// Cleanup texture stages after Pass 2
 	RwD3D9SetTexture(NULL, 1);
@@ -4405,9 +4433,13 @@ CPostEffects::DrawSMAA(void)
 			dbglog("[SMAA] velocity: vel=%.3f rot=%.3f tanFov=(%.3f, %.3f)",
 				velFactor, rotFactor, tanX, tanY);
 
-		overrideIm2dPixelShader = SMAA_Temporal;
-		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
-		overrideIm2dPixelShader = nil;
+		if(!SMAA_DrawPass((IDirect3DPixelShader9*)SMAA_Temporal)){
+			RwD3D9SetTexture(NULL, 1);
+			dev->SetTexture(2, NULL);
+			dev->SetViewport(&vpSaved);
+			ImmediateModeRenderStatesReStore();
+			return;
+		}
 
 		// Cleanup
 		RwD3D9SetTexture(NULL, 1);
