@@ -30,7 +30,6 @@ shaders/
 │   ├── neoVehiclePass2VS.hlsl  # Neo vehicle pass 2 VS
 │   ├── postfxVS.hlsl           # Post-processing fullscreen quad
 │   ├── Water_VS.hlsl           # Water vertex transform
-│   └── EdgeTessellationVS.hlsl # Edge tessellation displacement
 ├── ps/                         # Pixel shaders (35 files)
 │   ├── simplePS.hlsl           # Basic texture * color
 │   ├── grassPS.hlsl            # Grass rendering
@@ -198,7 +197,6 @@ fxc /E <entry> /T <profile> /Fo cso/<name>.cso <name>.hlsl
 | `vehiclePipeVS.hlsl` | `main_mobileVehicle` | Mobile vehicle | vs_2_0 |
 | `vehiclePipeVS.hlsl` | `main_neoPass1` | Neo pass 1 | vs_2_0 |
 | `vehiclePipeVS.hlsl` | `main_neoPass2` | Neo pass 2 | vs_2_0 |
-| `vehiclePipeVS.hlsl` | `main_edgeTessellation` | Edge tessellation | vs_3_0 |
 | `vehicleVS.hlsl` | `main` | Basic vehicle | vs_2_0 |
 | `ps2BuildingVS.hlsl` | `main` | PS2 building | vs_2_0 |
 | `ps2BuildingFxVS.hlsl` | `main` | PS2 building FX | vs_2_0 |
@@ -213,7 +211,6 @@ fxc /E <entry> /T <profile> /Fo cso/<name>.cso <name>.hlsl
 | `neoVehiclePass2VS.hlsl` | `main` | Neo vehicle pass 2 | vs_2_0 |
 | `postfxVS.hlsl` | `main` | Post-processing quad | vs_2_0 |
 | `Water_VS.hlsl` | `main` | Water | vs_2_0 |
-| `EdgeTessellationVS.hlsl` | `main` | Edge tessellation | vs_3_0 |
 
 ### Pixel Shaders — Vehicle
 

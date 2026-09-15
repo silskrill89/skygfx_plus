@@ -255,7 +255,7 @@ float SurfaceTypeToHeight(int surfaceType)
 }
 
 // --- Water Height Field ---
-// Procedural water height from perlin - used for POM and tessellation displacement
+// Procedural water height from perlin - used for POM
 float WaterHeight(float2 worldUV, float time, float waveScale)
 {
 	// Three octaves of traveling waves at different angles

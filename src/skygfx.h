@@ -392,13 +392,6 @@ struct Config {
 	float vegetationSSSStrength;	// 0.0-1.0, translucency strength
 	float vegetationAmbientBoost;	// ambient light multiplier
 
-	// Edge Tessellation - smooths sharp edges
-	// NOTE: Displaces vertices along normals at edges. Works best on vehicles
-	// and characters with sharp polygon edges. Requires SMAA edge buffer.
-	RwBool edgeTessEnable;
-	float edgeTessStrength;		// displacement strength
-	float edgeTessThreshold;	// edge detection threshold
-
 	// GTA IV Mode
 	RwBool ivMode;
 	float ivDesaturation;
@@ -661,14 +654,8 @@ extern RwRaster *envFB, *envZB;
 extern RwTexture *reflectionTex;
 void MakeEnvmapRasters(void);
 void MakeEnvmapCam(void);
+void ShutdownEnvMap(void);
 
-/* Normal buffer (stereo disparity) */
-extern RwCamera *normalCam;
-extern RwRaster *normalFB, *normalZB;
-extern RwTexture *normalTex;
-void MakeNormalRasters(void);
-void MakeNormalCam(void);
-void RenderNormalBuffer(void);
 extern struct IDirect3DTexture9 *g_normalBufferTex;
 
 enum {
@@ -1018,7 +1005,7 @@ void GTAfree(void *data);
 // c22 = {glossiness, specular, pipeParam3, pipeParam4}
 // c23 = {pipeParam5, pipeParam6, pipeParam7, 0}
 //
-// Vehicle: c22 = {glossiness, specular, tintR, tintG}
+// Vehicle: c22 = {glossiness, specular, specTint, metallicness}
 //          c23 = {wheelFlag, noiseScale, edgeBlend, 0}
 // Building: c22 = {glossiness, specular, clearcoat, subsurface}
 //           c23 = {tintR, tintG, tintB, 0}

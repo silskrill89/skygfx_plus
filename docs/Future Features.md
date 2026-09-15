@@ -85,11 +85,6 @@ Most features are already implemented (see [[Implemented Features]]). Remaining:
 - **Reason:** Requires DK22Pac normalmap SDK, complex dependencies
 - **Notes:** Code exists in `src/rw/normalmap.cpp` but excluded from build
 
-### Edge Tessellation
-- **Status:** Experimental
-- **Reason:** Can cause visual artifacts, needs more work
-- **Notes:** Shader exists (`EdgeTessellationVS.hlsl`) but disabled in config
-
 ### Multi-pass Vehicle Glass with Parallax
 - **Status:** Partially implemented
 - **Notes:** Glass shader exists, needs POM integration for lens details

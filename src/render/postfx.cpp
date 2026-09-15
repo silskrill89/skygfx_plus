@@ -304,6 +304,7 @@ void ReleaseSMAAStaticResources(void)
 // Velocity buffer resources
 static IDirect3DTexture9 *g_velocityTex = NULL;
 static IDirect3DSurface9 *g_velocitySurf = NULL;
+static int s_velocityW = 0, s_velocityH = 0;  // cached dims for res-aware recreate
 static D3DMATRIX g_prevVPMatrix;
 static bool g_prevVPValid = false;
 
@@ -311,6 +312,7 @@ static void ReleaseVelocityBufferResources(void)
 {
 	if(g_velocityTex){ g_velocityTex->Release(); g_velocityTex = NULL; }
 	if(g_velocitySurf){ g_velocitySurf->Release(); g_velocitySurf = NULL; }
+	s_velocityW = 0; s_velocityH = 0;
 	g_prevVPValid = false;
 }
 
@@ -1982,6 +1984,7 @@ CPostEffects::Grain_PS2(int strength, bool generate)
 
 void DrawNormalBufferToTexture(void);
 void DrawPipeChain(void);
+static void CopyDepthToPrev(void);
 
 void
 CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
@@ -2021,6 +2024,10 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 			DrawSSAO();             // Fallback: old full-res SSAO
 		}
 	}
+
+	// Copy current depth to prev-depth history AFTER SSAO has consumed
+	// the previous frame's depth, so temporal reprojection (T5) works correctly.
+	CopyDepthToPrev();
 
 	// 4-Pipe chain (after SSAO, uses normal buffer)
 	if(config->pipeChainEnable && config->normalBufferEnable){
@@ -2397,6 +2404,16 @@ static IDirect3DSurface9 *g_ssaoDepthSurf = NULL;
 static IDirect3DTexture9 *g_ssaoNoiseTex = NULL;
 static RwRaster *g_ssaoOutputRaster = NULL;
 
+// Wave-2 temporal history: previous-frame depth (own R32F render target, never aliased)
+IDirect3DTexture9 *g_prevDepthTex = NULL;
+static IDirect3DSurface9 *g_prevDepthSurf = NULL;
+bool g_prevDepthValid = false;
+static int s_prevDepthW = 0, s_prevDepthH = 0;  // cached dims for res-aware recreate
+static bool s_prevDepthLogDone = false;         // one-shot failure log
+
+// Wave-2 helper defined below InitSSAOResources; forward-declared for its two call sites.
+static void CreatePrevDepthTexture(IDirect3DDevice9 *dev, int w, int h);
+
 // SSAO overhaul — quarter-res temporal pipeline
 static RwRaster *g_ssaoQuarterRaster[2] = {NULL, NULL};
 static RwTexture *g_ssaoQuarterTexRW[2] = {NULL, NULL};
@@ -2419,6 +2436,12 @@ extern void *DynamicSky;
 // Normal buffer (half-res stereo-derived normals)
 IDirect3DTexture9 *g_normalBufferTex = NULL;
 static IDirect3DSurface9 *g_normalBufferSurf = NULL;
+static int s_normalBufW = 0, s_normalBufH = 0;  // cached dims for res-aware recreate
+
+// Wave-2 temporal history: previous-frame normals (half-res, same dims as g_normalBufferTex)
+IDirect3DTexture9 *g_prevNormalTex = NULL;
+static IDirect3DSurface9 *g_prevNormalSurf = NULL;
+bool g_normalHistoryValid = false;
 
 extern void *NormalBufferShader;
 
@@ -2442,6 +2465,12 @@ void ReleaseDefaultPoolResources(void)
 	if(g_ssaoDepthSurf && g_ssaoDepthSurf != g_intzSurf){ g_ssaoDepthSurf->Release(); g_ssaoDepthSurf = NULL; }
 	// Note: g_ssaoNoiseTex is D3DPOOL_MANAGED, survives reset
 
+	// Wave-2 prev-depth history (own R32F RT, never aliased — always released here)
+	if(g_prevDepthTex){ g_prevDepthTex->Release(); g_prevDepthTex = NULL; }
+	if(g_prevDepthSurf){ g_prevDepthSurf->Release(); g_prevDepthSurf = NULL; }
+	g_prevDepthValid = false;
+	s_prevDepthW = 0; s_prevDepthH = 0;
+
 	// SSAO output raster (RW-managed)
 	if(g_ssaoOutputRaster){ RwRasterDestroy(g_ssaoOutputRaster); g_ssaoOutputRaster = nil; }
 
@@ -2462,6 +2491,12 @@ void ReleaseDefaultPoolResources(void)
 	// Normal buffer (D3DPOOL_DEFAULT)
 	if(g_normalBufferTex){ g_normalBufferTex->Release(); g_normalBufferTex = NULL; }
 	if(g_normalBufferSurf){ g_normalBufferSurf->Release(); g_normalBufferSurf = NULL; }
+	s_normalBufW = 0; s_normalBufH = 0;
+
+	// Wave-2 prev-normal history (D3DPOOL_DEFAULT)
+	if(g_prevNormalTex){ g_prevNormalTex->Release(); g_prevNormalTex = NULL; }
+	if(g_prevNormalSurf){ g_prevNormalSurf->Release(); g_prevNormalSurf = NULL; }
+	g_normalHistoryValid = false;
 
 	// Pipe chain (D3DPOOL_DEFAULT)
 	if(g_pipeChainTexA){ g_pipeChainTexA->Release(); g_pipeChainTexA = NULL; }
@@ -2494,6 +2529,12 @@ void ReleaseDefaultPoolResources(void)
 
 	// INTZ depth hook resources (handles g_intzTex/g_intzSurf which g_ssaoDepthTex aliases)
 	DepthHook_ReleaseResources();
+	// DepthHook_ReleaseResources() just freed g_intzTex; clear the alias too or
+	// g_ssaoDepthTex dangles and the re-alias guard in InitSSAOResources never
+	// fires -> use-after-free on the next frame. Safe unconditionally (the
+	// non-aliased case already nulled these above).
+	g_ssaoDepthTex = NULL;
+	g_ssaoDepthSurf = NULL;
 
 	dbglog("ReleaseDefaultPoolResources: done");
 }
@@ -2561,6 +2602,7 @@ void InitSSAOResources(void)
 			g_ssaoDepthTex = g_intzTex;
 			g_ssaoDepthSurf = g_intzSurf;
 			dbglog("InitSSAOResources: using depthhook INTZ depth texture %dx%d", w, h);
+			CreatePrevDepthTexture(dev, w, h);
 			dbglog("InitSSAOResources: done");
 			return;
 		}
@@ -2582,6 +2624,7 @@ void InitSSAOResources(void)
 				if(SUCCEEDED(hr)){
 					g_ssaoDepthTex->GetSurfaceLevel(0, &g_ssaoDepthSurf);
 					dbglog("InitSSAOResources: INTZ depth texture created OK (fallback)");
+					CreatePrevDepthTexture(dev, w, h);
 					d3d->Release();
 					dbglog("InitSSAOResources: done");
 					return;
@@ -2600,6 +2643,127 @@ void InitSSAOResources(void)
 		dbglog("InitSSAOResources: done");
 	} __except(EXCEPTION_EXECUTE_HANDLER){
 		dbglog("InitSSAOResources crashed! exception=0x%08X", GetExceptionCode());
+	}
+}
+
+// Wave-2: create the previous-frame depth history texture (own R32F render target).
+// A plain R32F render target is used instead of INTZ/DEPTHSTENCIL because INTZ is a
+// texture format that can neither be read back via GetRenderTargetData (requires
+// POOL_SYSTEMMEM) nor copied via StretchRect (requires a plain depth-stencil surface).
+// The history is instead populated by rendering a fullscreen quad that samples the
+// current scene depth (see CopyDepthToPrev).
+// Res-aware: mirrors the velocity/normal buffer idiom — recreate when dims change.
+static void CreatePrevDepthTexture(IDirect3DDevice9 *dev, int w, int h)
+{
+	if(!dev || w < 1 || h < 1) return;
+	if(g_prevDepthTex && s_prevDepthW == w && s_prevDepthH == h) return;
+
+	// Release on dim change (or re-init)
+	if(g_prevDepthTex){ g_prevDepthTex->Release(); g_prevDepthTex = NULL; }
+	if(g_prevDepthSurf){ g_prevDepthSurf->Release(); g_prevDepthSurf = NULL; }
+	g_prevDepthValid = false;
+
+	HRESULT hr = dev->CreateTexture(w, h, 1, D3DUSAGE_RENDERTARGET,
+		D3DFMT_R32F, D3DPOOL_DEFAULT, &g_prevDepthTex, NULL);
+	if(SUCCEEDED(hr)){
+		g_prevDepthTex->GetSurfaceLevel(0, &g_prevDepthSurf);
+		s_prevDepthW = w;
+		s_prevDepthH = h;
+		dbglog("InitSSAOResources: prevDepth R32F texture created OK %dx%d", w, h);
+	}else{
+		dbglog("InitSSAOResources: CreateTexture prevDepth R32F failed hr=0x%08X", hr);
+		g_prevDepthTex = NULL;
+		g_prevDepthSurf = NULL;
+		s_prevDepthW = 0;
+		s_prevDepthH = 0;
+		g_prevDepthValid = false;
+	}
+}
+
+// Wave-2: copy current depth (g_ssaoDepthTex) into the previous-frame history texture
+// by rendering a fullscreen quad whose pixel shader samples the scene depth and writes
+// it to the R32F render target. History is only marked valid when the draw succeeds.
+static void CopyDepthToPrev(void)
+{
+	if(!g_ssaoDepthTex){
+		g_prevDepthValid = false;
+		return;
+	}
+	IDirect3DDevice9 *dev = d3d9device;
+	if(!dev){ g_prevDepthValid = false; return; }
+	if(!ClampShader){ g_prevDepthValid = false; return; }
+
+	// Res-aware lazy (re)create of the history texture (full camera resolution).
+	RwRaster *camRas = Scene.camera ? RwCameraGetRaster(Scene.camera) : NULL;
+	if(!camRas){ g_prevDepthValid = false; return; }
+	CreatePrevDepthTexture(dev, camRas->width, camRas->height);
+
+	if(!g_prevDepthTex || !g_prevDepthSurf){ g_prevDepthValid = false; return; }
+
+	// Save current RT, DS, viewport
+	IDirect3DSurface9 *oldRT = NULL;
+	IDirect3DSurface9 *oldDS = NULL;
+	D3DVIEWPORT9 oldVP;
+	dev->GetRenderTarget(0, &oldRT);
+	dev->GetDepthStencilSurface(&oldDS);
+	dev->GetViewport(&oldVP);
+
+	bool ok = false;
+
+	CPostEffects::ImmediateModeRenderStatesStore();
+	CPostEffects::ImmediateModeRenderStatesSet();
+	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
+	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
+	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
+	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
+	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
+
+	dev->SetRenderTarget(0, g_prevDepthSurf);
+	dev->SetDepthStencilSurface(NULL);
+	D3DVIEWPORT9 pdVP = { 0, 0, (DWORD)s_prevDepthW, (DWORD)s_prevDepthH, 0.0f, 1.0f };
+	dev->SetViewport(&pdVP);
+
+	__try {
+		// Suspend depth hook so g_ssaoDepthTex (INTZ) can be sampled while not bound as DS
+		DepthHook_Suspend();
+
+		dev->SetTexture(0, g_ssaoDepthTex);
+		dev->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+		dev->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+		dev->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
+		dev->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_POINT);
+
+		// ClampShader is the generic s0→RT copy shader; c0={min,max,tonemap,0} with
+		// [0,1] clamp is a no-op for depth (already in [0,1]).
+		float c0[4] = { 0.0f, 1.0f, 0.0f, 0.0f };
+		RwD3D9SetPixelShaderConstant(0, c0, 1);
+
+		overrideIm2dPixelShader = ClampShader;
+		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
+		overrideIm2dPixelShader = nil;
+
+		DepthHook_Restore();
+		ok = true;
+	} __except(EXCEPTION_EXECUTE_HANDLER){
+		DepthHook_Restore(); // keep Suspend/Restore balanced on fault
+	}
+
+	dev->SetTexture(0, NULL);
+	dev->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+	dev->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+
+	CPostEffects::ImmediateModeRenderStatesReStore();
+
+	dev->SetViewport(&oldVP);
+	dev->SetRenderTarget(0, oldRT);
+	dev->SetDepthStencilSurface(oldDS);
+	if(oldRT) oldRT->Release();
+	if(oldDS) oldDS->Release();
+
+	g_prevDepthValid = ok;
+	if(!ok && !s_prevDepthLogDone){
+		s_prevDepthLogDone = true;
+		dbglog("[PostFX] CopyDepthToPrev: depth copy failed, prev-depth history disabled (one-shot)");
 	}
 }
 
@@ -2751,6 +2915,13 @@ CPostEffects::DrawSSAO(void)
 		RwCameraSetRaster(Scene.camera, origRaster);
 		RwCameraBeginUpdate(Scene.camera);
 
+		// Unbind SSAO samplers (s0-s2) so g_ssaoDepthTex doesn't leak past
+		// DepthHook_Restore and stay bound while INTZ is re-bound as DS
+		// (feedback lock risk), mirroring DrawSSAO_Overhaul/DrawHeightFog.
+		dev->SetTexture(0, NULL);
+		dev->SetTexture(1, NULL);
+		dev->SetTexture(2, NULL);
+
 		// Restore depth hook (re-binds INTZ as DS, re-enables Z)
 		DepthHook_Restore();
 
@@ -2856,6 +3027,9 @@ static void DrawSSAO_Overhaul(void)
 		dev->SetTexture(2, g_normalBufferTex); // NULL-safe: D3D9 ignores NULL SetTexture
 		dev->SetTexture(3, g_velocityTex);     // NULL-safe: D3D9 ignores NULL SetTexture
 		RwD3D9SetTexture(g_ssaoQuarterTexRW[otherIdx], 4);
+		// Wave-2: s5=prev-depth, s6=prev-normals (NULL-safe: D3D9 ignores NULL SetTexture)
+		dev->SetTexture(5, g_prevDepthValid ? g_prevDepthTex : NULL);
+		dev->SetTexture(6, g_normalHistoryValid ? g_prevNormalTex : NULL);
 
 		dev->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
 		dev->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
@@ -2867,15 +3041,30 @@ static void DrawSSAO_Overhaul(void)
 		dev->SetSamplerState(3, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
 		dev->SetSamplerState(4, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
 		dev->SetSamplerState(4, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+		// Wave-2: history samplers POINT/CLAMP (matching s0's CLAMP addressing, point filter for depth)
+		dev->SetSamplerState(5, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+		dev->SetSamplerState(5, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+		dev->SetSamplerState(5, D3DSAMP_MINFILTER, D3DTEXF_POINT);
+		dev->SetSamplerState(5, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
+		dev->SetSamplerState(6, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+		dev->SetSamplerState(6, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+		dev->SetSamplerState(6, D3DSAMP_MINFILTER, D3DTEXF_POINT);
+		dev->SetSamplerState(6, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
 
 		// c0: {radius, power, noiseScale, temporalBlend}
-		float c0Temporal[4] = { radius, power, noiseScale, g_ssaoHistoryValid ? config->ssaoTemporalBlend : 1.0f };
+		// temporalBlend is the HISTORY weight (SSAO_Temporal.hlsl lerps toward
+		// historyOcclusion by this value), so it only applies when BOTH SSAO
+		// history and prev-depth history are valid; fallback to 0.0 = no history.
+		float c0Temporal[4] = { radius, power, noiseScale, (g_ssaoHistoryValid && g_prevDepthValid) ? config->ssaoTemporalBlend : 0.0f };
 		RwD3D9SetPixelShaderConstant(0, c0Temporal, 1);
 		// c1: {quarterW, quarterH, 1/quarterW, 1/quarterH}
 		float c1Temporal[4] = { (float)g_ssaoQuarterW, (float)g_ssaoQuarterH, 1.0f/max((float)g_ssaoQuarterW, 1e-7f), 1.0f/max((float)g_ssaoQuarterH, 1e-7f) };
 		RwD3D9SetPixelShaderConstant(1, c1Temporal, 1);
 		// c2: projInfo
 		RwD3D9SetPixelShaderConstant(2, projInfo, 1);
+		// c4: Wave-2 history flags {prevDepthValid, depthBlend, prevNormalValid, 0}
+		float c4History[4] = { (float)g_prevDepthValid, 0.05f, (float)g_normalHistoryValid, 0.0f };
+		RwD3D9SetPixelShaderConstant(4, c4History, 1);
 
 		overrideIm2dPixelShader = SSAO_Temporal;
 		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
@@ -2978,8 +3167,8 @@ static void DrawSSAO_Overhaul(void)
 		RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
 		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
 
-		// s0: blur result, s1: depth
-		RwD3D9SetTexture(g_ssaoBlurTempTexRW, 0);
+		// s0: final V-pass result (quarter frame), s1: depth
+		RwD3D9SetTexture(g_ssaoQuarterTexRW[g_ssaoFrameIndex], 0);
 		dev->SetTexture(1, g_ssaoDepthTex);
 		dev->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
 		dev->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
@@ -3003,6 +3192,16 @@ static void DrawSSAO_Overhaul(void)
 		RwCameraEndUpdate(Scene.camera);
 		RwCameraSetRaster(Scene.camera, origRaster);
 		RwCameraBeginUpdate(Scene.camera);
+
+		// Wave-2: unbind all Pass 1 samplers (s0-s6) so the depth texture and
+		// history textures don't leak past DepthHook_Restore (feedback lock risk).
+		dev->SetTexture(0, NULL);
+		dev->SetTexture(1, NULL);
+		dev->SetTexture(2, NULL);
+		dev->SetTexture(3, NULL);
+		dev->SetTexture(4, NULL);
+		dev->SetTexture(5, NULL);
+		dev->SetTexture(6, NULL);
 
 		// Restore depth hook (re-binds INTZ as DS, re-enables Z)
 		DepthHook_Restore();
@@ -3116,6 +3315,24 @@ void RenderIBLBuffer(void)
 {
 	static int iblLogged = 0;
 	if(!DynamicSky){ if(!iblLogged){ dbglog("RenderIBL: DynamicSky=NULL"); iblLogged=1; } return; }
+
+	// Defense-in-depth: skip if camera isn't ready (frame 1 before BeginUpdate).
+	// RwCameraGetRaster(NULL) would crash the D3D9 driver, and Im2D dispatch
+	// needs a live camera context. The call-site gate in buildingPipe.cpp
+	// catches this earlier; this guard prevents crash if entry is reached anyway.
+	if(!Scene.camera){
+		if(!iblLogged){ dbglog("RenderIBL: Scene.camera NULL (first-frame defer)"); iblLogged=1; }
+		return;
+	}
+
+	// Lane G gate: Scene.camera exists on frame 1 but the exe-side camera global
+	// at 0xC9BCC0 is still NULL before the first RwCameraBeginUpdate. Existence
+	// != begun. RwIm2DRenderIndexedPrimitive dereferences it → null deref fault.
+	if(*(void**)0xC9BCC0 == NULL){
+		if(dbglog_throttle("ibl_nobegun"))
+			dbglog("RenderIBL: skip, camera not begun");
+		return;
+	}
 
 	// Get screen size BEFORE switching RT so we can bail without leaking refs
 	RwRaster *camRas = RwCameraGetRaster(Scene.camera);
@@ -3249,7 +3466,6 @@ void RenderIBLBuffer(void)
 
 static IDirect3DTexture9* GetNormalBufferTexture(void)
 {
-	if(g_normalBufferTex) return g_normalBufferTex;
 	IDirect3DDevice9 *dev = d3d9device;
 	if(!dev) return NULL;
 	if(!Scene.camera) return NULL;
@@ -3258,6 +3474,22 @@ static IDirect3DTexture9* GetNormalBufferTexture(void)
 	int w = camRas->width / 2;
 	int h = camRas->height / 2;
 	if(w < 1 || h < 1) return NULL;
+
+	// Res-aware: recreate if the camera resolution changed since creation
+	if(g_normalBufferTex && (w != s_normalBufW || h != s_normalBufH)){
+		if(g_normalBufferSurf){ g_normalBufferSurf->Release(); g_normalBufferSurf = NULL; }
+		g_normalBufferTex->Release();
+		g_normalBufferTex = NULL;
+	}
+	// Wave-2: prev-normal history shares the main dims — recreate + invalidate on change
+	if(g_prevNormalTex && (w != s_normalBufW || h != s_normalBufH)){
+		if(g_prevNormalSurf){ g_prevNormalSurf->Release(); g_prevNormalSurf = NULL; }
+		g_prevNormalTex->Release();
+		g_prevNormalTex = NULL;
+		g_normalHistoryValid = false;
+	}
+
+	if(g_normalBufferTex) return g_normalBufferTex;
 	if(FAILED(dev->CreateTexture(w, h, 1, D3DUSAGE_RENDERTARGET,
 		D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &g_normalBufferTex, NULL)))
 		return NULL;
@@ -3265,6 +3497,21 @@ static IDirect3DTexture9* GetNormalBufferTexture(void)
 		g_normalBufferTex->Release();
 		g_normalBufferTex = NULL;
 		return NULL;
+	}
+	s_normalBufW = w;
+	s_normalBufH = h;
+
+	// Wave-2: lazy-create prev-normal history texture (half-res, same dims/format as main)
+	if(!g_prevNormalTex){
+		if(FAILED(dev->CreateTexture(w, h, 1, D3DUSAGE_RENDERTARGET,
+			D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &g_prevNormalTex, NULL))){
+			dbglog("[PostFX] GetNormalBufferTexture: CreateTexture prevNormal failed");
+			g_normalHistoryValid = false;
+		}else if(FAILED(g_prevNormalTex->GetSurfaceLevel(0, &g_prevNormalSurf))){
+			g_prevNormalTex->Release();
+			g_prevNormalTex = NULL;
+			g_normalHistoryValid = false;
+		}
 	}
 	return g_normalBufferTex;
 }
@@ -3350,24 +3597,34 @@ void DrawNormalBufferToTexture(void)
 	RwD3D9SetPixelShaderConstant(2, projP, 1);
 
 	// Set depth texture on stage 0 only (single-pass depth reconstruction)
-	dev->SetTexture(0, g_ssaoDepthTex);
-	dev->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
-	dev->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
-	dev->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
-	dev->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+	// Suspend depth hook so the INTZ depth can be sampled while not bound as DS
+	// (mirrors DrawSSAO) — otherwise the depth texture is feedback-locked.
+	__try {
+		DepthHook_Suspend();
+		dev->SetTexture(0, g_ssaoDepthTex);
+		dev->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+		dev->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+		dev->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+		dev->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
 
-	// Render fullscreen quad with normal buffer shader
-	CPostEffects::ImmediateModeRenderStatesStore();
-	CPostEffects::ImmediateModeRenderStatesSet();
-	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
-	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
+		// Render fullscreen quad with normal buffer shader
+		CPostEffects::ImmediateModeRenderStatesStore();
+		CPostEffects::ImmediateModeRenderStatesSet();
+		RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
+		RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
+		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
+		RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
+		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
 
-	overrideIm2dPixelShader = NormalBufferShader;
-	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
-	overrideIm2dPixelShader = nil;
+		overrideIm2dPixelShader = NormalBufferShader;
+		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
+		overrideIm2dPixelShader = nil;
+
+		// Restore depth hook (re-binds INTZ as DS, re-enables Z)
+		DepthHook_Restore();
+	} __except(EXCEPTION_EXECUTE_HANDLER){
+		DepthHook_Restore(); // keep Suspend/Restore balanced on fault
+	}
 
 	CPostEffects::ImmediateModeRenderStatesReStore();
 
@@ -3380,6 +3637,19 @@ void DrawNormalBufferToTexture(void)
 	dev->SetDepthStencilSurface(oldDS);
 	if(oldRT) oldRT->Release();
 	if(oldDS) oldDS->Release();
+
+	// Wave-2: copy current normals to previous-frame history (half-res)
+	if(g_normalBufferTex && g_prevNormalTex && g_prevNormalSurf){
+		IDirect3DSurface9 *srcSurf = NULL;
+		if(SUCCEEDED(g_normalBufferTex->GetSurfaceLevel(0, &srcSurf)) && srcSurf){
+			g_normalHistoryValid = SUCCEEDED(dev->StretchRect(srcSurf, NULL, g_prevNormalSurf, NULL, D3DTEXF_NONE));
+			srcSurf->Release();
+		}else{
+			g_normalHistoryValid = false;
+		}
+	}else{
+		g_normalHistoryValid = false;
+	}
 }
 
 void DrawPipeChain(void)
@@ -3433,7 +3703,9 @@ void DrawPipeChain(void)
 		dev->SetSamplerState(1, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
 		dev->SetSamplerState(1, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
 
-		// Depth on stage 2
+		// Depth on stage 2 (suspend depth hook so INTZ can be sampled on s2)
+		__try {
+		DepthHook_Suspend();
 		dev->SetTexture(2, g_ssaoDepthTex);
 		dev->SetSamplerState(2, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
 		dev->SetSamplerState(2, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
@@ -3441,7 +3713,6 @@ void DrawPipeChain(void)
 		overrideIm2dPixelShader = PipeChainShader;
 		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
 		overrideIm2dPixelShader = nil;
-	}
 
 	// ---- Pass 1: Mid-A -> texB ----
 	{
@@ -3485,6 +3756,13 @@ void DrawPipeChain(void)
 		overrideIm2dPixelShader = PipeChainShader;
 		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
 		overrideIm2dPixelShader = nil;
+	}
+
+	// Restore depth hook after the last depth-sampling pass (Pass 3 doesn't sample depth)
+	DepthHook_Restore();
+	} __except(EXCEPTION_EXECUTE_HANDLER){
+		DepthHook_Restore(); // keep Suspend/Restore balanced on fault
+	}
 	}
 
 	// ---- Pass 3: Output -> back buffer ----
@@ -3559,6 +3837,12 @@ void SMAATryInitRasters(void)
 		}
 	}
 
+	// Crash fix: save the exe's global camera pointer (0xC9BCC0) before we
+	// call RwCameraBeginUpdate on our scratch camera. Each EndUpdate clears it
+	// to NULL, and game code at 0x7F98DF dereferences [0xC9BCC0]+0x60 → crash.
+	// Restore it after all BeginUpdate/EndUpdate pairs are done.
+	void* savedCam = *(void**)0xC9BCC0;
+
 	// ---- SMAA rasters ----
 	if(s_smaaPendingInit && g_smaaEdgeRaster && g_smaaBlendRaster && g_smaaPrevFrameRaster){
 		RwRaster *initRas[] = { g_smaaEdgeRaster, g_smaaBlendRaster, g_smaaPrevFrameRaster };
@@ -3593,6 +3877,69 @@ void SMAATryInitRasters(void)
 		dbglog("[RasterInit] VCS radiosity rasters force-initialized as render targets");
 		s_vcsRadPendingInit = false;
 	}
+
+	// Restore the game's camera pointer so 0x7F98DF doesn't read NULL+0x60.
+	*(void**)0xC9BCC0 = savedCam;
+
+	// Crash fix (2026-09-14 #3): the scratch camera leaves the last init
+	// raster bound as the D3D9 render target, corrupting all downstream
+	// rendering (READ crash at 0x7FBD4A +0x60). Detach it and restore the
+	// backbuffer so the main frame renders to the correct target.
+	RwCameraSetRaster(s_smaaInitCam, NULL);
+	if(d3d9device){
+		IDirect3DSurface9 *bb = NULL;
+		if(SUCCEEDED(d3d9device->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &bb))){
+			d3d9device->SetRenderTarget(0, bb);
+			bb->Release();
+		}
+		dbglog("[RasterInit] scratch camera detached, backbuffer restored");
+	}
+}
+
+// SMAA edge-detect pass — extracted for SEH safety.
+// DrawSMAA has C++ objects with destructors in scope (error C2712 prevents __try),
+// so the risky Im2D render call lives here where only POD locals exist.
+// Returns true on success, false if the pass faulted (caller skips remaining passes).
+static bool DrawSMAA_EdgeDetect(float smaaThreshold, float cameraMovement, const float screenParams[4])
+{
+	extern IDirect3DTexture9 *g_ssaoDepthTex;
+	bool depthSuspended = false;
+
+	// Suspend depth hook so INTZ can be sampled on s2
+	if(g_ssaoDepthTex){
+		DepthHook_Suspend();
+		d3d9device->SetTexture(2, g_ssaoDepthTex);
+		depthSuspended = true;
+	}
+
+	// Bind velocity buffer on stage 3 for combined motion detection
+	if(g_velocityTex)
+		d3d9device->SetTexture(3, g_velocityTex);
+
+	// Temporal always on — lower motion threshold for better stabilization
+	float motionThresh = 0.5f;
+	float edgeP[4] = {smaaThreshold, motionThresh, 2.0f, cameraMovement};
+	RwD3D9SetPixelShaderConstant(0, edgeP, 1);
+	RwD3D9SetPixelShaderConstant(1, screenParams, 1);
+
+	// SEH-protected: helper has no C++ objects with destructors (C2712-safe)
+	bool ok = true;
+	__try {
+		overrideIm2dPixelShader = SMAA_EdgeMotionDepth ? SMAA_EdgeMotionDepth : SMAA_Edge;
+		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
+		overrideIm2dPixelShader = nil;
+	} __except(EXCEPTION_EXECUTE_HANDLER){
+		overrideIm2dPixelShader = nil;
+		dbglog("[SMAA-DIAG] EXCEPTION in SMAA edge-detect pass (Im2D fault) — SMAA disabled this frame");
+		ok = false;
+	}
+
+	// Restore depth hook after edge pass if it was suspended (blend weight doesn't sample depth)
+	if(depthSuspended){
+		DepthHook_Restore();
+	}
+
+	return ok;
 }
 
 void
@@ -3642,6 +3989,17 @@ CPostEffects::DrawSMAA(void)
 	int w = camRasForSize->width;
 	int h = camRasForSize->height;
 	if(w < 8 || h < 8){ if(dbglog_throttle("smaa_skip")) dbglog("[SMAA] SKIP: dims too small %dx%d", w, h); return; }
+
+	// Guard: skip first 2 frames to let the game's entity pool initialize.
+	// SMAA Pass2 calls RwIm2DRenderIndexedPrimitive which triggers the game's
+	// text/entity rendering pipeline. On frame 1-2, the entity pool at [0xB4E9E0]
+	// has slots with NULL data pointers, causing a crash at 0x7F9ECB.
+	static int smaaFrameCount = 0;
+	smaaFrameCount++;
+	if(smaaFrameCount <= 2){
+		dbglog("[SMAA] SKIP: frame %d, letting game init entity pool", smaaFrameCount);
+		return;
+	}
 
 	// --- First-frame / resolution-change detailed log ---
 	// NOTE: resolution-change check MUST come before the s_smaaBroken check
@@ -3886,32 +4244,13 @@ CPostEffects::DrawSMAA(void)
 		if(g_smaaPrevFrameTexRW)
 			RwD3D9SetTexture(g_smaaPrevFrameTexRW, 1);
 	}
-	// Bind depth texture for depth-based edge detection on stage 2
-	extern IDirect3DTexture9 *g_ssaoDepthTex;
-	if(g_ssaoDepthTex){
-		// Suspend depth hook so INTZ can be sampled on s2
-		DepthHook_Suspend();
-		d3d9device->SetTexture(2, g_ssaoDepthTex);
-	}
-
-	// Bind velocity buffer on stage 3 for combined motion detection
-	if(g_velocityTex)
-		d3d9device->SetTexture(3, g_velocityTex);
-
-	// Temporal always on — lower motion threshold for better stabilization
-	float motionThresh = 0.5f;
-	float edgeP[4] = {smaaThreshold, motionThresh, 2.0f, cameraMovement};
-	RwD3D9SetPixelShaderConstant(0, edgeP, 1);
-	RwD3D9SetPixelShaderConstant(1, screenParams, 1);
-
-	// Use combined edge+motion+depth shader
-	overrideIm2dPixelShader = SMAA_EdgeMotionDepth ? SMAA_EdgeMotionDepth : SMAA_Edge;
-	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
-	overrideIm2dPixelShader = nil;
-
-	// Restore depth hook after edge pass if it was suspended (blend weight doesn't sample depth)
-	if(g_ssaoDepthTex){
-		DepthHook_Restore();
+	// Edge-detect pass — SEH-protected via helper (DrawSMAA has objects with destructors,
+	// preventing __try here; error C2712). Suspend/Restore are inside the helper.
+	if(!DrawSMAA_EdgeDetect(smaaThreshold, cameraMovement, screenParams)){
+		// Edge detect faulted — depth hook already restored inside helper.
+		// Skip remaining passes; just do final cleanup.
+		ImmediateModeRenderStatesReStore();
+		return;
 	}
 
 	// ---- Pass 1: Blend Weight Calculation ----
@@ -4020,6 +4359,15 @@ CPostEffects::DrawSMAA(void)
 		if(g_smaaPrevFrameTexRW)
 			RwD3D9SetTexture(g_smaaPrevFrameTexRW, 1);
 
+		// Bind velocity buffer on s2 for history reprojection (POINT/CLAMP)
+		if(g_velocityTex){
+			dev->SetTexture(2, g_velocityTex);
+			dev->SetSamplerState(2, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+			dev->SetSamplerState(2, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+			dev->SetSamplerState(2, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
+			dev->SetSamplerState(2, D3DSAMP_MINFILTER, D3DTEXF_POINT);
+		}
+
 		// Temporal constants: blendStrength (low = more history), motionScale
 		// On the first frame, the history raster contains undefined data (black).
 		// Use blendStrength=1.0 (all current, no history) to avoid a dark flash.
@@ -4029,12 +4377,41 @@ CPostEffects::DrawSMAA(void)
 		RwD3D9SetPixelShaderConstant(0, temporalP, 1);
 		RwD3D9SetPixelShaderConstant(1, screenParams, 1);
 
+		// c2 = (velocity, rotation, tanFovX, tanFovY) — velocity-driven temporal
+		// weight for the resolve shader. Velocity/rotation reuse the per-frame
+		// camera tracking above (same static-prev pattern as DrawMotionBlur) with
+		// the same gains so SMAA softens in sync with motion blur. FOV comes from
+		// the camera view window (tan half-FOV, same as vehiclePipe.cpp iblParams).
+		float tanX = 0.65f, tanY = 0.45f;
+		if(Scene.camera){
+			tanX = Scene.camera->viewWindow.x;
+			tanY = Scene.camera->viewWindow.y;
+		}
+		float velFactor = min(1.0f, cameraVelocity * 0.25f);
+		float rotFactor = min(1.0f, cameraRotation * 2.0f);
+		float motionP[4] = { velFactor, rotFactor, tanX, tanY };
+		RwD3D9SetPixelShaderConstant(2, motionP, 1);
+
+		// c3 = (near, far, maxHistClamp, velToPx) — history reprojection params.
+		// near/far mirror DrawNormalBufferToTexture's c0 source. velToPx is 1.0
+		// when the velocity buffer is bound (velocity is stored in UV units) and
+		// 0.0 otherwise, so the shader samples history unshifted when s2 is null.
+		float smaaNear = Scene.camera ? RwCameraGetNearClipPlane(Scene.camera) : 0.1f;
+		float smaaFar = Scene.camera ? RwCameraGetFarClipPlane(Scene.camera) : 500.0f;
+		float histP[4] = { smaaNear, smaaFar, 0.9f, g_velocityTex ? 1.0f : 0.0f };
+		RwD3D9SetPixelShaderConstant(3, histP, 1);
+
+		if(dbglog_throttle("smaa_vel"))
+			dbglog("[SMAA] velocity: vel=%.3f rot=%.3f tanFov=(%.3f, %.3f)",
+				velFactor, rotFactor, tanX, tanY);
+
 		overrideIm2dPixelShader = SMAA_Temporal;
 		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
 		overrideIm2dPixelShader = nil;
 
 		// Cleanup
 		RwD3D9SetTexture(NULL, 1);
+		dev->SetTexture(2, NULL);
 
 		if(dbglog_throttle("smaaTemporal"))
 			dbglog("[SMAA-DIAG] Pass3 Temporal: edge=%p + prev=%p -> drawBuf=%p shader=%p",
@@ -4094,14 +4471,21 @@ static void DrawVelocityBuffer(void)
 	if(w < 1 || h < 1)
 		return;
 
-	// Lazy-init velocity texture
-	if(!g_velocityTex){
+	// Lazy-init velocity texture (res-aware: recreate if camera resolution changed)
+	if(!g_velocityTex || w != s_velocityW || h != s_velocityH){
+		if(g_velocityTex){
+			if(g_velocitySurf){ g_velocitySurf->Release(); g_velocitySurf = NULL; }
+			g_velocityTex->Release();
+			g_velocityTex = NULL;
+		}
 		if(FAILED(dev->CreateTexture(w, h, 1, D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &g_velocityTex, NULL))){
 			dbglog("[PostFX] DrawVelocityBuffer: CreateTexture velocity failed");
 			config->velocityBufferEnable = 0;
 			return;
 		}
 		g_velocityTex->GetSurfaceLevel(0, &g_velocitySurf);
+		s_velocityW = w;
+		s_velocityH = h;
 		dbglog("[PostFX] DrawVelocityBuffer: texture created %dx%d", w, h);
 	}
 
@@ -4200,12 +4584,21 @@ static void DrawVelocityBuffer(void)
 		dev->SetTexture(0, g_ssaoDepthTex);
 		dev->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_POINT);
 		dev->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
+		// Wave-2: previous-frame depth on s1 (POINT/CLAMP, NULL-safe)
+		dev->SetTexture(1, g_prevDepthValid ? g_prevDepthTex : NULL);
+		dev->SetSamplerState(1, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+		dev->SetSamplerState(1, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+		dev->SetSamplerState(1, D3DSAMP_MINFILTER, D3DTEXF_POINT);
+		dev->SetSamplerState(1, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
 
 		// Upload constants
 		RwD3D9SetPixelShaderConstant(0, &invCurVP, 4); // c0-c3: inverse current VP
 		RwD3D9SetPixelShaderConstant(4, &g_prevVPMatrix, 4); // c4-c7: previous VP
 		float screenParams[4] = { (float)w, (float)h, 1.0f/max((float)w, 1e-7f), 1.0f/max((float)h, 1e-7f) };
 		RwD3D9SetPixelShaderConstant(8, screenParams, 1); // c8: screen params
+		// c9: Wave-2 prev-depth {prevDepthValid, farPlane, 0, 0}
+		float c9PrevDepth[4] = { (float)g_prevDepthValid, Scene.camera->farPlane, 0.0f, 0.0f };
+		RwD3D9SetPixelShaderConstant(9, c9PrevDepth, 1);
 
 		// Render fullscreen quad
 		overrideIm2dPixelShader = VelocityReconstruct;
@@ -4227,6 +4620,9 @@ static void DrawVelocityBuffer(void)
 	dev->SetTexture(0, NULL);
 	dev->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
 	dev->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+	dev->SetTexture(1, NULL);
+	dev->SetSamplerState(1, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+	dev->SetSamplerState(1, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
 
 	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)TRUE);
 	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
@@ -4236,6 +4632,9 @@ RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
 	CPostEffects::ImmediateModeRenderStatesReStore();
 	// Store VP for next frame
 	memcpy(&g_prevVPMatrix, &curVP, sizeof(D3DMATRIX));
+
+	// NOTE: CopyDepthToPrev() moved to ColourFilter_switch, after DrawSSAO_Overhaul,
+	// so SSAO temporal reprojection reads the actual previous-frame depth.
 }
 
 void
@@ -4296,11 +4695,13 @@ CPostEffects::DrawMotionBlur(void)
 		}
 	}
 
-	// Combine camera movement into a single factor (0=still, 1=fast movement)
-	float cameraMovement = min(1.0f, (cameraVelocity * 0.1f) + (cameraRotation * 2.0f));
+	// Combine camera movement into a single factor (0=still, 1=fast movement).
+	// Gain 0.25 + gate 0.002: blur engages at slow driving speeds
+	// (~0.008 world-units/frame), not just fast camera sweeps.
+	float cameraMovement = min(1.0f, (cameraVelocity * 0.25f) + (cameraRotation * 2.0f));
 
 	// Skip if barely moving
-	if(cameraMovement < 0.01f)
+	if(cameraMovement < 0.002f)
 		return;
 
 	// Optional: reduce blur when camera is moving very fast (camera-aware mode)
@@ -4336,31 +4737,63 @@ CPostEffects::DrawMotionBlur(void)
 		dev->SetTexture(1, NULL);
 	}
 
-	// c0: (blurStrength, radialStrength, maxSamples, speedFactor)
-	float c0[4] = {
-		effectiveStrength,
-		config->motionBlurRadial,
-		8.0f, // maxSamples (matches shader loop unroll)
-		config->motionBlurSpeedFactor
-	};
-	RwD3D9SetPixelShaderConstant(0, c0, 1);
+	// Bind depth texture on s2 for depth-aware blur scaling (INTZ, sampled while
+	// the depth hook is suspended — mirrors the SMAA edge pass).
+	__try {
+		if(g_ssaoDepthTex){
+			DepthHook_Suspend();
+			dev->SetTexture(2, g_ssaoDepthTex);
+			dev->SetSamplerState(2, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+			dev->SetSamplerState(2, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+			dev->SetSamplerState(2, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
+			dev->SetSamplerState(2, D3DSAMP_MINFILTER, D3DTEXF_POINT);
+		}
 
-	// c1: (screenW, screenH, 1/screenW, 1/screenH)
-	float c1[4] = { (float)w, (float)h, 1.0f/max((float)w, 1e-7f), 1.0f/max((float)h, 1e-7f) };
-	RwD3D9SetPixelShaderConstant(1, c1, 1);
+		// c0: (blurStrength, radialStrength, maxSamples, speedFactor)
+		float c0[4] = {
+			effectiveStrength,
+			config->motionBlurRadial,
+			8.0f, // maxSamples (matches shader loop unroll)
+			config->motionBlurSpeedFactor
+		};
+		RwD3D9SetPixelShaderConstant(0, c0, 1);
 
-	// c2: (cameraVelocity, cameraRotation, deltaTime, 0)
-	float dt = CTimer__ms_fTimeStep / 50.0f; // GTA SA tick rate: 50 fps
-	float c2[4] = { cameraMovement, cameraRotation, dt, 0.0f };
-	RwD3D9SetPixelShaderConstant(2, c2, 1);
+		// c1: (screenW, screenH, 1/screenW, 1/screenH)
+		float c1[4] = { (float)w, (float)h, 1.0f/max((float)w, 1e-7f), 1.0f/max((float)h, 1e-7f) };
+		RwD3D9SetPixelShaderConstant(1, c1, 1);
 
-	// Render fullscreen quad with motion blur shader
-	overrideIm2dPixelShader = MotionBlur_Burnout;
-	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
-	overrideIm2dPixelShader = nil;
+		// c2: (cameraVelocity, cameraRotation, deltaTime, 0)
+		float dt = CTimer__ms_fTimeStep / 50.0f; // GTA SA tick rate: 50 fps
+		float c2[4] = { cameraMovement, cameraRotation, dt, 0.0f };
+		RwD3D9SetPixelShaderConstant(2, c2, 1);
+
+		// c3: (near, far, tanFovX, maxBlurPx) — depth-aware blur scaling.
+		// near/far mirror DrawNormalBufferToTexture's c0 source; tanFovX mirrors
+		// the SMAA temporal c2 FOV source. maxBlurPx caps the blur in pixels.
+		float mbNear = Scene.camera ? RwCameraGetNearClipPlane(Scene.camera) : 0.1f;
+		float mbFar = Scene.camera ? RwCameraGetFarClipPlane(Scene.camera) : 500.0f;
+		float mbTanX = Scene.camera ? Scene.camera->viewWindow.x : 0.65f;
+		float c3[4] = { mbNear, mbFar, mbTanX, 64.0f }; // maxBlurPx
+		RwD3D9SetPixelShaderConstant(3, c3, 1);
+
+		// Render fullscreen quad with motion blur shader
+		overrideIm2dPixelShader = MotionBlur_Burnout;
+		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
+		overrideIm2dPixelShader = nil;
+
+		// Restore depth hook after the pass (mirrors edge pass)
+		if(g_ssaoDepthTex){
+			DepthHook_Restore();
+		}
+	} __except(EXCEPTION_EXECUTE_HANDLER){
+		if(g_ssaoDepthTex){
+			DepthHook_Restore(); // keep Suspend/Restore balanced on fault
+		}
+	}
 
 	// Cleanup texture stages
 	dev->SetTexture(1, NULL);
+	dev->SetTexture(2, NULL);
 	if(config->velocityBufferEnable){
 		dev->SetSamplerState(1, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
 		dev->SetSamplerState(1, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
@@ -4616,13 +5049,13 @@ DrawGodRays(void)
 	float c0[4] = { sunScreenX, sunScreenY, 0.0f, 0.0f };
 	RwD3D9SetPixelShaderConstant(0, c0, 1);
 
-	// c1: ray params
-	float c1[4] = {
-		config->godRaysExposure,
-		config->godRaysDecay,
-		config->godRaysDensity,
-		config->godRaysWeight
-	};
+	// c1: ray params — sanitize: config may be zero-initialised (no INI key),
+	// which previously collapsed the effect to a pure additive frame double.
+	float grExposure = (config->godRaysExposure > 0.0f) ? config->godRaysExposure : 0.0034f;
+	float grDecay    = (config->godRaysDecay > 0.0f && config->godRaysDecay <= 1.0f) ? config->godRaysDecay : 1.0f;
+	float grDensity  = (config->godRaysDensity > 0.0f) ? config->godRaysDensity : 0.84f;
+	float grWeight   = (config->godRaysWeight > 0.0f) ? config->godRaysWeight : 1.0f;
+	float c1[4] = { grExposure, grDecay, grDensity, grWeight };
 	RwD3D9SetPixelShaderConstant(1, c1, 1);
 
 	// c2: num samples

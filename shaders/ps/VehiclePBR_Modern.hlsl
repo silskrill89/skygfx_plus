@@ -38,13 +38,14 @@ float3 viewRight    : register(c25); // view matrix row 0 (world→view rotation
 float3 viewUp       : register(c26); // view matrix row 1
 float3 viewFwd      : register(c27); // view matrix row 2
 float4 skyParams    : register(c28); // xyz=skyTop color (0-1), w=skyReflect strength
+float4 screenSize   : register(c29); // (screenW, screenH, 1/screenW, 1/screenH) — screen UV for normal-buffer sampling
 
 // Forward+ clustered lights
 sampler2D clusterTex : register(s5);   // 128x128 RGBA8 tile light index texture
-float4 clusterParams : register(c45);  // (gridOffsetX, gridOffsetZ, tileSize, lightCount)
+float4 clusterParams : register(c45);  // (tileSize, gridW, gridH, lightCount)
 float4 layerCfg   : register(c46);  // x = vehPBRLayers layer bitmask
-float4 clusterLightPos[8] : register(c29);  // (pos.x, pos.y, pos.z, radius) per light
-float4 clusterLightCol[8] : register(c37);  // (col.r*intensity, col.g*intensity, col.b*intensity, 0) per light
+float4 clusterLightPos[32] : register(c48);  // (pos.x, pos.y, pos.z, radius) per light
+float4 clusterLightCol[32] : register(c80);  // (col.r*intensity, col.g*intensity, col.b*intensity, 0) per light
 float4 iblAmbient : register(c20);  // x = sky hemisphere ambient weight (config->pbrIblAmbientWeight)
 
 // Universal dynamic-sky hemisphere ambient tint, shared by the vehicle and building
@@ -58,8 +59,17 @@ float3 SkyHemisphereTint(float3 N){
     float2 uv = float2(0.5, saturate(N.y * 0.5 + 0.5));
     float3 skyCol = tex2D(iblTex, uv).rgb;
     if(dot(skyCol, skyCol) <= 1e-6) return float3(1.0, 1.0, 1.0); // guard: no-op
-    float3 ambientSafe = max(ambientColor.rgb, 1e-4);
-    float3 ratio = skyCol / ambientSafe;
+    // CHROMATIC ratio only: normalize sky and ambient to UNIT LUMINANCE before dividing
+    // so a dark / near-zero timecycle ambient can never explode the magnitude (this was
+    // the bug that turned the whole frame mega-blue when ambient was ~0). Magnitude is
+    // intentionally dropped here - this is a hue tie between sky and ambient, centered
+    // at 1.0, and the clamp bounds any residual excursion. Multiplicative, never lifts
+    // blacks; sky==ambient -> 1.0.
+    const float3 LUMA = float3(0.299, 0.587, 0.114);
+    float skyL = max(dot(skyCol, LUMA), 1e-4);
+    float ambL = max(dot(ambientColor.rgb, LUMA), 1e-4);
+    float3 ratio = (skyCol / skyL) / max(ambientColor.rgb / ambL, 1e-4);
+    ratio = clamp(ratio, 0.6, 1.5);
     return lerp(float3(1.0, 1.0, 1.0), ratio, iblAmbient.x * 0.15);
 }
 
@@ -95,7 +105,7 @@ struct PS_INPUT{
     float4 envColor    : COLOR1;
 };
 
-float4 main(PS_INPUT IN) : COLOR
+float4 main(PS_INPUT IN, float4 vpos : VPOS) : COLOR
 {
     float3 N = length(IN.WorldNormal) > 1e-6 ? IN.WorldNormal / length(IN.WorldNormal) : float3(0, 1, 0);
     float3 V = length(IN.ViewDir) > 1e-6 ? IN.ViewDir / length(IN.ViewDir) : float3(0, 0, 1);
@@ -113,7 +123,11 @@ float4 main(PS_INPUT IN) : COLOR
     // Blend with screen-space normal (if available)
     // ambientColor.w > 0 means normal buffer is bound and valid
     if(LF(7) > 0.5 && ambientColor.w > 0.5){
-        float3 ssNormal = tex2D(normalBufTex, IN.texcoord0).rgb * 2.0 - 1.0;
+        // Sample with SCREEN UV (derived from VPOS), not diffuse UV — the normal
+        // buffer is a fullscreen half-res texture; diffuse UVs smear wrong texels
+        // across the paint.
+        float2 screenUV = vpos.xy * screenSize.zw;
+        float3 ssNormal = tex2D(normalBufTex, screenUV).rgb * 2.0 - 1.0;
         if(dot(ssNormal, ssNormal) > 0.25)
             N = normalize(lerp(N, ssNormal, 0.3));
     }
@@ -158,8 +172,23 @@ float4 main(PS_INPUT IN) : COLOR
     // Applying it to vertex-lit color would darken/wash out the paint.
     float metallicFactor = saturate((specularF0 - 0.5) * 2.0);
 
-    // Fresnel for specular energy split (kD not used — diffuse comes from VS vertex color)
+    // Fresnel for specular energy split (kD not used for the VS-baked directional
+    // diffuse — that is already energy-managed by the game). It IS used for the
+    // new cluster-light diffuse term further down.
     float3 F_atNdotV = F_Schlick(NdotV, F0);
+    float3 kDv = saturate(1.0 - F_atNdotV);
+
+    // ---- Daylight sky-lift (vehicle diffuse only) ----
+    // The timecycle ambient reaching car materials is near-zero (live log:
+    // raw=(0,0,0), final=0.034), so non-sunlit faces were lit almost entirely by
+    // the baked prelight. Sample the dynamic-sky capture by elevation and apply a
+    // small MULTIPLICATIVE lift: it scales the existing paint colour, so it can
+    // never grey/wash the paint (the additive version pushed saturated colours
+    // into the tonemap's desaturating top end) and never lifts true blacks.
+    // Self-extinguishes at night, stronger on sky-facing surfaces.
+    float3 skyFill = tex2D(iblTex, float2(0.5, saturate(N.y * 0.5 + 0.5))).rgb;
+    float skyFillLuma = dot(skyFill, float3(0.299, 0.587, 0.114));
+    baseColor *= 1.0 + skyFillLuma * 0.22 * LF(4) * saturate(N.y * 0.5 + 0.5);
 
     // ---- Diffuse: VS vertex color already has full game lighting ----
     // Ambient + 7 directional lights baked into IN.color.rgb by the VS.
@@ -263,9 +292,12 @@ float4 main(PS_INPUT IN) : COLOR
     }
 
     // ---- Clustered Point Lights (Forward+) ----
+    float3 clusterDiffuse = float3(0, 0, 0);
     if(clusterParams.w > 0.0) {  // lightCount > 0
-        float2 tileUV = (IN.WorldPos.xz - clusterParams.xy) / clusterParams.z;
-        tileUV = clamp(tileUV, 0.0, 1.0);
+        // Screen-space tile: the CPU culler bins lights into a 16px screen tile
+        // grid (CullLightsToTiles). VPOS gives the current pixel; derive the
+        // same tile the CPU filled (old code used world XZ -> always corner).
+        float2 tileUV = (floor(vpos.xy / clusterParams.x) + 0.5) / float2(clusterParams.y, clusterParams.z);
         float4 clusterSample = tex2D(clusterTex, tileUV);
         
         int indices[4];
@@ -277,7 +309,7 @@ float4 main(PS_INPUT IN) : COLOR
         [unroll] for(int ci = 0; ci < 4; ci++) {
             if(indices[ci] <= 0) continue;
             int li = indices[ci] - 1;  // 0-based index (0 in texture = no light)
-            if(li < 0 || li >= 8) continue;
+            if(li < 0 || li >= 32) continue;
             
             float4 clPos = clusterLightPos[li];
             float4 clCol = clusterLightCol[li];
@@ -303,6 +335,12 @@ float4 main(PS_INPUT IN) : COLOR
                     float Visc_cc = V_SmithCorrelated(NdotV, NdotLc, 0.05);
                     float3 Fc_cc = F_SchlickLH(LdotHc, float3(0.04, 0.04, 0.04));
                     specTotal += Dc_cc * Fc_cc * Visc_cc * NdotLc * clCol.rgb * atten * 0.6;
+                    // Diffuse from cluster lights. Vehicles accumulated ONLY specular
+                    // before this, so street lamps lit the road but left car bodies as
+                    // black silhouettes at night. Mirrors main_building's clusterDiffuse.
+                    float VdotHc = max(dot(V, Hc), 0.0);
+                    float diffc = BurleyDiffuse(NdotLc, NdotV, VdotHc, 1.0 - glossiness);
+                    clusterDiffuse += baseColor * diffc * clCol.rgb * atten * kDv / 3.14159;
                 }
             }
         }
@@ -322,6 +360,7 @@ float4 main(PS_INPUT IN) : COLOR
     float3 color = layer2;
     color += specTotal;                                // specular highlights (base + clearcoat)
     color += rimLight;                                 // Fresnel rim on top of clearcoat
+    color += clusterDiffuse;                           // street-lamp diffuse (was missing)
 
     // Output linear HDR — PostFX TonemapPass handles everything
     return float4(max(color, 0.0), diff.a);
@@ -450,7 +489,7 @@ struct PS_INPUT_BUILDING {
     float4 dayNight    : COLOR1;  // day/night parameters
 };
 
-float4 main_building(PS_INPUT_BUILDING IN) : COLOR
+float4 main_building(PS_INPUT_BUILDING IN, float4 vpos : VPOS) : COLOR
 {
     // Base color from texture * vertex color
     float4 diff = tex2D(diffuseTex, IN.texcoord0);
@@ -485,6 +524,16 @@ float4 main_building(PS_INPUT_BUILDING IN) : COLOR
     float3 N = length(IN.WorldNormal) > 1e-6 ? IN.WorldNormal / length(IN.WorldNormal) : float3(0, 1, 0);
     float3 V = length(IN.ViewDir) > 1e-6 ? IN.ViewDir / length(IN.ViewDir) : float3(0, 0, 1);
     float3 L = length(IN.SunDir) > 1e-6 ? IN.SunDir / length(IN.SunDir) : float3(0, 0, -1);
+
+    // Blend with screen-space normal (if available) — mirrors vehicle main().
+    // ambientColor.w > 0.5 means the half-res normal buffer is bound and valid
+    // (buildingPipe uploads c24.w=1.0 when s4 is set). Screen UV from VPOS.
+    if(ambientColor.w > 0.5){
+        float2 screenUV = vpos.xy * screenSize.zw;
+        float3 ssNormal = tex2D(normalBufTex, screenUV).rgb * 2.0 - 1.0;
+        if(dot(ssNormal, ssNormal) > 0.25)
+            N = normalize(lerp(N, ssNormal, 0.3));
+    }
 
     // Core PBR vectors
     float NdotV = max(dot(N, V), 0.0);
@@ -538,8 +587,10 @@ float4 main_building(PS_INPUT_BUILDING IN) : COLOR
     // ---- Clustered Point Lights (Forward+) ----
     float3 clusterDiffuse = float3(0, 0, 0);
     if(clusterParams.w > 0.0) {
-        float2 tileUV = (IN.WorldPos.xz - clusterParams.xy) / clusterParams.z;
-        tileUV = clamp(tileUV, 0.0, 1.0);
+        // Screen-space tile: the CPU culler bins lights into a 16px screen tile
+        // grid (CullLightsToTiles). VPOS gives the current pixel; derive the
+        // same tile the CPU filled (old code used world XZ -> always corner).
+        float2 tileUV = (floor(vpos.xy / clusterParams.x) + 0.5) / float2(clusterParams.y, clusterParams.z);
         float4 clusterSample = tex2D(clusterTex, tileUV);
         
         int indices[4];
@@ -551,7 +602,7 @@ float4 main_building(PS_INPUT_BUILDING IN) : COLOR
         [unroll] for(int ci = 0; ci < 4; ci++) {
             if(indices[ci] <= 0) continue;
             int li = indices[ci] - 1;
-            if(li < 0 || li >= 8) continue;
+            if(li < 0 || li >= 32) continue;
             
             float4 clPos = clusterLightPos[li];
             float4 clCol = clusterLightCol[li];
@@ -602,7 +653,7 @@ float4 main_building(PS_INPUT_BUILDING IN) : COLOR
 // c22 = {roughness, F0, tintR, tintG}  (tireParams)
 // c23 = {tintB, dirtLevel, wearFactor, 0}  (tireParams2)
 // ============================================================
-float4 main_rubber(PS_INPUT IN) : COLOR
+float4 main_rubber(PS_INPUT IN, float4 vpos : VPOS) : COLOR
 {
     float3 N = length(IN.WorldNormal) > 1e-6 ? IN.WorldNormal / length(IN.WorldNormal) : float3(0, 1, 0);
     float3 V = length(IN.ViewDir) > 1e-6 ? IN.ViewDir / length(IN.ViewDir) : float3(0, 0, 1);
@@ -620,6 +671,11 @@ float4 main_rubber(PS_INPUT IN) : COLOR
     float3 dryDust = float3(0.35, 0.30, 0.25);  // light dry dust
     baseColor = lerp(baseColor, wetMud, dirtLevel * 0.5);    // wet mud darkens
     baseColor = lerp(baseColor, dryDust * baseColor, wearFactor * 0.15);  // dry dust lightens slightly
+
+    // Rubber sky-lift: MULTIPLICATIVE, so tyres keep their dark hue instead of
+    // gaining a grey additive wash (matches the body path). Fades out at night.
+    float3 rubberSky = tex2D(iblTex, float2(0.5, saturate(N.y * 0.5 + 0.5))).rgb;
+    baseColor *= 1.0 + dot(rubberSky, float3(0.299, 0.587, 0.114)) * 0.12 * LF(4);
 
     float NdotV = max(dot(N, V), 0.0);
     float NdotL_sun = max(dot(N, L), 0.0);
@@ -639,6 +695,40 @@ float4 main_rubber(PS_INPUT IN) : COLOR
         float NdL = max(dot(N, Ll), 0.0);
         float wrap = saturate((NdL + subsurface) / (1.0 + subsurface));
         color += baseColor * wrap * lightCol[i].rgb * 0.08;
+    }
+
+    // Cluster (street) lights — tyres were lit ONLY by the 6 directional lobes,
+    // so at night they went pure black while the body received cluster diffuse.
+    // Matching the body keeps wheel shading in step with the paint.
+    if(clusterParams.w > 0.0) {
+        // Screen-space tile (same 16px binning as the body): VPOS -> tile UV.
+        float2 tireTileUV = (floor(vpos.xy / clusterParams.x) + 0.5) / float2(clusterParams.y, clusterParams.z);
+        float4 tireCluster = tex2D(clusterTex, tireTileUV);
+        int tireIdx[4];
+        tireIdx[0] = (int)(tireCluster.r * 255.0 + 0.5);
+        tireIdx[1] = (int)(tireCluster.g * 255.0 + 0.5);
+        tireIdx[2] = (int)(tireCluster.b * 255.0 + 0.5);
+        tireIdx[3] = (int)(tireCluster.a * 255.0 + 0.5);
+        [unroll] for(int tci = 0; tci < 4; tci++) {
+            if(tireIdx[tci] <= 0) continue;
+            int tli = tireIdx[tci] - 1;
+            if(tli < 0 || tli >= 32) continue;
+            float4 clPos = clusterLightPos[tli];
+            float4 clCol = clusterLightCol[tli];
+            float3 ToLight = clPos.xyz - IN.WorldPos.xyz;
+            float dist = length(ToLight);
+            float radius = clPos.w;
+            if(dist < radius && dist > 1e-6) {
+                float3 Lc = ToLight / dist;
+                float atten = saturate(1.0 - dist / radius);
+                atten *= atten;
+                float NdotLc = max(dot(N, Lc), 0.0);
+                if(NdotLc > 0.0) {
+                    float diffc = BurleyDiffuse(NdotLc, NdotV, max(dot(V, normalize(V + Lc)), 0.0), roughness);
+                    color += baseColor * diffc * clCol.rgb * atten * 0.5 / 3.14159;
+                }
+            }
+        }
     }
 
     return float4(color, diff.a);

@@ -175,9 +175,6 @@
 | `neoVehiclePass1VS.hlsl` | Neo vehicle pass 1 VS |
 | `neoVehiclePass2VS.hlsl` | Neo vehicle pass 2 VS |
 | `postfxVS.hlsl` | Post-processing fullscreen quad |
-| `Water_VS.hlsl` | Water vertex transform |
-| `EdgeTessellationVS.hlsl` | Edge tessellation displacement |
-| `vehicleVS.hlsl` | Basic vehicle vertex transform |
 
 ### Shader Includes (shaders/include/) — 6 files
 | File | Purpose |

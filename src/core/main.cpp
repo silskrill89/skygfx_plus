@@ -618,6 +618,75 @@ rxD3D9DefaultRenderCallback_Hook(void)
 	}
 }
 
+// Crash 0x7FAD4D: game default render callback clips with a NULL curCamera on frame 1.
+// Both frustum tests are clip-only; return "inside" (eax=1) when camera is NULL.
+void __declspec(naked)
+FrustumTestSphere_Guard(void)
+{
+	_asm
+	{
+		cmp	dword ptr [esp+4], 0	// arg1 = camera
+		je	inside
+		mov	edx, [esp+8]		// replay overwritten prologue
+		mov	eax, [esp+4]
+		push	7FAD38h			// resume at original `push esi`
+		retn
+	inside:
+		mov	eax, 1
+		retn
+	}
+}
+
+void __declspec(naked)
+FrustumTestBox_Guard(void)
+{
+	_asm
+	{
+		cmp	dword ptr [esp+4], 0
+		je	inside
+		mov	eax, [esp+4]
+		mov	edx, [esp+8]
+		push	7FAD98h
+		retn
+	inside:
+		mov	eax, 1
+		retn
+	}
+}
+
+// Crash 0x7618F5: game PS-constant uploader 0x7618B0 reads curCamera near/far
+// ([curCamera+0x84]/[+0x88]) in its (arg1[3]&3)==1 path. curCamera is NULL before
+// the first RwCameraBeginUpdate -> NULL deref. Replay the prologue and, when the
+// camera is NULL, zero the two camera-derived slots and continue at the common
+// upload tail (same semantics as the game's own al==0 path).
+void __declspec(naked)
+PSSetCameraConstantD_Guard(void)
+{
+	_asm
+	{
+		mov		eax, [esp+4]
+		sub		esp, 10h
+		mov		al, [eax+3]
+		and		al, 3
+		cmp		al, 1
+		jne		PSCCD_notcam
+		mov		edx, dword ptr ds:[0C97B24h]
+		mov		eax, [edx]
+		test	eax, eax
+		jne		PSCCD_hascam
+		mov		dword ptr [esp], 0
+		mov		dword ptr [esp+4], 0
+		push	761917h
+		retn
+	PSCCD_hascam:
+		push	7618EDh
+		retn
+	PSCCD_notcam:
+		push	7618C0h
+		retn
+	}
+}
+
 void __declspec(naked)
 rxD3D9DefaultRenderCallback_VertexShaderHook(void)
 {
@@ -856,6 +925,15 @@ RenderScene_before(void*)
 	// Must be here (not in RenderScene_hook) because RenderScene_before is
 	// called from both RenderScene_hook AND the UG mod callback path, but
 	// RenderScene_hook itself may not be called if UG mod handles events.
+	// NOTE (2026-09-14 crash fix #2): DepthHook_Install vtable-patches the
+	// D3D9 device. Under MoonLoader this now runs for the first time ever
+	// (previously dead code), and the very next device call in
+	// ForwardPlus_CullAndUpload crashes at 0x7FBD4A (+0x60 null deref).
+	// Disabled until hook timing/slots are verified. Depth effects degrade.
+	// NOTE (2026-09-14): re-enabled — crash-fix #3 proved the 0x7FBD4A crash
+	// was the SMAA scratch camera leaking its render target, not this hook
+	// (game crashed identically with it disabled). Depth chain restores
+	// SSAO / velocity buffer / normal buffer.
 	static bool s_depthHookInstalled = false;
 	if(!s_depthHookInstalled && d3d9device) {
 		DepthHook_Install(d3d9device);
@@ -865,14 +943,32 @@ RenderScene_before(void*)
 	// Deferred SMAA raster init: force-create D3D9 surfaces for CAMERATEXTURE
 	// rasters. Must run OUTSIDE the main camera's BeginUpdate because RW 3.6's
 	// D3D9 driver crashes when creating render-target textures mid-frame.
+	// NOTE (2026-09-14 crash fix #3): trace proves ForwardPlus_CullAndUpload
+	// completes fully (all 5 steps incl. tile upload) and the crash at
+	// 0x7FBD4A (+0x60) happens downstream. Prime suspect is the scratch-camera
+	// SMAA raster init leaving D3D render-target state behind. Disabled until
+	// save/restore of device state is added. SMAA degrades to skip path.
+	// NOTE (2026-09-14): re-enabled — SMAATryInitRasters now detaches the
+	// scratch raster and restores the backbuffer render target (crash fix #3).
 	SMAATryInitRasters();
 
-	// Do this because far and fog plane are set AFTER calling BeingUpdate in Idle()
-	RwCameraEndUpdate(Scene.camera);
-	RwCameraBeginUpdate(Scene.camera);
+	// NOTE (2026-09-14 crash fix): EndUpdate on a camera that hasn't begun
+	// corrupts RW state -> READ crash at 0x7F98DF accessing 0x60 on the
+	// next BeginUpdate. Under MoonLoader this hook now actually runs for the
+	// first time (previously dead), exposing the latent bug. The far/fog
+	// refresh dance is skipped until a safe begin-state query exists.
+	// RwCameraEndUpdate(Scene.camera);
+	// RwCameraBeginUpdate(Scene.camera);
 
 	// Forward+ tiled light culling (before scene render)
 	ForwardPlus_CullAndUpload();
+
+	// One-shot: confirm FP cull completed on frame 1 (crash diagnostics)
+	static bool s_fpCullLogOnce = false;
+	if(!s_fpCullLogOnce) {
+		s_fpCullLogOnce = true;
+		dbglog("RenderScene_before: frame1 FP cull complete");
+	}
 
 	// V7: Apply ragdoll hierarchy pose BEFORE rendering so bone
 	// matrices are live when the scene draws. This fixes the 1-frame
@@ -977,6 +1073,36 @@ myPluginAttach(void)
 
 void (*InitialiseGame)(void);
 
+// Scene-render hooks + envmaphooks were previously installed only from
+// InitialiseGame_hook, which is skipped when MoonLoader is present (log:
+// "SKIP: InitialiseGame (MoonLoader handles this)"). Consequence under
+// MoonLoader: RenderScene_before never runs (ForwardPlus_CullAndUpload,
+// DepthHook_Install, SMAA raster init, ragdoll, wind all dead) and
+// envmaphooks() never runs (RenderSphereReflections never installed -> the
+// real-time env map is never refreshed -> black vehicle reflections).
+// installDeferredHooks() is called from BOTH InjectDelayedPatches (early,
+// always) and InitialiseGame_hook (legacy path); the guard makes it idempotent.
+static void
+installDeferredHooks(void)
+{
+	static bool s_deferredHooksInstalled = false;
+	if(s_deferredHooksInstalled)
+		return;
+	s_deferredHooksInstalled = true;
+
+	if(!UG_RegisterEventCallback)
+		InterceptCall(&RenderScene_A, RenderScene_hook, 0x53EABF);
+	else{
+		UG_RegisterEventCallback("EVENT_BEFORE_RENDERSCENE", RenderScene_before);
+		UG_RegisterEventCallback("EVENT_AFTER_RENDERSCENE", RenderScene_after);
+	}
+	dbglog("installDeferredHooks: scene hooks installed");
+
+	void envmaphooks(void);
+	envmaphooks();
+	dbglog("installDeferredHooks: envmaphooks done");
+}
+
 void
 installLCMV2Hooks(void)
 {
@@ -991,17 +1117,7 @@ InitialiseGame_hook(void)
 	dbglog("InitialiseGame_hook: entered (call #%d)", initCount);
 
 	if(initCount == 1){
-		if(!UG_RegisterEventCallback)
-			InterceptCall(&RenderScene_A, RenderScene_hook, 0x53EABF);
-		else{
-			UG_RegisterEventCallback("EVENT_BEFORE_RENDERSCENE", RenderScene_before);
-			UG_RegisterEventCallback("EVENT_AFTER_RENDERSCENE", RenderScene_after);
-		}
-		dbglog("InitialiseGame_hook: scene hooks installed");
-
-		void envmaphooks(void);
-		envmaphooks();
-		dbglog("InitialiseGame_hook: envmaphooks done");
+		installDeferredHooks();
 		neoInit();
 		dbglog("InitialiseGame_hook: neoInit done");
 		initTexDB();
@@ -1300,7 +1416,6 @@ readIni(int n)
 		c->skinEnhanceEnable = 0;
 		c->hairEnhanceEnable = 0;
 		c->vegetationEnhanceEnable = 0;
-		c->edgeTessEnable = 0;
 		c->detailMaps = 0;
 		c->stochastic = 0;
 		c->dualPassBuilding = 0;
@@ -1326,7 +1441,6 @@ readIni(int n)
 		c->skinEnhanceEnable = 0;
 		c->hairEnhanceEnable = 0;
 		c->vegetationEnhanceEnable = 0;
-		c->edgeTessEnable = 0;
 		c->detailMaps = 1;
 		c->stochastic = 0;
 		c->dualPassBuilding = 1;
@@ -1355,7 +1469,6 @@ readIni(int n)
 		c->skinEnhanceEnable = 1;
 		c->hairEnhanceEnable = 1;
 		c->vegetationEnhanceEnable = 1;
-		c->edgeTessEnable = 0;
 		c->detailMaps = 1;
 		c->stochastic = 1;
 		c->dualPassBuilding = 1;
@@ -1405,7 +1518,6 @@ readIni(int n)
 		c->vegetationEnhanceEnable = 1;
 		c->vegetationSSSStrength = 0.2f;
 		c->vegetationAmbientBoost = 1.3f;
-		c->edgeTessEnable = 0;
 		c->detailMaps = 1;
 		c->stochastic = 1;
 		c->dualPassBuilding = 1;
@@ -1646,7 +1758,7 @@ readIni(int n)
 	c->depthHookEnable = readint(cfg.get("SkyGfx", "depthHookEnable", ""), 1);
 
 	// Faux Normal Buffer (stereo disparity)
-	c->normalBufferEnable = readint(cfg.get("SkyGfx", "normalBufferEnable", ""), 0);
+	c->normalBufferEnable = readint(cfg.get("SkyGfx", "normalBufferEnable", ""), 1);
 	c->normalBufferOffset = readfloat(cfg.get("SkyGfx", "normalBufferOffset", ""), 0.5f);
 	c->normalBufferScale = readfloat(cfg.get("SkyGfx", "normalBufferScale", ""), 1.0f);
 
@@ -1729,13 +1841,8 @@ readIni(int n)
 	c->vegetationSSSStrength = readfloat(cfg.get("SkyGfx", "vegetationSSSStrength", ""), c->vegetationSSSStrength);
 	c->vegetationAmbientBoost = readfloat(cfg.get("SkyGfx", "vegetationAmbientBoost", ""), c->vegetationAmbientBoost);
 	
-	// Edge tessellation
-	c->edgeTessEnable = readint(cfg.get("SkyGfx", "edgeTessEnable", ""), c->edgeTessEnable);
-	c->edgeTessStrength = readfloat(cfg.get("SkyGfx", "edgeTessStrength", ""), c->edgeTessStrength);
-	c->edgeTessThreshold = readfloat(cfg.get("SkyGfx", "edgeTessThreshold", ""), c->edgeTessThreshold);
-	
 	// Forward+ tiled lighting
-	c->forwardPlusEnable = readint(cfg.get("SkyGfx", "forwardPlusEnable", ""), c->forwardPlusEnable);
+	c->forwardPlusEnable = readint(cfg.get("SkyGfx", "forwardPlusEnable", ""), 1);
 	
 	// Sun corona
 	c->sunCoronaIntensity = readfloat(cfg.get("SkyGfx", "sunCoronaIntensity", ""), c->sunCoronaIntensity);
@@ -1863,9 +1970,9 @@ readIni(int n)
 		ADD_IF_MISSING("SkyGfx", "ivExposure", "2.5");
 		ADD_IF_MISSING("SkyGfx", "ragdollEnable", "1");
 		ADD_IF_MISSING("SkyGfx", "depthHookEnable", "1");
-		ADD_IF_MISSING("SkyGfx", "forwardPlusEnable", "0");
+		ADD_IF_MISSING("SkyGfx", "forwardPlusEnable", "1");
 		ADD_IF_MISSING("SkyGfx", "velocityBufferEnable", "1");
-		ADD_IF_MISSING("SkyGfx", "normalBufferEnable", "0");
+		ADD_IF_MISSING("SkyGfx", "normalBufferEnable", "1");
 		ADD_IF_MISSING("SkyGfx", "pipeChainEnable", "0");
 		ADD_IF_MISSING("SkyGfx", "postfxDumpDebug", "0");
 		ADD_IF_MISSING("SkyGfx", "pbrAmbientFloor", "0.0");
@@ -2071,11 +2178,6 @@ saveConfig(void)
 	cfg.set("SkyGfx", "vegetationEnhanceEnable", std::to_string(c->vegetationEnhanceEnable));
 	cfg.set("SkyGfx", "vegetationSSSStrength", std::to_string(c->vegetationSSSStrength));
 	cfg.set("SkyGfx", "vegetationAmbientBoost", std::to_string(c->vegetationAmbientBoost));
-
-	// Edge tessellation
-	cfg.set("SkyGfx", "edgeTessEnable", std::to_string(c->edgeTessEnable));
-	cfg.set("SkyGfx", "edgeTessStrength", std::to_string(c->edgeTessStrength));
-	cfg.set("SkyGfx", "edgeTessThreshold", std::to_string(c->edgeTessThreshold));
 
 	// GTA IV
 	cfg.set("SkyGfx", "ivMode", std::to_string(c->ivMode));
@@ -2289,6 +2391,11 @@ InjectDelayedPatches()
 		dbglog("  SKIP: InitialiseGame (MoonLoader handles this)");
 	}
 
+	// Install deferred init immediately (scene render hooks + envmaphooks).
+	// Under MoonLoader InitialiseGame_hook never runs, which left Forward+ and
+	// the real-time env-map reflections dead. Guarded -> idempotent.
+	installDeferredHooks();
+
 	installLCMV2Hooks();
 
 	Nop(0x5BBF6F, 2);
@@ -2466,6 +2573,9 @@ DllMain(HINSTANCE hInst, DWORD reason, LPVOID)
 		InjectHook(0x7491C0, myDefaultCallback, PATCH_JUMP);
 		InjectHook(0x5BF8EA, CPlantMgr_Initialise);
 		InjectHook(0x756DFE, rxD3D9DefaultRenderCallback_Hook, PATCH_JUMP);
+		InjectHook(0x7FAD30, FrustumTestSphere_Guard, PATCH_JUMP);
+		InjectHook(0x7FAD90, FrustumTestBox_Guard,     PATCH_JUMP);
+		InjectHook(0x7618B0, PSSetCameraConstantD_Guard, PATCH_JUMP);
 		InjectHook(0x5DADB7, fixSeed, PATCH_JUMP);
 
 		// NOTE: RpNormMapPluginAttach is called by normalmap_init() during game init.
@@ -2590,6 +2700,15 @@ DllMain(HINSTANCE hInst, DWORD reason, LPVOID)
 			dbglog("DLL_DETACH: shutdownTexDB crashed, continuing");
 		}
 		dbglog("texdb shutdown complete");
+
+		// Env map resources: RwTextureCreate/RwCameraCreate/RwRasterCreate
+		// call into RW internals that may already be torn down at DLL_PROCESS_DETACH.
+		__try {
+			ShutdownEnvMap();
+		} __except(EXCEPTION_EXECUTE_HANDLER) {
+			dbglog("DLL_DETACH: ShutdownEnvMap crashed, continuing");
+		}
+		dbglog("envmap shutdown complete");
 
 		// Forward+ resources are raw D3D9 textures — the device may be gone.
 		// Skip to avoid Release on invalid device.

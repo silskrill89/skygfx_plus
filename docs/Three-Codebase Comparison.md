@@ -107,7 +107,7 @@ aap (original v4.2b) → junior_dr (fork, backup_original/) → skygfx_plus (exp
 | Shader Name | aap? | junior? | skygfx_plus? | Entry Points | Purpose |
 |-------------|------|---------|--------------|--------------|---------|
 | vehicleVS.hlsl | Y (inline) | Y (inline) | Y | `main_vehicle` | Basic vehicle vertex transform |
-| vehiclePipeVS.hlsl | — | — | Y | `main_vehicle`, `main_vehiclePBR`, `main_ps2CarFx`, `main_specCarFx`, `main_xboxCar`, `main_leedsCarFx`, `main_mobileVehicle`, `main_neoPass1`, `main_neoPass2`, `main_edgeTessellation` | Consolidated vehicle VS (all modes) |
+| vehiclePipeVS.hlsl | — | — | Y | `main_vehicle`, `main_vehiclePBR`, `main_ps2CarFx`, `main_specCarFx`, `main_xboxCar`, `main_leedsCarFx`, `main_mobileVehicle`, `main_neoPass1`, `main_neoPass2` | Consolidated vehicle VS (all modes) |
 | ps2BuildingVS.hlsl | Y (inline) | Y | Y | `main_ps2Building` | PS2 building vertex transform |
 | ps2BuildingFxVS.hlsl | — | Y | Y | `main_ps2BuildingFx` | PS2 building effects VS |
 | ps2BuildingWindVS.hlsl | — | Y | Y | `main_ps2BuildingWind` | PS2 building wind animation |
@@ -121,7 +121,6 @@ aap (original v4.2b) → junior_dr (fork, backup_original/) → skygfx_plus (exp
 | neoVehiclePass2VS.hlsl | — | — | Y | `main_neoPass2` | Neo vehicle pass 2 VS |
 | postfxVS.hlsl | — | — | Y | `main_postfx` | Post-processing fullscreen quad |
 | Water_VS.hlsl | — | — | Y | `main_water` | Water vertex transform |
-| EdgeTessellationVS.hlsl | — | — | Y | `main_edgeTess` | Edge tessellation displacement |
 
 ### Pixel Shaders
 
@@ -395,14 +394,6 @@ aap (original v4.2b) → junior_dr (fork, backup_original/) → skygfx_plus (exp
 | `normalMapDebug` | 0 | Debug visualization |
 | `normalMapDebugMode` | 0 | Debug mode |
 
-### Edge Tessellation (skygfx_plus only)
-
-| INI Key | Default | Notes |
-|---------|---------|-------|
-| `edgeTessEnable` | 0 | Enable edge tessellation |
-| `edgeTessStrength` | 0.01 | Displacement strength |
-| `edgeTessThreshold` | 0.1 | Edge detection threshold |
-
 ### Normal Buffer (skygfx_plus only)
 
 | INI Key | Default | Notes |
@@ -517,7 +508,6 @@ aap (original v4.2b) → junior_dr (fork, backup_original/) → skygfx_plus (exp
 | Skin Enhancement | — | — | Y | Wrap lighting |
 | Hair Enhancement | — | — | Y | Anisotropic highlights |
 | Vegetation Enhancement | — | — | Y | SSS-like translucency |
-| Edge Tessellation | — | — | Y | Vertex displacement |
 | Normal Buffer | — | — | Y | Stereo disparity |
 | Pipe Chain | — | — | Y | 4-pass processing |
 | Neo Water Drops | Y | Y | Y | Rain drops |

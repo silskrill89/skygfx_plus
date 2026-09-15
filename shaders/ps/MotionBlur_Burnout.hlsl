@@ -5,17 +5,21 @@
 //   c0 = (blurStrength, radialStrength, maxSamples, speedFactor)
 //   c1 = (screenW, screenH, 1/screenW, 1/screenH)
 //   c2 = (cameraVelocity, cameraRotation, deltaTime, 0)
+//   c3 = (near, far, tanFovX, maxBlurPx) — depth-aware blur scaling
 //
 // Textures:
 //   s0 = current frame
 //   s1 = motion buffer (RG=motion XY, B=motion magnitude, A=depth)
+//   s2 = depth buffer (INTZ, sampled while depth hook is suspended)
 
 sampler2D currentTex : register(s0);
 sampler2D motionTex  : register(s1);
+sampler2D depthTex   : register(s2);
 
 uniform float4 blurParams    : register(c0);
 uniform float4 screenSize    : register(c1);
 uniform float4 cameraParams  : register(c2);
+uniform float4 depthFov      : register(c3); // x=near, y=far, z=tanFovX, w=maxBlurPx
 
 struct PS_INPUT
 {
@@ -70,13 +74,26 @@ float4 main(PS_INPUT IN) : COLOR
     float blurAmount = motionMagnitude * blurParams.x;
     blurAmount += cameraParams.x * blurParams.w; // Camera velocity contribution
     blurAmount = min(blurAmount, blurParams.z * 0.01); // Clamp to max blur
+
+    // Depth-aware blur scaling: linear eye-space depth from the INTZ buffer
+    // (NormalBuffer.hlsl pattern). Far surfaces keep full blur; near surfaces
+    // (lin -> near) fade toward 0 so the global camera-velocity term doesn't
+    // smear close geometry.
+    float z = tex2D(depthTex, tex).r;
+    float lin = depthFov.x * depthFov.y / max(depthFov.y - z * (depthFov.y - depthFov.x), 1e-7);
+    float depthW = saturate(lin / depthFov.y * 1.5);
+    blurAmount *= depthW;
+
+    // Clamp to max blur in pixels (c3.w), converted to UV units via 1/screenW
+    blurAmount = min(blurAmount, depthFov.w * pixel.x);
     
     // Early exit if no blur needed (GTA V technique: discard when velocity near zero)
     if(blurAmount < 0.001)
         return float4(color, 1.0);
     
-    // Normalize blur direction
-    float2 blurStep = normalize(blurDir) * blurAmount * pixel;
+    // Normalize blur direction (NaN-safe: guard against zero-length when motionVector cancels radialDir)
+    float blurLen = max(length(blurDir), 1e-7);
+    float2 blurStep = (blurDir / blurLen) * blurAmount;
     
     // Apply jitter to reduce banding (GTA V technique)
     float2 jitterOffset = Jitter(tex, color.rg);
@@ -119,10 +136,6 @@ float4 main(PS_INPUT IN) : COLOR
     
     // Normalize
     result /= totalWeight;
-    
-    // Add slight brightness boost for high-speed (Burnout style)
-    float speedBoost = saturate(blurAmount * 10.0);
-    result *= (1.0 + speedBoost * 0.1);
     
     return float4(result, 1.0);
 }

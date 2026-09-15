@@ -146,9 +146,6 @@ Every `vehiclePipe=` and `buildingPipe=` INI value from the original skygfx and 
 | `normalBufferEnable` | New | config.cpp | Faux normal buffer enable |
 | `normalBufferOffset` | New | config.cpp | Normal buffer offset |
 | `normalBufferScale` | New | config.cpp | Normal buffer scale |
-| `edgeTessEnable` | New | config.cpp | Edge tessellation enable |
-| `edgeTessStrength` | New | config.cpp | Edge tessellation strength |
-| `edgeTessThreshold` | New | config.cpp | Edge tessellation threshold |
 | `pipeChainEnable` | New | config.cpp | Pipe chain enable |
 | `pipeChainIntensity` | New | config.cpp | Pipe chain intensity |
 | `ivSaturation` | New | config.cpp | GTA IV saturation |

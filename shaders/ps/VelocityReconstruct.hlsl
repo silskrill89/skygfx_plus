@@ -3,10 +3,12 @@
 // into previous frame's clip space to derive screen-space motion vectors.
 
 sampler2D depthTex : register(s0);
+sampler2D prevDepthTex : register(s1);
 
 uniform float4x4 invCurrentVP : register(c0); // inverse(currentView * currentProj)
 uniform float4x4 prevVP       : register(c4); // previousView * previousProj
 uniform float4   screenParams : register(c8);  // (W, H, 1/W, 1/H)
+uniform float4   prevDepthInfo : register(c9); // (prevDepthAvail, farPlane, 0, 0)
 
 struct PS_INPUT
 {
@@ -46,5 +48,17 @@ float4 main(PS_INPUT IN) : COLOR
     float2 packedVelocity = velocity * 0.5 + 0.5;
     float motionMagnitude = length(velocity);
 
-    return float4(packedVelocity.x, packedVelocity.y, motionMagnitude, 1.0);
+    // Depth-delta encoding into alpha channel
+    // prevDepthInfo.x > 0.5 means previous depth is available
+    float alpha;
+    if (prevDepthInfo.x > 0.5) {
+        float prevZ = tex2D(prevDepthTex, prevUV).r;
+        float depthDelta = abs(currentDepth - prevZ);
+        // Scale chosen: 10.0 — depth in [0,1], |delta| of 0.1 saturates alpha
+        alpha = saturate(depthDelta * 10.0);
+    } else {
+        alpha = 0.0;
+    }
+
+    return float4(packedVelocity.x, packedVelocity.y, motionMagnitude, alpha);
 }
