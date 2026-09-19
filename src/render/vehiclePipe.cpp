@@ -1713,13 +1713,12 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 		wearFactor = (era == 0) ? 0.5f : (era == 3 ? 0.4f : (era == 1 ? 0.2f : 0.05f));
 		dirtLevel = (era == 3) ? 0.5f : (era == 0 ? 0.3f : 0.1f);
 
-		// Upload tire params to c22/c23 (read by parametric Rubber_Vehicle shader)
-		// c22 = {roughness, F0, tintR, tintG}
-		// c23 = {tintB, dirtLevel, wearFactor, 0}
-		float tireParams[4] = { tireRough, tireRefl, tireTR, tireTG };
-		float tireParams2[4] = { tireTB, dirtLevel, wearFactor, 0.0f };
-		RwD3D9SetPixelShaderConstant(22, tireParams, 1);
-		RwD3D9SetPixelShaderConstant(23, tireParams2, 1);
+		// Rubber c22/c23 via pipeUploadPBR (single source of truth for register layout).
+		// main_rubber reads the same registers as pbrParams/paintNoise but with
+		// tire semantics: c22 = {roughness, F0, tintR, tintG},
+		// c23 = {tintB, dirtLevel, wearFactor, 0} (VehiclePBR_Modern.hlsl:656+).
+		pipeUploadPBR(tireRough, tireRefl, tireTR, tireTG,
+		              tireTB, dirtLevel, wearFactor);
 
 		// main_rubber consumes the same shared per-vehicle state as the opaque
 		// path: c46 (layer bitmask via LF(4)), s3 (iblTex), c24 (ambientColor)

@@ -190,6 +190,7 @@ static HRESULT STDMETHODCALLTYPE hook_Reset(IDirect3DDevice9 *dev, D3DPRESENT_PA
 	if(g_gameDS) { g_gameDS->Release(); g_gameDS = NULL; }
 	g_dsWidth = 0;
 	g_dsHeight = 0;
+	s_lastDsW = 0; s_lastDsH = 0; s_dsStableCount = 0;
 
 	// Clear suspend state so Suspend/Restore doesn't desync after Reset
 	g_depthSuspended = false;

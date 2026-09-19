@@ -20,11 +20,11 @@ This plan addresses all issues found in the codebase analysis, assigns appropria
 | ID | Issue | File | Line | Skill | Verification |
 |----|-------|------|------|-------|--------------|
 | MEM-1 | ~~Unguarded RwV3dNormalize~~ **FIXED** | vehiclePipe.cpp | 209,282,373 | @fixer | ✅ `== 0.0f` guards |
-| MEM-2 | ~~Division-by-zero risks~~ **FIXED** | postfx.cpp | 1497+ | @fixer | ✅ `max(..., 1e-7f)` epsilon guards |
+| MEM-2 | ~~Division-by-zero risks~~ **FIXED** | postfx.cpp | 1506+ | @fixer | ✅ `max(..., 1e-7f)` epsilon guards |
 | MEM-3 | ~~fxParams.fxSwitch uninitialized~~ **FIXED** | vehiclePipe.cpp | 621,776,1178,1301,1459 | @fixer | ✅ memset zero-init |
 | MEM-4 | ~~Unsafe strcat in getpath~~ **FIXED** | main.cpp | 108 | @fixer | ✅ strncat with bounds |
-| ARCH-3 | Render state leaks (no enforcement) | multiple | - | @oracle | State tracking audit |
-| ARCH-4 | Static locals non-reentrant | multiple | - | @oracle | Thread safety review |
+| ARCH-3 | Render state leaks (no enforcement) | multiple | - | @oracle | State tracking audit. Verification: state table landed this session (~90 sites) |
+| ARCH-4 | Static locals non-reentrant | multiple | - | @oracle | Thread safety review. Verification: statics table landed (3 HIGH: postfx.cpp:883-884, :1042, :1175; depthhook.cpp:39-41) |
 
 ### Priority 3: LOW SEVERITY
 
@@ -35,13 +35,13 @@ This plan addresses all issues found in the codebase analysis, assigns appropria
 | MEM-7 | ~~sprintf without bounds~~ **FIXED** | PC_PlantsMgr.cpp | 428-451 | @fixer | ✅ snprintf with sizeof |
 | TODO-1 | Implement safe swap double-buffer | wheels_extender.cpp | 331 | @fixer | Concurrency test |
 | TODO-2 | InterceptCall hook | wheels_extender.cpp | 348 | @fixer | Hook validation |
-| TODO-3 | Reconstruct normals from depth | envmap.cpp | 629 | @librarian | Research implementation |
+| TODO-3 | Reconstruct normals from depth | envmap.cpp | — | @librarian | Research implementation |
 | TODO-4 | Instance one set | buildingPipe.cpp | 1021 | @fixer | Performance test |
-| TODO-5 | Allow III/VC in debug menu | debugmenu_ui.cpp | 174 | @designer | UI test |
+| TODO-5 | Allow III/VC in debug menu | debugmenu_ui.cpp | — | @designer | UI test |
 | TODO-6 | Recover unified pipeline | debugmenu_ui.cpp | 301 | @librarian | Research JuniorDjjr fork |
-| TODO-7 | Do we always have this? | vehiclePipe.cpp | 72 | @oracle | Architecture review |
-| TODO-8 | Is this even needed? | vehiclePipe.cpp | 557 | @oracle | Architecture review |
-| TODO-9 | Tex coords correct? | postfx.cpp | 299 | @fixer | Visual verification |
+| TODO-7 | Do we always have this? | vehiclePipe.cpp | — | @oracle | Architecture review |
+| TODO-8 | Is this even needed? | vehiclePipe.cpp | 707,717 | @oracle | Architecture review |
+| TODO-9 | Tex coords correct? | postfx.cpp | — | @fixer | Visual verification |
 
 ---
 
@@ -328,7 +328,7 @@ python tools/fast_build.py --launch
 
 ### Phase 1 Success
 
-- [x] No runtime crashes from null pointer — FIXED 0x7F98DF, 0x7F9ECB, 0x7FAD4D
+- [x] No runtime crashes from null pointer — FIXED 0x7F98DF, 0x7F9ECB (SMAA_DrawPass postfx.cpp:3954,4319,4363,4436, aac8478), 0x7FAD4D (neoCarpipe.cpp:86,124; envmap.cpp:487, fa1d507)
 - [x] No division-by-zero in debug log — FIXED with epsilon guards
 - [x] No buffer overflow in getpath — FIXED strncat
 - [x] All fxParams initialized — FIXED memset
@@ -358,6 +358,15 @@ python tools/fast_build.py --launch
 
 - [ ] III/VC in debug menu — OPEN (blocked by P1.3 preset framework)
 - [x] Tex coords verified — PASS (postfx.cpp:713)
+
+### VehiclePBR Audit Note
+
+- main_rubber FAIL: manual c22/c23 upload at vehiclePipe.cpp:1721-1722 (must use pipeUploadPBR())
+- main_ps2EnvSpecFx: dead entry point (no caller)
+
+### SSAO Chain Note
+
+- 4/4 PASS, ordering SSAO :2030-2034 → CopyDepthToPrev :2039 → PipeChain :2042
 
 ---
 
