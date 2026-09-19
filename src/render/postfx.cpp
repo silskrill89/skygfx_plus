@@ -1,4 +1,5 @@
 #include "skygfx.h"
+#include "diagnostics.h"
 #include "ModuleList.hpp"
 #include "postfx.h"
 #include "chars.h"
@@ -3944,6 +3945,7 @@ static bool DrawSMAA_EdgeDetect(float smaaThreshold, float cameraMovement, const
 
 	// SEH-protected: helper has no C++ objects with destructors (C2712-safe)
 	bool ok = true;
+	g_inGuardedIm2DPass = 1;
 	__try {
 		overrideIm2dPixelShader = SMAA_EdgeMotionDepth ? SMAA_EdgeMotionDepth : SMAA_Edge;
 		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
@@ -3953,6 +3955,7 @@ static bool DrawSMAA_EdgeDetect(float smaaThreshold, float cameraMovement, const
 		dbglog("[SMAA-DIAG] EXCEPTION in SMAA edge-detect pass (Im2D fault) — SMAA disabled this frame");
 		ok = false;
 	}
+	g_inGuardedIm2DPass = 0;
 
 	// Restore depth hook after edge pass if it was suspended (blend weight doesn't sample depth)
 	if(depthSuspended){
@@ -3965,6 +3968,7 @@ static bool DrawSMAA_EdgeDetect(float smaaThreshold, float cameraMovement, const
 static bool SMAA_DrawPass(IDirect3DPixelShader9 *shader)
 {
 	bool ok = true;
+	g_inGuardedIm2DPass = 1;
 	__try {
 		overrideIm2dPixelShader = shader;
 		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
@@ -3974,6 +3978,7 @@ static bool SMAA_DrawPass(IDirect3DPixelShader9 *shader)
 		dbglog("[SMAA-DIAG] EXCEPTION in SMAA pass (Im2D fault shader=%p code=0x%08X) — SMAA disabled this frame", shader, GetExceptionCode());
 		ok = false;
 	}
+	g_inGuardedIm2DPass = 0;
 	return ok;
 }
 
