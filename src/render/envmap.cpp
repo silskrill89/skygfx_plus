@@ -484,6 +484,7 @@ RenderSphereReflections(void)
 
 		fb = RwCameraGetRaster(cam);
 		zb = RwCameraGetZRaster(cam);
+		if(!fb || !zb) return;
 		farplane = RwCameraGetFarClipPlane(cam);
 		fog = RwCameraGetFogDistance(cam);
 		RwCameraSetRaster(cam, RwCameraGetRaster(reflectionCam));

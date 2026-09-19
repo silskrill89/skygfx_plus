@@ -83,6 +83,7 @@ CarPipe::MakeQuadTexCoords(bool textureSpace)
 void
 CarPipe::MakeScreenQuad(void)
 {
+	if(!reflectionCam) return;
 	int width = reflectionTex->raster->width;
 	int height = reflectionTex->raster->height;
 	screenQuad[0].x = 0.0f;
@@ -120,6 +121,7 @@ CarPipe::RenderReflectionScene(void)
 void
 CarPipe::RenderEnvTex(void)
 {
+	if(!Scene.camera || !reflectionCam) return;
 	RwCameraEndUpdate(Scene.camera);
 
 	MakeEnvmapRasters();
