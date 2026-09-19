@@ -34,6 +34,10 @@ void diag_installVEH(void);
 // Remove the VEH crash handler.
 void diag_removeVEH(void);
 
+// Guard flag: set while inside SEH-guarded Im2D dispatches (SMAA passes).
+// Lets the VEH pass through untouched so frame SEH containment can fire.
+extern volatile LONG g_inGuardedIm2DPass;
+
 // Get the current log file path (for external code that needs it).
 const char* diag_getLogPath(void);
 

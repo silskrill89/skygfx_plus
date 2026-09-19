@@ -9,6 +9,7 @@
 //   - Scope tag registry (address→function name for crash backtrace)
 
 #include "skygfx.h"
+#include "diagnostics.h"
 #include <windows.h>
 #include <DbgHelp.h>
 #include <stdio.h>
@@ -176,6 +177,11 @@ diag_crashHandler(EXCEPTION_POINTERS *ep)
 	if(code == 0xE06D7363)
 		return EXCEPTION_CONTINUE_SEARCH;
 
+	// Inside SEH-guarded Im2D dispatches the VEH must be a pure pass-through.
+	// Any logging here does file I/O on the faulting thread and derails
+	// dispatch before frame-based __try/__except handlers can run.
+	if(g_inGuardedIm2DPass) return EXCEPTION_CONTINUE_SEARCH;
+
 	static int crashCount = 0;
 	if(++crashCount > 20) return EXCEPTION_CONTINUE_SEARCH;
 
@@ -334,6 +340,7 @@ void diag_stopWatchdog(void)
 // Public API
 // ============================================================
 static LONG_PTR s_oldVEH = 0;
+volatile LONG g_inGuardedIm2DPass = 0;
 
 void
 diag_init(const char *logPath)
