@@ -867,6 +867,8 @@ RwImVertexIndex blur_vcs_Indices[] = {
 	8, 9, 10, 10, 9, 11,
 };
 RwRaster *lastFrameBuffer;
+static int s_blurVCS_lastWidth = 0, s_blurVCS_lastHeight = 0;
+static int s_blurVCS_justInitialized = 0;
 RwRGBA vcsblurrgb;
 RwRGBA rgbTweak;
 
@@ -880,8 +882,6 @@ CPostEffects::Blur_VCS(void)
 		dbglog("Blur_VCS: pRasterFrontBuffer is NULL, skipping");
 		return;
 	}
-	static int lastWidth, lastHeight;
-	static int justInitialized;
 	int i;
 	int bufw, bufh;
 	int screenw, screenh;
@@ -890,17 +890,17 @@ CPostEffects::Blur_VCS(void)
 	bufh = CPostEffects::pRasterFrontBuffer->height;
 
 	/*if(GetAsyncKeyState(VK_F7) & 0x8000){
-		justInitialized = 1;
+		s_blurVCS_justInitialized = 1;
 		return;
 	}*/
 
-	if(lastWidth != bufw || lastHeight != bufh){
+	if(s_blurVCS_lastWidth != bufw || s_blurVCS_lastHeight != bufh){
 		if(lastFrameBuffer)
 			RwRasterDestroy(lastFrameBuffer);
 		lastFrameBuffer = RwRasterCreate(bufw, bufh, CPostEffects::pRasterFrontBuffer->depth, rwRASTERTYPECAMERATEXTURE);
-		justInitialized = 1;
-		lastWidth = bufw;
-		lastHeight = bufh;
+		s_blurVCS_justInitialized = 1;
+		s_blurVCS_lastWidth = bufw;
+		s_blurVCS_lastHeight = bufh;
 	}
 
 	screenw = RwCameraGetRaster(Scene.camera)->width;
@@ -951,8 +951,8 @@ CPostEffects::Blur_VCS(void)
 	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, blur_vcs_vertices+12, 4, blur_vcs_Indices, 6);
 
 	// blend with last frame
-	if(justInitialized)
-		justInitialized = 0;
+	if(s_blurVCS_justInitialized)
+		s_blurVCS_justInitialized = 0;
 	else{
 		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, lastFrameBuffer);
 		RwD3D9SetRenderState(D3DRS_SRCBLEND, D3DBLEND_BLENDFACTOR);
@@ -1031,6 +1031,10 @@ CPostEffects::DrawQuadSetDefaultUVs(void)
 }
 
 void *blurPS, *radiosityPS;
+// Hoisted from function-statics (were invisible to Reset → dangling after
+// ReleaseDefaultPoolResources). Released alongside lastFrameBuffer below.
+static RwRaster *s_radiosityShaderWorkBuffer = nil;
+static RwRaster *s_radiosityWorkBuffer = nil;
 
 void
 CPostEffects::Radiosity_shader(int intensityLimit, int filterPasses, int renderPasses, int intensity)
@@ -1039,7 +1043,7 @@ CPostEffects::Radiosity_shader(int intensityLimit, int filterPasses, int renderP
 		dbglog("Radiosity_shader: pRasterFrontBuffer is NULL, skipping");
 		return;
 	}
-	static RwRaster *workBuffer;
+	RwRaster *workBuffer = s_radiosityShaderWorkBuffer;
 	if(workBuffer)
 		if(workBuffer->width != pRasterFrontBuffer->width ||
 		   workBuffer->height != pRasterFrontBuffer->height ||
@@ -1049,6 +1053,7 @@ CPostEffects::Radiosity_shader(int intensityLimit, int filterPasses, int renderP
 		}
 	if(workBuffer == nil)
 		workBuffer = RwRasterCreate(pRasterFrontBuffer->width, pRasterFrontBuffer->height, pRasterFrontBuffer->depth, rwRASTERTYPECAMERATEXTURE);
+	s_radiosityShaderWorkBuffer = workBuffer;
 
 	RwRaster *drawBuffer = RwCameraGetRaster(Scene.camera);
 
@@ -1172,7 +1177,7 @@ CPostEffects::Radiosity(int intensityLimit, int filterPasses, int renderPasses, 
 		return;
 	}
 
-	static RwRaster *workBuffer;
+	RwRaster *workBuffer = s_radiosityWorkBuffer;
 	if(workBuffer)
 		if(workBuffer->width != pRasterFrontBuffer->width ||
 		   workBuffer->height != pRasterFrontBuffer->height ||
@@ -1182,6 +1187,7 @@ CPostEffects::Radiosity(int intensityLimit, int filterPasses, int renderPasses, 
 		}
 	if(workBuffer == nil)
 		workBuffer = RwRasterCreate(pRasterFrontBuffer->width, pRasterFrontBuffer->height, pRasterFrontBuffer->depth, rwRASTERTYPECAMERATEXTURE);
+	s_radiosityWorkBuffer = workBuffer;
 
 	RwRaster *renderBuffer, *textureBuffer;
 
@@ -2485,6 +2491,11 @@ void ReleaseDefaultPoolResources(void)
 
 	// VCS blur last-frame buffer
 	if(lastFrameBuffer){ RwRasterDestroy(lastFrameBuffer); lastFrameBuffer = nil; }
+	s_blurVCS_lastWidth = 0; s_blurVCS_lastHeight = 0; s_blurVCS_justInitialized = 1;
+
+	// Hoisted radiosity work buffers (were function-static, invisible to Reset)
+	if(s_radiosityShaderWorkBuffer){ RwRasterDestroy(s_radiosityShaderWorkBuffer); s_radiosityShaderWorkBuffer = nil; }
+	if(s_radiosityWorkBuffer){ RwRasterDestroy(s_radiosityWorkBuffer); s_radiosityWorkBuffer = nil; }
 	
 	// SMAA area/search textures (D3DPOOL_DEFAULT)
 	if(g_smaaAreaTex){ g_smaaAreaTex->Release(); g_smaaAreaTex = NULL; }
