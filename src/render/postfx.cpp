@@ -3943,8 +3943,10 @@ static bool DrawSMAA_EdgeDetect(float smaaThreshold, float cameraMovement, const
 	RwD3D9SetPixelShaderConstant(0, edgeP, 1);
 	RwD3D9SetPixelShaderConstant(1, screenParams, 1);
 
-	// SEH-protected: helper has no C++ objects with destructors (C2712-safe)
+	// SEH-protected: helper has no C++ objects with destructors (C2712-safe).
+	// Save/restore: DrawSMAA may hoist the flag across passes; do not clobber it.
 	bool ok = true;
+	LONG outerGuard = g_inGuardedIm2DPass;
 	g_inGuardedIm2DPass = 1;
 	__try {
 		overrideIm2dPixelShader = SMAA_EdgeMotionDepth ? SMAA_EdgeMotionDepth : SMAA_Edge;
@@ -3955,7 +3957,7 @@ static bool DrawSMAA_EdgeDetect(float smaaThreshold, float cameraMovement, const
 		dbglog("[SMAA-DIAG] EXCEPTION in SMAA edge-detect pass (Im2D fault) — SMAA disabled this frame");
 		ok = false;
 	}
-	g_inGuardedIm2DPass = 0;
+	g_inGuardedIm2DPass = outerGuard;
 
 	// Restore depth hook after edge pass if it was suspended (blend weight doesn't sample depth)
 	if(depthSuspended){
@@ -3968,6 +3970,7 @@ static bool DrawSMAA_EdgeDetect(float smaaThreshold, float cameraMovement, const
 static bool SMAA_DrawPass(IDirect3DPixelShader9 *shader)
 {
 	bool ok = true;
+	LONG outerGuard = g_inGuardedIm2DPass;
 	g_inGuardedIm2DPass = 1;
 	__try {
 		overrideIm2dPixelShader = shader;
@@ -3978,7 +3981,7 @@ static bool SMAA_DrawPass(IDirect3DPixelShader9 *shader)
 		dbglog("[SMAA-DIAG] EXCEPTION in SMAA pass (Im2D fault shader=%p code=0x%08X) — SMAA disabled this frame", shader, GetExceptionCode());
 		ok = false;
 	}
-	g_inGuardedIm2DPass = 0;
+	g_inGuardedIm2DPass = outerGuard;
 	return ok;
 }
 
@@ -4215,6 +4218,11 @@ CPostEffects::DrawSMAA(void)
 	int camW = drawBuffer ? RwRasterGetWidth(drawBuffer) : w;
 	int camH = drawBuffer ? RwRasterGetHeight(drawBuffer) : h;
 
+	// Hoisted guard: cover the Pass0-3 setup windows (RwTextureCreate, RT
+	// switches) that run outside the SEH helpers. Helpers save/restore this
+	// flag so the hoist survives across passes. Every return below clears it.
+	g_inGuardedIm2DPass = 1;
+
 	// Log pre-pass D3D9 state
 	IDirect3DSurface9 *rt0 = NULL;
 	dev->GetRenderTarget(0, &rt0);
@@ -4235,6 +4243,7 @@ CPostEffects::DrawSMAA(void)
 	if(!g_smaaEdgeRaster || !g_smaaBlendRaster || !g_smaaPrevFrameRaster){
 		dbglog("[SMAA-DIAG] FATAL: intermediate rasters NULL (edge=%p blend=%p prev=%p)",
 			g_smaaEdgeRaster, g_smaaBlendRaster, g_smaaPrevFrameRaster);
+		g_inGuardedIm2DPass = 0;
 		ImmediateModeRenderStatesReStore();
 		return;
 	}
@@ -4289,6 +4298,7 @@ CPostEffects::DrawSMAA(void)
 	if(!DrawSMAA_EdgeDetect(smaaThreshold, cameraMovement, screenParams)){
 		// Edge detect faulted — depth hook already restored inside helper.
 		// Skip remaining passes; just do final cleanup.
+		g_inGuardedIm2DPass = 0;
 		ImmediateModeRenderStatesReStore();
 		return;
 	}
@@ -4334,6 +4344,7 @@ CPostEffects::DrawSMAA(void)
 	RwD3D9SetPixelShaderConstant(1, screenParams, 1);
 	if(!SMAA_DrawPass((IDirect3DPixelShader9*)SMAA_BlendWeight)){
 		dev->SetViewport(&vpSaved);
+		g_inGuardedIm2DPass = 0;
 		ImmediateModeRenderStatesReStore();
 		return;
 	}
@@ -4378,6 +4389,7 @@ CPostEffects::DrawSMAA(void)
 	RwD3D9SetPixelShaderConstant(1, screenParams, 1);
 	if(!SMAA_DrawPass((IDirect3DPixelShader9*)SMAA_BlendNeighbor)){
 		dev->SetViewport(&vpSaved);
+		g_inGuardedIm2DPass = 0;
 		ImmediateModeRenderStatesReStore();
 		return;
 	}
@@ -4453,6 +4465,7 @@ CPostEffects::DrawSMAA(void)
 			RwD3D9SetTexture(NULL, 1);
 			dev->SetTexture(2, NULL);
 			dev->SetViewport(&vpSaved);
+			g_inGuardedIm2DPass = 0;
 			ImmediateModeRenderStatesReStore();
 			return;
 		}
@@ -4494,6 +4507,7 @@ CPostEffects::DrawSMAA(void)
 	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
 
+	g_inGuardedIm2DPass = 0;
 	ImmediateModeRenderStatesReStore();
 }
 

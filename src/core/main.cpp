@@ -2522,6 +2522,7 @@ DllMain(HINSTANCE hInst, DWORD reason, LPVOID)
 		diag_installVEH();
 		// diag_startWatchdog() removed — heartbeat() is never called, causes false freeze dialog
 		dbglog("VEH handler + watchdog installed");
+		dbglog("skygfx build DrawSMAA-hoist d0886dd+1 (guarded-Im2D VEH pass-through)");
 
 		dbglog("=== skygfx loading ===");
 		dbglog("dllModule=%p, logPath=%s", dllModule, diag_getLogPath());
