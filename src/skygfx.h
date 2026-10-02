@@ -22,6 +22,15 @@
 #include "Pools.h"
 #include "LinkList.h"
 
+// d3d9types.h only defines the four D3DCOLORWRITEENABLE_* channel bits —
+// there is no "ALL" macro in the SDK. Colour-write repair (pipeEnterAlphaMode
+// / pipeForceAlphaBlock) needs the mask that enables every channel.
+#ifndef D3DCOLORWRITEENABLE_ALL
+#define D3DCOLORWRITEENABLE_ALL \
+	(D3DCOLORWRITEENABLE_RED|D3DCOLORWRITEENABLE_GREEN| \
+	 D3DCOLORWRITEENABLE_BLUE|D3DCOLORWRITEENABLE_ALPHA)
+#endif
+
 typedef uint8_t uint8, uchar;
 typedef uint16_t uint16, ushort;
 typedef uint32_t uint32, uint;
@@ -263,6 +272,25 @@ struct Config {
 	RwBool ps2ModulateBuilding;
 	RwBool dualPassBuilding;
 
+	// ---- PBR building env / reflection (ported from the GTA IV building path)
+	// Consumed by main_building() in VehiclePBR_Modern.hlsl through PS c47 and
+	// uploaded per mesh by the PBR cb (buildingPipe.cpp); full contract in the
+	// env block at the end of main_building.
+	//
+	// bldEnvReflect (default 1): restores the env-mapped-material reflection
+	//   that the IV/PS2/Xbox building cbs all run (branch on
+	//   `*(int*)&surfaceProps.specular & 1`, additive
+	//   Envcolor = 192/128 * shininess pass — buildingPipe PS2 :683,
+	//   Xbox :809) and the PBR cb had NO branch for. Those materials rendered
+	//   flat under Building=PBR. 0 = off.
+	RwBool bldEnvReflect;
+	// bldSkyReflect (0.0-1.0, default 0.15, 0 = off): the superset term IV does
+	//   NOT have — a Fresnel-weighted reflection of the already-bound IBL sky
+	//   capture for materials without their own env map. Energy-consistent
+	//   (F*env + (1-F)*body, weight forced to 0 when the capture is empty) so
+	//   it can never darken a wall.
+	float bldSkyReflect;
+
 	RwBool usePCTimecyc;
 	RwBool ps2ModulateGrass;
 	RwBool grassAddAmbient;
@@ -367,6 +395,9 @@ struct Config {
 	float sssPostProcessStrength;	// 0.0-1.0, how much SSS blur to apply
 	float sssPostProcessRadius;	// blur radius in pixels (higher = softer skin)
 	float sssPostProcessThreshold;	// depth threshold for edge preservation
+	float sssAmbientBoost;		// 0.0-1.0 (default 1.0): scales the timecycle
+					// ambient the SSS blur adds to character pixels
+					// (shader c21). 0 = pure blur, no glow.
 
 	// Skin Enhancement - wrap lighting for SSS approximation
 	// NOTE: Works ON TOP of existing Rpskin rendering. Does NOT replace it.
@@ -491,6 +522,14 @@ struct Config {
 	float waterFoamSoftness;
 	float waterShallowR, waterShallowG, waterShallowB;
 	float waterDeepR, waterDeepG, waterDeepB;
+	// Water rewrite knobs (Xbox/IV-style water)
+	float waterTileScale;          // detail normal UV frequency (higher = finer tiles)
+	float waterShoreFade;          // metres of depth ramp for soft shore blending
+	float waterTranslucency;       // master translucency/opacity scale
+	float waterReflectionStrength; // reflection reflectivity cap (< 1, anti-chrome)
+	int   waterUseTimecycle;       // 1 = water colour/alpha from timecyc, 0 = INI overrides
+	int   waterStyle;              // 0 = Xbox (default), 1 = GTA IV, 2 = GTA V
+	int   waterQuality;            // 0-3 (Low/Med/High/Ultra) cost tiers
 	
 	// Weather cycle control
 	int currentWeatherType;
@@ -580,6 +619,62 @@ struct Config {
 	// bit7=normal buffer. Default 255 = all layers on.
 	int vehPBRLayers;
 
+	// Non-prelit prelight fallback for the PBR/Modern vehicle VS
+	// (main_vehiclePBR, VS c28.x). SA vehicle geometry ships WITHOUT
+	// rpGEOMETRYPRELIT (1793/1793 meshes in skygfx_dbg.log), so the VS
+	// prelight term (IN.Color * surfProps.w) is identically 0 and the only
+	// shade-side light left is timecycle ambient * material ambient
+	// (0.03*0.5 ≈ 0.02) -> black silhouette boxes. When the geometry has no
+	// baked prelight the VS floors its lit colour at this value BEFORE the
+	// material-colour multiply. Because the floor is a max(), prelit
+	// geometry and sun-lit faces (already >= floor) are bit-identical.
+	// 0.0-1.0, default 0.15; 0 = off (exact legacy behaviour).
+	float vehPrelightFallback;
+
+	// ---- Modern/Env vehicle REFLECTION MODEL terms -------------------------
+	// One knob per term, all consumed by VehiclePBR_Modern.hlsl main() and
+	// uploaded once per Env-cb invocation (PS c20.y/z/w + c44.z/w — see the
+	// "reflection register contract" comment at the upload sites). Each
+	// restores a term Modern was missing relative to the other car pipes
+	// (Mobile / PS2 / Specular / Neo-xbox); 0 = legacy Modern behaviour.
+
+	// Env-source VALIDITY FALLBACK (default on). When reflectionTex comes back
+	// empty (sphere render skipped/failed) the old code did
+	// layer2 = lerp(body, envTerm≈0, kr) — i.e. it REPLACED up to kr of the
+	// paint with black and darkened the car. Now: env -> ibl -> sky source
+	// chain, and kr is forced to 0 when none of them carry content, so an
+	// empty environment can never darken the body.
+	RwBool vehEnvFallback;
+
+	// Energy-consistent strength model (default on). vehEnvIntensity used to
+	// scale the env CONTENT while kr still removed kr of the body, so lowering
+	// the strength slider DARKENED the paint by kr instead of weakening the
+	// reflection. Mode 1 puts the intensity on the Fresnel COVERAGE
+	// (kr *= intensity, content full) — at intensity 1.0 it is bit-identical
+	// to the legacy path, at low intensity the body stays intact.
+	RwBool vehEnvStrengthMode;
+
+	// Apply CarReflectionMask at the env UV (default on). The PS2/Specular
+	// shaders and CarPipe::RenderEnvTex (NEO) all modulate the reflection by
+	// this mask (RenderEnvTex multiplies it into reflectionTex with
+	// SRCBLEND=ZERO/DESTBLEND=SRCCOLOR over a 0..1 screen quad); the
+	// RenderSphereReflections path Modern/Mobile use does NOT bake it, and
+	// Modern bound the texture on s2 without ever sampling it.
+	RwBool vehEnvMask;
+
+	// Wet-road reflection boost (default on). Ported from main_building's
+	// wet block: WetRoads raises env coverage, raises glossiness and
+	// darkens the base slightly. Folded into PS c20.z on the CPU (0 when
+	// this toggle is off).
+	RwBool vehWetEnv;
+
+	// Standalone Mobile-style sun glint strength, 0.0-1.0, default 0 (off).
+	// Mobile adds pow(dot(reflectV, sunDir), 10) * strength * 2 * sunColor on
+	// top of its env lerp — texture-INDEPENDENT, so it survives with no env
+	// map at all. Modern's envGlint is multiplied by the env source, so this
+	// is the always-available version. Also gated by LF(2) (sun/spec layer).
+	float vehEnvGlint;
+
 	// PBR vehicle env-reflection strength multiplier (0=off, 1=default).
 	// Scales the env reflection term in VehiclePBR_Modern.hlsl main().
 	float vehEnvIntensity;
@@ -588,8 +683,21 @@ struct Config {
 	// env map to ALL car paint, so name-only classification misses untextured
 	// chrome trim; when > 0, body materials whose env-map shininess is >= this
 	// value are promoted to SURFACE_CAR_CHROME (metal reflection path).
-	// 0 = disabled (default), try 1.5-3.0.
+	// 0 = disabled (default), try 1.5-3.0. Compares the RAW env-map shininess
+	// (captured BEFORE the ×8×mult shaping) — raw semantics, per this comment.
 	float vehChromeEnvThreshold;
+	// Auto-chrome by part/frame name (default 1): RpAtomic frame-name keyword
+	// walk (chrome/bumper/trim/...) OR material specular float bit 3 marks the
+	// atomic's materials SURFACE_CAR_CHROME. Toggle off = never frame-chrome
+	// even if bits were pre-set.
+	RwBool vehAutoChrome;
+	// Chrome material breakdown (Part B) — defaults match the Car Chrome BRDF
+	// row (brdfLibrary.h). Folded into c22/c3/chromeParams instead of hardcoded.
+	float chromeF0;         // chrome specular/F0 (c22.y), default 0.56, [0..1]
+	float chromeGloss;      // chrome glossiness (c22.x), default 0.90, [0..1]
+	float chromeMetallic;   // chrome metallicness (c22.w), default 1.0, [0..1]
+	float chromeEnvBoost;   // chrome env-reflection mult folded into c3.x, default 1.0, [0..4]
+	float chromeClearcoat;  // chrome clearcoat strength (PS c44.x), default 0.6, [0..1]
 
 	// Unified tonemap (CryEngine-style): timecyc supplies COLOUR, the rendered
 	// frame supplies BRIGHTNESS via a GPU luminance measure + temporal eye
@@ -601,9 +709,20 @@ struct Config {
 	// Key strength (0-1, default 1.0) — blend between timecyc exposure and the
 	// frame-derived auto exposure. 0 = timecyc only, 1 = full auto.
 	float tonemapKeyStrength;
-	// Auto-exposure clamp bounds (0.2-4.0, defaults 0.5 / 2.0).
+	// Auto-exposure clamp bounds (min [-0.5..0.5] default 0.5,
+	// max [-0.5..1.0] default 2.0-at-read-then-clamped). Negative bounds are
+	// allowed for deliberate darkening; Min <= Max is enforced by pinning
+	// min = max in clampTonemapExposureRanges (load/reload/save/menu).
 	float tonemapMinExposure;
 	float tonemapMaxExposure;
+	// User pivot curve applied at the OUTPUT of TonemapPass (identity —
+	// bit-exact passthrough — when both intensities are 0.0, defaults):
+	// region below mid driven by lows, region above mid by highs, midpoint
+	// anchors at gain 1.0 for continuity. Negative lows darkens shadows /
+	// pulls highlights down, positive lifts them (per-channel gain ramp).
+	float tonemapCurveLows;		// [-1..1], default 0.0
+	float tonemapCurveHighs;	// [-1..1], default 0.0
+	float tonemapCurveMid;		// pivot [0..1], default 0.5
 
 	// Universal dynamic-sky hemisphere ambient weight (0=off, 0.5 default, 1=full).
 	// Samples the per-frame DynamicSky capture by surface normal and adds the
@@ -626,6 +745,8 @@ void refreshIni(void);
 void refreshMenu(void);
 void reloadAllInis(void);
 void saveConfig(void);
+bool saveConfigTo(const char *path);	// Save as New Config: writes live config to an explicit path
+bool loadConfigFile(const char *path);	// Config selector: reads a config file into the live config (false = file missing/unreadable)
 void installMenu(void);
 void setConfig(void);
 void ApplyPreset(Config *c, int preset);
@@ -655,6 +776,14 @@ extern RwTexture *reflectionTex;
 void MakeEnvmapRasters(void);
 void MakeEnvmapCam(void);
 void ShutdownEnvMap(void);
+
+/* Utility Noise Texture (docs/plans/effects-menu-overhaul.md §2)
+ * One runtime-generated RGBA noise tile, channel-packed per pixel as
+ * (a<<24)|(r<<16)|(g<<8)|b (D3DFMT_A8R8G8B8): R = tileable Perlin fBm,
+ * G = tileable Worley F1, B = white noise, A = Bayer 8x8 dither. */
+extern RwTexture *g_pUtilityNoise;	// the noise tile (NULL until generated)
+extern int g_CurrentNoiseSize;		// its resolution in px (0 = not generated)
+void GenerateUtilityTexture(int res);	// res clamped 32..1024; destroys+frees old texture
 
 extern struct IDirect3DTexture9 *g_normalBufferTex;
 
@@ -849,7 +978,10 @@ extern bool VehShaders_IsHeadlightTexture(const char *texName);
 extern bool VehShaders_IsTaillightTexture(const char *texName);
 extern bool VehShaders_IsGlassTexture(const char *texName, bool hasAlpha, unsigned char alpha);
 extern int  VehShaders_GetModelIndex(void *atomic);
-extern int  VehShaders_GetSurfaceType(const char *texName);
+	extern int  VehShaders_GetSurfaceType(const char *texName);
+	// Part C: chrome by atomic frame-name keyword walk (+ material specular bit 3
+	// marker + 64-slot direct-mapped cache). Checks config->vehAutoChrome first.
+	extern bool VehShaders_FrameNameIsChrome(RpAtomic *atomic);
 extern float VehShaders_GetDirtLevel(void *vehicle);
 extern void VehShaders_ApplyDirtToPBR(float dirtLevel, float *specular, float *glossiness, float *specularTintR, float *specularTintG, float *specularTintB);
 
@@ -901,6 +1033,8 @@ extern void *MotionBlur_Burnout;
 extern void *ColorFilter_CrossMix;
 extern void *VehiclePaint_GTAIV;
 extern void *Water_Parallax;
+extern void *Water_IV;
+extern void *Water_V;
 extern void *Water_VS;
 extern void *VehiclePBR_Modern;
 extern void *Glass_Vehicle;
@@ -1012,6 +1146,97 @@ void GTAfree(void *data);
 // ============================================================
 void pipeUploadPBR(float glossiness, float specular, float c22_3, float c22_4,
                    float c23_1, float c23_2, float c23_3);
+
+// ============================================================
+// Cull-mode guard for pipe render callbacks — pipelinecommon.cpp.
+// Saves rwRENDERSTATECULLMODE (clamped: only NONE/BACK survive),
+// forces rwCULLMODECULLBACK (SA world default), and on exit restores
+// the clamped saved value. Prevents a stale/foreign cull value
+// (e.g. a failed Get leaving garbage) from leaking into pipe draws
+// and hiding one-sided geometry. Safe to nest.
+// Every set goes through pipeForceCullMode(), which syncs ALL THREE
+// cull layers (rw cache / D3D9 driver cache / raw device): a plain
+// RwRenderStateSet is a no-op when the rw cache already holds the
+// value, so a raw device drift (postfx Save/RestoreRawGeomStates,
+// device reset) could otherwise never be repaired — see the
+// pipelinecommon.cpp block comment for the disassembly-backed
+// details. pipeForceCullMode is also the re-assert to call after
+// any fullscreen Im2D pass (buildingPipe:731, vehicle Env cb).
+// ============================================================
+RwUInt32 pipeEnterCullMode(void);
+void pipeExitCullMode(RwUInt32 saved);
+void pipeForceCullMode(RwUInt32 rwCull);
+
+// ============================================================
+// Alpha/blend-mode guard for pipe render callbacks — sibling of
+// pipeEnterCullMode (pipelinecommon.cpp). Saves the rw-cached
+// vertex-alpha / src+dst blend / alpha-test func+ref states (all
+// pre-seeded so a failed Get is a known-good value), then forces a
+// deterministic entry through BOTH layers (rw-set + raw device):
+// blend factors back to the world-canonical SRCALPHA/INVSRCALPHA,
+// D3DBLENDOP back to ADD (no rw state exists for it), vertex alpha
+// OFF as the per-mesh baseline, and the alpha-test group re-aligned
+// to the rw-cached func with ref==0 repaired to 1. Exit restores
+// the caller's states through both layers. Needed because
+// RwRenderStateSet/Get are no-ops when the rw cache already holds
+// the value — foreign raw RwD3D9SetRenderState(D3DRS_*) writes
+// (postfx, SSS, radiosity, moon helpers) bypass that cache and
+// leave the device disagreeing with it.
+// ============================================================
+struct PipeAlphaState {
+	RwUInt32 vtxAlpha;   // rwRENDERSTATEVERTEXALPHAENABLE
+	RwUInt32 srcBlend;   // rwRENDERSTATESRCBLEND
+	RwUInt32 dstBlend;   // rwRENDERSTATEDESTBLEND
+	RwUInt32 alphaFunc;  // rwRENDERSTATEALPHATESTFUNCTION
+	RwUInt32 alphaRef;   // rwRENDERSTATEALPHATESTFUNCTIONREF
+	// Raw-only states — no rw render state exists for these, so layers (1)/(2)
+	// can never carry them and a foreign raw write is invisible to every
+	// RwRenderStateGet. They are therefore snapshotted from the DEVICE (layer 3,
+	// the only layer that ever sees them) at enter and restored raw at exit:
+	//   sepAlphaBlend — D3DRS_SEPARATEALPHABLENDENABLE. setMoonAlphaBlendStates
+	//     (main.cpp) pushes it ON with DESTBLENDALPHA=ZERO and only restores the
+	//     enable bit; if that leaks, every later draw's DESTINATION ALPHA is
+	//     recomputed separately, which the postfx chain reads back.
+	//   colorWrite    — D3DRS_COLORWRITEENABLE. A leaked channel mask silently
+	//     drops RGB writes so the frame keeps its cleared (black) content.
+	RwUInt32 sepAlphaBlend;
+	RwUInt32 colorWrite;
+};
+PipeAlphaState pipeEnterAlphaMode(void);
+void pipeExitAlphaMode(PipeAlphaState saved);
+
+// ============================================================
+// Class-proof SEH choke-points — implemented in pipelinecommon.cpp.
+// The __try bodies live in these POD-only helpers so callers with C++
+// objects in scope (error C2712) still get SEH containment.
+//
+// guardedSetRT:      bind a raster as RT0. NULL raster -> false; fault ->
+//                    dbglog(phase + code) and false. Callers fail open.
+// guardedIm2DRender: fullscreen Im2D draw with an override pixel shader.
+//                    Pre-checks verts/idx, Scene.camera and the begun-camera
+//                    gate (*(void**)0xC9BCC0); fault -> dbglog(phase + code)
+//                    and false.
+//
+// Both save/restore g_inGuardedIm2DPass (hoisted-draw pattern from postfx)
+// and bump g_guardDepth so the VEH can report nesting depth on GUARD-FAULT.
+// ============================================================
+extern volatile LONG g_guardDepth;
+bool guardedSetRT(RwRaster *ras, const char *phase);
+bool guardedIm2DRender(void *ps, RwInt32 primType, RwIm2DVertex *verts, RwInt32 numVerts,
+                       RwImVertexIndex *indices, RwInt32 numIndices, const char *phase);
+
+// ============================================================
+// Raw geometry render-state guard — postfx.cpp (shared with
+// chars.cpp, whose SSS blur pass raw-writes ALPHATEST/Z*/blend
+// states that ImmediateModeRenderStatesReStore never round-trips).
+// Save the 9-state device snapshot (s_rawGeomStateIds) BEFORE
+// ImmediateModeRenderStatesStore, restore AFTER ReStore so the
+// restore wins on any overlap. Snapshot type is D3DRENDERSTATETYPE
+// values as unsigned long (DWORD), RAW_GEOM_STATE_COUNT entries.
+// ============================================================
+#define RAW_GEOM_STATE_COUNT 9
+bool SaveRawGeomStates(DWORD *out);
+void RestoreRawGeomStates(const DWORD *in);
 
 // ============================================================
 // Shared timecycle lighting — single source of truth for all pipelines

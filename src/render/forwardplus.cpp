@@ -20,7 +20,8 @@ static int g_fpCurrentBuffer = 0;
 
 // Light collection
 static ClusterLight g_fpLights[FP_MAX_LIGHTS];
-static int g_fpNumLights = 0;
+int g_fpNumLights = 0;       // non-static: debug menu shows it next to the GPU count
+static int g_fpRawCount = 0; // raw game count before range filtering (diagnostics)
 
 // Tile data (per-tile light indices)
 static unsigned char g_fpTileData[FP_GRID_W * FP_GRID_H * 4]; // RGBA8
@@ -73,22 +74,30 @@ static void EnsureFPResources(IDirect3DDevice9 *dev, int screenW, int screenH)
 	diag_registerScope("ForwardPlus_SetConstants", (void*)ForwardPlus_SetConstants);
 }
 
-// GTA SA point light structure (from gta-reversed / plugin-sdk)
-// CRegisteredPointLight at CPointLights::m_aPointLights
+// GTA SA point light structure — layout verified against gta_sa.exe's own
+// CPointLights::Add (0x7001FD writes pos/dir/radius/color at exactly these
+// offsets) and matching main.cpp's PointLight / aap-skygfx's reference:
 struct CRegisteredPointLight {
-	float posX, posY, posZ;     // 0x00 world position
-	float dirX, dirY, dirZ;    // 0x0C direction (for spotlights)
-	float colorR, colorG, colorB, colorA; // 0x18 RGBA (floats, 0-1)
-	float radius;              // 0x28 attenuation radius
-	unsigned char type;        // 0x2C: 0=point, 1=spot
-	unsigned char fogType;     // 0x2D
-	unsigned char flags;       // 0x2E: bit 0 = check direction, bit 1 = cast shadow
-	unsigned char pad;         // 0x2F
+	float posX, posY, posZ;       // 0x00 world position
+	float dirX, dirY, dirZ;       // 0x0C direction (for spotlights)
+	float radius;                 // 0x18 attenuation radius
+	float colorR, colorG, colorB; // 0x1C colour (floats, 0-1)
+	void *attachedTo;             // 0x28
+	unsigned char type;           // 0x2C: 0=point, 1=spot
+	unsigned char fogType;        // 0x2D
+	unsigned char flags;          // 0x2E: bit 0 = check direction, bit 1 = cast shadow
+	unsigned char pad;            // 0x2F
 }; // 48 bytes per entry
 
-// GTA SA 1.0 US addresses
-static int *NumLights = (int*)0xC3A090;
-static CRegisteredPointLight *PointLights = (CRegisteredPointLight*)0xC3A0A0;
+// GTA SA 1.0 US addresses — the previous pair (0xC3A090 / 0xC3A0A0) was
+// fabricated: zero code references to them exist in gta_sa.exe, so the
+// collector read unrelated memory (count out of range => "collected 0
+// lights" every frame). Proven from the exe's own code:
+//   0x700176  mov edx, [0xC3F0D0] / cmp edx, 0x20  <- active count, cap 32
+//   0x700272  inc edx / mov [0xC3F0D0], edx        <- count store in Add
+//   0x7001FD  lea eax, [ecx + 0xC3F0E0] (stride 0x30 = 48-byte entries)
+static int *NumLights = (int*)0xC3F0D0;
+static CRegisteredPointLight *PointLights = (CRegisteredPointLight*)0xC3F0E0;
 #define MAX_GAME_LIGHTS 32
 
 // Collect lights from GTA SA's CPointLights system
@@ -99,6 +108,7 @@ static void CollectLights(void)
 	// Guard: NumLights pointer must be readable and count must be sane
 	if(!NumLights) return;
 	int numLights = *NumLights;
+	g_fpRawCount = numLights; // keep raw value even when rejected (log/menu)
 	if(numLights <= 0 || numLights > MAX_GAME_LIGHTS)
 		return;
 	if(!PointLights) return;
@@ -266,17 +276,47 @@ static void UploadLightConstants(void)
 	RwD3D9SetPixelShaderConstant(45, clusterParams, 1);
 }
 
+// Trusted screen size: the engine's configured video resolution. Unlike a
+// live Scene.camera raster read, this is immune to the geometry-phase
+// camera-raster swap (measured 2048x1024 while the real screen is 1920x1080 —
+// see main.cpp's scene-entry camRas diagnostic). Returns false when RsGlobal
+// is not yet populated OR the values are implausible, so the caller can DEFER
+// the tile-grid build to the first frame with valid dims instead of locking
+// the dims-stability guard onto a transient/garbage size.
+static bool FpGetTrustedScreenSize(int *w, int *h)
+{
+	if(RsGlobal){
+		DWORD gw = RsGlobal->MaximumWidth;
+		DWORD gh = RsGlobal->MaximumHeight;
+		// Plausibility bounds: RsGlobal is a fixed exe address (0xC17040) that
+		// is zero until the game's Rs init runs, and a garbage-but-stable value
+		// here would permanently mis-size the tile grid (the dims-stability
+		// guard in CullAndUpload would treat it as "stable" and never re-sync,
+		// culling lights into tiles for the wrong screen area). Anything
+		// outside [64, 8192] cannot be a real SA video mode.
+		if(gw >= 64 && gw <= 8192 && gh >= 64 && gh <= 8192){
+			*w = (int)gw;
+			*h = (int)gh;
+			return true;
+		}
+	}
+	return false;
+}
+
 // Main entry point — call each frame before rendering
 void ForwardPlus_CullAndUpload(void)
 {
 	DBGLOG_ENTER("ForwardPlus_CullAndUpload");
 	if(!config || !config->forwardPlusEnable){
-		// Defensive: keep the shader gate closed even if the feature was toggled
-		// off after a frame where it was on (c45 would otherwise stay non-zero).
-		if(d3d9device){
-			float zeroParams[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-			RwD3D9SetPixelShaderConstant(45, zeroParams, 1);
-		}
+		// MUST NOT write c45 here: this function runs from RenderScene_before,
+		// outside the pipe callbacks, where RwD3D9SetPixelShaderConstant derefs
+		// null RW shader state -> READ crash at 0x7FBD4A (+0x60) — the exact
+		// hazard documented at the UploadLightConstants call site below. With
+		// the feature disabled EnsureFPResources never ran, so there is no
+		// bound RW pixel shader whose constant cache could take the write.
+		// The gate-close zeroing of c45 (and s5 unbind) is done safely by
+		// ForwardPlus_SetConstants' disabled branch, which runs inside the
+		// frame render before any draw samples c45 — nothing is lost here.
 		return;
 	}
 	
@@ -284,10 +324,35 @@ void ForwardPlus_CullAndUpload(void)
 	if(!dev) return;
 	if(!Scene.camera) return;
 
-	RwRaster *camRas = RwCameraGetRaster(Scene.camera);
-	if(!camRas) return;
-	int w = camRas->width;
-	int h = camRas->height;
+	// Size the tile grid from the engine's trusted resolution (RsGlobal), NOT
+	// a live Scene.camera raster read: during the geometry phase the camera
+	// raster can be a transient swap (measured 2048x1024 while the real screen
+	// is 1920x1080 — see main.cpp's scene-entry camRas diagnostic). A live read
+	// here would mis-size the tile grid for the whole session via the
+	// dims-stability guard below. When RsGlobal is not yet populated we DEFER
+	// (skip the frame) — see the comment inside the branch. (postfx's
+	// GetScreenSize/CaptureScreenSize gives the same guarantee but is static
+	// to postfx.cpp and not exported; RsGlobal is the same source main.cpp
+	// uses to detect the swap.)
+	int w = 0, h = 0;
+	if(!FpGetTrustedScreenSize(&w, &h)){
+		// DEFER, don't fall back to the live camera raster: that live read is
+		// exactly what fix-11 removed as a size source — during the
+		// geometry-phase camera-raster swap it reports the transient
+		// 2048x1024 IBL/classify raster, and the dims-stability guard below
+		// would lock the tile grid onto that wrong size for the whole session
+		// (lights culled into tiles for the wrong screen area → no cluster
+		// lights where the shader looks for them). Skipping the frame is safe:
+		// c45.w keeps its previous value and the shader's 7-light path keeps
+		// the world lit until RsGlobal is populated (game init always precedes
+		// the first RenderScene call, so this is a startup-only window).
+		static bool s_fpTrustedWarned = false;
+		if(!s_fpTrustedWarned){
+			s_fpTrustedWarned = true;
+			dbglog("[ForwardPlus] RsGlobal dims not valid yet — deferring tile grid");
+		}
+		return;
+	}
 	if(w < 1 || h < 1) return;
 	
 	// Ensure textures exist
@@ -296,6 +361,11 @@ void ForwardPlus_CullAndUpload(void)
 
 	// Dims-stability guard: when camera dims change, run EnsureFPResources
 	// (done above) but skip collect/cull/upload/swap until dims repeat.
+	// NOTE: the tile grid itself is NOT cached — CullLightsToTiles recomputes
+	// tilesX/tilesY and refills g_fpTileData from the CURRENT w/h every frame,
+	// so once real dims are known the grid is rebuilt correctly with no
+	// stale-size carryover (the index textures are fixed 128x128 and
+	// resolution-independent).
 	static int s_fpLastW = 0;
 	static int s_fpLastH = 0;
 	static int s_fpStableCount = 0;
@@ -320,7 +390,8 @@ void ForwardPlus_CullAndUpload(void)
 
 	static int fpLogThrottle = 0;
 	if(++fpLogThrottle >= 60){
-		dbglog("[ForwardPlus] collected %d lights, gpu=%d", g_fpNumLights, g_fpGpuLightCount);
+		dbglog("[ForwardPlus] collected %d lights, gpu=%d rawGameCount=%d",
+			g_fpNumLights, g_fpGpuLightCount, g_fpRawCount);
 		fpLogThrottle = 0;
 	}
 	

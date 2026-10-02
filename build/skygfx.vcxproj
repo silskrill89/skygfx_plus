@@ -149,6 +149,7 @@
     <ClCompile Include="..\src\render\buildingPipe.cpp" />
     <ClCompile Include="..\src\entities\chars.cpp" />
     <ClCompile Include="..\src\entities\ragdoll.cpp" />
+    <ClCompile Include="..\src\core\crashhandler.cpp" />
     <ClCompile Include="..\src\core\diagnostics.cpp" />
     <ClCompile Include="..\src\core\menu_inject.cpp" />
     <!-- <ClCompile Include="..\src\core\config.cpp" /> -->
@@ -177,6 +178,7 @@
     <ClCompile Include="..\src\core\test.cpp" />
     <ClCompile Include="..\src\extras\texdb.cpp" />
     <ClCompile Include="..\src\extras\ragdoll_death.cpp" />
+    <ClCompile Include="..\src\render\utilitynoise.cpp" />
     <ClCompile Include="..\src\render\vehiclePipe.cpp" />
     <ClCompile Include="..\src\extras\vehicles.cpp" />
     <ClCompile Include="..\src\extras\veh_shaders.cpp" />

@@ -54,8 +54,13 @@
 #define IDR_SKINPBR                 210
 #define IDR_RUBBER_VEHICLE_MODERN   240
 
+// Water style variants (Water_Parallax.hlsl multi-entry: main_iv / main_v)
+#define IDR_WATER_IV                241
+#define IDR_WATER_V                 242
+
 // Vehicle legacy (211-219)
 #define IDR_VEHICLEPBRVS             211
+#define IDR_PS2ENVSPECFXPS           212
 #define IDR_PS2CARFXVS              213
 #define IDR_SPECCARFXVS             214
 #define IDR_SPECCARFXPS             215

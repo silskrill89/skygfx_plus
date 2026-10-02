@@ -180,7 +180,19 @@ diag_crashHandler(EXCEPTION_POINTERS *ep)
 	// Inside SEH-guarded Im2D dispatches the VEH must be a pure pass-through.
 	// Any logging here does file I/O on the faulting thread and derails
 	// dispatch before frame-based __try/__except handlers can run.
-	if(g_inGuardedIm2DPass) return EXCEPTION_CONTINUE_SEARCH;
+	// Forensics first: push a bounded ring entry (no file I/O, no malloc) so a
+	// later hard-crash ring dump carries the guarded-phase context. Behavior
+	// past this point (EXCEPTION_CONTINUE_SEARCH) is unchanged.
+	if(g_inGuardedIm2DPass){
+		char gmsg[RING_MSG_LEN];
+		_snprintf(gmsg, sizeof(gmsg), "GUARD-FAULT eip=%08X phase=%s depth=%ld",
+			ep->ContextRecord->Eip,
+			g_renderPhase ? g_renderPhase : "",
+			(long)g_guardDepth);
+		gmsg[sizeof(gmsg) - 1] = 0;
+		diag_ringPut(gmsg);
+		return EXCEPTION_CONTINUE_SEARCH;
+	}
 
 	static int crashCount = 0;
 	if(++crashCount > 20) return EXCEPTION_CONTINUE_SEARCH;
@@ -341,6 +353,7 @@ void diag_stopWatchdog(void)
 // ============================================================
 static LONG_PTR s_oldVEH = 0;
 volatile LONG g_inGuardedIm2DPass = 0;
+const char *g_renderPhase = "";
 
 void
 diag_init(const char *logPath)

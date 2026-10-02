@@ -210,18 +210,61 @@ static void LogColorfilterVerts(void)
 static RwRaster *g_smaaEdgeRaster = NULL;
 static RwRaster *g_smaaBlendRaster = NULL;
 static RwRaster *g_smaaPrevFrameRaster = NULL;
+// Camera-sized copy of the final graded frame, refreshed at SMAA entry.
+// SMAA sampling doctrine: every raster the SMAA shaders touch (scene input,
+// edge, blend, prevFrame history, velocity, depth) must be CAMERA-sized with
+// content filling UV 0..1, drawn with s_ffQuad (UV 0..1). The game's
+// colorfilterVerts are a hardcoded 2048x2048 quad (positions 0..2048, UV
+// 0..1) whose visible window only spans UV 0..0.9375 x 0..0.5273 — correct
+// for the padded front buffer, but WRONG for camera-sized rasters: pass 3's
+// prevFrame/velocity samples landed on the top-left 93.75%x52.7% sub-rect of
+// the history (spatially compressed vs the current frame) -> ghosting/
+// doubling; and the c1 texel size (1/1920,1/1080) was measured in the wrong
+// UV space (1/2048,1/2048 in quad-UV space) -> edge taps off by 1.9x
+// vertically. Camera-sized scene copy + UV 0..1 quad makes every tap exact.
+static RwRaster *g_smaaSceneRaster = NULL;
 static int g_smaaRtWidth = 0, g_smaaRtHeight = 0;
 static RwTexture *g_smaaBlendTexRW = NULL;
 static RwTexture *g_smaaPrevFrameTexRW = NULL;
 static bool s_smaaRastersInitialized = false;
 static bool s_smaaPendingInit = false;  // set by DrawSMAA, consumed by SMAATryInitRasters
-static bool s_smaaBroken = false;       // set if init fails; DrawSMAA permanently skips
+static bool s_smaaBroken = false;       // fail-open latch: set on init failure OR any
+                                        // guarded fault in DrawSMAA; skips until resolution change
+
+// Raw geometry-state snapshot for DrawSMAA (file-scope so smaaGuardBail can
+// restore from any early-exit without extra parameters). DrawSMAA raw-writes
+// D3DRS_ALPHATESTENABLE/CULLMODE/ZENABLE/ZWRITEENABLE — it was the ONLY
+// postfx pass without a SaveRawGeomStates/RestoreRawGeomStates wrap. Those
+// raw writes are device-side only, so ImmediateModeRenderStatesReStore()
+// (rw-cached) does not undo them: the values leaked past SMAA (last pass of
+// the frame) into the next frame's scene and showed up at every pipe entry as
+// "[BUILDING] ZWRITE off/desynced on entry (rw=1 dev=0)" and
+// "[PipeAlpha] ... test=0". RestoreRawGeomStates re-pushes both layers.
+static DWORD s_smaaRawGeom[9];
+static bool s_smaaRawGeomSaved = false;
+
+// fwd decl — defined with the other raw-geom helpers ~line 2400
+// (non-static: exported via skygfx.h for chars.cpp's SSS blur pass)
+void RestoreRawGeomStates(const DWORD *in);
+
+static void smaaRestoreRawGeom(void)
+{
+	if(s_smaaRawGeomSaved){
+		RestoreRawGeomStates(s_smaaRawGeom);
+		s_smaaRawGeomSaved = false;
+	}
+}
 
 // SMAA temporal history: set to true after the first frame's history is written.
 // On the first frame, the history raster is black (never rendered to), so the
 // temporal blend would produce a very dark image. We use blendStrength=1.0
 // (all current, no history) on the first frame to avoid this.
 static bool g_smaaHistoryValid = false;
+// Hard history TTL: count of valid-history frames since the last full refresh.
+// Every 8 frames the temporal resolve forces blendStrength=1.0 (all current) to
+// kill the accumulated ghost tail, then restarts the count. Reset to 0 whenever
+// history is invalidated (resource release / resolution change).
+static int s_smaaHistAge = 0;
 
 // Track initialized CAMERATEXTURE rasters for RasterEnsureSurfaceReady.
 // Max 8 tracked rasters — plenty for all our passes.
@@ -303,11 +346,13 @@ void ReleaseSMAAStaticResources(void)
 	if(g_smaaEdgeRaster){ UntrackRaster(g_smaaEdgeRaster); RwRasterDestroy(g_smaaEdgeRaster); g_smaaEdgeRaster = NULL; }
 	if(g_smaaBlendRaster){ UntrackRaster(g_smaaBlendRaster); RwRasterDestroy(g_smaaBlendRaster); g_smaaBlendRaster = NULL; }
 	if(g_smaaPrevFrameRaster){ UntrackRaster(g_smaaPrevFrameRaster); RwRasterDestroy(g_smaaPrevFrameRaster); g_smaaPrevFrameRaster = NULL; }
+	if(g_smaaSceneRaster){ UntrackRaster(g_smaaSceneRaster); RwRasterDestroy(g_smaaSceneRaster); g_smaaSceneRaster = NULL; }
 	g_smaaRtWidth = 0; g_smaaRtHeight = 0;
 	s_smaaRastersInitialized = false;
 	s_smaaPendingInit = false;
 	s_smaaBroken = false;
 	g_smaaHistoryValid = false;
+	s_smaaHistAge = 0;
 	dbglog("ReleaseSMAAStaticResources: done");
 }
 
@@ -333,6 +378,64 @@ static void DrawSSAO_Overhaul(void);
 static void DrawVelocityBuffer(void);
 static void DrawHeightFog(void);
 static void DrawGodRays(void);
+
+// Raw geom-state save/restore helper (defined ~line 2326, used earlier by
+// Radiosity_VCS/Blur_VCS; also exported to chars.cpp's SSS blur — see skygfx.h)
+bool SaveRawGeomStates(DWORD *out);
+void RestoreRawGeomStates(const DWORD *in);
+
+/////
+///// Authoritative screen-size cache.
+/////
+///// RwCameraGetRaster(Scene.camera) is NOT a stable screen-size source
+///// outside the postfx entry points: other passes (envmap/reflection and
+///// friends) temporarily point the main camera at a NON-screen raster, and
+///// every geometry-phase reader observes that transient. Measured in
+///// skygfx_dbg.log (PBR pipeline + COLORFILTER_MODERN session, m0169):
+/////
+/////   [PipeChain] classify RT created 2048x1024   <- transient camRas read
+/////   [PipeChain] classify RT created 1920x1080   <- same frame, restored
+/////   GetIBLTexture: OK 512x256                   <- camRas/4 == 2048x1024/4
+/////
+///// i.e. the live read reported 2048x1024 while the actual screen is
+///// 1920x1080, TWICE per frame for the whole PBR + Modern-filter window.
+///// Anything SIZED during that window inherits the wrong dimensions: the
+///// pipe-chain classify pack RT was destroyed+recreated twice per frame
+///// (every recreate CLEARS the pack PipeChain pass 3 consumes), the IBL
+///// capture was allocated 2:1 instead of 16:9 (its per-frame viewport never
+///// matched the texture), and any UV remap derived from the read composites
+///// at the wrong scale/coords.
+/////
+///// Contract: capture ONLY from on-screen postfx entry points
+///// (ColourFilter_switch / DrawPipeChain — both verified 1920x1080 every
+///// frame in the same log); geometry-phase and mid-frame readers use the
+///// cache instead of the live read. The cache self-corrects on resolution
+///// changes at the next postfx entry (worst case one frame of stale size —
+///// the same failure mode as today, but bounded to one frame instead of
+///// every frame).
+/////
+static int g_screenSizeW = 0;
+static int g_screenSizeH = 0;
+
+static void CaptureScreenSize(RwRaster *camRas)
+{
+	if(camRas && camRas->width > 0 && camRas->height > 0){
+		g_screenSizeW = camRas->width;
+		g_screenSizeH = camRas->height;
+	}
+}
+
+// Returns true when a trusted screen size has been captured at least once.
+bool GetScreenSize(int *w, int *h)
+{
+	if(g_screenSizeW > 0 && g_screenSizeH > 0){
+		*w = g_screenSizeW;
+		*h = g_screenSizeH;
+		return true;
+	}
+	return false;
+}
+
 
 // View/proj matrices (defined in pipelinecommon.cpp, no header extern)
 extern D3DMATRIX &_RwD3D9D3D9ViewTransform;
@@ -418,6 +521,15 @@ struct Grade
 void *gradingPS, *contrastPS, *tonemapPassPS;
 void *luminanceReducePS, *luminanceAdaptPS;
 
+// colourFilterEnable=0 bypass ownership (single owner: ColourFilter_Modern's
+// tonemap pass). The bypass must skip the COLOUR FILTER, never the sRGB gamma
+// encode: the pipes emit linear HDR and TonemapPass is the ONLY LinearToSRGB
+// in the chain. Returning before it put the raw linear frame on screen —
+// mid-tones land ~2x under their display value, so daylight exteriors render
+// near-black while the HUD (already display-referred) stays bright.
+// Set for exactly one ColourFilter_Modern call from the bypass path.
+static bool s_tonemapIdentityGrade = false;
+
 // --- Unified tonemap: frame-adaptive exposure resources ---
 // 8x8 luminance measure target + two 1x1 temporal eye-adaptation targets.
 // Allocated lazily, released in ReleaseDefaultPoolResources().
@@ -446,12 +558,40 @@ static bool EnsureLuminanceTargets(void)
 		}
 		g_lumaMeasTex->GetSurfaceLevel(0, &g_lumaMeasSurf);
 	}
+	// Dark-frame fix: a freshly created FP16 RT has UNDEFINED content. The
+	// adapt pass reads the OTHER 1x1 target as `prev` on its first run —
+	// undefined FP16 can be NaN or a huge value. NaN propagates through
+	// `prev + s*(measured-prev)` into the adapted luminance, and TonemapPass's
+	// `key/lum` then yields NaN exposure -> saturate(NaN) = 0 -> BLACK frame
+	// that persists via the ping-pong. A huge prev decays only slowly
+	// (adaptSpeed 0.12/frame) -> long dark window. Clear both adapt targets
+	// to a sane mid-grey luminance (~0.18) at creation so adaptation always
+	// starts from a valid state (LuminanceAdapt's prev<=0 first-frame branch
+	// then never sees garbage either).
 	if(!g_lumaAdaptTexA){
 		if(FAILED(dev->CreateTexture(1, 1, 1, D3DUSAGE_RENDERTARGET, D3DFMT_A16B16G16R16F, D3DPOOL_DEFAULT, &g_lumaAdaptTexA, NULL))){
 			dbglog("[Tonemap] luma adapt RT A create FAILED");
 			return false;
 		}
 		g_lumaAdaptTexA->GetSurfaceLevel(0, &g_lumaAdaptSurfA);
+		if(g_lumaAdaptSurfA){
+			IDirect3DSurface9 *oldRT = NULL, *oldDS = NULL;
+			D3DVIEWPORT9 oldVP;
+			dev->GetRenderTarget(0, &oldRT);
+			dev->GetDepthStencilSurface(&oldDS);
+			dev->GetViewport(&oldVP);
+			dev->SetRenderTarget(0, g_lumaAdaptSurfA);
+			dev->SetDepthStencilSurface(NULL);
+			D3DVIEWPORT9 vp = { 0, 0, 1, 1, 0.0f, 1.0f };
+			dev->SetViewport(&vp);
+			// 46/255 ~= 0.18 linear luminance — plausible indoor scene key
+			dev->Clear(0, NULL, D3DCLEAR_TARGET, D3DCOLOR_ARGB(0, 46, 46, 46), 0.0f, 0);
+			dev->SetViewport(&oldVP);
+			dev->SetRenderTarget(0, oldRT);
+			dev->SetDepthStencilSurface(oldDS);
+			if(oldRT) oldRT->Release();
+			if(oldDS) oldDS->Release();
+		}
 	}
 	if(!g_lumaAdaptTexB){
 		if(FAILED(dev->CreateTexture(1, 1, 1, D3DUSAGE_RENDERTARGET, D3DFMT_A16B16G16R16F, D3DPOOL_DEFAULT, &g_lumaAdaptTexB, NULL))){
@@ -459,14 +599,35 @@ static bool EnsureLuminanceTargets(void)
 			return false;
 		}
 		g_lumaAdaptTexB->GetSurfaceLevel(0, &g_lumaAdaptSurfB);
+		if(g_lumaAdaptSurfB){
+			IDirect3DSurface9 *oldRT = NULL, *oldDS = NULL;
+			D3DVIEWPORT9 oldVP;
+			dev->GetRenderTarget(0, &oldRT);
+			dev->GetDepthStencilSurface(&oldDS);
+			dev->GetViewport(&oldVP);
+			dev->SetRenderTarget(0, g_lumaAdaptSurfB);
+			dev->SetDepthStencilSurface(NULL);
+			D3DVIEWPORT9 vp = { 0, 0, 1, 1, 0.0f, 1.0f };
+			dev->SetViewport(&vp);
+			dev->Clear(0, NULL, D3DCLEAR_TARGET, D3DCOLOR_ARGB(0, 46, 46, 46), 0.0f, 0);
+			dev->SetViewport(&oldVP);
+			dev->SetRenderTarget(0, oldRT);
+			dev->SetDepthStencilSurface(oldDS);
+			if(oldRT) oldRT->Release();
+			if(oldDS) oldDS->Release();
+		}
 	}
 	return true;
 }
 
 // Render one fullscreen pass into a raw D3D9 target using a scene raster or an
 // explicit stage-0 texture. Mirrors the proven DrawNormalBuffer idiom.
+// `verts` selects the quad: colorfilterVerts (2048² quad, correct when
+// sampling the padded front buffer across its full UV range) or a caller
+// built quad (e.g. the valid-sub-rect luma measure quad).
 static void RenderLumaPass(IDirect3DSurface9 *dst, int w, int h,
-                           void *ps, RwRaster *sceneRaster, IDirect3DTexture9 *tex0)
+                           void *ps, RwRaster *sceneRaster, IDirect3DTexture9 *tex0,
+                           RwIm2DVertex *verts)
 {
 	IDirect3DDevice9 *dev = d3d9device;
 	if(!dev || !dst || !ps)
@@ -504,7 +665,7 @@ static void RenderLumaPass(IDirect3DSurface9 *dst, int w, int h,
 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
 
 	overrideIm2dPixelShader = ps;
-	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
+	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, verts, 4, colorfilterIndices, 6);
 	overrideIm2dPixelShader = nil;
 
 	CPostEffects::ImmediateModeRenderStatesReStore();
@@ -529,9 +690,39 @@ static IDirect3DTexture9 *RunFrameExposure(float adaptSpeed)
 	if(!EnsureLuminanceTargets())
 		return NULL;
 
-	// 1) Full-res graded frame -> 8x8 luminance measure
+	// 1) Full-res graded frame -> 8x8 luminance measure.
+	// The measure quad must cover ONLY the front buffer's valid sub-rect:
+	// colorfilterVerts map UV 0..1 across the whole padded 2048x2048 FB, so
+	// ~56% of the taps land in the never-written pad region — the measured
+	// luminance (and therefore the auto-exposure key) is diluted/offset by
+	// garbage. Build an 8x8-position quad whose UVs span exactly
+	// (screenW/fbW, screenH/fbH) — the valid 1920x1080 content region.
+	RwIm2DVertex lumaQuad[4];
+	RwIm2DVertex *measureVerts = colorfilterVerts;
+	int lumaScrW = 0, lumaScrH = 0;
+	RwRaster *lumaFB = CPostEffects::pRasterFrontBuffer;
+	if(GetScreenSize(&lumaScrW, &lumaScrH) && lumaFB &&
+	   lumaFB->width > 0 && lumaFB->height > 0){
+		float uMax = min(1.0f, (float)lumaScrW / max((float)lumaFB->width, 1.0f));
+		float vMax = min(1.0f, (float)lumaScrH / max((float)lumaFB->height, 1.0f));
+		static const float lpx[4] = { 0.0f, 0.0f, 8.0f, 8.0f };
+		static const float lpy[4] = { 0.0f, 8.0f, 8.0f, 0.0f };
+		static const float luu[4] = { 0.0f, 0.0f, 1.0f, 1.0f };
+		static const float lvv[4] = { 0.0f, 1.0f, 1.0f, 0.0f };
+		for(int i = 0; i < 4; i++){
+			RwIm2DVertex *v = &lumaQuad[i];
+			v->x = lpx[i];
+			v->y = lpy[i];
+			v->z = 0.0f;
+			v->rhw = 1.0f;
+			v->u = luu[i] * uMax;
+			v->v = lvv[i] * vMax;
+			RwIm2DVertexSetIntRGBA(v, 255, 255, 255, 255);
+		}
+		measureVerts = lumaQuad;
+	}
 	RenderLumaPass(g_lumaMeasSurf, 8, 8, luminanceReducePS,
-	               CPostEffects::pRasterFrontBuffer, NULL);
+	               CPostEffects::pRasterFrontBuffer, NULL, measureVerts);
 
 	// 2) 8x8 measure + previous 1x1 -> current 1x1 eye adaptation
 	IDirect3DTexture9 *curTex  = g_lumaAdaptFlip ? g_lumaAdaptTexB : g_lumaAdaptTexA;
@@ -550,7 +741,7 @@ static IDirect3DTexture9 *RunFrameExposure(float adaptSpeed)
 	float adaptP[4] = { adaptSpeed, 0.0f, 0.0f, 0.0f };
 	RwD3D9SetPixelShaderConstant(0, adaptP, 1);
 
-	RenderLumaPass(curSurf, 1, 1, luminanceAdaptPS, NULL, g_lumaMeasTex);
+	RenderLumaPass(curSurf, 1, 1, luminanceAdaptPS, NULL, g_lumaMeasTex, colorfilterVerts);
 	if(dev) dev->SetTexture(1, NULL);
 
 	g_lumaAdaptFlip ^= 1;
@@ -597,15 +788,32 @@ CPostEffects::UpdateFrontBuffer(void)
 		dbglog("[PostFX] WARNING: UpdateFrontBuffer Scene.camera is NULL!");
 		return;
 	}
+	RwRaster *camRas = RwCameraGetRaster(Scene.camera);
+	if(!camRas){
+		dbglog("[PostFX] WARNING: UpdateFrontBuffer camera raster is NULL!");
+		return;
+	}
+	// Screen-size doctrine: the camera raster is NOT a stable screen-size
+	// source mid-chain. When a geometry pass (envmap/reflection) temporarily
+	// points it at a non-screen raster, copying that at 0,0 into the padded
+	// front buffer composites the wrong region -> blocky colour rectangles
+	// across the interior. Bail the copy; the next postfx entry re-syncs.
+	int ufbScrW = 0, ufbScrH = 0;
+	if(GetScreenSize(&ufbScrW, &ufbScrH) &&
+	   (camRas->width != ufbScrW || camRas->height != ufbScrH)){
+		if(dbglog_throttle("ufb_mismatch"))
+			dbglog("[PostFX] UpdateFrontBuffer SKIP: camRas %dx%d != screen %dx%d (transient raster)",
+				camRas->width, camRas->height, ufbScrW, ufbScrH);
+		return;
+	}
 	if(dbglog_throttle("ufb_copy"))
 		dbglog("[PostFX] UpdateFrontBuffer pRasFB=%p(%dx%d) camRas=%p(%dx%d)",
 			CPostEffects::pRasterFrontBuffer,
 			RwRasterGetWidth(CPostEffects::pRasterFrontBuffer), RwRasterGetHeight(CPostEffects::pRasterFrontBuffer),
-			RwCameraGetRaster(Scene.camera),
-			RwRasterGetWidth(RwCameraGetRaster(Scene.camera)), RwRasterGetHeight(RwCameraGetRaster(Scene.camera)));
+			camRas, camRas->width, camRas->height);
 	RwCameraEndUpdate(Scene.camera);
 	RwRasterPushContext(CPostEffects::pRasterFrontBuffer);
-	RwRaster *copyResult = RwRasterRenderFast(RwCameraGetRaster(Scene.camera), 0, 0);
+	RwRaster *copyResult = RwRasterRenderFast(camRas, 0, 0);
 	RwRasterPopContext();
 	RwCameraBeginUpdate(Scene.camera);
 
@@ -720,9 +928,22 @@ CPostEffects::Radiosity_VCS_init(void)
 	w = 256 * resMult;
 	h = 128 * resMult;
 
+	// Full-screen quad maps UV 0..1 across the SCREEN. Derive its extents
+	// from the trusted screen-size cache (live camRas only as the pre-capture
+	// fallback): a transient camRas read here left the quad sized to a
+	// non-screen raster, compositing the VCS trails at the wrong scale.
+	int screenW = 256 * resMult, screenH = 128 * resMult;
+	if(!GetScreenSize(&screenW, &screenH)){
+		RwRaster *camRasLive = Scene.camera ? RwCameraGetRaster(Scene.camera) : NULL;
+		if(camRasLive){
+			screenW = camRasLive->width;
+			screenH = camRasLive->height;
+		}
+	}
+
 	// TODO: tex coords correct?
 	makequad(radiosity_vcs_vertices, 256 * resMult, 128 * resMult);
-	makequad(radiosity_vcs_vertices+4, RwCameraGetRaster(Scene.camera)->width, RwCameraGetRaster(Scene.camera)->height);
+	makequad(radiosity_vcs_vertices+4, screenW, screenH);
 
 	// black vertices; at 8
 	for(i = 0; i < 4; i++){
@@ -794,6 +1015,8 @@ CPostEffects::Radiosity_VCS(int limit, int intensity)
 	r.w = 256 * resMult;
 	r.h = 128 * resMult;
 
+	DWORD rawGeom[9];
+	bool rawGeomSaved = SaveRawGeomStates(rawGeom); // before Store (raw Set below)
 	CPostEffects::ImmediateModeRenderStatesStore();
 	CPostEffects::ImmediateModeRenderStatesSet();
 	RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
@@ -859,6 +1082,10 @@ CPostEffects::Radiosity_VCS(int limit, int intensity)
 
 	RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
 	CPostEffects::ImmediateModeRenderStatesReStore();
+	if(rawGeomSaved){
+		RestoreRawGeomStates(rawGeom); // BLENDOP/SRCBLEND/DESTBLEND/BLENDFACTOR leak past ReStore
+		rawGeomSaved = false;
+	}
 }
 
 RwD3D9Vertex blur_vcs_vertices[24];
@@ -926,6 +1153,8 @@ CPostEffects::Blur_VCS(void)
 	for(i = 20; i < 24; i++)
 		blur_vcs_vertices[i].emissiveColor = 0;
 
+	DWORD rawGeom[9];
+	bool rawGeomSaved = SaveRawGeomStates(rawGeom); // before Store (raw Set below)
 	CPostEffects::ImmediateModeRenderStatesStore();
 	CPostEffects::ImmediateModeRenderStatesSet();
 	RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
@@ -979,6 +1208,10 @@ if(0){
 
 	RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
 	CPostEffects::ImmediateModeRenderStatesReStore();
+	if(rawGeomSaved){
+		RestoreRawGeomStates(rawGeom); // SRCBLEND/DESTBLEND/BLENDFACTOR leak past ReStore
+		rawGeomSaved = false;
+	}
 }
 
 /* quad format:
@@ -1057,9 +1290,26 @@ CPostEffects::Radiosity_shader(int intensityLimit, int filterPasses, int renderP
 	s_radiosityShaderWorkBuffer = workBuffer;
 
 	RwRaster *drawBuffer = RwCameraGetRaster(Scene.camera);
+	if(!drawBuffer){
+		dbglog("Radiosity_shader: camera raster NULL, skipping");
+		return;
+	}
+	// Screen dims for the composite UV remap (c1): the remap maps the padded
+	// 2048² front buffer onto the screen quad, so deriving it from a transient
+	// camRas read (see GetScreenSize) would composite the radiosity buffer at
+	// the wrong scale/coords — a full-screen blocky mismatch. Use the trusted
+	// cache; live drawBuffer dims only as pre-capture fallback.
+	int drawW = drawBuffer->width, drawH = drawBuffer->height;
+	GetScreenSize(&drawW, &drawH);
+	if(drawW < 1) drawW = 1;
+	if(drawH < 1) drawH = 1;
 
-
-
+	// Three-layer contract: this pass flips the camera raster and pushes
+	// ONE/ONE additive blend + vertex alpha through the rw cache — snapshot
+	// the raw device alpha block first so nothing leaks past the pass into
+	// the world draw (BLENDOP/SRCBLEND/DESTBLEND/BLENDFACTOR family).
+	DWORD rawGeom[9];
+	bool rawGeomSaved = SaveRawGeomStates(rawGeom);
 
 	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
 	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
@@ -1074,7 +1324,7 @@ CPostEffects::Radiosity_shader(int intensityLimit, int filterPasses, int renderP
 
 	float params[4];
 	params[2] = 1<<filterPasses;
-	params[2] *= drawBuffer->width/640.0f;
+	params[2] *= drawW/640.0f;
 
 	overrideIm2dPixelShader = blurPS;
 	// Blur vertically
@@ -1112,15 +1362,19 @@ CPostEffects::Radiosity_shader(int intensityLimit, int filterPasses, int renderP
 
 	float minu = offu;
 	float minv = offv;
-	float maxu = drawBuffer->width - offu; //off*2;
-	float maxv = drawBuffer->height - offv; //off*2;
-	float cu = (offu*(drawBuffer->width+0.5f) + offu/*off*2*/*0.5f) / drawBuffer->width;
-	float cv = (offv*(drawBuffer->height+0.5f) + offv/*off*2*/*0.5f) / drawBuffer->height;
+	// Screen dims (trusted cache) — NOT the live drawBuffer read. A transient
+	// camRas read here composites the radiosity buffer at the wrong scale and
+	// produces the full-screen blocky mismatch. Live read is only the
+	// pre-capture fallback that seeded drawW/drawH above.
+	float maxu = drawW - offu; //off*2;
+	float maxv = drawH - offv; //off*2;
+	float cu = (offu*(drawW+0.5f) + offu/*off*2*/*0.5f) / max((float)drawW, 1.0f);
+	float cv = (offv*(drawH+0.5f) + offv/*off*2*/*0.5f) / max((float)drawH, 1.0f);
 
-	params[0] = cu / pRasterFrontBuffer->width;
-	params[1] = cv / pRasterFrontBuffer->height;
-	params[2] = (maxu-minu) / drawBuffer->width;
-	params[3] = (maxv-minv) / drawBuffer->height;
+	params[0] = cu / max((float)pRasterFrontBuffer->width, 1.0f);
+	params[1] = cv / max((float)pRasterFrontBuffer->height, 1.0f);
+	params[2] = (maxu-minu) / max((float)drawW, 1.0f);
+	params[3] = (maxv-minv) / max((float)drawH, 1.0f);
 	RwD3D9SetPixelShaderConstant(1, params, 1);
 
 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)!m_bRadiosityDebug);
@@ -1150,6 +1404,17 @@ CPostEffects::Radiosity(int intensityLimit, int filterPasses, int renderPasses, 
 	if(!pRasterFrontBuffer){
 		return;
 	}
+	// Pass breadcrumb (throttled): Radiosity is a full-screen compositing pass
+	// and had NO logging at all, while the game only calls it on its outdoor
+	// path (hooks main.cpp:4007-4008, right behind ColourFilter_switch). If a
+	// covered-frame forensics pass ever sees this tag immediately before the
+	// symptom, start here. m_bRadiosityDebug is the ONE switch that turns both
+	// composite variants into a REPLACE of the screen with the (heavily
+	// downsampled, edge-only looking) radiosity buffer instead of a blend.
+	if(dbglog_throttle("radiosity"))
+		dbglog("[PostFX] Radiosity: ff=%d vcs=%d doRad=%d mode=%d int=%d limit=%d passes=%d debug=%d",
+			config->radiosityEnable, config->vcsTrails, config->doRadiosity, config->radiosity,
+			intensity, intensityLimit, filterPasses, (int)m_bRadiosityDebug);
 /*
 	{
 		static bool keystate = false;
@@ -1167,6 +1432,18 @@ CPostEffects::Radiosity(int intensityLimit, int filterPasses, int renderPasses, 
 		CPostEffects::Radiosity_VCS(config->trailsLimit, config->trailsIntensity);
 		if (config->colorFilter == COLORFILTER_VCS)
 			CPostEffects::Blur_VCS();
+		return;
+	}
+
+	// REPLACE hazard (upgrades the breadcrumb above): m_bRadiosityDebug is a
+	// game global (0xC402CD) that nothing in SA or this mod ever writes — a
+	// garbage nonzero value flips VERTEXALPHAENABLE off in BOTH composite
+	// variants (Radiosity_shader and the classic blend below), replacing the
+	// screen with the downsampled radiosity buffer. Force the composite off
+	// when nonzero. VCS trails above is unaffected (never reads the flag).
+	if(m_bRadiosityDebug){
+		if(dbglog_throttle("rad_dbg"))
+			dbglog("[Radiosity] m_bRadiosityDebug=%d nonzero — composite suppressed", (int)m_bRadiosityDebug);
 		return;
 	}
 
@@ -1340,9 +1617,9 @@ CPostEffects::ColourFilter_Generic(RwRGBA rgb1, RwRGBA rgb2, void *ps)
 	RwD3D9SetPixelShaderConstant(0, &color, 1);
 	RwD3D9SetPixelShaderConstant(1, &color2, 1);
 
-	overrideIm2dPixelShader = ps;
-	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
-	overrideIm2dPixelShader = nil;
+	// SEH-guarded choke-point: resets overrideIm2dPixelShader on every exit
+	// (incl. fault) so a faulting dispatch can't leave the override bound.
+	guardedIm2DRender(ps, rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6, "cf_generic");
 
 	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
 	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
@@ -1434,10 +1711,22 @@ CPostEffects::ColourFilter_Modern(RwRGBA rgba1, RwRGBA rgba2)
 		dbglog("[PostFX] WARNING: gradingPS is NULL! ColourFilter_Modern will render with no shader");
 	}
 
-	// Pass 1: Color grading (diagonal matrix multiply)
-	overrideIm2dPixelShader = gradingPS;
-	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
-	overrideIm2dPixelShader = nil;
+	// Filter-quad blend doctrine: the grading/tonemap quads must REPLACE the
+	// frame, never blend with it. The rw cache can carry a stale blend block
+	// from an earlier pass (e.g. BLENDFACTOR additive from VCS trails, or
+	// HUD SRCALPHA with a quad whose vertex alpha is 0 — colorfilterVerts
+	// carry emissiveColor=0) which darkens or no-ops the graded output.
+	// Force ONE/ZERO (replace) on both layers for the filter draws; the
+	// cleanup below restores SRCALPHA/INVSRCALPHA.
+	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDONE);
+	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDZERO);
+
+	// Pass 1: Color grading (diagonal matrix multiply). SEH-guarded so the
+	// override is cleared on fault as well as success. SKIPPED on the
+	// colorFilterEnable=0 bypass (s_tonemapIdentityGrade): that path only
+	// wants the tonemap's gamma encode, not the timecycle tint.
+	if(!s_tonemapIdentityGrade)
+		guardedIm2DRender(gradingPS, rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6, "cf_modern_p1");
 
 	// Copy graded linear output to pRasterFrontBuffer for tonemap input
 	UpdateFrontBuffer();
@@ -1446,8 +1735,12 @@ CPostEffects::ColourFilter_Modern(RwRGBA rgba1, RwRGBA rgba2)
 	// timecyc supplies COLOUR (pass 1 above); the rendered frame supplies
 	// BRIGHTNESS here, so exposure is frame-consistent across all pipes.
 	// Only runs when the feature is enabled; otherwise the legacy timecyc-only
-	// exposure path below is used unchanged.
-	bool autoExposureOn = (config && config->tonemapAutoExposure && luminanceReducePS && luminanceAdaptPS);
+	// exposure path below is used unchanged. The identity-grade bypass forces
+	// it OFF: TonemapPass re-derives sceneLuma (and therefore PostGrade's
+	// adaptive intensity) from the measured frame whenever c5.w >= 0.5, which
+	// would re-introduce grading the bypass asked us to skip.
+	bool autoExposureOn = !s_tonemapIdentityGrade &&
+		(config && config->tonemapAutoExposure && luminanceReducePS && luminanceAdaptPS);
 	float adaptSpeed = config ? config->tonemapAdaptSpeed : 0.12f;
 	IDirect3DTexture9 *frameLumaTex = autoExposureOn ? RunFrameExposure(adaptSpeed) : NULL;
 	if(autoExposureOn && !frameLumaTex)
@@ -1455,13 +1748,16 @@ CPostEffects::ColourFilter_Modern(RwRGBA rgba1, RwRGBA rgba2)
 
 	// Pass 2: Hable/Uncharted 2 filmic tonemap + sRGB gamma encode
 	if(tonemapPassPS){
-		// Re-setup render states for tonemap pass (reads pRasterFrontBuffer)
+		// Re-setup render states for tonemap pass (reads pRasterFrontBuffer).
+		// Re-assert replace blending — UpdateFrontBuffer's blit ran in between.
 		RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
 		RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
 		RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
 		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
 		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)CPostEffects::pRasterFrontBuffer);
 		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
+		RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDONE);
+		RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDZERO);
 
 		// Map GTA SA brightness slider (0-384, default 256) to tonemap exposure
 		float brightness = (float)CMenuManager__m_PrefsBrightness;
@@ -1489,6 +1785,11 @@ CPostEffects::ColourFilter_Modern(RwRGBA rgba1, RwRGBA rgba2)
 		float sunBright      = max(0.0f, min(2.0f, tc.spriteBrightness));
 		float streetLights   = max(0.0f, min(1.0f, tc.lightsOnGroundBrightness));
 		float envMult        = CCustomCarEnvMapPipeline__m_EnvMapLightingMult;
+		// Dark-frame guard: envMult feeds the exposure product directly. A
+		// garbage/negative value (pipe not initialised this frame, cutscene
+		// reset, etc.) would scale exposure to <= 0 -> black frame. Clamp to
+		// the plausible physical range before use.
+		envMult = max(0.0f, min(2.0f, envMult));
 
 		float exposure, toeStrength;
 		float gradeContrast, gradeBrightness, gradeLift, gradeCurve;
@@ -1556,6 +1857,25 @@ CPostEffects::ColourFilter_Modern(RwRGBA rgba1, RwRGBA rgba2)
 		// Throttled diagnostic
 		static unsigned int tonemapLogCounter = 0;
 		float blackLift = config ? config->tonemapBlackLift : 0.015f;
+
+		// --- colorFilterEnable=0 bypass: IDENTITY grade -----------------------
+		// The bypass path routes through this tonemap so the frame still gets
+		// its sRGB gamma encode; everything downstream must be a no-op:
+		//   sceneLuma 0        -> PostGrade adaptive scale 0 => brightness/
+		//                         contrast/lift/curve all neutral
+		//   blackLift 0        -> no black-level lift
+		//   curveP x/y 0       -> PivotCurve bit-exact early-out (see below)
+		// Exposure/toe stay on the normal timecycle path so overall brightness
+		// matches the graded path — only the timecycle TINT (pass 1) is skipped.
+		if(s_tonemapIdentityGrade){
+			sceneLuma = 0.0f;
+			gradeBrightness = 0.0f;
+			gradeContrast = 1.0f;
+			gradeLift = 0.0f;
+			gradeCurve = 0.0f;
+			blackLift = 0.0f;
+		}
+
 		if(tonemapLogCounter++ % 3600 == 0){
 			extern int16 &CWeather__OldWeatherType;
 			extern int16 &CWeather__NewWeatherType;
@@ -1581,13 +1901,37 @@ CPostEffects::ColourFilter_Modern(RwRGBA rgba1, RwRGBA rgba2)
 
 		// Pack into c7: {blackLift, minExposure, maxExposure, keyStrength}
 		// The auto-exposure clamp + key blend are only read when c5.w >= 0.5.
+		// Dark-frame guard: enforce a sane exposure FLOOR — the TonemapPass
+		// computes autoExp = key/lum and clamps to [c7.y, c7.z]; a config
+		// minExposure of 0 (or negative) lets a bogus huge measured luminance
+		// drive the exposure to ~0 -> black frame. Floor at 0.15 and keep
+		// maxExposure >= minExposure.
+		float minExpCfg = config ? config->tonemapMinExposure : 0.5f;
+		float maxExpCfg = config ? config->tonemapMaxExposure : 2.0f;
+		minExpCfg = max(0.15f, minExpCfg);
+		maxExpCfg = max(maxExpCfg, minExpCfg);
 		float blackP[4] = {
 			blackLift,
-			autoExposureOn ? (config ? config->tonemapMinExposure : 0.5f) : 0.0f,
-			autoExposureOn ? (config ? config->tonemapMaxExposure : 2.0f) : 0.0f,
+			autoExposureOn ? minExpCfg : 0.0f,
+			autoExposureOn ? maxExpCfg : 0.0f,
 			autoExposureOn ? (config ? config->tonemapKeyStrength : 1.0f) : 0.0f
 		};
 		RwD3D9SetPixelShaderConstant(7, blackP, 1);
+
+		// Pack into c8: {curveLows, curveHighs, curveMid, 0} — user pivot
+		// curve applied at the TonemapPass OUTPUT (per-channel gain ramp
+		// around the mid pivot; bit-exact identity when both intensities
+		// are 0). Uploaded here for THIS draw only — other passes (DynamicSky
+		// weatherP, screenParams) re-upload their own c8 before theirs.
+		// Identity-grade bypass forces both intensities to exact 0.0 so
+		// PivotCurve's early-out returns the pixel untouched.
+		float curveP[4] = {
+			s_tonemapIdentityGrade ? 0.0f : (config ? config->tonemapCurveLows : 0.0f),
+			s_tonemapIdentityGrade ? 0.0f : (config ? config->tonemapCurveHighs : 0.0f),
+			config ? config->tonemapCurveMid : 0.5f,
+			0.0f
+		};
+		RwD3D9SetPixelShaderConstant(8, curveP, 1);
 
 		// Bind the frame luminance (s1) for frame-adaptive exposure.
 		IDirect3DDevice9 *cfDev = d3d9device;
@@ -2002,10 +2346,593 @@ void DrawNormalBufferToTexture(void);
 void DrawPipeChain(void);
 static void CopyDepthToPrev(void);
 
+/////
+///// Local fullscreen quad — SSAO composites and the IV grade draw with this
+///// instead of the game's colorfilterVerts. colorfilterVerts carry
+///// emissiveColor=0x00000000 (they are only coloured by the game's own
+///// colour-filter paths, which COLORFILTER_MODERN never runs), so any
+///// fixed-function draw using them modulates texture x 0 = black; they are
+///// also a hardcoded 2048x2048 quad whose UVs misalign on smaller camera
+///// rasters. White + RT-sized = correct multiply/replace and UV 0..1.
+/////
+static RwIm2DVertex s_ffQuad[4];
+static RwImVertexIndex s_ffQuadIdx[6] = { 0, 1, 2, 0, 2, 3 };
+
+static void
+SetupFullscreenQuad(float w, float h)
+{
+	// Corner order matches colorfilterVerts: TL, BL, BR, TR
+	static const float px[4] = { 0.0f, 0.0f, 1.0f, 1.0f };
+	static const float py[4] = { 0.0f, 1.0f, 1.0f, 0.0f };
+	static const float uu[4] = { 0.0f, 0.0f, 1.0f, 1.0f };
+	static const float vv[4] = { 0.0f, 1.0f, 1.0f, 0.0f };
+	for(int i = 0; i < 4; i++){
+		RwIm2DVertex *v = &s_ffQuad[i];
+		v->x = px[i] * w;
+		v->y = py[i] * h;
+		v->z = 0.0f;
+		v->rhw = 1.0f;
+		v->u = uu[i];
+		v->v = vv[i];
+		RwIm2DVertexSetIntRGBA(v, 255, 255, 255, 255);
+	}
+}
+
+/////
+///// IV mode grade — first real consumer of config->ivMode + iv* sliders
+///// (previously dead config fields: read from INI, shown in the debug menu,
+///// never read by any pass). Grade runs after the colour-filter switch on
+///// the freshly graded/tonemapped frame; every slider maps to a live pixel
+///// shader constant uploaded each frame.
+/////
+
+// ps_3_0 bytecode of IVGrade.hlsl (compiled with the project's FXC:
+//   fxc /T ps_3_0 /E main IVGrade.hlsl)
+// Registers:
+//   c0 = {exposure, desaturation, gamma, 0}
+//   c1 = {vignetteIntensity, vignetteRadius, vignetteContrast, bloomIntensity}
+//   c2 = {1/screenW, 1/screenH, 0, 0}
+//   s0 = scene (front buffer)
+alignas(4) static const BYTE g_ivGradePSBytes[] =
+{
+      0,   3, 255, 255, 254, 255, 
+     58,   0,  67,  84,  65,  66, 
+     28,   0,   0,   0, 179,   0, 
+      0,   0,   0,   3, 255, 255, 
+      4,   0,   0,   0,  28,   0, 
+      0,   0,   0,   1,   0,   0, 
+    172,   0,   0,   0, 108,   0, 
+      0,   0,   2,   0,   0,   0, 
+      1,   0,   2,   0, 116,   0, 
+      0,   0,   0,   0,   0,   0, 
+    132,   0,   0,   0,   2,   0, 
+      1,   0,   1,   0,   6,   0, 
+    116,   0,   0,   0,   0,   0, 
+      0,   0, 139,   0,   0,   0, 
+      2,   0,   2,   0,   1,   0, 
+     10,   0, 116,   0,   0,   0, 
+      0,   0,   0,   0, 146,   0, 
+      0,   0,   3,   0,   0,   0, 
+      1,   0,   2,   0, 156,   0, 
+      0,   0,   0,   0,   0,   0, 
+    103, 114,  97, 100, 101,  48, 
+      0, 171,   1,   0,   3,   0, 
+      1,   0,   4,   0,   1,   0, 
+      0,   0,   0,   0,   0,   0, 
+    103, 114,  97, 100, 101,  49, 
+      0, 103, 114,  97, 100, 101, 
+     50,   0, 115,  99, 101, 110, 
+    101,  84, 101, 120,   0, 171, 
+      4,   0,  12,   0,   1,   0, 
+      1,   0,   1,   0,   0,   0, 
+      0,   0,   0,   0, 112, 115, 
+     95,  51,  95,  48,   0,  77, 
+    105,  99, 114, 111, 115, 111, 
+    102, 116,  32,  40,  82,  41, 
+     32,  72,  76,  83,  76,  32, 
+     83, 104,  97, 100, 101, 114, 
+     32,  67, 111, 109, 112, 105, 
+    108, 101, 114,  32,  57,  46, 
+     50,  57,  46,  57,  53,  50, 
+     46,  51,  49,  49,  49,   0, 
+     81,   0,   0,   5,   3,   0, 
+     15, 160,  10, 215,  35,  60, 
+      0,   0, 128,  63,   0,   0, 
+      0,  63, 205, 204,  76,  61, 
+     81,   0,   0,   5,   4,   0, 
+     15, 160, 135,  22, 153,  62, 
+    162,  69,  22,  63, 213, 120, 
+    233,  61, 111,  18, 131,  58, 
+     81,   0,   0,   5,   5,   0, 
+     15, 160,   0,   0,   0,   0, 
+      0,   0, 128,  64,   0,   0, 
+      0, 128,   0,   0, 200,  66, 
+     81,   0,   0,   5,   6,   0, 
+     15, 160,   0,   0, 128,  62, 
+      0,   0,  64, 191,   0,   0, 
+      0, 192,   0,   0,  64,  64, 
+     31,   0,   0,   2,   5,   0, 
+      0, 128,   0,   0,   3, 144, 
+     31,   0,   0,   2,   0,   0, 
+      0, 144,   0,   8,  15, 160, 
+      2,   0,   0,   3,   0,   0, 
+      3, 128,   3,   0, 170, 161, 
+      0,   0, 228, 144,  90,   0, 
+      0,   4,   0,   0,   1, 128, 
+      0,   0, 228, 128,   0,   0, 
+    228, 128,   5,   0,   0, 160, 
+      7,   0,   0,   2,   0,   0, 
+      1, 128,   0,   0,   0, 128, 
+      6,   0,   0,   2,   0,   0, 
+      1, 128,   0,   0,   0, 128, 
+      1,   0,   0,   2,   1,   0, 
+     15, 128,   3,   0, 228, 160, 
+      2,   0,   0,   3,   0,   0, 
+      2, 128,   1,   0,   0, 129, 
+      1,   0,  85, 160,   6,   0, 
+      0,   2,   0,   0,   4, 128, 
+      1,   0,  85, 160,  88,   0, 
+      0,   4,   0,   0,   2, 128, 
+      0,   0,  85, 128,   0,   0, 
+    170, 128,   5,   0, 255, 160, 
+      5,   0,   0,   3,   0,   0, 
+     17, 128,   0,   0,  85, 128, 
+      0,   0,   0, 128,   4,   0, 
+      0,   4,   0,   0,   2, 128, 
+      0,   0,   0, 128,   6,   0, 
+    170, 160,   6,   0, 255, 160, 
+      5,   0,   0,   3,   0,   0, 
+      1, 128,   0,   0,   0, 128, 
+      0,   0,   0, 128,   4,   0, 
+      0,   4,   0,   0,   1, 128, 
+      0,   0,  85, 128,   0,   0, 
+      0, 129,   3,   0,  85, 160, 
+     11,   0,   0,   3,   2,   0, 
+      1, 128,   0,   0,   0, 128, 
+      5,   0,   0, 160,  11,   0, 
+      0,   3,   0,   0,   1, 128, 
+      1,   0, 170, 160,   1,   0, 
+      0, 128,  32,   0,   0,   3, 
+      3,   0,   1, 128,   2,   0, 
+      0, 128,   0,   0,   0, 128, 
+      2,   0,   0,   3,   0,   0, 
+      1, 128,   3,   0,   0, 128, 
+      3,   0,  85, 161,   4,   0, 
+      0,   4,   0,   0,   1, 128, 
+      1,   0,   0, 160,   0,   0, 
+      0, 128,   1,   0,  85, 128, 
+     11,   0,   0,   3,   2,   0, 
+      1, 128,   0,   0,   0, 128, 
+      5,   0,   0, 160,   1,   0, 
+      0,   2,   0,   0,   2, 128, 
+      5,   0,  85, 160,   5,   0, 
+      0,   3,   0,   0,   5, 128, 
+      0,   0,  85, 128,   2,   0, 
+    212, 160,   1,   0,   0,   2, 
+      3,   0,   9, 128,   0,   0, 
+    164, 129,   1,   0,   0,   2, 
+      3,   0,   6, 128,   5,   0, 
+    170, 160,   2,   0,   0,   3, 
+      3,   0,  15, 128,   3,   0, 
+    228, 128,   0,   0,  68, 144, 
+     66,   0,   0,   3,   4,   0, 
+     15, 128,   3,   0, 228, 128, 
+      0,   8, 228, 160,  66,   0, 
+      0,   3,   3,   0,  15, 128, 
+      3,   0, 238, 128,   0,   8, 
+    228, 160,   4,   0,   0,   4, 
+      0,   0,   9, 128,   2,   0, 
+    100, 160,   0,   0,  85, 128, 
+      0,   0, 100, 144,   1,   0, 
+      0,   2,   0,   0,   6, 128, 
+      0,   0, 196, 144,  66,   0, 
+      0,   3,   5,   0,  15, 128, 
+      0,   0, 228, 128,   0,   8, 
+    228, 160,  66,   0,   0,   3, 
+      0,   0,  15, 128,   0,   0, 
+    238, 128,   0,   8, 228, 160, 
+      2,   0,   0,   3,   2,   0, 
+     14, 128,   4,   0, 144, 128, 
+      5,   0, 144, 128,   2,   0, 
+      0,   3,   0,   0,   7, 128, 
+      0,   0, 228, 128,   2,   0, 
+    249, 128,   2,   0,   0,   3, 
+      0,   0,   7, 128,   3,   0, 
+    228, 128,   0,   0, 228, 128, 
+      4,   0,   0,   4,   0,   0, 
+      7, 128,   0,   0, 228, 128, 
+      6,   0,   0, 160,   6,   0, 
+     85, 160,   5,   0,   0,   3, 
+      2,   0,  14, 128,   0,   0, 
+    144, 128,   1,   0, 255, 160, 
+     88,   0,   0,   4,   0,   0, 
+      7, 128,   0,   0, 228, 128, 
+      2,   0, 249, 128,   5,   0, 
+      0, 160,   2,   0,   0,   3, 
+      0,   0,   8, 128,   1,   0, 
+      0, 128,   0,   0,   0, 161, 
+     88,   0,   0,   4,   0,   0, 
+      8, 128,   0,   0, 255, 128, 
+      1,   0,  85, 128,   0,   0, 
+      0, 160,  66,   0,   0,   3, 
+      3,   0,  15, 128,   0,   0, 
+    228, 144,   0,   8, 228, 160, 
+      5,   0,   0,   3,   2,   0, 
+     14, 128,   0,   0, 255, 128, 
+      3,   0, 144, 128,   8,   0, 
+      0,   3,   1,   0,   1, 128, 
+      2,   0, 249, 128,   4,   0, 
+    228, 160,   4,   0,   0,   4, 
+      3,   0,   7, 128,   3,   0, 
+    228, 128,   0,   0, 255, 129, 
+      1,   0,   0, 128,   5,   0, 
+      0,   3,   0,   0,  24, 128, 
+      1,   0, 170, 128,   0,   0, 
+     85, 160,   4,   0,   0,   4, 
+      1,   0,   7, 128,   0,   0, 
+    255, 128,   3,   0, 228, 128, 
+      2,   0, 249, 128,  88,   0, 
+      0,   4,   1,   0,   7, 128, 
+      0,   0, 255, 129,   2,   0, 
+    249, 128,   1,   0, 228, 128, 
+     11,   0,   0,   3,   2,   0, 
+     14, 128,   1,   0, 144, 128, 
+      5,   0,   0, 160,  15,   0, 
+      0,   2,   3,   0,   1, 128, 
+      2,   0,  85, 128,  15,   0, 
+      0,   2,   3,   0,   2, 128, 
+      2,   0, 170, 128,  15,   0, 
+      0,   2,   3,   0,   4, 128, 
+      2,   0, 255, 128,  11,   0, 
+      0,   3,   0,   0,   8, 128, 
+      0,   0, 170, 160,   1,   0, 
+    255, 128,   6,   0,   0,   2, 
+      1,   0,   8, 128,   0,   0, 
+    255, 128,   2,   0,   0,   3, 
+      0,   0,   8, 128,   0,   0, 
+    255, 128,   3,   0,  85, 161, 
+      2,   0,   0,   3,   0,   0, 
+      8, 128,   0,   0, 255, 140, 
+      4,   0, 255, 160,   5,   0, 
+      0,   3,   2,   0,  14, 128, 
+      3,   0, 144, 128,   1,   0, 
+    255, 128,  14,   0,   0,   2, 
+      3,   0,   1, 128,   2,   0, 
+     85, 128,  14,   0,   0,   2, 
+      3,   0,   2, 128,   2,   0, 
+    170, 128,  14,   0,   0,   2, 
+      3,   0,   4, 128,   2,   0, 
+    255, 128,  88,   0,   0,   4, 
+      1,   0,   7, 128,   0,   0, 
+    255, 128,   1,   0, 228, 128, 
+      3,   0, 228, 128,   2,   0, 
+      0,   3,   0,   0,   7, 128, 
+      0,   0, 228, 128,   1,   0, 
+    228, 128,   1,   0,   0,   2, 
+      3,   0,   9, 128,   1,   0, 
+    228, 160,   2,   0,   0,   3, 
+      2,   0,   6, 128,   3,   0, 
+    204, 129,   4,   0, 255, 160, 
+     88,   0,   0,   4,   0,   0, 
+      7, 128,   2,   0,  85, 128, 
+      1,   0, 228, 128,   0,   0, 
+    228, 128,   5,   0,   0,   3, 
+      1,   0,   7, 128,   2,   0, 
+      0, 128,   0,   0, 228, 128, 
+     88,   0,   0,   4,   0,   8, 
+      7, 128,   2,   0, 170, 128, 
+      0,   0, 228, 128,   1,   0, 
+    228, 128,   1,   0,   0,   2, 
+      0,   8,   8, 128,   3,   0, 
+     85, 160, 255, 255,   0,   0
+};
+
+
+static void *s_ivGradePS = NULL;
+static bool s_ivGradePSFailed = false;
+
+// Camera-sized frame copy that feeds the IV grade (see DrawIVGrade): the
+// grade's tex-space math (vignette centred at 0.5, c2 bloom taps =
+// 1/screenW) assumes UV 0..1 spans a FULL frame of content, but
+// pRasterFrontBuffer is a padded (e.g. 2048x2048) raster with the frame only
+// in its top-left — sampling it with a UV 0..1 quad read black below
+// y = h*h/fbH (the IV-mode black band). Private w x h copy = content fills
+// UV 0..1. Managed like Blur_VCS's lastFrameBuffer (PushContext + RenderFast).
+static RwRaster *s_ivGradeRas = NULL;
+static int s_ivGradeW = 0, s_ivGradeH = 0;
+
+// ============================================================
+// Raw geometry render-state guard.
+// ImmediateModeRenderStates{Store,Set,ReStore} only round-trip the 10 RW-
+// cached state IDs; every postfx pass ALSO writes raw D3D9 states
+// (ALPHATEST/CULL/Z*/blend factors) that bypass that cache. A pass that
+// exits without re-asserting them — or faults mid-way — leaks the values
+// into the NEXT frame's geometry (evidenced: vegetation drawing over
+// buildings after the SSAO multiply left ALPHABLEND/SRCBLEND/DESTBLEND
+// wrong). Save/restore the raw states around every pass that writes them.
+// Save BEFORE DepthHook_Suspend (it writes raw ZENABLE itself); restore
+// AFTER ReStore so these values win on any overlap.
+// ============================================================
+static const D3DRENDERSTATETYPE s_rawGeomStateIds[9] = {
+	D3DRS_ALPHATESTENABLE,
+	D3DRS_CULLMODE,
+	D3DRS_ZENABLE,
+	D3DRS_ZWRITEENABLE,
+	D3DRS_ALPHABLENDENABLE,
+	D3DRS_SRCBLEND,
+	D3DRS_DESTBLEND,
+	D3DRS_BLENDOP,      // raw-written by Radiosity_VCS/Blur_VCS — NOT in the
+	D3DRS_BLENDFACTOR   // game ReStore's 10-state list, leaks past ReStore
+};
+
+bool
+SaveRawGeomStates(DWORD *out)
+{
+	IDirect3DDevice9 *dev = d3d9device;
+	if(!dev)
+		return false;
+	for(int i = 0; i < RAW_GEOM_STATE_COUNT; i++)
+		dev->GetRenderState(s_rawGeomStateIds[i], &out[i]);
+	return true;
+}
+
+void
+RestoreRawGeomStates(const DWORD *in)
+{
+	IDirect3DDevice9 *dev = d3d9device;
+	if(!dev)
+		return;
+	// Layer (2) driver cache first (pending[]+dirty, flushed before every
+	// draw): a raw layer-(3)-only restore leaves pending==applied at the
+	// leaked value, so the next RwD3D9SetRenderState to THAT value would
+	// no-op against an already-matching pending and could never push it
+	// down — and worse, a pending!=applied pair left behind by the pass
+	// would flush OVER our raw restore and put the leak straight back.
+	// D3D9 domain, no rw conversion needed.
+	for(int i = 0; i < RAW_GEOM_STATE_COUNT; i++)
+		RwD3D9SetRenderState(s_rawGeomStateIds[i], in[i]);
+	// Layer (3) raw — authoritative device write, wins over any pending
+	// bookkeeping disagreement.
+	for(int i = 0; i < RAW_GEOM_STATE_COUNT; i++)
+		dev->SetRenderState(s_rawGeomStateIds[i], in[i]);
+	// Canonical on-state LAST, forced on ALL THREE layers. These passes
+	// dirty the rw cache to FALSE with rw-only restores that no-op when
+	// the cache never changed back, and a stale saved FALSE would otherwise
+	// re-create the every-frame "[BUILDING] ZWRITE off/desynced (rw=1
+	// dev=0)" the pipe entries log: the rw sets re-sync the cache
+	// (FALSE->TRUE transition re-pushes to the device too), the RwD3D9
+	// sets re-sync pending[] (otherwise a pending TRUE!=applied FALSE
+	// flush would undo the raw TRUE below on the NEXT draw), and the raw
+	// writes guarantee the device value. Vertex alpha is forced the same
+	// way: SSS/postfx rw-set it FALSE, and a cache stuck FALSE would turn
+	// every later alpha-blended draw opaque.
+	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
+	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
+	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)TRUE);
+	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
+	RwD3D9SetRenderState(D3DRS_ZENABLE, TRUE);
+	RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+	RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
+	RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+	dev->SetRenderState(D3DRS_ZENABLE, TRUE);
+	dev->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+	dev->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
+	dev->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+}
+
+static void*
+EnsureIVGradePS(void)
+{
+	if(s_ivGradePS || s_ivGradePSFailed)
+		return s_ivGradePS;
+	IDirect3DDevice9 *dev = d3d9device;
+	if(!dev){
+		s_ivGradePSFailed = true;
+		return NULL;
+	}
+	HRESULT hr = dev->CreatePixelShader((const DWORD*)g_ivGradePSBytes,
+		(IDirect3DPixelShader9**)&s_ivGradePS);
+	if(FAILED(hr) || !s_ivGradePS){
+		dbglog("[PostFX] IVGrade CreatePixelShader FAILED hr=0x%08X", (unsigned)hr);
+		s_ivGradePS = NULL;
+		s_ivGradePSFailed = true;
+		return NULL;
+	}
+	dbglog("[PostFX] IVGrade pixel shader created sh=%p", s_ivGradePS);
+	return s_ivGradePS;
+}
+
+static void
+DrawIVGrade(void)
+{
+	// Gate decision breadcrumb (lane-A, build-2 outdoor-occluder hunt):
+	// the log line "[IVGrade] 0.00 ms" is PerfTimer's UNCONDITIONAL scope
+	// exit line (skygfx.h:79 `~PerfTimer(){ dbglog(...) }`) — it fires even
+	// when this function returns instantly at the gate below, so it is NOT
+	// evidence the grade ran. This throttle logs the ACTUAL gate input
+	// every ~2s so the next test proves either way: ivMode=0 + no
+	// "DrawIVGrade:" lines => grade never ran, occluder is elsewhere.
+	// ivMode writers to watch: derivePipelineFromPipes (main.cpp:597-607,
+	// flips it on pipe-change into/out-of the GTAIV family), menu_inject
+	// "GTA IV Mode" toggle (menu_inject.cpp:123), presets.cpp:130,
+	// debug-menu checkbox.
+	if(dbglog_throttle("ivgrade_gate"))
+		dbglog("[PostFX] IVGrade GATE: ivMode=%d pipeline=%d buildingPipe=%d vehiclePipe=%d cfEnable=%d -> %s",
+			config ? (int)config->ivMode : -1,
+			config ? config->pipeline : -1,
+			config ? config->buildingPipe : -1,
+			config ? config->vehiclePipe : -1,
+			config ? (int)config->colorFilterEnable : -1,
+			(config && config->ivMode) ? "RUN" : "SKIP");
+	if(!config || !config->ivMode)
+		return;
+	void *ps = EnsureIVGradePS();
+	if(!ps)
+		return;
+	IDirect3DDevice9 *dev = d3d9device;
+	if(!dev || !Scene.camera)
+		return;
+	RwRaster *camRas = RwCameraGetRaster(Scene.camera);
+	if(!camRas)
+		return;
+	// Screen-size doctrine: size the private grade copy from the trusted
+	// cache (live camRas only as the pre-capture fallback). If the camera
+	// raster is temporarily pointed at a non-screen raster (envmap/
+	// reflection), skip — copying it would composite at the wrong scale.
+	int w = 0, h = 0;
+	if(!GetScreenSize(&w, &h)){
+		w = camRas->width;
+		h = camRas->height;
+	}
+	if(w < 1 || h < 1)
+		return;
+	if(camRas->width != w || camRas->height != h){
+		if(dbglog_throttle("ivgrade_skip"))
+			dbglog("[PostFX] DrawIVGrade SKIP: camRas %dx%d != screen %dx%d (transient raster)",
+				camRas->width, camRas->height, w, h);
+		return;
+	}
+	if(!CPostEffects::pRasterFrontBuffer)
+		return;
+	if(IsGameInMenuOrPaused())
+		return;
+
+	if(dbglog_throttle("ivgrade"))
+		dbglog("[PostFX] DrawIVGrade: desat=%.2f gamma=%.2f exposure=%.2f vig=(%.2f,%.2f,%.2f) bloom=%.2f",
+			config->ivDesaturation, config->ivGamma, config->ivExposure,
+			config->ivVignetteIntensity, config->ivVignetteRadius,
+			config->ivVignetteContrast, config->ivBloomIntensity);
+
+	// Feed the grade a CAMERA-SIZED frame copy instead of pRasterFrontBuffer.
+	// Root cause of the IV-mode black band: the front buffer is a padded
+	// (2048x2048) raster holding the 1920x1080 frame 1:1 at its TOP-LEFT
+	// (UpdateFrontBuffer = RwRasterRenderFast at 0,0), while s_ffQuad maps
+	// UV 0..1 across the screen — screen rows below y = h*h/fbH (~570 on
+	// 1080/2048) sampled past the content into black. A private w x h copy
+	// has content filling UV 0..1, so the grade's authored tex-space math
+	// (vignette centred at 0.5, c2 bloom taps = 1/screenW) stays exact.
+	// The game's own colorfilterVerts avoid the band with 0..2048 positions
+	// + UV 0..1 (visible window = content region) — same idea, different
+	// mechanism (we can't move positions without breaking tex 0..1 math).
+	// Mirrors Blur_VCS's lastFrameBuffer copy (PushContext + RenderFast).
+	if(!s_ivGradeRas || s_ivGradeW != w || s_ivGradeH != h){
+		if(s_ivGradeRas){ RwRasterDestroy(s_ivGradeRas); s_ivGradeRas = NULL; }
+		s_ivGradeRas = RwRasterCreate(w, h, camRas->depth, rwRASTERTYPECAMERATEXTURE);
+		s_ivGradeW = w;
+		s_ivGradeH = h;
+		if(!s_ivGradeRas){
+			dbglog("[PostFX] DrawIVGrade: frame-copy raster create failed %dx%d", w, h);
+			return;
+		}
+	}
+	{
+		// Copy the CURRENT post-colour-filter camera frame into the private
+		// raster (same EndUpdate/PushContext/RenderFast/BeginUpdate dance as
+		// UpdateFrontBuffer). Fail-open: if the copy fails, skip the grade
+		// this frame rather than grading garbage.
+		RwCameraEndUpdate(Scene.camera);
+		RwRasterPushContext(s_ivGradeRas);
+		RwRaster *copyResult = RwRasterRenderFast(camRas, 0, 0);
+		RwRasterPopContext();
+		RwCameraBeginUpdate(Scene.camera);
+		if(!copyResult){
+			dbglog("[PostFX] DrawIVGrade: frame copy failed (RenderFast NULL), skipping grade");
+			return;
+		}
+	}
+
+	SetupFullscreenQuad((float)w, (float)h);
+
+	DWORD rawGeom[9];
+	bool rawGeomSaved = SaveRawGeomStates(rawGeom); // no depth hook in this pass
+	CPostEffects::ImmediateModeRenderStatesStore();
+	CPostEffects::ImmediateModeRenderStatesSet();
+	RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
+	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
+	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
+	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
+	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
+	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)s_ivGradeRas);
+
+	// c0: {exposure, desaturation, gamma, 0} — live from the debug-menu sliders
+	float ex = (config->ivExposure > 0.01f) ? config->ivExposure : 1.0f;
+	float gm = (config->ivGamma > 0.05f) ? config->ivGamma : 1.0f;
+	float c0[4] = { ex, config->ivDesaturation, gm, 0.0f };
+	RwD3D9SetPixelShaderConstant(0, c0, 1);
+	// c1: {vignetteIntensity, vignetteRadius, vignetteContrast, bloomIntensity}
+	float c1[4] = {
+		config->ivVignetteIntensity,
+		config->ivVignetteRadius,
+		config->ivVignetteContrast,
+		config->ivBloomIntensity
+	};
+	RwD3D9SetPixelShaderConstant(1, c1, 1);
+	// c2: {1/screenW, 1/screenH, 0, 0} — bloom tap offsets
+	float c2[4] = { 1.0f/max((float)w, 1e-7f), 1.0f/max((float)h, 1e-7f), 0.0f, 0.0f };
+	RwD3D9SetPixelShaderConstant(2, c2, 1);
+
+	overrideIm2dPixelShader = ps;
+	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, s_ffQuad, 4, s_ffQuadIdx, 6);
+	overrideIm2dPixelShader = nil;
+
+	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
+	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)TRUE);
+	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
+	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
+	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)NULL);
+	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
+	RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
+
+	CPostEffects::ImmediateModeRenderStatesReStore();
+	if(rawGeomSaved){
+		RestoreRawGeomStates(rawGeom);
+		rawGeomSaved = false;
+	}
+
+	// Leave the front buffer in sync so motion blur / height fog / god rays
+	// sample the IV-graded frame even if they skip their own start-sync.
+	CPostEffects::UpdateFrontBuffer();
+}
+
+// Defined in main.cpp (pipe-conjunction fix #4) — re-derives
+// config->pipeline/colorFilter/ivMode from the actual building/vehicle pipes.
+extern void derivePipelineFromPipes(Config *c);
+
 void
 CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 {
 	DBGLOG_ENTER("ColourFilter_switch");
+
+	// Pipe-conjunction #4 — EVERY-FRAME re-derivation, before any gate below
+	// reads config->pipeline (SSAO dispatch region above runs first in this
+	// function but doesn't key on pipeline; the timecycle gate and the PBR
+	// Modern-filter force further down do). This is the catch-all for pipe
+	// writers with no reload hook of their own: pause-menu menu_inject
+	// cycles (menu_inject.cpp:124 buildingPipe-only) and the legacy DebugMenu
+	// vars (debugmenu_ui.cpp:169/:177, nil callbacks). Snapshot-cheap: only
+	// acts when the pipes (or a deliberate ivMode write) actually changed.
+	derivePipelineFromPipes(config);
+
+	// Pipeline-source breadcrumb (lane-A, build-2 flip hunt): the reported
+	// "pipeline=3 (Mobile)" <-> "pipeline=0" flip — note pipeline 0 is
+	// PIPELINE_PBR (skygfx.h:178), NOT PS2 — is NOT two different variables:
+	// there is no g_pipeline-style global anywhere in src; every postfx gate
+	// (this log, the bypass cfGate, the PBR Modern force) reads the SAME
+	// config->pipeline, which derivePipelineFromPipes rewrites EVERY FRAME
+	// from the ground-truth pipes (buildingPipe/vehiclePipe). A flip with
+	// filter=8 (MODERN, the rule-3 PBR lock at main.cpp:585) therefore means
+	// SOMETHING IS WRITING THE PIPES at runtime (menu_inject buildingPipe
+	// cycle, debug-menu pipelineOverride application
+	// (debugmenu_ui.cpp:612-615), presets.cpp:117-118). postfx stays on the
+	// EFFECTIVE value — the render callbacks key off the pipes, so reading
+	// the derived pipeline is the only self-consistent choice. This line
+	// logs all sources so the next test pins the writer.
+	if(dbglog_throttle("cf_pipeline"))
+		dbglog("[PostFX] CF-SRC: effective pipeline=%d override=%d bp=%d vp=%d colorFilter=%d ivMode=%d",
+			config->pipeline, config->pipelineOverride, config->buildingPipe,
+			config->vehiclePipe, config->colorFilter, (int)config->ivMode);
+
 	// Log entry with full context for crash correlation
 	if(dbglog_throttle("cf_switch"))
 		dbglog("[PostFX] ColourFilter_switch: filter=%d pipeline=%d smaa=%d ssao=%d motionBlur=%d",
@@ -2016,6 +2943,12 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 		DBGLOG_BAIL("ColourFilter_switch", "pRasterFrontBuffer NULL");
 		return;
 	}
+
+	// Trusted screen-size capture point (postfx entry — main camera is on the
+	// screen here, see GetScreenSize above). Geometry-phase readers
+	// (pipe-chain classify, IBL capture) size themselves from this cache
+	// instead of a live read that can hit a transient non-screen raster.
+	CaptureScreenSize(Scene.camera ? RwCameraGetRaster(Scene.camera) : NULL);
 
 	// Debug dump: log colorfilterVerts once, increment frame counter
 	LogColorfilterVerts();
@@ -2034,10 +2967,20 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 	// SSAO must run before color filter to read original scene
 	{
 		PERF_SCOPE("SSAO");
-		if(config->ssaoEnable && SSAO_Temporal && config->ssaoTemporalEnable){
-			DrawSSAO_Overhaul();    // Quarter-res temporal SSAO
+		// Overhaul path runs when Temporal is ON, OR when Blur Passes > 0 —
+		// the bilateral blur loop lives ONLY inside DrawSSAO_Overhaul
+		// (:3836), so requiring ssaoTemporalEnable here made blur dead on
+		// the old path (old DrawSSAO has no blur at all). Verified safe
+		// without temporal: entry guard :3698 does not test ssaoTemporalEnable,
+		// ping-pong history RTs are always allocated + NULL-checked (:3725),
+		// and the history weight is validity-gated (and now also gated on
+		// ssaoTemporalEnable at :3810) so no temporal accumulation happens
+		// when Temporal is off. SSAO_Temporal still required (shader load).
+		if(config->ssaoEnable && SSAO_Temporal &&
+		   (config->ssaoTemporalEnable || config->ssaoBlurPasses > 0)){
+			DrawSSAO_Overhaul();    // Quarter-res SSAO (+temporal, +bilateral blur)
 		}else{
-			DrawSSAO();             // Fallback: old full-res SSAO
+			DrawSSAO();             // Fallback: old full-res SSAO (no blur)
 		}
 	}
 
@@ -2199,8 +3142,37 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 		if(dbglog_throttle("cf_switch"))
 			dbglog("[PostFX] ColourFilter_switch BYPASSED (colorFilterEnable=0)");
 		UpdateFrontBuffer();
+
+		// Gamma ownership — the bypass skips the COLOUR FILTER, not the sRGB
+		// encode (see s_tonemapIdentityGrade). Only routes through the Modern
+		// tonemap when this frame WOULD have run it (filter resolves to
+		// MODERN, or PBR forces it): pipelines whose filter never gamma-
+		// encoded must not gain an encode here (double gamma).
+		int cfGate = colorFilter;
+		if(config->pipeline == PIPELINE_PBR)
+			cfGate = COLORFILTER_MODERN;
+		if(cfGate == COLORFILTER_MODERN && tonemapPassPS){
+			s_tonemapIdentityGrade = true;
+			ColourFilter_Modern(rgb1, rgb2); // pass-1 tint skipped, tonemap runs
+			s_tonemapIdentityGrade = false;
+			// Re-sync: ColourFilter_Modern leaves pRasterFrontBuffer at the
+			// PRE-tonemap linear frame (the normal path re-syncs further down,
+			// after the IVGrade/height-fog chain — the bypass returns here).
+			// Without this, chars_drawSSSBlur and any later FB consumer would
+			// read the un-gamma-encoded frame again.
+			UpdateFrontBuffer();
+		}
+
 		// SSS still runs even when colour filter is bypassed - it's independent
 		chars_drawSSSBlur();
+		// Keep the per-frame report alive during bypass windows: this early
+		// return used to skip postfxReportSummary (below), so the report went
+		// silent exactly when the filter was bypassed — the "PostFX-REPORT
+		// stops while rendering continues" symptom. NOTE: the
+		// colorFilterEnable flag itself is owned by main.cpp (two call sites
+		// alternate it) — reported to orchestrator, NOT fixed here.
+		postfxReportFrame++;
+		postfxReportSummary();
 		return;
 	}
 
@@ -2268,6 +3240,15 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 	// Per-frame summary report (one compact line per frame)
 	postfxReportFrame++;
 	postfxReportSummary();
+
+	// IV mode grade: runs on the freshly graded/tonemapped frame, before
+	// motion blur / height fog / god rays. Consumes config->ivMode and the
+	// iv* sliders (exposure/desaturation/gamma/vignette/bloom) as live
+	// shader constants — previously all dead config fields.
+	{
+		PERF_SCOPE("IVGrade");
+		DrawIVGrade();
+	}
 
 	// Motion blur: after colour filter + SMAA, before final front buffer sync
 	{
@@ -2453,6 +3434,12 @@ extern void *DynamicSky;
 IDirect3DTexture9 *g_normalBufferTex = NULL;
 static IDirect3DSurface9 *g_normalBufferSurf = NULL;
 static int s_normalBufW = 0, s_normalBufH = 0;  // cached dims for res-aware recreate
+// True only after DrawNormalBufferToTexture completed at least one full write.
+// A freshly created D3DPOOL_DEFAULT RT is driver garbage (cleared to the
+// invalid-normal marker in GetNormalBufferTexture, but the marker must also
+// never be blended into geometry normals), so consumers gate binding on this
+// flag — see the s4 bind gate in buildingPipe.cpp PBR callback.
+bool g_normalBufferHasContent = false;
 
 // Wave-2 temporal history: previous-frame normals (half-res, same dims as g_normalBufferTex)
 IDirect3DTexture9 *g_prevNormalTex = NULL;
@@ -2468,6 +3455,11 @@ static IDirect3DTexture9 *g_pipeChainTexB = NULL;
 static IDirect3DSurface9 *g_pipeChainSurfB = NULL;
 
 extern void *PipeChainShader;
+
+// g_pipeChainClassify* statics are defined AFTER this function (~:4560) —
+// forward-declare a helper so the Reset release below can reach them
+// (direct references would be use-before-declaration).
+static void ReleasePipeChainClassifyResources(void);
 
 // Release all D3DPOOL_DEFAULT resources (call on device lost/reset)
 void ReleaseDefaultPoolResources(void)
@@ -2494,6 +3486,10 @@ void ReleaseDefaultPoolResources(void)
 	if(lastFrameBuffer){ RwRasterDestroy(lastFrameBuffer); lastFrameBuffer = nil; }
 	s_blurVCS_lastWidth = 0; s_blurVCS_lastHeight = 0; s_blurVCS_justInitialized = 1;
 
+	// IV grade frame copy (RW-managed; recreated on next DrawIVGrade)
+	if(s_ivGradeRas){ RwRasterDestroy(s_ivGradeRas); s_ivGradeRas = nil; }
+	s_ivGradeW = 0; s_ivGradeH = 0;
+
 	// Hoisted radiosity work buffers (were function-static, invisible to Reset)
 	if(s_radiosityShaderWorkBuffer){ RwRasterDestroy(s_radiosityShaderWorkBuffer); s_radiosityShaderWorkBuffer = nil; }
 	if(s_radiosityWorkBuffer){ RwRasterDestroy(s_radiosityWorkBuffer); s_radiosityWorkBuffer = nil; }
@@ -2513,6 +3509,7 @@ void ReleaseDefaultPoolResources(void)
 	if(g_normalBufferTex){ g_normalBufferTex->Release(); g_normalBufferTex = NULL; }
 	if(g_normalBufferSurf){ g_normalBufferSurf->Release(); g_normalBufferSurf = NULL; }
 	s_normalBufW = 0; s_normalBufH = 0;
+	g_normalBufferHasContent = false;
 
 	// Wave-2 prev-normal history (D3DPOOL_DEFAULT)
 	if(g_prevNormalTex){ g_prevNormalTex->Release(); g_prevNormalTex = NULL; }
@@ -2525,16 +3522,15 @@ void ReleaseDefaultPoolResources(void)
 	if(g_pipeChainTexB){ g_pipeChainTexB->Release(); g_pipeChainTexB = NULL; }
 	if(g_pipeChainSurfB){ g_pipeChainSurfB->Release(); g_pipeChainSurfB = NULL; }
 
-	// Unified tonemap luminance targets (D3DPOOL_DEFAULT)
-	if(g_lumaMeasTex){ g_lumaMeasTex->Release(); g_lumaMeasTex = NULL; }
-	if(g_lumaMeasSurf){ g_lumaMeasSurf->Release(); g_lumaMeasSurf = NULL; }
-	if(g_lumaAdaptTexA){ g_lumaAdaptTexA->Release(); g_lumaAdaptTexA = NULL; }
-	if(g_lumaAdaptSurfA){ g_lumaAdaptSurfA->Release(); g_lumaAdaptSurfA = NULL; }
-	if(g_lumaAdaptTexB){ g_lumaAdaptTexB->Release(); g_lumaAdaptTexB = NULL; }
-	if(g_lumaAdaptSurfB){ g_lumaAdaptSurfB->Release(); g_lumaAdaptSurfB = NULL; }
-	g_lumaAdaptFlip = 0;
+	// CRITICAL-1: classify pack RT (D3DPOOL_DEFAULT, created lazily by
+	// GetPipeChainClassifySurf ~:4577) was NEVER released here → after
+	// PipeChain had run once, device Reset failed D3DERR_INVALIDCALL.
+	ReleasePipeChainClassifyResources();
 
-	// RW rasters are managed by RW, not our responsibility
+// Unified tonemap luminance targets (D3DPOOL_DEFAULT)
+ReleaseLuminanceTargets();
+
+// RW rasters are managed by RW, not our responsibility
 
 	// SMAA static RW rasters/textures
 	ReleaseSMAAStaticResources();
@@ -2560,9 +3556,49 @@ void ReleaseDefaultPoolResources(void)
 	dbglog("ReleaseDefaultPoolResources: done");
 }
 
-// Check if device is valid - use RenderWare camera state instead
+// Release luminance target resources (g_lumaMeas*, g_lumaAdapt*)
+void ReleaseLuminanceTargets(void)
+{
+	// g_lumaMeasTex (and related) – released here to free memory
+	if(g_lumaMeasTex){ g_lumaMeasTex->Release(); g_lumaMeasTex = nil; }
+	if(g_lumaMeasSurf){ g_lumaMeasSurf->Release(); g_lumaMeasSurf = nil; }
+	if(g_lumaAdaptTexA){ g_lumaAdaptTexA->Release(); g_lumaAdaptTexA = nil; }
+	if(g_lumaAdaptSurfA){ g_lumaAdaptSurfA->Release(); g_lumaAdaptSurfA = nil; }
+	if(g_lumaAdaptTexB){ g_lumaAdaptTexB->Release(); g_lumaAdaptTexB = nil; }
+	if(g_lumaAdaptSurfB){ g_lumaAdaptSurfB->Release(); g_lumaAdaptSurfB = nil; }
+	g_lumaAdaptFlip = 0;
+}
+
+// Central cleanup on device reset (called from depthhook::hook_Reset)
+extern void ReleaseEnvMapResources(void);
+extern void ReleaseVehiclePipeCaches(void);
+extern void ReleaseBuildingPipeCaches(void);
+extern void ReleaseNeoCarPipeResources(void);
+
+void OnDeviceReset(void)
+{
+	// Release all D3DPOOL_DEFAULT resources (including luminance targets)
+	ReleaseDefaultPoolResources();
+
+	// Release RW-managed caches that survive device reset
+	ReleaseEnvMapResources();
+	ReleaseVehiclePipeCaches();
+	ReleaseBuildingPipeCaches();
+	ReleaseNeoCarPipeResources();
+
+	// Reset guard state: never leave the VEH in silent pass-through mode or
+	// with a stale phase tag across a device Reset (gap: previously the
+	// hoisted DrawSMAA guard flag survived reset).
+	g_inGuardedIm2DPass = 0;
+	g_renderPhase = "";
+	g_guardDepth = 0;
+}
 static inline bool CheckDeviceState(void)
 {
+	// Fail fast while the device is lost — TestCooperativeLevel is cheap and
+	// every RT bind / Im2D draw downstream would fault or fail anyway.
+	if (!d3d9device || d3d9device->TestCooperativeLevel() == D3DERR_DEVICELOST)
+		return false;
 	// RW camera BeginUpdate handles device state internally
 	// Just check if we have a valid camera and raster
 	if (!Scene.camera) return false;
@@ -2731,6 +3767,8 @@ static void CopyDepthToPrev(void)
 
 	bool ok = false;
 
+	DWORD rawGeom[9];
+	bool rawGeomSaved = SaveRawGeomStates(rawGeom); // before Store (raw Set below)
 	CPostEffects::ImmediateModeRenderStatesStore();
 	CPostEffects::ImmediateModeRenderStatesSet();
 	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
@@ -2763,9 +3801,15 @@ static void CopyDepthToPrev(void)
 		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
 		overrideIm2dPixelShader = nil;
 
+		// Unbind INTZ from s0 BEFORE the hook re-binds it as DS (feedback-lock
+		// guard, mirrors DrawSSAO/DrawHeightFog); the cleanup below stays as-is.
+		dev->SetTexture(0, NULL);
 		DepthHook_Restore();
 		ok = true;
 	} __except(EXCEPTION_EXECUTE_HANDLER){
+		overrideIm2dPixelShader = nil;	// SEH: the `= nil` reset in the __try above is skipped on fault
+
+		dev->SetTexture(0, NULL); // same unbind before the bail-out Restore
 		DepthHook_Restore(); // keep Suspend/Restore balanced on fault
 	}
 
@@ -2774,6 +3818,10 @@ static void CopyDepthToPrev(void)
 	dev->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
 
 	CPostEffects::ImmediateModeRenderStatesReStore();
+	if(rawGeomSaved){
+		RestoreRawGeomStates(rawGeom);
+		rawGeomSaved = false;
+	}
 
 	dev->SetViewport(&oldVP);
 	dev->SetRenderTarget(0, oldRT);
@@ -2786,6 +3834,130 @@ static void CopyDepthToPrev(void)
 		s_prevDepthLogDone = true;
 		dbglog("[PostFX] CopyDepthToPrev: depth copy failed, prev-depth history disabled (one-shot)");
 	}
+}
+
+// ============================================================
+// PostFX_CopyDepthToTexture — copy the live scene depth (INTZ depth-stencil,
+// currently bound as the device DS) into dstTex (an R32F render target) as
+// raw window-space z. Used by the water pipe at water-draw time for
+// depth-based shore blending / translucency / shallow->deep colour.
+//
+// Unlike CopyDepthToPrev (postfx tail, Z irrelevant) this runs MID-SCENE,
+// so the exact incoming depth-stencil surface is re-bound at the end instead
+// of DepthHook_Restore's cached game DS — the water draw that follows must
+// keep Z-testing against the live INTZ contents.
+//
+// Returns false (and touches nothing) when the copy cannot run: no INTZ,
+// INTZ not the active DS (its contents would be stale), or a draw fault —
+// callers fall back to depth-less shading.
+// ============================================================
+bool PostFX_CopyDepthToTexture(IDirect3DTexture9 *dstTex, int dstW, int dstH)
+{
+	if(!dstTex || dstW < 1 || dstH < 1) return false;
+	if(!g_intzTex || !g_intzSurf) return false;
+	if(!ClampShader) return false;
+	IDirect3DDevice9 *dev = d3d9device;
+	if(!dev) return false;
+
+	IDirect3DSurface9 *oldRT = NULL;
+	IDirect3DSurface9 *oldDS = NULL;
+	D3DVIEWPORT9 oldVP;
+	dev->GetRenderTarget(0, &oldRT);
+	dev->GetDepthStencilSurface(&oldDS);
+	dev->GetViewport(&oldVP);
+
+	// Only trust INTZ contents when INTZ is the surface receiving depth writes.
+	if(oldDS != g_intzSurf){
+		if(oldRT) oldRT->Release();
+		if(oldDS) oldDS->Release();
+		return false;
+	}
+
+	IDirect3DSurface9 *dstSurf = NULL;
+	if(FAILED(dstTex->GetSurfaceLevel(0, &dstSurf)) || !dstSurf){
+		if(oldRT) oldRT->Release();
+		if(oldDS) oldDS->Release();
+		return false;
+	}
+
+	bool ok = false;
+
+	DWORD rawGeom[9];
+	bool rawGeomSaved = SaveRawGeomStates(rawGeom); // before Store (raw Set below)
+	CPostEffects::ImmediateModeRenderStatesStore();
+	CPostEffects::ImmediateModeRenderStatesSet();
+	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
+	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
+	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
+	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
+	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
+	RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)rwCULLMODECULLNONE);
+
+	dev->SetRenderTarget(0, dstSurf);
+	// Unbind the DS so INTZ can be sampled (hook_SetDS passes NULL straight
+	// through to the original — no substitution on the unbind path).
+	dev->SetDepthStencilSurface(NULL);
+	D3DVIEWPORT9 vp = { 0, 0, (DWORD)dstW, (DWORD)dstH, 0.0f, 1.0f };
+	dev->SetViewport(&vp);
+
+	__try {
+		dev->SetTexture(0, g_intzTex);
+		dev->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+		dev->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+		dev->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
+		dev->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_POINT);
+
+		// Fullscreen quad in the dst RT's own pixel grid (colourfilterVerts
+		// would only be valid once the colourfilter has run this frame).
+		RwIm2DVertex quad[4];
+		for(int i = 0; i < 4; i++){
+			quad[i].z = 0.0f;
+			quad[i].rhw = 1.0f;
+			quad[i].emissiveColor = 0xFFFFFFFF;
+		}
+		quad[0].x = 0.0f;         quad[0].y = 0.0f;         quad[0].u = 0.0f; quad[0].v = 0.0f;
+		quad[1].x = (float)dstW;  quad[1].y = 0.0f;         quad[1].u = 1.0f; quad[1].v = 0.0f;
+		quad[2].x = 0.0f;         quad[2].y = (float)dstH;  quad[2].u = 0.0f; quad[2].v = 1.0f;
+		quad[3].x = (float)dstW;  quad[3].y = (float)dstH;  quad[3].u = 1.0f; quad[3].v = 1.0f;
+		RwImVertexIndex quadIdx[6] = { 0, 1, 2, 2, 1, 3 };
+
+		// ClampShader is the generic s0→RT copy shader; c0={min,max,tonemap,0}
+		// with a [0,1] clamp is a no-op for raw depth (already in [0,1]).
+		float c0[4] = { 0.0f, 1.0f, 0.0f, 0.0f };
+		RwD3D9SetPixelShaderConstant(0, c0, 1);
+
+		overrideIm2dPixelShader = ClampShader;
+		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, quad, 4, quadIdx, 6);
+		overrideIm2dPixelShader = nil;
+
+		ok = true;
+	} __except(EXCEPTION_EXECUTE_HANDLER){
+		overrideIm2dPixelShader = nil;	// SEH: the `= nil` reset in the __try above is skipped on fault
+
+		dbglog("[PostFX] CopyDepthToTexture fault code=0x%08X", GetExceptionCode());
+		ok = false;
+	}
+
+	dev->SetTexture(0, NULL);
+	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)NULL);
+	dev->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+	dev->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+
+	CPostEffects::ImmediateModeRenderStatesReStore();
+	if(rawGeomSaved){
+		RestoreRawGeomStates(rawGeom);
+		rawGeomSaved = false;
+	}
+
+	dev->SetViewport(&oldVP);
+	dev->SetRenderTarget(0, oldRT);
+	// Re-bind the EXACT incoming DS (== g_intzSurf -> hook_SetDS passthrough)
+	// so the following water draw Z-tests against live scene depth.
+	dev->SetDepthStencilSurface(oldDS);
+	dstSurf->Release();
+	if(oldRT) oldRT->Release();
+	if(oldDS) oldDS->Release();
+	return ok;
 }
 
 void ReleaseSSAOOverhaulResources(void){
@@ -2844,6 +4016,70 @@ static void InitSSAOOverhaulResources(void){
 	g_ssaoHistoryValid = false;
 }
 
+// Throttled AO-output validation: read back a sparse grid from the occlusion
+// RT and fail-open (skip the multiply composite) if it is near-black — under
+// SRCBLEND=ZERO/DESTBLEND=SRCCOLOR a black AO texture *replaces* the whole
+// scene with black. Reuses the DumpRasterToBMP GetRenderTargetData pattern,
+// but runs regardless of postfxDumpDebug because it is a safety gate, not a
+// debug dump. First 3 frames always validate (catch immediate failures),
+// then once every 60 frames (~2s) to bound the GetRenderTargetData stall.
+// Returns true = composite may proceed.
+static bool ValidateSSAOOutput(IDirect3DSurface9 *aoRT)
+{
+	static int s_validateCount = 0;
+	s_validateCount++;
+	if(s_validateCount > 3 && (s_validateCount % 60) != 0)
+		return true;
+	if(!aoRT)
+		return true; // no surface captured — can't verify, don't block
+	IDirect3DDevice9 *dev = d3d9device;
+	if(!dev)
+		return true;
+
+	D3DSURFACE_DESC desc;
+	if(FAILED(aoRT->GetDesc(&desc)) || desc.Width < 1 || desc.Height < 1)
+		return true;
+	IDirect3DSurface9 *sysSurf = NULL;
+	if(FAILED(dev->CreateOffscreenPlainSurface(desc.Width, desc.Height,
+			D3DFMT_A8R8G8B8, D3DPOOL_SYSTEMMEM, &sysSurf, NULL)) || !sysSurf)
+		return true;
+	if(FAILED(dev->GetRenderTargetData(aoRT, sysSurf))){
+		sysSurf->Release();
+		return true; // readback failed — don't skip the composite on a glitch
+	}
+	D3DLOCKED_RECT lr;
+	if(FAILED(sysSurf->LockRect(&lr, NULL, D3DLOCK_READONLY))){
+		sysSurf->Release();
+		return true;
+	}
+	// Sparse 16x16 grid of the red channel (AO output is greyscale)
+	float amin = 1.0f, amax = 0.0f, asum = 0.0f;
+	int count = 0;
+	for(int gy = 0; gy < 16; gy++){
+		int y = (int)((size_t)gy * (desc.Height - 1) / 15);
+		const BYTE *row = (const BYTE*)lr.pBits + (size_t)y * lr.Pitch;
+		for(int gx = 0; gx < 16; gx++){
+			int x = (int)((size_t)gx * (desc.Width - 1) / 15);
+			float a = row[x * 4 + 2] / 255.0f; // A8R8G8B8 -> R
+			if(a < amin) amin = a;
+			if(a > amax) amax = a;
+			asum += a;
+			count++;
+		}
+	}
+	sysSurf->UnlockRect();
+	sysSurf->Release();
+
+	// Healthy AO: mostly white (avg ~0.7+). avg < 0.02 = effectively all
+	// black -> the multiply would black out the frame -> fail open.
+	float aavg = asum / (float)count;
+	bool ok = (aavg >= 0.02f);
+	if(dbglog_throttle("ssao_aoval"))
+		dbglog("[PostFX] SSAO ao validate: min=%.3f max=%.3f avg=%.3f -> %s",
+			amin, amax, aavg, ok ? "composite" : "SKIP (near-black, fail-open)");
+	return ok;
+}
+
 void
 CPostEffects::DrawSSAO(void)
 {
@@ -2855,6 +4091,11 @@ CPostEffects::DrawSSAO(void)
 			dbglog("[PostFX] DrawSSAO bailing: ssaoEnable=%d SSAO=%p", config->ssaoEnable, SSAO);
 		return;
 	}
+
+	// Declared before __try so the __except path can restore them too
+	DWORD rawGeom[9];
+	bool rawGeomSaved = false;
+	bool imStored = false; // set after ImmediateModeRenderStatesStore
 
 	__try {
 		IDirect3DDevice9 *dev = d3d9device;
@@ -2878,10 +4119,14 @@ CPostEffects::DrawSSAO(void)
 			if(!g_ssaoOutputRaster){ dbglog("[PostFX] DrawSSAO bailing: output raster creation failed"); return; }
 		}
 
+		// Save raw geometry states BEFORE Suspend (it writes raw ZENABLE)
+		rawGeomSaved = SaveRawGeomStates(rawGeom);
+
 		// Suspend depth hook so g_ssaoDepthTex can be sampled while not bound as DS
 		DepthHook_Suspend();
 
 		ImmediateModeRenderStatesStore();
+		imStored = true;
 		ImmediateModeRenderStatesSet();
 
 		// Render SSAO occlusion to output raster
@@ -2889,6 +4134,16 @@ CPostEffects::DrawSSAO(void)
 		RwCameraEndUpdate(Scene.camera);
 		RwCameraSetRaster(Scene.camera, g_ssaoOutputRaster);
 		RwCameraBeginUpdate(Scene.camera);
+
+		// White-clear the occlusion target: if the pass is skipped or fails
+		// mid-frame the composite multiplies by 1.0 (graceful no-op) instead
+		// of stale/garbage data — SSAO must degrade to "off", never black.
+		dev->Clear(0, NULL, D3DCLEAR_TARGET, 0xFFFFFFFF, 1.0f, 0);
+
+		// Capture the AO output surface while bound for the post-pass readback
+		// validation (fail-open gate on the multiply composite below).
+		IDirect3DSurface9 *aoRT = NULL;
+		dev->GetRenderTarget(0, &aoRT);
 
 		RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
 		RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
@@ -2927,8 +4182,12 @@ CPostEffects::DrawSSAO(void)
 		};
 		RwD3D9SetPixelShaderConstant(2, projInfo, 1);
 
+		// RT-sized white quad: correct UV 0..1 on this raster, white vertex
+		// colour so the fixed-function composite can't modulate to black.
+		SetupFullscreenQuad((float)w, (float)h);
+
 		overrideIm2dPixelShader = SSAO;
-		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
+		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, s_ffQuad, 4, s_ffQuadIdx, 6);
 		overrideIm2dPixelShader = nil;
 
 		// Restore original camera raster
@@ -2946,22 +4205,67 @@ CPostEffects::DrawSSAO(void)
 		// Restore depth hook (re-binds INTZ as DS, re-enables Z)
 		DepthHook_Restore();
 
-		// Blend SSAO occlusion with scene (multiply)
-		RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-		RwD3D9SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ZERO);
-		RwD3D9SetRenderState(D3DRS_DESTBLEND, D3DBLEND_SRCCOLOR);
-		RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
-		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, g_ssaoOutputRaster);
+		// Photoshop-multiply contract: final = scene x aoTexture, white =
+		// no occlusion. Fail-open: skip the composite entirely if the readback
+		// says the AO buffer is near-black (a black texture under
+		// ZERO/SRCCOLOR *replaces* the scene with black).
+		bool aoOk = ValidateSSAOOutput(aoRT);
+		if(dbglog_throttle("ssao_comp"))
+			dbglog("[PostFX] DrawSSAO composite: raster=%p aoOk=%d",
+				g_ssaoOutputRaster, (int)aoOk);
+		if(aoRT){ aoRT->Release(); aoRT = NULL; }
 
-		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
+		if(aoOk){
+			// Set blend through the RW cache FIRST (VERTEXALPHAENABLE /
+			// SRCBLEND / DESTBLEND): RwIm2D re-emits cached states at draw
+			// time and would clobber raw-only D3D9 factors set before the
+			// draw — the old raw-only sequence is how the multiply could
+			// silently degrade to a plain replace (showing the AO texture
+			// alone / black). Mirror the factors with raw calls immediately
+			// before the draw as a second layer.
+			RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
+			RwRenderStateSet(rwRENDERSTATETEXTURERASTER, g_ssaoOutputRaster);
+			RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
+			RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDZERO);        // src factor dropped
+			RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDSRCCOLOR);   // dest x src = multiply
+			RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+			RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+			RwD3D9SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ZERO);
+			RwD3D9SetRenderState(D3DRS_DESTBLEND, D3DBLEND_SRCCOLOR);
 
-		RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+			// White RT-sized quad — NOT colorfilterVerts (emissiveColor=0 would
+			// modulate the SSAO texture to black and zero the whole scene).
+			RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, s_ffQuad, 4, s_ffQuadIdx, 6);
+
+			// Restore blend defaults through the RW cache too (keep it coherent
+			// with the D3D9 state before ImmediateModeRenderStatesReStore)
+			RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
+			RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
+			RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
+			RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+		}else if(dbglog_throttle("ssao_skipped"))
+			dbglog("[PostFX] DrawSSAO: multiply composite SKIPPED (AO buffer near-black — fail-open)");
 
 		ImmediateModeRenderStatesReStore();
+		if(rawGeomSaved){
+			RestoreRawGeomStates(rawGeom);
+			rawGeomSaved = false;
+		}
 		dbglog("[PostFX] DrawSSAO completed successfully");
 	} __except(EXCEPTION_EXECUTE_HANDLER){
+		overrideIm2dPixelShader = nil;	// SEH: the `= nil` reset in the __try above is skipped on fault
+
 		dbglog("[PostFX] DrawSSAO CRASHED exception=0x%08X", GetExceptionCode());
 		DepthHook_Restore(); // Restore depth hook on bail to keep Suspend/Restore balanced
+		// ReStore BEFORE the raw restore (same order as the normal exit): a fault
+		// between the composite's rw SRCBLEND=ZERO/DESTBLEND=SRCCOLOR sets and
+		// their restore left the rw cache holding the multiply factors — the raw
+		// restore alone cannot fix layer (1), and the next RwIm2D draw re-emits
+		// the cached ZERO/SRCCOLOR over the world pass.
+		if(imStored)
+			ImmediateModeRenderStatesReStore();
+		if(rawGeomSaved)
+			RestoreRawGeomStates(rawGeom);
 	}
 }
 
@@ -2976,6 +4280,11 @@ static void DrawSSAO_Overhaul(void)
 		CPostEffects::DrawSSAO();
 		return;
 	}
+
+	// Declared before __try so the __except path can restore them too
+	DWORD rawGeom[9];
+	bool rawGeomSaved = false;
+	bool imStored = false; // set after ImmediateModeRenderStatesStore
 
 	__try {
 		IDirect3DDevice9 *dev = d3d9device;
@@ -3005,10 +4314,14 @@ static void DrawSSAO_Overhaul(void)
 			if(!g_ssaoOutputRaster){ dbglog("[PostFX] DrawSSAO_Overhaul bailing: output raster creation failed"); return; }
 		}
 
+		// Save raw geometry states BEFORE Suspend (it writes raw ZENABLE)
+		rawGeomSaved = SaveRawGeomStates(rawGeom);
+
 		// Suspend depth hook so g_ssaoDepthTex can be sampled (INTZ not bound as DS)
 		DepthHook_Suspend();
 
 		CPostEffects::ImmediateModeRenderStatesStore();
+		imStored = true;
 		CPostEffects::ImmediateModeRenderStatesSet();
 
 		RwRaster *origRaster = camRas;
@@ -3074,9 +4387,14 @@ static void DrawSSAO_Overhaul(void)
 
 		// c0: {radius, power, noiseScale, temporalBlend}
 		// temporalBlend is the HISTORY weight (SSAO_Temporal.hlsl lerps toward
-		// historyOcclusion by this value), so it only applies when BOTH SSAO
-		// history and prev-depth history are valid; fallback to 0.0 = no history.
-		float c0Temporal[4] = { radius, power, noiseScale, (g_ssaoHistoryValid && g_prevDepthValid) ? config->ssaoTemporalBlend : 0.0f };
+		// historyOcclusion by this value), so it only applies when Temporal is
+		// ON AND both SSAO history and prev-depth history are valid; otherwise
+		// 0.0 = no history. This is the ONLY in-function temporal-accumulation
+		// switch (the function never reads ssaoTemporalEnable elsewhere), and
+		// the dispatch now routes blurPasses>0 here even with Temporal OFF —
+		// gating on the flag keeps OFF = pure current-frame AO, no ghosting.
+		float c0Temporal[4] = { radius, power, noiseScale,
+			(config->ssaoTemporalEnable && g_ssaoHistoryValid && g_prevDepthValid) ? config->ssaoTemporalBlend : 0.0f };
 		RwD3D9SetPixelShaderConstant(0, c0Temporal, 1);
 		// c1: {quarterW, quarterH, 1/quarterW, 1/quarterH}
 		float c1Temporal[4] = { (float)g_ssaoQuarterW, (float)g_ssaoQuarterH, 1.0f/max((float)g_ssaoQuarterW, 1e-7f), 1.0f/max((float)g_ssaoQuarterH, 1e-7f) };
@@ -3087,8 +4405,12 @@ static void DrawSSAO_Overhaul(void)
 		float c4History[4] = { (float)g_prevDepthValid, 0.05f, (float)g_normalHistoryValid, 0.0f };
 		RwD3D9SetPixelShaderConstant(4, c4History, 1);
 
+		// Quarter-res RT needs quarter-sized white quad (colorfilterVerts are a
+		// 2048x2048 quad whose UVs would sample only a corner of the depth map).
+		SetupFullscreenQuad((float)g_ssaoQuarterW, (float)g_ssaoQuarterH);
+
 		overrideIm2dPixelShader = SSAO_Temporal;
-		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
+		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, s_ffQuad, 4, s_ffQuadIdx, 6);
 		overrideIm2dPixelShader = nil;
 
 		RwCameraEndUpdate(Scene.camera);
@@ -3128,8 +4450,9 @@ static void DrawSSAO_Overhaul(void)
 			// c2: projInfo
 			RwD3D9SetPixelShaderConstant(2, projInfo, 1);
 
+			SetupFullscreenQuad((float)g_ssaoQuarterW, (float)g_ssaoQuarterH);
 			overrideIm2dPixelShader = SSAO_BilateralBlur;
-			RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
+			RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, s_ffQuad, 4, s_ffQuadIdx, 6);
 			overrideIm2dPixelShader = nil;
 
 			RwCameraEndUpdate(Scene.camera);
@@ -3165,8 +4488,9 @@ static void DrawSSAO_Overhaul(void)
 			// c2: projInfo
 			RwD3D9SetPixelShaderConstant(2, projInfo, 1);
 
+			SetupFullscreenQuad((float)g_ssaoQuarterW, (float)g_ssaoQuarterH);
 			overrideIm2dPixelShader = SSAO_BilateralBlur;
-			RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
+			RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, s_ffQuad, 4, s_ffQuadIdx, 6);
 			overrideIm2dPixelShader = nil;
 
 			RwCameraEndUpdate(Scene.camera);
@@ -3180,6 +4504,15 @@ static void DrawSSAO_Overhaul(void)
 		RwCameraEndUpdate(Scene.camera);
 		RwCameraSetRaster(Scene.camera, g_ssaoOutputRaster);
 		RwCameraBeginUpdate(Scene.camera);
+
+		// White-clear output so a failed upsample degrades to "no AO", never
+		// black garbage through the multiply composite.
+		dev->Clear(0, NULL, D3DCLEAR_TARGET, 0xFFFFFFFF, 1.0f, 0);
+
+		// Capture the AO output surface while bound for the post-pass readback
+		// validation (fail-open gate on the multiply composite below).
+		IDirect3DSurface9 *aoRT = NULL;
+		dev->GetRenderTarget(0, &aoRT);
 
 		RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
 		RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
@@ -3206,8 +4539,12 @@ static void DrawSSAO_Overhaul(void)
 		float c2Up[4] = { (float)g_ssaoQuarterW, (float)g_ssaoQuarterH, 1.0f/max((float)g_ssaoQuarterW, 1e-7f), 1.0f/max((float)g_ssaoQuarterH, 1e-7f) };
 		RwD3D9SetPixelShaderConstant(2, c2Up, 1);
 
+		// Full-res RT: white quad sized to the camera raster (same UV fix as
+		// the temporal pass; composite below reuses it).
+		SetupFullscreenQuad((float)w, (float)h);
+
 		overrideIm2dPixelShader = SSAO_Upsample;
-		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
+		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, s_ffQuad, 4, s_ffQuadIdx, 6);
 		overrideIm2dPixelShader = nil;
 
 		RwCameraEndUpdate(Scene.camera);
@@ -3228,19 +4565,49 @@ static void DrawSSAO_Overhaul(void)
 		DepthHook_Restore();
 
 		// =====================================================================
-		// Composite: multiply blend SSAO onto scene
+		// Composite: multiply blend SSAO onto scene (Photoshop multiply:
+		// final = scene x ao, white = no occlusion). Fail-open on a
+		// near-black AO readback — see ValidateSSAOOutput.
 		// =====================================================================
-		RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-		RwD3D9SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ZERO);
-		RwD3D9SetRenderState(D3DRS_DESTBLEND, D3DBLEND_SRCCOLOR);
-		RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
-		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, g_ssaoOutputRaster);
+		bool aoOk = ValidateSSAOOutput(aoRT);
+		if(dbglog_throttle("ssao_ov_comp"))
+			dbglog("[PostFX] DrawSSAO_Overhaul composite: raster=%p aoOk=%d",
+				g_ssaoOutputRaster, (int)aoOk);
+		if(aoRT){ aoRT->Release(); aoRT = NULL; }
 
-		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
+		if(aoOk){
+			// Blend factors through the RW cache FIRST (RwIm2D re-emits cached
+			// states at draw time and would clobber raw-only D3D9 factors),
+			// then mirror them raw immediately before the draw — same contract
+			// as DrawSSAO's composite.
+			RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
+			RwRenderStateSet(rwRENDERSTATETEXTURERASTER, g_ssaoOutputRaster);
+			RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
+			RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDZERO);        // src factor dropped
+			RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDSRCCOLOR);   // dest x src = multiply
+			RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+			RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+			RwD3D9SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ZERO);
+			RwD3D9SetRenderState(D3DRS_DESTBLEND, D3DBLEND_SRCCOLOR);
 
-		RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+			// White RT-sized quad — NOT colorfilterVerts (their emissiveColor is 0
+			// under COLORFILTER_MODERN, which modulates SSAO to black).
+			RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, s_ffQuad, 4, s_ffQuadIdx, 6);
+
+			// Restore blend defaults through the RW cache (keep it coherent
+			// with the D3D9 state before ImmediateModeRenderStatesReStore)
+			RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
+			RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
+			RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
+			RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+		}else if(dbglog_throttle("ssao_ov_skip"))
+			dbglog("[PostFX] DrawSSAO_Overhaul: multiply composite SKIPPED (AO buffer near-black — fail-open)");
 
 		CPostEffects::ImmediateModeRenderStatesReStore();
+		if(rawGeomSaved){
+			RestoreRawGeomStates(rawGeom);
+			rawGeomSaved = false;
+		}
 
 		// Swap frame index and mark history valid
 		g_ssaoFrameIndex = otherIdx;
@@ -3251,8 +4618,18 @@ static void DrawSSAO_Overhaul(void)
 		// Debug dump: after SSAO composite
 		DumpCurrentRT("after_ssao");
 	} __except(EXCEPTION_EXECUTE_HANDLER){
+		overrideIm2dPixelShader = nil;	// SEH: the `= nil` reset in the __try above is skipped on fault
+
 		dbglog("[PostFX] DrawSSAO_Overhaul CRASHED exception=0x%08X", GetExceptionCode());
 		DepthHook_Restore(); // Restore depth hook on bail to keep Suspend/Restore balanced
+		// Same three-layer contract gap as DrawSSAO: the rw cache can be left
+		// holding the multiply-composite factors (SRCBLEND=ZERO/DESTBLEND=
+		// SRCCOLOR) if the fault lands between the composite and its restore —
+		// ReStore layer (1) first, then the raw snapshot.
+		if(imStored)
+			CPostEffects::ImmediateModeRenderStatesReStore();
+		if(rawGeomSaved)
+			RestoreRawGeomStates(rawGeom);
 	}
 }
 
@@ -3312,14 +4689,40 @@ static IDirect3DTexture9 *GetIBLTexture(void)
 {
 	IDirect3DDevice9 *dev = d3d9device;
 	if(!dev) return NULL;
-	if(g_iblTex) return g_iblTex;
 
-	RwRaster *camRas = RwCameraGetRaster(Scene.camera);
-	if(!camRas) return NULL;
-	int w = camRas->width / 4;
-	int h = camRas->height / 4;
+	// Size from the trusted screen-size cache: a live Scene.camera read here
+	// can hit a transient non-screen raster (measured 2048x1024 during PBR
+	// geometry => this texture was allocated 512x256 instead of 480x270, see
+	// GetScreenSize). Fall back to the live read only before the first
+	// postfx capture of the session.
+	int scrW = 0, scrH = 0;
+	if(!GetScreenSize(&scrW, &scrH)){
+		RwRaster *camRas = Scene.camera ? RwCameraGetRaster(Scene.camera) : NULL;
+		if(!camRas) return NULL;
+		scrW = camRas->width;
+		scrH = camRas->height;
+	}
+	int w = scrW / 4;
+	int h = scrH / 4;
 	if(w < 16) w = 16;
 	if(h < 16) h = 16;
+
+	// Self-heal: a texture allocated inside a transient window keeps the wrong
+	// aspect for the whole session, and RenderIBLBuffer derives its viewport
+	// from the (now correct) screen size each frame — viewport/texture would
+	// never match. Recreate instead of silently reusing the mismatched one.
+	if(g_iblTex){
+		D3DSURFACE_DESC desc = {};
+		bool sizeOk = SUCCEEDED(g_iblTex->GetLevelDesc(0, &desc)) &&
+		              (int)desc.Width == w && (int)desc.Height == h;
+		if(sizeOk)
+			return g_iblTex;
+		dbglog("[PostFX] GetIBLTexture: mis-sized %ux%u -> %dx%d (transient camRas read at creation)",
+			desc.Width, desc.Height, w, h);
+		if(g_iblSurf){ g_iblSurf->Release(); g_iblSurf = NULL; }
+		g_iblTex->Release();
+		g_iblTex = NULL;
+	}
 
 	if(FAILED(dev->CreateTexture(w, h, 1, D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &g_iblTex, NULL)))
 		return NULL;
@@ -3365,8 +4768,14 @@ void RenderIBLBuffer(void)
 	if(!dev) return;
 	if(!iblLogged){ dbglog("RenderIBL: OK tex=%p surf=%p", tex, g_iblSurf); iblLogged=1; }
 
-	int rtW = camRas->width / 4;
-	int rtH = camRas->height / 4;
+	// Viewport size MUST come from the same source GetIBLTexture sized the
+	// texture with (trusted screen cache, live read only as pre-capture
+	// fallback) — otherwise a texture allocated inside a transient camRas
+	// window is rendered into with a viewport that never matches it.
+	int scrW = camRas->width, scrH = camRas->height;
+	GetScreenSize(&scrW, &scrH);
+	int rtW = scrW / 4;
+	int rtH = scrH / 4;
 	if(rtW < 16) rtW = 16;
 	if(rtH < 16) rtH = 16;
 
@@ -3384,7 +4793,7 @@ void RenderIBLBuffer(void)
 	D3DVIEWPORT9 iblVP = { 0, 0, (DWORD)rtW, (DWORD)rtH, 0.0f, 1.0f };
 	dev->SetViewport(&iblVP);
 
-	float screenP[4] = { (float)camRas->width, (float)camRas->height, 1.0f/max((float)camRas->width, 1e-7f), 1.0f/max((float)camRas->height, 1e-7f) };
+	float screenP[4] = { (float)scrW, (float)scrH, 1.0f/max((float)scrW, 1e-7f), 1.0f/max((float)scrH, 1e-7f) };
 	RwD3D9SetPixelShaderConstant(0, screenP, 1);
 
 	// Sky colors from timecycle (zenith = sky top, horizon = sky bottom)
@@ -3462,6 +4871,8 @@ void RenderIBLBuffer(void)
 	RwD3D9SetPixelShaderConstant(7, fogC, 1);
 
 	// Render fullscreen quad with IBL shader
+	DWORD rawGeom[9];
+	bool rawGeomSaved = SaveRawGeomStates(rawGeom); // before Store (raw Set below)
 	CPostEffects::ImmediateModeRenderStatesStore();
 	CPostEffects::ImmediateModeRenderStatesSet();
 	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERNEAREST);
@@ -3476,6 +4887,10 @@ void RenderIBLBuffer(void)
 	overrideIm2dPixelShader = nil;
 
 	CPostEffects::ImmediateModeRenderStatesReStore();
+	if(rawGeomSaved){
+		RestoreRawGeomStates(rawGeom);
+		rawGeomSaved = false;
+	}
 
 	// Restore old render target and viewport
 	dev->SetViewport(&oldVP);
@@ -3522,6 +4937,19 @@ static IDirect3DTexture9* GetNormalBufferTexture(void)
 	s_normalBufW = w;
 	s_normalBufH = h;
 
+	// A D3DPOOL_DEFAULT render target starts as driver garbage: sampling it
+	// feeds random normals into main_building's screen-normal blend -> GGX
+	// blowout ("white ground patches", see the s4 gate note in
+	// buildingPipe.cpp). Clear to the invalid-normal marker: RGB 0x808080
+	// decodes to (0,0,0) which fails every normal-length validity gate
+	// (main_building lerp-out, SSAO's unit-length window -> depth-derivative
+	// fallback), alpha 0 = "no depth" (NormalBuffer.hlsl writes depth/far).
+	// ColorFill targets THIS surface directly — dev->Clear would hit whatever
+	// RT happens to be bound.
+	if(g_normalBufferSurf)
+		dev->ColorFill(g_normalBufferSurf, NULL, D3DCOLOR_ARGB(0, 0x80, 0x80, 0x80));
+	g_normalBufferHasContent = false;
+
 	// Wave-2: lazy-create prev-normal history texture (half-res, same dims/format as main)
 	if(!g_prevNormalTex){
 		if(FAILED(dev->CreateTexture(w, h, 1, D3DUSAGE_RENDERTARGET,
@@ -3560,8 +4988,45 @@ static IDirect3DTexture9* GetPipeChainTexture(int idx)
 	return *tex;
 }
 
+// Fail-open classify pack for PipeChain pass 3: a 1x1 A8R8G8B8 texture
+// cleared to 0 (pack.y/z = 0 => the pass3 gate skips reflection entirely).
+// Used when the geometry-classify RT was never created this frame (zero
+// classify draws) — sampling an unbound s4 yields undefined values in
+// SM3.0 and garbage gloss/spec passed the >0.001 gate as ink-blot
+// reflections. pack 0 = "no reflection by design", same as a real clear.
+static IDirect3DTexture9*
+GetPipeChainNoPackTex(void)
+{
+	static IDirect3DTexture9 *noPackTex = NULL;
+	static bool noPackLogDone = false;
+	IDirect3DDevice9 *dev = d3d9device;
+	if(!dev)
+		return NULL;
+	if(!noPackTex){
+		if(FAILED(dev->CreateTexture(1, 1, 1, 0, D3DFMT_A8R8G8B8,
+			D3DPOOL_MANAGED, &noPackTex, NULL))){
+			noPackTex = NULL;
+			return NULL;
+		}
+		D3DLOCKED_RECT lr;
+		if(SUCCEEDED(noPackTex->LockRect(0, &lr, NULL, 0))){
+			*(DWORD*)lr.pBits = 0x00000000; // pack = 0
+			noPackTex->UnlockRect(0);
+		}
+	}
+	if(!noPackLogDone){
+		dbglog("[PipeChain] no-pack dummy created %p", noPackTex);
+		noPackLogDone = true;
+	}
+	return noPackTex;
+}
+
 void DrawNormalBufferToTexture(void)
 {
+	// Invalidate first: any early-out below means this frame did NOT refresh
+	// the buffer, so consumers must stop binding it (stale/garbage normals ->
+	// GGX blowout). Re-set to true only after a completed write.
+	g_normalBufferHasContent = false;
 	if(!config->normalBufferEnable || !NormalBufferShader)
 		return;
 
@@ -3620,6 +5085,9 @@ void DrawNormalBufferToTexture(void)
 	// Set depth texture on stage 0 only (single-pass depth reconstruction)
 	// Suspend depth hook so the INTZ depth can be sampled while not bound as DS
 	// (mirrors DrawSSAO) — otherwise the depth texture is feedback-locked.
+	// Save raw geom states BEFORE Suspend (it raw-writes ZENABLE).
+	DWORD rawGeom[9];
+	bool rawGeomSaved = SaveRawGeomStates(rawGeom); // before Suspend + Store below
 	__try {
 		DepthHook_Suspend();
 		dev->SetTexture(0, g_ssaoDepthTex);
@@ -3637,17 +5105,39 @@ void DrawNormalBufferToTexture(void)
 		RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
 		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
 
+		// RT-sized white quad with UV 0..1 — NOT colorfilterVerts. The game's
+		// quad is a hardcoded 2048x2048 (positions 0..2048, UV 0..1); this
+		// pass rasterizes into the HALF-RES viewport (w/2 x h/2 = 960x540),
+		// which clips it at pixel 960x540 -> the shader only ever saw depth
+		// UVs 0..0.469 x 0..0.264. The whole normal buffer therefore held the
+		// screen's top-left ~47%x26% region and every consumer reading it at
+		// full-screen UV (SSAO's hemisphere orientation, PipeChain edge
+		// detection, the pipes' s4 normal blend) got normals from the wrong
+		// place — garbled AO that read as "inverted" (dark open areas, bright
+		// edges). UV is resolution-independent, so a quad spanning the RT with
+		// UV 0..1 maps depth 1:1 onto the half-res buffer.
+		SetupFullscreenQuad((float)nbW, (float)nbH);
 		overrideIm2dPixelShader = NormalBufferShader;
-		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
+		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, s_ffQuad, 4, s_ffQuadIdx, 6);
 		overrideIm2dPixelShader = nil;
 
+		// Unbind INTZ from s0 BEFORE the hook re-binds it as DS (feedback-lock
+		// guard, mirrors DrawSSAO/DrawHeightFog); the cleanup below stays as-is.
+		dev->SetTexture(0, NULL);
 		// Restore depth hook (re-binds INTZ as DS, re-enables Z)
 		DepthHook_Restore();
 	} __except(EXCEPTION_EXECUTE_HANDLER){
+		overrideIm2dPixelShader = nil;	// SEH: the `= nil` reset in the __try above is skipped on fault
+
+		dev->SetTexture(0, NULL); // same unbind before the bail-out Restore
 		DepthHook_Restore(); // keep Suspend/Restore balanced on fault
 	}
 
 	CPostEffects::ImmediateModeRenderStatesReStore();
+	if(rawGeomSaved){
+		RestoreRawGeomStates(rawGeom);
+		rawGeomSaved = false;
+	}
 
 	// Cleanup
 	dev->SetTexture(0, NULL);
@@ -3658,6 +5148,11 @@ void DrawNormalBufferToTexture(void)
 	dev->SetDepthStencilSurface(oldDS);
 	if(oldRT) oldRT->Release();
 	if(oldDS) oldDS->Release();
+
+	// Full write completed — the buffer now holds one valid frame of normals
+	// (consumed by next frame's geometry draws, see the s4 bind gate in
+	// buildingPipe.cpp).
+	g_normalBufferHasContent = true;
 
 	// Wave-2: copy current normals to previous-frame history (half-res)
 	if(g_normalBufferTex && g_prevNormalTex && g_prevNormalSurf){
@@ -3673,26 +5168,252 @@ void DrawNormalBufferToTexture(void)
 	}
 }
 
+// ============================================================
+// PipeChain classify buffer — full-res RGBA8 pack emitted by the PBR
+// geometry pipes (building/vehicle) and consumed by PipeChain pass 3
+// for the BRDF-weighted screen-space reflection.
+// Pack layout (0..1 floats stored to 8-bit):
+//   R = surfaceType/255 (reserved), G = glossiness,
+//   B = specular/F0,     A = metallicness
+// Cleared to 0 at creation and after consumption each frame => pixels
+// never drawn (sky/background) keep weight 0.
+// ============================================================
+static IDirect3DTexture9 *g_pipeChainClassifyTex = NULL;
+static IDirect3DSurface9 *g_pipeChainClassifySurf = NULL;
+static int s_classifyW = 0, s_classifyH = 0;
+static IDirect3DSurface9 *s_classifyOldRT = NULL;
+static void *s_classifyVtxAlpha = NULL;
+static void *s_classifyFog = NULL;
+static void *s_classifyZWrite = NULL;
+static int s_classifyBegins = 0; // PipeChain_ClassifyBegin successes this frame (grab+reset at DrawPipeChain entry)
+
+// CRITICAL-1: Reset release for the classify RT — called from
+// ReleaseDefaultPoolResources (~:3130), which appears BEFORE these statics
+// in the file (hence the forward declaration there). SafeRelease pattern
+// matches the g_pipeChainTexA/B neighbors; s_classifyOldRT/VtxAlpha/Fog/
+// ZWrite are transient per-draw grabs (always released by ClassifyEnd
+// within the same draw), so only tex+surf+size need the Reset treatment.
+static void ReleasePipeChainClassifyResources(void)
+{
+	if(g_pipeChainClassifySurf){ g_pipeChainClassifySurf->Release(); g_pipeChainClassifySurf = NULL; }
+	if(g_pipeChainClassifyTex){ g_pipeChainClassifyTex->Release(); g_pipeChainClassifyTex = NULL; }
+	s_classifyW = 0;
+	s_classifyH = 0;
+}
+
+static IDirect3DSurface9 *
+GetPipeChainClassifySurf(void)
+{
+	IDirect3DDevice9 *dev = d3d9device;
+	if(!dev || !Scene.camera)
+		return NULL;
+	// Pack size comes from the trusted screen-size cache (GetScreenSize) —
+	// this runs from the GEOMETRY pipes, where Scene.camera's raster can be a
+	// transient non-screen raster (measured: live read alternated
+	// 2048x1024 / 1920x1080 twice per frame, so this RT was destroyed and
+	// recreated — and CLEARED — twice per frame for the whole PBR window).
+	// DrawPipeChain, the consumer of this pack (PipeChain pass 3 samples it
+	// with screen UVs), refreshes the cache at postfx time where the main
+	// camera is verified on-screen, so pack size always matches the screen
+	// the consumer draws with. Live read only as pre-capture fallback.
+	int w = 0, h = 0;
+	if(!GetScreenSize(&w, &h)){
+		RwRaster *camRas = RwCameraGetRaster(Scene.camera);
+		if(!camRas)
+			return NULL;
+		w = camRas->width;
+		h = camRas->height;
+	}
+	if(w < 1 || h < 1)
+		return NULL;
+	// Res-aware: recreate on camera resolution change
+	if(g_pipeChainClassifyTex && (w != s_classifyW || h != s_classifyH)){
+		if(g_pipeChainClassifySurf){ g_pipeChainClassifySurf->Release(); g_pipeChainClassifySurf = NULL; }
+		g_pipeChainClassifyTex->Release();
+		g_pipeChainClassifyTex = NULL;
+	}
+	if(!g_pipeChainClassifyTex){
+		if(FAILED(dev->CreateTexture(w, h, 1, D3DUSAGE_RENDERTARGET,
+			D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &g_pipeChainClassifyTex, NULL)))
+			return NULL;
+		if(FAILED(g_pipeChainClassifyTex->GetSurfaceLevel(0, &g_pipeChainClassifySurf))){
+			g_pipeChainClassifyTex->Release();
+			g_pipeChainClassifyTex = NULL;
+			return NULL;
+		}
+		s_classifyW = w;
+		s_classifyH = h;
+		// start from a clean pack (0 = no reflection)
+		IDirect3DSurface9 *prevRT = NULL;
+		dev->GetRenderTarget(0, &prevRT);
+		dev->SetRenderTarget(0, g_pipeChainClassifySurf);
+		dev->Clear(0, NULL, D3DCLEAR_TARGET, 0x00000000, 1.0f, 0.0f);
+		dev->SetRenderTarget(0, prevRT);
+		if(prevRT) prevRT->Release();
+		dbglog("[PipeChain] classify RT created %dx%d", w, h);
+	}
+	return g_pipeChainClassifySurf;
+}
+
+// ---- Classify begin/end -------------------------------------------------
+// Called by the PBR geometry pipes around a second draw of the SAME mesh
+// with PipeChainShader forced on as the PS (c0.x = 9 pack mode). The depth
+// stencil stays bound, so ZTEST against the just-written depth resolves
+// occlusion (classify runs AFTER the main draw); ZWRITE stays off so the
+// main depth buffer is untouched. Fail-open: any inactive gate = no-op.
+bool PipeChain_ClassifyBegin(float surfaceType, float gloss, float spec, float metal)
+{
+	// HIGH-4: match the consumer dispatch gate (postfx ~:2624 pipeChainEnable
+	// && normalBufferEnable) — without normalBufferEnable the classify pack
+	// was written but DrawPipeChain never consumed it (wasted RT + second
+	// draw per mesh).
+	if(!config || !config->pipeChainEnable || !config->normalBufferEnable || !PipeChainShader)
+		return false;
+	if(gRenderingSpheremap || IsGameInMenuOrPaused())
+		return false;
+	IDirect3DSurface9 *classifySurf = GetPipeChainClassifySurf();
+	if(!classifySurf || !d3d9device)
+		return false;
+
+	s_classifyOldRT = NULL;
+	d3d9device->GetRenderTarget(0, &s_classifyOldRT);
+	if(!s_classifyOldRT)
+		return false;
+	d3d9device->SetRenderTarget(0, classifySurf);
+
+	// Pack must arrive unblended, unfogged, no depth write. RW cache + raw
+	// mirrors (pipeEnterAlphaMode raw writes can desync the two layers).
+	RwRenderStateGet(rwRENDERSTATEVERTEXALPHAENABLE, &s_classifyVtxAlpha);
+	RwRenderStateGet(rwRENDERSTATEFOGENABLE, &s_classifyFog);
+	RwRenderStateGet(rwRENDERSTATEZWRITEENABLE, &s_classifyZWrite);
+	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
+	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
+	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
+	RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+	RwD3D9SetRenderState(D3DRS_FOGENABLE, FALSE);
+	RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+
+	// c0.x = 9 selects pack mode in PipeChain.hlsl; c1 = pack floats.
+	float flagP[4] = { 9.0f, 0.0f, 0.0f, 0.0f };
+	float cl = surfaceType < 0.0f ? 0.0f : (surfaceType > 255.0f ? 255.0f : surfaceType) / 255.0f;
+	float gl = gloss < 0.0f ? 0.0f : (gloss > 1.0f ? 1.0f : gloss);
+	float sp = spec  < 0.0f ? 0.0f : (spec  > 1.0f ? 1.0f : spec);
+	float mt = metal < 0.0f ? 0.0f : (metal > 1.0f ? 1.0f : metal);
+	float packP[4] = { cl, gl, sp, mt };
+	RwD3D9SetPixelShaderConstant(0, flagP, 1);
+	RwD3D9SetPixelShaderConstant(1, packP, 1);
+	RwD3D9SetPixelShader(PipeChainShader);
+	s_classifyBegins++; // diagnostic: proves classify landed this frame
+	return true;
+}
+
+void PipeChain_ClassifyEnd(void)
+{
+	if(!s_classifyOldRT)
+		return;
+	// Restore RW cache first, then raw mirrors to match (covers the case
+	// where the cache value didn't change but we forced the device).
+	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, s_classifyVtxAlpha);
+	RwRenderStateSet(rwRENDERSTATEFOGENABLE, s_classifyFog);
+	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, s_classifyZWrite);
+	RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, s_classifyVtxAlpha == (void*)FALSE ? FALSE : TRUE);
+	RwD3D9SetRenderState(D3DRS_FOGENABLE, s_classifyFog == (void*)FALSE ? FALSE : TRUE);
+	RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, s_classifyZWrite == (void*)FALSE ? FALSE : TRUE);
+	d3d9device->SetRenderTarget(0, s_classifyOldRT);
+	s_classifyOldRT->Release();
+	s_classifyOldRT = NULL;
+	// NOTE: caller re-sets its own pixel shader (Begin forced PipeChainShader).
+}
+
 void DrawPipeChain(void)
 {
-	if(!config->pipeChainEnable || !PipeChainShader)
+	// Grab-and-reset BEFORE any gate: geometry classify runs earlier in the
+	// frame than this postfx entry, so this snapshot is "begins this frame".
+	// (Resetting inside the throttled pc_ok log accumulated across many
+	// frames — the 43503 vs 635 mismatch.)
+	int classifyBegins = s_classifyBegins;
+	s_classifyBegins = 0;
+
+	if(!config->pipeChainEnable || !PipeChainShader){
+		if(dbglog_throttle("pc_g1"))
+			dbglog("[PipeChain] skip: enable=%d shader=%p",
+				config ? config->pipeChainEnable : -1, PipeChainShader);
 		return;
-	if(!config->normalBufferEnable || !g_normalBufferTex)
+	}
+	if(!config->normalBufferEnable || !g_normalBufferTex){
+		if(dbglog_throttle("pc_g2"))
+			dbglog("[PipeChain] skip: normalBufferEnable=%d tex=%p",
+				config ? config->normalBufferEnable : -1, g_normalBufferTex);
 		return;
-	if(!g_ssaoDepthTex) return;
+	}
+	if(!g_ssaoDepthTex){
+		if(dbglog_throttle("pc_g3")) dbglog("[PipeChain] skip: no depth texture");
+		return;
+	}
 
 	IDirect3DTexture9 *texA = GetPipeChainTexture(0);
 	IDirect3DTexture9 *texB = GetPipeChainTexture(1);
-	if(!texA || !texB || !g_pipeChainSurfA || !g_pipeChainSurfB) return;
+	if(!texA || !texB || !g_pipeChainSurfA || !g_pipeChainSurfB){
+		if(dbglog_throttle("pc_g4")) dbglog("[PipeChain] skip: ping-pong RTs unavailable");
+		return;
+	}
 	IDirect3DDevice9 *dev = d3d9device;
 	if(!dev) return;
-
 	RwRaster *camRas = RwCameraGetRaster(Scene.camera);
-	if(!camRas){ dbglog("pipeChainBlend: camRas is NULL, skipping"); return; }
+	if(!camRas){
+		if(dbglog_throttle("pc_g5"))
+			dbglog("[PipeChain] skip: camRas NULL");
+		return;
+	}
+	// Second trusted capture point (postfx time, main camera on-screen) —
+	// refreshes the cache the geometry-phase classify RT sizes itself from.
+	CaptureScreenSize(camRas);
+	// Pass 0-3 read pRasterFrontBuffer as scene source — without it the whole
+	// chain (and env sampling) runs on a never-written padded raster.
+	if(!CPostEffects::pRasterFrontBuffer){
+		if(dbglog_throttle("pc_g6")) dbglog("[PipeChain] skip: pRasterFrontBuffer NULL");
+		return;
+	}
+
+	// Sync the front buffer BEFORE the chain samples it: passes 0-2 read
+	// pRasterFrontBuffer as the scene source, and a stale/never-written
+	// front buffer feeds the whole chain (including the classify composite)
+	// junk — the other front-buffer consumers (motion blur, height fog)
+	// already re-sync at their entry points.
+	CPostEffects::UpdateFrontBuffer();
+
+	// Force-create the classify RT now (it was lazily created only inside
+	// PipeChain_ClassifyBegin, so frames with zero classify draws reached
+	// pass 3 with s4 unbound). Creation clears to pack 0 = no reflection.
+	GetPipeChainClassifySurf();
+
+	// Screen-space quad sized to the camera raster (UV 0..1). The old
+	// colorfilterVerts are a hardcoded 2048² quad — their /2048 UVs misalign
+	// every screen-sized buffer (depth/normal) below 2048px.
+	SetupFullscreenQuad((float)camRas->width, (float)camRas->height);
+
 	float screenP[4] = { (float)camRas->width, (float)camRas->height,
 		1.0f/max((float)camRas->width, 1e-7f), 1.0f/max((float)camRas->height, 1e-7f) };
-	float projP[4] = { 1.0f, 1.0f, 1.0f, 0.0f };
+	// c3: front-buffer UV scale — s0 is the padded 2048² front buffer while
+	// depth/normal/classify are screen-sized (raw UV).
+	float fbParams[4] = { 1.0f, 1.0f, 0.0f, 0.0f };
+	if(CPostEffects::pRasterFrontBuffer){
+		fbParams[0] = (float)camRas->width  / max((float)CPostEffects::pRasterFrontBuffer->width,  1.0f);
+		fbParams[1] = (float)camRas->height / max((float)CPostEffects::pRasterFrontBuffer->height, 1.0f);
+	}
+	// c4: real projection info for pass 3's view-space reflection
+	// (the old c1 upload was junk {1,1,1,0} and nothing consumed it).
+	RwCamera *cam = Scene.camera;
+	float nf = cam->farPlane - cam->nearPlane;
+	if(nf < 1e-7f) nf = 1e-7f;
+	float proj4[4] = {
+		cam->recipViewWindow.x, cam->recipViewWindow.y,
+		-cam->nearPlane * cam->farPlane / nf,
+		    cam->farPlane / nf
+	};
 
+	DWORD rawGeom[9];
+	bool rawGeomSaved = SaveRawGeomStates(rawGeom); // before Store and the DepthHook below
 	CPostEffects::ImmediateModeRenderStatesStore();
 	CPostEffects::ImmediateModeRenderStatesSet();
 	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
@@ -3705,115 +5426,191 @@ void DrawPipeChain(void)
 	IDirect3DSurface9 *oldDS = NULL;
 	dev->GetRenderTarget(0, &oldRT);
 	dev->GetDepthStencilSurface(&oldDS);
+	if(!oldRT){
+		CPostEffects::ImmediateModeRenderStatesReStore();
+		if(rawGeomSaved){
+			RestoreRawGeomStates(rawGeom);
+			rawGeomSaved = false;
+		}
+		if(oldDS) oldDS->Release();
+		return;
+	}
 
-	// ---- Pass 0: Input -> texA ----
-	{
-		dev->SetRenderTarget(0, g_pipeChainSurfA);
-		dev->SetDepthStencilSurface(NULL);
-
-		float pipeP[4] = { 0.0f, 0.0f, config->pipeChainIntensity, 0.0f };
-		RwD3D9SetPixelShaderConstant(0, pipeP, 1);
-		RwD3D9SetPixelShaderConstant(1, projP, 1);
-		RwD3D9SetPixelShaderConstant(2, screenP, 1);
-
-		dev->SetTexture(0, NULL);
-		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)CPostEffects::pRasterFrontBuffer);
-
-		// Normal buffer on stage 1
-		dev->SetTexture(1, g_normalBufferTex);
-		dev->SetSamplerState(1, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
-		dev->SetSamplerState(1, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
-
-		// Depth on stage 2 (suspend depth hook so INTZ can be sampled on s2)
-		__try {
+	__try {
+		// Keep the depth hook suspended for the WHOLE chain — pass 3 samples
+		// depth too (the old code restored before pass 3 and fed it junk).
 		DepthHook_Suspend();
-		dev->SetTexture(2, g_ssaoDepthTex);
-		dev->SetSamplerState(2, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
-		dev->SetSamplerState(2, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
 
-		overrideIm2dPixelShader = PipeChainShader;
-		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
-		overrideIm2dPixelShader = nil;
-
-	// ---- Pass 1: Mid-A -> texB ----
-	{
-		dev->SetRenderTarget(0, g_pipeChainSurfB);
-		dev->SetDepthStencilSurface(NULL);
-
-		float pipeP[4] = { 1.0f, 0.0f, config->pipeChainIntensity, 0.0f };
-		RwD3D9SetPixelShaderConstant(0, pipeP, 1);
-		RwD3D9SetPixelShaderConstant(1, projP, 1);
 		RwD3D9SetPixelShaderConstant(2, screenP, 1);
+		RwD3D9SetPixelShaderConstant(3, fbParams, 1);
+		RwD3D9SetPixelShaderConstant(4, proj4, 1);
 
-		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)CPostEffects::pRasterFrontBuffer);
-		dev->SetTexture(1, g_normalBufferTex);
-		dev->SetTexture(2, g_ssaoDepthTex);
-		dev->SetTexture(3, NULL);
+		// ---- Pass 0: Input -> texA ----
+		{
+			dev->SetRenderTarget(0, g_pipeChainSurfA);
+			dev->SetDepthStencilSurface(NULL);
 
-		overrideIm2dPixelShader = PipeChainShader;
-		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
-		overrideIm2dPixelShader = nil;
-	}
+			float pipeP[4] = { 0.0f, 0.0f, config->pipeChainIntensity, 0.0f };
+			RwD3D9SetPixelShaderConstant(0, pipeP, 1);
 
-	// ---- Pass 2: Mid-B -> texA (ping-pong) ----
-	{
-		dev->SetRenderTarget(0, g_pipeChainSurfA);
-		dev->SetDepthStencilSurface(NULL);
+			dev->SetTexture(0, NULL);
+			RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)CPostEffects::pRasterFrontBuffer);
 
-		float pipeP[4] = { 2.0f, 0.0f, config->pipeChainIntensity, 0.0f };
-		RwD3D9SetPixelShaderConstant(0, pipeP, 1);
-		RwD3D9SetPixelShaderConstant(1, projP, 1);
-		RwD3D9SetPixelShaderConstant(2, screenP, 1);
+			// Normal buffer on stage 1
+			dev->SetTexture(1, g_normalBufferTex);
+			dev->SetSamplerState(1, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+			dev->SetSamplerState(1, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
 
-		// Scene on stage 0
-		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)CPostEffects::pRasterFrontBuffer);
-		dev->SetTexture(1, g_normalBufferTex);
-		dev->SetTexture(2, g_ssaoDepthTex);
-		// Intermediate (texB) on stage 3
-		dev->SetTexture(3, texB);
-		dev->SetSamplerState(3, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
-		dev->SetSamplerState(3, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+			// Depth on stage 2 (hook suspended above so INTZ can be sampled)
+			dev->SetTexture(2, g_ssaoDepthTex);
+			dev->SetSamplerState(2, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+			dev->SetSamplerState(2, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
 
-		overrideIm2dPixelShader = PipeChainShader;
-		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
-		overrideIm2dPixelShader = nil;
-	}
+			overrideIm2dPixelShader = PipeChainShader;
+			RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, s_ffQuad, 4, s_ffQuadIdx, 6);
+			overrideIm2dPixelShader = nil;
+		}
 
-	// Restore depth hook after the last depth-sampling pass (Pass 3 doesn't sample depth)
-	DepthHook_Restore();
-	} __except(EXCEPTION_EXECUTE_HANDLER){
-		DepthHook_Restore(); // keep Suspend/Restore balanced on fault
-	}
-	}
+		// ---- Pass 1: Mid-A -> texB ----
+		{
+			dev->SetRenderTarget(0, g_pipeChainSurfB);
+			dev->SetDepthStencilSurface(NULL);
 
-	// ---- Pass 3: Output -> back buffer ----
-	{
-		dev->SetRenderTarget(0, oldRT);
-		dev->SetDepthStencilSurface(oldDS);
+			float pipeP[4] = { 1.0f, 0.0f, config->pipeChainIntensity, 0.0f };
+			RwD3D9SetPixelShaderConstant(0, pipeP, 1);
 
-		float pipeP[4] = { 3.0f, 0.0f, config->pipeChainIntensity, 0.0f };
-		RwD3D9SetPixelShaderConstant(0, pipeP, 1);
-		RwD3D9SetPixelShaderConstant(1, projP, 1);
-		RwD3D9SetPixelShaderConstant(2, screenP, 1);
+			RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)CPostEffects::pRasterFrontBuffer);
+			dev->SetTexture(1, g_normalBufferTex);
+			dev->SetTexture(2, g_ssaoDepthTex);
+			dev->SetTexture(3, NULL);
 
-		// Scene on stage 0
-		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)CPostEffects::pRasterFrontBuffer);
-		dev->SetTexture(1, NULL);
+			overrideIm2dPixelShader = PipeChainShader;
+			RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, s_ffQuad, 4, s_ffQuadIdx, 6);
+			overrideIm2dPixelShader = nil;
+		}
+
+		// ---- Pass 2: Mid-B -> texA (ping-pong) ----
+		{
+			dev->SetRenderTarget(0, g_pipeChainSurfA);
+			dev->SetDepthStencilSurface(NULL);
+
+			float pipeP[4] = { 2.0f, 0.0f, config->pipeChainIntensity, 0.0f };
+			RwD3D9SetPixelShaderConstant(0, pipeP, 1);
+
+			// Scene on stage 0
+			RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)CPostEffects::pRasterFrontBuffer);
+			dev->SetTexture(1, g_normalBufferTex);
+			dev->SetTexture(2, g_ssaoDepthTex);
+			// Intermediate (texB) on stage 3
+			dev->SetTexture(3, texB);
+			dev->SetSamplerState(3, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+			dev->SetSamplerState(3, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+
+			overrideIm2dPixelShader = PipeChainShader;
+			RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, s_ffQuad, 4, s_ffQuadIdx, 6);
+			overrideIm2dPixelShader = nil;
+		}
+
+		// ---- Pass 3: Output -> back buffer (BRDF reflection composite) ----
+		{
+			// DS intentionally NOT re-bound: the depth hook is still suspended
+			// and s2 samples INTZ (binding it as DS again would feedback-lock).
+			// Z-test is off, so no depth buffer is needed for this draw.
+			dev->SetRenderTarget(0, oldRT);
+
+			float pipeP[4] = { 3.0f, 0.0f, config->pipeChainIntensity, 0.0f };
+			RwD3D9SetPixelShaderConstant(0, pipeP, 1);
+
+			RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)CPostEffects::pRasterFrontBuffer);
+			dev->SetTexture(1, g_normalBufferTex);
+			dev->SetTexture(2, g_ssaoDepthTex);
+			// Intermediate (texA) on stage 3
+			dev->SetTexture(3, texA);
+			dev->SetSamplerState(3, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+			dev->SetSamplerState(3, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+			// Classify pack on stage 4 — POINT so gloss/spec don't bleed
+			// across silhouettes. Fall back to a 1x1 pack=0 dummy when the
+			// classify RT doesn't exist: an unbound s4 samples undefined
+			// values in SM3.0 and garbage gloss/spec passes the gate below
+			// as ink-blot reflections (pack 0 = no reflection, fail-open).
+			IDirect3DTexture9 *packTex = g_pipeChainClassifyTex;
+			if(!packTex){
+				packTex = GetPipeChainNoPackTex();
+				if(packTex){
+					if(dbglog_throttle("pc_noclassify"))
+						dbglog("[PipeChain] pass3: classify RT NULL, using pack0 dummy %p", packTex);
+					dev->SetTexture(4, packTex);
+					dev->SetSamplerState(4, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+					dev->SetSamplerState(4, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+					dev->SetSamplerState(4, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
+					dev->SetSamplerState(4, D3DSAMP_MINFILTER, D3DTEXF_POINT);
+				}else{
+					dev->SetTexture(4, NULL); // last resort (dummy creation failed)
+				}
+			}else{
+				dev->SetTexture(4, packTex);
+				dev->SetSamplerState(4, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+				dev->SetSamplerState(4, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+				dev->SetSamplerState(4, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
+				dev->SetSamplerState(4, D3DSAMP_MINFILTER, D3DTEXF_POINT);
+			}
+
+			overrideIm2dPixelShader = PipeChainShader;
+			RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, s_ffQuad, 4, s_ffQuadIdx, 6);
+			overrideIm2dPixelShader = nil;
+		}
+
+		// Unbind INTZ from s2 before the hook re-binds it as DS (feedback-lock
+		// guard, mirrors DrawSSAO_Overhaul/DrawHeightFog); the stage 1-4
+		// cleanup below stays as the belt-and-braces unbind.
 		dev->SetTexture(2, NULL);
-		// Intermediate (texA) on stage 3
-		dev->SetTexture(3, texA);
 
-		overrideIm2dPixelShader = PipeChainShader;
-		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
-		overrideIm2dPixelShader = nil;
+		// Re-bind INTZ as DS before anything else touches sampler/RT state
+		DepthHook_Restore();
+	} __except(EXCEPTION_EXECUTE_HANDLER){
+		overrideIm2dPixelShader = nil;	// SEH: the `= nil` reset in the __try above is skipped on fault
+
+		if(dbglog_throttle("pc_crash"))
+			dbglog("[PipeChain] crashed exception=0x%08X", GetExceptionCode());
+		dev->SetTexture(2, NULL); // same unbind before the bail-out Restore
+		DepthHook_Restore(); // keep Suspend/Restore balanced on fault
+		dev->SetRenderTarget(0, oldRT); // fail-open: leave the frame as-is
+	}
+
+	// Depth: re-assert the pre-chain surface (idempotent when the depth hook
+	// already restored it; covers the no-depthhook fallback path where
+	// pass 1's SetDepthStencilSurface(NULL) unbound the game's real DS).
+	dev->SetDepthStencilSurface(oldDS);
+
+	// Wipe the classify buffer for the NEXT frame (packs are re-emitted by
+	// geometry every frame; stale packs would otherwise leak).
+	if(g_pipeChainClassifySurf){
+		dev->SetRenderTarget(0, g_pipeChainClassifySurf);
+		dev->Clear(0, NULL, D3DCLEAR_TARGET, 0x00000000, 1.0f, 0.0f);
+		dev->SetRenderTarget(0, oldRT);
 	}
 
 	// Cleanup
 	dev->SetTexture(1, NULL);
 	dev->SetTexture(2, NULL);
 	dev->SetTexture(3, NULL);
+	dev->SetTexture(4, NULL);
 
 	CPostEffects::ImmediateModeRenderStatesReStore();
+	if(rawGeomSaved){
+		RestoreRawGeomStates(rawGeom);
+		rawGeomSaved = false;
+	}
+
+	if(oldRT) oldRT->Release();
+	if(oldDS) oldDS->Release();
+
+	if(dbglog_throttle("pc_ok")){
+		dbglog("[PipeChain] ran: intensity=%.2f classify=%p fb=(%.4f,%.4f) classifyBegins=%d",
+			config->pipeChainIntensity, g_pipeChainClassifySurf,
+			fbParams[0], fbParams[1], classifyBegins); // grab+reset at entry: this-frame count
+	}
+
 	// Debug dump: after pipe chain
 	DumpCurrentRT("after_pipechain");
 }
@@ -3865,10 +5662,10 @@ void SMAATryInitRasters(void)
 	void* savedCam = *(void**)0xC9BCC0;
 
 	// ---- SMAA rasters ----
-	if(s_smaaPendingInit && g_smaaEdgeRaster && g_smaaBlendRaster && g_smaaPrevFrameRaster){
-		RwRaster *initRas[] = { g_smaaEdgeRaster, g_smaaBlendRaster, g_smaaPrevFrameRaster };
+	if(s_smaaPendingInit && g_smaaEdgeRaster && g_smaaBlendRaster && g_smaaPrevFrameRaster && g_smaaSceneRaster){
+		RwRaster *initRas[] = { g_smaaEdgeRaster, g_smaaBlendRaster, g_smaaPrevFrameRaster, g_smaaSceneRaster };
 		bool allOk = true;
-		for(int i = 0; i < 3; i++){
+		for(int i = 0; i < 4; i++){
 			RwCameraSetRaster(s_smaaInitCam, initRas[i]);
 			allOk &= (RwCameraBeginUpdate(s_smaaInitCam) != NULL);
 			RwCameraEndUpdate(s_smaaInitCam);
@@ -3917,11 +5714,12 @@ void SMAATryInitRasters(void)
 	}
 }
 
-// SMAA edge-detect pass — extracted for SEH safety.
-// DrawSMAA has C++ objects with destructors in scope (error C2712 prevents __try),
-// so the risky Im2D render call lives here where only POD locals exist.
+// SMAA edge-detect pass — extracted so the draw goes through the guardedIm2DRender
+// choke-point (DrawSMAA itself can't take __try: error C2712) and so depth-hook
+// suspend/restore brackets the draw.
 // Returns true on success, false if the pass faulted (caller skips remaining passes).
-static bool DrawSMAA_EdgeDetect(float smaaThreshold, float cameraMovement, const float screenParams[4])
+static bool DrawSMAA_EdgeDetect(float smaaThreshold, float cameraMovement, const float screenParams[4],
+                                RwIm2DVertex *verts)
 {
 	extern IDirect3DTexture9 *g_ssaoDepthTex;
 	bool depthSuspended = false;
@@ -3943,46 +5741,95 @@ static bool DrawSMAA_EdgeDetect(float smaaThreshold, float cameraMovement, const
 	RwD3D9SetPixelShaderConstant(0, edgeP, 1);
 	RwD3D9SetPixelShaderConstant(1, screenParams, 1);
 
-	// SEH-protected: helper has no C++ objects with destructors (C2712-safe).
-	// Save/restore: DrawSMAA may hoist the flag across passes; do not clobber it.
-	bool ok = true;
-	LONG outerGuard = g_inGuardedIm2DPass;
-	g_inGuardedIm2DPass = 1;
-	__try {
-		overrideIm2dPixelShader = SMAA_EdgeMotionDepth ? SMAA_EdgeMotionDepth : SMAA_Edge;
-		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
-		overrideIm2dPixelShader = nil;
-	} __except(EXCEPTION_EXECUTE_HANDLER){
-		overrideIm2dPixelShader = nil;
-		dbglog("[SMAA-DIAG] EXCEPTION in SMAA edge-detect pass (Im2D fault) — SMAA disabled this frame");
-		ok = false;
-	}
-	g_inGuardedIm2DPass = outerGuard;
+	// SEH containment + g_inGuardedIm2DPass save/restore now live in
+	// guardedIm2DRender (pipelinecommon.cpp) — POD-only body, C2712-safe,
+	// single guarded path (no double SEH).
+	bool ok = guardedIm2DRender(
+		SMAA_EdgeMotionDepth ? SMAA_EdgeMotionDepth : SMAA_Edge,
+		rwPRIMTYPETRILIST, verts, 4, colorfilterIndices, 6,
+		"smaa_edge");
 
 	// Restore depth hook after edge pass if it was suspended (blend weight doesn't sample depth)
 	if(depthSuspended){
+		d3d9device->SetTexture(2, NULL); // unbind INTZ before Restore (mirrors DrawHeightFog)
 		DepthHook_Restore();
 	}
 
 	return ok;
 }
 
-static bool SMAA_DrawPass(IDirect3DPixelShader9 *shader)
+static bool SMAA_DrawPass(IDirect3DPixelShader9 *shader, RwIm2DVertex *verts)
 {
-	bool ok = true;
+	// SEH containment + g_inGuardedIm2DPass save/restore live in
+	// guardedIm2DRender (POD-only, C2712-safe) — one guarded path, no
+	// duplicate __try here.
+	return guardedIm2DRender(shader, rwPRIMTYPETRILIST,
+		verts, 4, colorfilterIndices, 6, "smaa_draw");
+}
+
+// Common fail-open bail for guarded DrawSMAA faults: put the frame back on
+// the camera draw buffer (a fault mid-pass can leave an SMAA raster bound as
+// RT0), restore viewport, clear the hoisted guard + phase tag, latch SMAA
+// broken (fail-open until resolution change resets it), restore the game's
+// immediate-mode render states.
+// POD-only, no SEH here — safe to call from DrawSMAA (no __try in it).
+static void smaaGuardBail(IDirect3DDevice9 *dev, RwRaster *drawBuffer, const D3DVIEWPORT9 *vp)
+{
+	// Restore the camera frame raster as RT0. Do NOT use RwD3D9SetRenderTarget
+	// here: the game's frame raster is rwRASTERTYPECAMERA, which that entry
+	// point dereferences as a CAMERATEXTURE (null parent -> 0xC0000005 at
+	// 0x7F9ECB). End/BeginUpdate re-binds it through the camera driver path,
+	// exactly like UpdateFrontBuffer.
+	if(Scene.camera){
+		if(drawBuffer && RwCameraGetRaster(Scene.camera) != drawBuffer)
+			dbglog("[GUARD] smaaGuardBail: camera raster changed during SMAA");
+		RwCameraEndUpdate(Scene.camera);
+		RwCameraBeginUpdate(Scene.camera);
+	}
+	if(dev && vp)
+		dev->SetViewport(vp);
+	g_inGuardedIm2DPass = 0;
+	g_renderPhase = "";
+	s_smaaBroken = true;
+	// Edge-detect raw-binds s2=g_ssaoDepthTex / s3=g_velocityTex and pass1
+	// binds s1/s2 (area/search) — mirror the success-path unbind so a fault
+	// mid-pass doesn't leave an INTZ/velocity texture on a stage while
+	// DepthHook still re-binds it as the depth-stencil (feedback lock).
+	if(dev){
+		dev->SetTexture(1, NULL);
+		dev->SetTexture(2, NULL);
+		dev->SetTexture(3, NULL);
+	}
+	CPostEffects::ImmediateModeRenderStatesReStore();
+	smaaRestoreRawGeom();
+}
+
+// SEH-guarded RwTextureCreate for SMAA RT-backed textures — wrapping a
+// CAMERATEXTURE raster without a live D3D9 surface can fault inside the
+// driver's texture-create path. POD-only body (C2712-safe).
+// *faulted distinguishes a caught SEH fault (caller must bail) from a plain
+// NULL return (caller just skips the bind, as before).
+static RwTexture *smaaTexCreate(RwRaster *ras, const char *phase, bool *faulted)
+{
+	*faulted = false;
+	if(!ras)
+		return NULL;
+	const char *ph = phase ? phase : "?";
+	RwTexture *tex = NULL;
 	LONG outerGuard = g_inGuardedIm2DPass;
+	InterlockedIncrement(&g_guardDepth);
 	g_inGuardedIm2DPass = 1;
 	__try {
-		overrideIm2dPixelShader = shader;
-		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
-		overrideIm2dPixelShader = nil;
+		tex = RwTextureCreate(ras);
 	} __except(EXCEPTION_EXECUTE_HANDLER){
-		overrideIm2dPixelShader = nil;
-		dbglog("[SMAA-DIAG] EXCEPTION in SMAA pass (Im2D fault shader=%p code=0x%08X) — SMAA disabled this frame", shader, GetExceptionCode());
-		ok = false;
+		dbglog("[GUARD] smaaTexCreate: FAULT phase=%s code=0x%08X raster=%p",
+			ph, GetExceptionCode(), ras);
+		tex = NULL;
+		*faulted = true;
 	}
 	g_inGuardedIm2DPass = outerGuard;
-	return ok;
+	InterlockedDecrement(&g_guardDepth);
+	return tex;
 }
 
 void
@@ -4080,6 +5927,7 @@ CPostEffects::DrawSMAA(void)
 		if(g_smaaEdgeRaster){ UntrackRaster(g_smaaEdgeRaster); RwRasterDestroy(g_smaaEdgeRaster); g_smaaEdgeRaster = NULL; }
 		if(g_smaaBlendRaster){ UntrackRaster(g_smaaBlendRaster); RwRasterDestroy(g_smaaBlendRaster); g_smaaBlendRaster = NULL; }
 		if(g_smaaPrevFrameRaster){ UntrackRaster(g_smaaPrevFrameRaster); RwRasterDestroy(g_smaaPrevFrameRaster); g_smaaPrevFrameRaster = NULL; }
+		if(g_smaaSceneRaster){ UntrackRaster(g_smaaSceneRaster); RwRasterDestroy(g_smaaSceneRaster); g_smaaSceneRaster = NULL; }
 		g_smaaRtWidth = w; g_smaaRtHeight = h;
 		if(g_smaaBlendTexRW){ RwTextureDestroy(g_smaaBlendTexRW); g_smaaBlendTexRW = NULL; }
 		if(g_smaaPrevFrameTexRW){ RwTextureDestroy(g_smaaPrevFrameTexRW); g_smaaPrevFrameTexRW = NULL; }
@@ -4087,6 +5935,7 @@ CPostEffects::DrawSMAA(void)
 		s_smaaPendingInit = false;
 		s_smaaBroken = false;
 		g_smaaHistoryValid = false;
+		s_smaaHistAge = 0;
 	}
 
 	// Check for permanent broken state (init failed previously).
@@ -4097,15 +5946,13 @@ CPostEffects::DrawSMAA(void)
 		return;
 	}
 
-	// Create RW camera texture rasters at FRONT-BUFFER size (pRasterFrontBuffer),
-	// NOT camera raster size. The game's fullscreen-quad UVs (colorfilterVerts)
-	// are in front-buffer texel space � e.g. blurVerts math divides by
-	// pRasterFrontBuffer width, and radiosity uses umax=(screenW+0.5)/fbWidth.
-	// SMAA shaders sample with IN.texCoord passed through from the quad UVs.
-	// If rasters had mismatched size (1920x1080 camera vs 2048x2048 FB), the
-	// final image would show only the top-left 93.75%%x52.7%% stretched to fullscreen.
-	// This is a known GTA SA gotcha: pRasterFrontBuffer is 2048x2048 while
-	// the camera is 1920x1080. Raster storage is cheap; visual correctness is not.
+	// Create RW camera texture rasters at CAMERA size (w x h = camRas dims).
+	// SMAA sampling doctrine (see g_smaaSceneRaster comment): all SMAA
+	// rasters are camera-sized with content filling UV 0..1, drawn with
+	// s_ffQuad (UV 0..1, positions 0..w x 0..h). The scene input is a
+	// camera-sized copy of the front buffer's valid sub-rect (the FB itself
+	// is padded 2048x2048 and only correct under colorfilterVerts' 0..2048
+	// positions — under a UV 0..1 quad it would sample stretched).
 	RwRaster *camRasForDepth = RwCameraGetRaster(Scene.camera);
 	int camDepth = camRasForDepth ? camRasForDepth->depth : 32;
 	if(!g_smaaEdgeRaster){
@@ -4123,6 +5970,37 @@ CPostEffects::DrawSMAA(void)
 		if(!g_smaaPrevFrameRaster){ dbglog("[SMAA-DIAG] FATAL: prevFrameRaster create failed %dx%d", w, h); return; }
 		dbglog("[SMAA-DIAG] Created prevFrameRaster=%p %dx%d (cam size)", g_smaaPrevFrameRaster, w, h);
 	}
+	if(!g_smaaSceneRaster){
+		g_smaaSceneRaster = RwRasterCreate(w, h, camDepth, rwRASTERTYPECAMERATEXTURE);
+		if(!g_smaaSceneRaster){ dbglog("[SMAA-DIAG] FATAL: sceneRaster create failed %dx%d", w, h); return; }
+		dbglog("[SMAA-DIAG] Created sceneRaster=%p %dx%d (cam size)", g_smaaSceneRaster, w, h);
+	}
+
+	// Self-check (bug 5): every SMAA raster must be camera-sized. A stale
+	// raster — resolution change that destroyed/recreated only some of them,
+	// a device Reset that dropped one, or a partial recreate after alt-tab —
+	// makes UV 0..1 address the wrong texel grid: edge/blend/history then
+	// sample a sub-rect (or a stretched copy) and the artifact shows as
+	// residual edging/ghosting. Fail CLOSED: latch s_smaaBroken so SMAA
+	// self-skips until the next resolution change instead of drawing a
+	// wrong image.
+	{
+		struct { RwRaster *r; const char *n; } chk[4] = {
+			{ g_smaaEdgeRaster,    "edge"    },
+			{ g_smaaBlendRaster,   "blend"   },
+			{ g_smaaPrevFrameRaster,"prevFrame" },
+			{ g_smaaSceneRaster,   "scene"   },
+		};
+		for(int i = 0; i < 4; i++){
+			RwRaster *r = chk[i].r;
+			if(r && (r->width != w || r->height != h)){
+				dbglog("[SMAA] SELF-SKIP: %s raster %dx%d != camera %dx%d (stale, latching broken until resolution change)",
+					chk[i].n, r->width, r->height, w, h);
+				s_smaaBroken = true;
+				return;
+			}
+		}
+	}
 
 	// Deferred force-init: set the pending flag so SMAATryInitRasters() (called
 	// from RenderScene_before, outside the main camera's BeginUpdate) will
@@ -4130,7 +6008,8 @@ CPostEffects::DrawSMAA(void)
 	// because RW 3.6's D3D9 driver crashes when creating render-target
 	// textures while the device is in an active render state (mid-frame).
 	// Bail out this frame — the SMAA pass will run next frame after init.
-	if(!s_smaaRastersInitialized && g_smaaEdgeRaster && g_smaaBlendRaster && g_smaaPrevFrameRaster){
+	if(!s_smaaRastersInitialized && g_smaaEdgeRaster && g_smaaBlendRaster &&
+	   g_smaaPrevFrameRaster && g_smaaSceneRaster){
 		s_smaaPendingInit = true;
 		if(dbglog_throttle("smaa_pending"))
 			dbglog("[SMAA] SKIP: rasters pending init, will run next frame");
@@ -4145,15 +6024,49 @@ CPostEffects::DrawSMAA(void)
 	// Verify all rasters have valid D3D9 surfaces before proceeding
 	if(!RasterEnsureSurfaceReady(g_smaaEdgeRaster, "SMAA") ||
 	   !RasterEnsureSurfaceReady(g_smaaBlendRaster, "SMAA") ||
-	   !RasterEnsureSurfaceReady(g_smaaPrevFrameRaster, "SMAA")){
+	   !RasterEnsureSurfaceReady(g_smaaPrevFrameRaster, "SMAA") ||
+	   !RasterEnsureSurfaceReady(g_smaaSceneRaster, "SMAA")){
 		if(dbglog_throttle("smaa_nosurf"))
 			dbglog("[SMAA] SKIP: rasters not surface-ready, will retry next frame");
 		return;
 	}
 
+	// Refresh the camera-sized scene copy from the front buffer's VALID
+	// sub-rect. UpdateFrontBuffer just synced camRas -> FB (DrawFinalEffects
+	// :3066), so the camera draw buffer holds the identical final graded
+	// frame at 1:1 — copy from it (same-size blit, no padded-region math).
+	// Same EndUpdate/PushContext/RenderFast/Pop/BeginUpdate idiom as
+	// DrawIVGrade's frame copy. Fail-open: skip SMAA this frame on failure.
+	{
+		RwRaster *sceneSrc = RwCameraGetRaster(Scene.camera);
+		if(!sceneSrc){
+			if(dbglog_throttle("smaa_skip")) dbglog("[SMAA] SKIP: scene copy src NULL");
+			return;
+		}
+		RwCameraEndUpdate(Scene.camera);
+		RwRasterPushContext(g_smaaSceneRaster);
+		RwRaster *copyResult = RwRasterRenderFast(sceneSrc, 0, 0);
+		RwRasterPopContext();
+		RwCameraBeginUpdate(Scene.camera);
+		if(!copyResult){
+			dbglog("[SMAA] scene copy failed (RenderFast NULL), skipping SMAA this frame");
+			return;
+		}
+	}
+
+	// UV 0..1 fullscreen quad on the camera texel grid — ALL SMAA draws use
+	// this instead of colorfilterVerts (hardcoded 2048x2048 quad whose
+	// visible window spans only UV 0..0.9375 x 0..0.5273, correct for the
+	// padded FB but wrong for every camera-sized SMAA raster).
+	SetupFullscreenQuad((float)w, (float)h);
+
 	// Save/restore D3D9 state around all SMAA passes + texture creation.
 	// Must be BEFORE area/search tex generation — those leave D3D9 state dirty,
 	// and we need Restore to capture the original game state, not the post-creation state.
+	// Raw geom states first: the rw-only Store/Set below cannot capture (or
+	// later undo) the raw D3DRS writes at the pass0 block (ALPHATEST/CULL/
+	// ZENABLE/ZWRITE off) — every other postfx pass pairs them like this.
+	s_smaaRawGeomSaved = SaveRawGeomStates(s_smaaRawGeom);
 	ImmediateModeRenderStatesStore();
 	ImmediateModeRenderStatesSet();
 
@@ -4191,9 +6104,21 @@ CPostEffects::DrawSMAA(void)
 		float dz = camPos.z - prevCamPos.z;
 		cameraVelocity = sqrtf(dx*dx + dy*dy + dz*dz);
 
-		float dot = camMatrix->at.x * prevCamMatrix.at.x +
-		            camMatrix->at.y * prevCamMatrix.at.y +
-		            camMatrix->at.z * prevCamMatrix.at.z;
+		// Normalize both forward vectors so the dot is a true cosine (the
+		// rotation/acosf metric). Guard the reciprocal length against zero with the
+		// project pattern max(x, 1e-7f): a degenerate 'at' vector would divide to
+		// NaN, which SM3.0 renders as black. CPU-side math, keeps ps_3_0 legal.
+		float curLen = sqrtf(camMatrix->at.x * camMatrix->at.x +
+		                     camMatrix->at.y * camMatrix->at.y +
+		                     camMatrix->at.z * camMatrix->at.z);
+		float prvLen = sqrtf(prevCamMatrix.at.x * prevCamMatrix.at.x +
+		                     prevCamMatrix.at.y * prevCamMatrix.at.y +
+		                     prevCamMatrix.at.z * prevCamMatrix.at.z);
+		float invCur = 1.0f / max(curLen, 1e-7f);
+		float invPrv = 1.0f / max(prvLen, 1e-7f);
+		float dot = (camMatrix->at.x * invCur) * (prevCamMatrix.at.x * invPrv) +
+		            (camMatrix->at.y * invCur) * (prevCamMatrix.at.y * invPrv) +
+		            (camMatrix->at.z * invCur) * (prevCamMatrix.at.z * invPrv);
 		cameraRotation = 1.0f - max(-1.0f, min(1.0f, dot));
 	}
 
@@ -4244,17 +6169,25 @@ CPostEffects::DrawSMAA(void)
 		dbglog("[SMAA-DIAG] FATAL: intermediate rasters NULL (edge=%p blend=%p prev=%p)",
 			g_smaaEdgeRaster, g_smaaBlendRaster, g_smaaPrevFrameRaster);
 		g_inGuardedIm2DPass = 0;
+		g_renderPhase = "";
 		ImmediateModeRenderStatesReStore();
+		smaaRestoreRawGeom();
 		return;
 	}
 
-	// Intermediates are front-buffer sized; keep rasterization on the camera
-	// viewport so the quad writes the same top-left texel region its UVs address.
+	// Intermediates are camera-sized; keep rasterization on the camera
+	// viewport so the quad writes the same texel region its UVs address
+	// (s_ffQuad: positions 0..w x 0..h = UV 0..1 on a w x h raster).
 	D3DVIEWPORT9 vpSaved;
 	dev->GetViewport(&vpSaved);
 	D3DVIEWPORT9 vpCam = { 0, 0, (DWORD)camW, (DWORD)camH, 0.0f, 1.0f };
 
-	RwD3D9SetRenderTarget(0, g_smaaEdgeRaster);
+	g_renderPhase = "smaa_p0_rt";
+	if(!guardedSetRT(g_smaaEdgeRaster, "smaa_p0_rt")){
+		// Guarded fault (or NULL raster) — fail open this frame, latch broken.
+		smaaGuardBail(dev, drawBuffer, &vpSaved);
+		return;
+	}
 	dev->SetViewport(&vpCam);
 	dev->Clear(0, NULL, D3DCLEAR_TARGET, D3DCOLOR_ARGB(0,0,0,0), 0.0f, 0);
 
@@ -4275,15 +6208,22 @@ CPostEffects::DrawSMAA(void)
 			SMAA_EdgeMotionDepth != NULL);
 	if(p0rt) p0rt->Release();
 
-	// Set front buffer as input texture on stage 0
-	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)pRasterFrontBuffer);
+	// Set camera-sized scene copy as input texture on stage 0 (UV 0..1 =
+	// full valid frame; the padded FB would sample stretched under s_ffQuad)
+	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)g_smaaSceneRaster);
 	RwRenderStateSet(rwRENDERSTATETEXTUREADDRESSU, (void*)rwTEXTUREADDRESSCLAMP);
 	RwRenderStateSet(rwRENDERSTATETEXTUREADDRESSV, (void*)rwTEXTUREADDRESSCLAMP);
 
 	// Bind previous frame for motion detection on stage 1
 	if(g_smaaPrevFrameRaster){
 		if(!g_smaaPrevFrameTexRW){
-			g_smaaPrevFrameTexRW = RwTextureCreate(g_smaaPrevFrameRaster);
+			g_renderPhase = "smaa_texcreate";
+			bool texFaulted = false;
+			g_smaaPrevFrameTexRW = smaaTexCreate(g_smaaPrevFrameRaster, "smaa_texcreate", &texFaulted);
+			if(texFaulted){
+				smaaGuardBail(dev, drawBuffer, &vpSaved);
+				return;
+			}
 			if(g_smaaPrevFrameTexRW){
 				RwTextureSetFilterMode(g_smaaPrevFrameTexRW, rwFILTERLINEAR);
 				RwTextureSetAddressingU(g_smaaPrevFrameTexRW, rwTEXTUREADDRESSCLAMP);
@@ -4293,18 +6233,22 @@ CPostEffects::DrawSMAA(void)
 		if(g_smaaPrevFrameTexRW)
 			RwD3D9SetTexture(g_smaaPrevFrameTexRW, 1);
 	}
-	// Edge-detect pass — SEH-protected via helper (DrawSMAA has objects with destructors,
-	// preventing __try here; error C2712). Suspend/Restore are inside the helper.
-	if(!DrawSMAA_EdgeDetect(smaaThreshold, cameraMovement, screenParams)){
+	// Edge-detect pass — draw goes through the guardedIm2DRender choke-point
+	// (C2712: DrawSMAA can't take __try). Suspend/Restore are inside the helper.
+	g_renderPhase = "smaa_edge";
+	if(!DrawSMAA_EdgeDetect(smaaThreshold, cameraMovement, screenParams, s_ffQuad)){
 		// Edge detect faulted — depth hook already restored inside helper.
-		// Skip remaining passes; just do final cleanup.
-		g_inGuardedIm2DPass = 0;
-		ImmediateModeRenderStatesReStore();
+		// Skip remaining passes; fail open + latch broken.
+		smaaGuardBail(dev, drawBuffer, &vpSaved);
 		return;
 	}
 
 	// ---- Pass 1: Blend Weight Calculation ----
-	RwD3D9SetRenderTarget(0, g_smaaBlendRaster);
+	g_renderPhase = "smaa_p1_rt";
+	if(!guardedSetRT(g_smaaBlendRaster, "smaa_p1_rt")){
+		smaaGuardBail(dev, drawBuffer, &vpSaved);
+		return;
+	}
 	dev->SetViewport(&vpCam);
 	dev->Clear(0, NULL, D3DCLEAR_TARGET, D3DCOLOR_ARGB(0,0,0,0), 0.0f, 0);
 
@@ -4342,10 +6286,9 @@ CPostEffects::DrawSMAA(void)
 	float blendP[4] = {0.0f, smaaSearchSteps, 0.0f, 0.0f};
 	RwD3D9SetPixelShaderConstant(0, blendP, 1);
 	RwD3D9SetPixelShaderConstant(1, screenParams, 1);
-	if(!SMAA_DrawPass((IDirect3DPixelShader9*)SMAA_BlendWeight)){
-		dev->SetViewport(&vpSaved);
-		g_inGuardedIm2DPass = 0;
-		ImmediateModeRenderStatesReStore();
+	g_renderPhase = "smaa_draw";
+	if(!SMAA_DrawPass((IDirect3DPixelShader9*)SMAA_BlendWeight, s_ffQuad)){
+		smaaGuardBail(dev, drawBuffer, &vpSaved);
 		return;
 	}
 
@@ -4355,11 +6298,34 @@ CPostEffects::DrawSMAA(void)
 		dev->SetTexture(2, NULL);
 	}
 
+	// Pass2-entry guard (lane-A hardening): g_smaaSceneRaster is pass2's ONLY
+	// colour input (bound at the "Bind camera-sized scene copy" line below).
+	// If it went NULL or stale-sized since the entry self-check, the
+	// neighbourhood blend renders NOTHING into edgeRaster and Pass3 (or the
+	// no-temporal fallback presenting edgeRaster) would show a stale
+	// breadcrumb frame. Fail CLOSED with the same latch as the entry
+	// self-check: smaaGuardBail rebinds the camera RT, restores state and
+	// sets s_smaaBroken — a stale edgeRaster can NEVER be presented; SMAA
+	// self-skips until the next resolution change.
+	if(!g_smaaSceneRaster ||
+	   g_smaaSceneRaster->width != w || g_smaaSceneRaster->height != h){
+		dbglog("[SMAA] PASS2 GUARD: scene=%p (%dx%d) != camera %dx%d — latching broken, edgeRaster NOT presented",
+			(void*)g_smaaSceneRaster,
+			g_smaaSceneRaster ? g_smaaSceneRaster->width : 0,
+			g_smaaSceneRaster ? g_smaaSceneRaster->height : 0, w, h);
+		smaaGuardBail(dev, drawBuffer, &vpSaved);
+		return;
+	}
+
 	// ---- Pass 2: Neighborhood Blending → edgeRaster (temp reuse) ----
 	// Render to edgeRaster instead of drawBuffer so Pass 3 temporal can read it
 	// while writing to drawBuffer — avoids D3D9 read-write conflict on same surface.
 	// edgeRaster is done being read after Pass 1, safe to reuse as temp.
-	RwD3D9SetRenderTarget(0, g_smaaEdgeRaster);
+	g_renderPhase = "smaa_p2_rt";
+	if(!guardedSetRT(g_smaaEdgeRaster, "smaa_p2_rt")){
+		smaaGuardBail(dev, drawBuffer, &vpSaved);
+		return;
+	}
 	dev->SetViewport(&vpCam);
 
 	IDirect3DSurface9 *p2rt = NULL;
@@ -4368,14 +6334,20 @@ CPostEffects::DrawSMAA(void)
 		dbglog("[SMAA-DIAG] Pass2: edgeRaster=%p RT0=%p shader=%p", g_smaaEdgeRaster, p2rt, SMAA_BlendNeighbor);
 	if(p2rt) p2rt->Release();
 
-	// Bind original front buffer as color input on stage 0
-	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)pRasterFrontBuffer);
+	// Bind camera-sized scene copy as color input on stage 0 (UV 0..1)
+	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)g_smaaSceneRaster);
 	RwRenderStateSet(rwRENDERSTATETEXTUREADDRESSU, (void*)rwTEXTUREADDRESSCLAMP);
 	RwRenderStateSet(rwRENDERSTATETEXTUREADDRESSV, (void*)rwTEXTUREADDRESSCLAMP);
 
 	// Bind blend raster on stage 1 via RwD3D9SetTexture
 	if(!g_smaaBlendTexRW && g_smaaBlendRaster){
-		g_smaaBlendTexRW = RwTextureCreate(g_smaaBlendRaster);
+		g_renderPhase = "smaa_texcreate";
+		bool texFaulted = false;
+		g_smaaBlendTexRW = smaaTexCreate(g_smaaBlendRaster, "smaa_texcreate", &texFaulted);
+		if(texFaulted){
+			smaaGuardBail(dev, drawBuffer, &vpSaved);
+			return;
+		}
 		if(g_smaaBlendTexRW){
 			RwTextureSetFilterMode(g_smaaBlendTexRW, rwFILTERLINEAR);
 			RwTextureSetAddressingU(g_smaaBlendTexRW, rwTEXTUREADDRESSCLAMP);
@@ -4387,10 +6359,9 @@ CPostEffects::DrawSMAA(void)
 
 	// Set neighborhood blend shader
 	RwD3D9SetPixelShaderConstant(1, screenParams, 1);
-	if(!SMAA_DrawPass((IDirect3DPixelShader9*)SMAA_BlendNeighbor)){
-		dev->SetViewport(&vpSaved);
-		g_inGuardedIm2DPass = 0;
-		ImmediateModeRenderStatesReStore();
+	g_renderPhase = "smaa_draw";
+	if(!SMAA_DrawPass((IDirect3DPixelShader9*)SMAA_BlendNeighbor, s_ffQuad)){
+		smaaGuardBail(dev, drawBuffer, &vpSaved);
 		return;
 	}
 
@@ -4402,8 +6373,24 @@ CPostEffects::DrawSMAA(void)
 	// ---- Pass 3: Temporal Resolve → drawBuffer (final output) ----
 	// Reads edgeRaster (current SMAA result) + prevFrameRaster (history),
 	// writes directly to drawBuffer. No extra copy-back blit needed.
-	if(SMAA_Temporal && g_smaaPrevFrameRaster){
-		RwD3D9SetRenderTarget(0, drawBuffer);
+	// Pause gate: DrawVelocityBuffer skips paused/menu frames (~:6512) so the
+	// velocity buffer freezes, but reprojection against that stale velocity
+	// ghosts while paused. Gate the temporal pass off in menus/pause so it falls
+	// through to the spatial-only fallback below (unchanged).
+	if(SMAA_Temporal && g_smaaPrevFrameRaster && !IsGameInMenuOrPaused()){
+		g_renderPhase = "smaa_p3_rt";
+		// Re-bind the camera frame raster through the camera context (see
+		// smaaGuardBail): RwD3D9SetRenderTarget faults on rwRASTERTYPECAMERA.
+		if(Scene.camera){
+			RwCameraEndUpdate(Scene.camera);
+			RwCameraBeginUpdate(Scene.camera);
+		}
+		// BeginUpdate may have re-applied camera states — re-assert the
+		// fullscreen-pass state set from Pass0 before the final draw.
+		RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+		RwD3D9SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+		RwD3D9SetRenderState(D3DRS_ZENABLE, FALSE);
+		RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
 		dev->SetViewport(&vpSaved);
 
 		// Bind current SMAA result (edgeRaster) on s0
@@ -4424,12 +6411,27 @@ CPostEffects::DrawSMAA(void)
 			dev->SetSamplerState(2, D3DSAMP_MINFILTER, D3DTEXF_POINT);
 		}
 
-		// Temporal constants: blendStrength (low = more history), motionScale
+		// Temporal constants: blendStrength = CURRENT-frame weight at rest
+		// (0.4 = 60% history at rest — audit: rest-state retention 85.4%->46%,
+		// ghost tail 34->7 frames), motionScale = how fast the
+		// motion signal saturates luma/velocity difference.
 		// On the first frame, the history raster contains undefined data (black).
 		// Use blendStrength=1.0 (all current, no history) to avoid a dark flash.
 		// Subsequent frames blend normally with accumulated history.
-		float blendStrength = g_smaaHistoryValid ? 0.1f : 1.0f;
-		float temporalP[4] = { blendStrength, 2.0f, 0.0f, 0.0f };
+		// motionScale 2.0 -> 3.0: moderate camera motion (walking pans) only
+		// produced lumaDiff ~0.1..0.3, which left blendFactor around 0.5..0.65
+		// = 35..45% of every pixel taken from the PREVIOUS frame — reads as a
+		// permanent smear/"motion blur that never turns off" plus trailing
+		// artifacts, entirely independent of the motionBlurEnable checkbox
+		// (DrawMotionBlur's own gate is correct — see :6494+).
+		float blendStrength = g_smaaHistoryValid ? 0.4f : 1.0f;
+		// Hard history TTL: every 8 valid-history frames force a full current-frame
+		// refresh (blendStrength=1.0) to kill the accumulated ghost tail, then reset.
+		if(g_smaaHistoryValid && ++s_smaaHistAge >= 8){
+			blendStrength = 1.0f;
+			s_smaaHistAge = 0;
+		}
+		float temporalP[4] = { blendStrength, 3.0f, 0.0f, 0.0f };
 		RwD3D9SetPixelShaderConstant(0, temporalP, 1);
 		RwD3D9SetPixelShaderConstant(1, screenParams, 1);
 
@@ -4452,21 +6454,29 @@ CPostEffects::DrawSMAA(void)
 		// near/far mirror DrawNormalBufferToTexture's c0 source. velToPx is 1.0
 		// when the velocity buffer is bound (velocity is stored in UV units) and
 		// 0.0 otherwise, so the shader samples history unshifted when s2 is null.
+		// maxHistClamp 0.9 -> 1.0: 0.9 is the shader's CEILING on the
+		// current-frame weight, i.e. it forced >=10% of the previous frame into
+		// every pixel on EVERY frame ("never fully discards history"). That
+		// floor is the residual trailing/ghosting after lane3's scene-copy fix,
+		// and it is what reads as motion blur while the motionBlur checkbox is
+		// off. 1.0 lets the motion signal reach a full current frame at speed
+		// while minBlend (= blendStrength, 0.1) still keeps the slow static
+		// accumulation; it also makes the blendStrength=1.0 first frame a true
+		// 100% current (0.9 used to leak 10% undefined history on frame 1).
 		float smaaNear = Scene.camera ? RwCameraGetNearClipPlane(Scene.camera) : 0.1f;
 		float smaaFar = Scene.camera ? RwCameraGetFarClipPlane(Scene.camera) : 500.0f;
-		float histP[4] = { smaaNear, smaaFar, 0.9f, g_velocityTex ? 1.0f : 0.0f };
+		float histP[4] = { smaaNear, smaaFar, 1.0f, g_velocityTex ? 1.0f : 0.0f };
 		RwD3D9SetPixelShaderConstant(3, histP, 1);
 
 		if(dbglog_throttle("smaa_vel"))
 			dbglog("[SMAA] velocity: vel=%.3f rot=%.3f tanFov=(%.3f, %.3f)",
 				velFactor, rotFactor, tanX, tanY);
 
-		if(!SMAA_DrawPass((IDirect3DPixelShader9*)SMAA_Temporal)){
+		g_renderPhase = "smaa_draw";
+		if(!SMAA_DrawPass((IDirect3DPixelShader9*)SMAA_Temporal, s_ffQuad)){
 			RwD3D9SetTexture(NULL, 1);
 			dev->SetTexture(2, NULL);
-			dev->SetViewport(&vpSaved);
-			g_inGuardedIm2DPass = 0;
-			ImmediateModeRenderStatesReStore();
+			smaaGuardBail(dev, drawBuffer, &vpSaved);
 			return;
 		}
 
@@ -4478,13 +6488,20 @@ CPostEffects::DrawSMAA(void)
 			dbglog("[SMAA-DIAG] Pass3 Temporal: edge=%p + prev=%p -> drawBuf=%p shader=%p",
 				g_smaaEdgeRaster, g_smaaPrevFrameRaster, drawBuffer, SMAA_Temporal);
 	} else {
-		// No temporal: Pass 2 result is in edgeRaster, copy to drawBuffer
-		RwD3D9SetRenderTarget(0, drawBuffer);
-		dev->SetViewport(&vpSaved);
-
+		// No temporal: Pass 2 result is in edgeRaster, copy it into the camera
+		// frame raster with the same EndUpdate/PushContext/RenderFast/Pop/
+		// BeginUpdate idiom as UpdateFrontBuffer. RwD3D9SetRenderTarget faults
+		// on rwRASTERTYPECAMERA, so never bind drawBuffer that way.
+		if(dbglog_throttle("smaa_p3_fallback"))
+			dbglog("[SMAA-DIAG] Pass3 skipped (Temporal=%p prev=%p): presenting edgeRaster (pass2 composite, NOT raw edge/blend)",
+				SMAA_Temporal, g_smaaPrevFrameRaster);
+		g_renderPhase = "smaa_p3_rt";
+		RwCameraEndUpdate(Scene.camera);
 		RwRasterPushContext(drawBuffer);
 		RwRasterRenderFast(g_smaaEdgeRaster, 0, 0);
 		RwRasterPopContext();
+		RwCameraBeginUpdate(Scene.camera);
+		dev->SetViewport(&vpSaved);
 	}
 
 	// Save current frame for next frame's temporal history
@@ -4508,7 +6525,12 @@ CPostEffects::DrawSMAA(void)
 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
 
 	g_inGuardedIm2DPass = 0;
+	g_renderPhase = "";
 	ImmediateModeRenderStatesReStore();
+	smaaRestoreRawGeom(); // push the raw ZENABLE/ZWRITE/ALPHATEST/CULL values
+	                       // back on BOTH layers — the rw-only ReStore above
+	                       // cannot see them, and SMAA is the last pass of the
+	                       // frame (they would carry into the next scene).
 }
 
 static void DrawVelocityBuffer(void)
@@ -4623,6 +6645,8 @@ static void DrawVelocityBuffer(void)
 	}
 
 	// Render velocity buffer
+	DWORD rawGeom[9];
+	bool rawGeomSaved = SaveRawGeomStates(rawGeom); // BEFORE Store (DepthHook below writes raw ZENABLE)
 	CPostEffects::ImmediateModeRenderStatesStore();
 	CPostEffects::ImmediateModeRenderStatesSet();
 	RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
@@ -4662,15 +6686,28 @@ static void DrawVelocityBuffer(void)
 		float c9PrevDepth[4] = { (float)g_prevDepthValid, Scene.camera->farPlane, 0.0f, 0.0f };
 		RwD3D9SetPixelShaderConstant(9, c9PrevDepth, 1);
 
-		// Render fullscreen quad
+		// Render fullscreen quad — camera-sized with UV 0..1, NOT
+		// colorfilterVerts (0..2048 positions): the velocity RT is w x h, so
+		// the game's quad clipped at the screen only wrote UV 0..0.9375 x
+		// 0..0.527 — the right edge and the WHOLE BOTTOM HALF of the velocity
+		// buffer kept the Clear() value (zero velocity) and every reprojection
+		// consumer (SMAA temporal history, SSAO temporal, motion blur) was
+		// unshifted there -> trailing/ghosting on the lower half of the screen.
+		SetupFullscreenQuad((float)w, (float)h);
 		overrideIm2dPixelShader = VelocityReconstruct;
-		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
+		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, s_ffQuad, 4, s_ffQuadIdx, 6);
 		overrideIm2dPixelShader = nil;
 
+		// Unbind INTZ from s0 before the hook re-binds it as DS (feedback-lock
+		// guard, mirrors DrawSSAO/DrawHeightFog); the cleanup below stays as-is.
+		dev->SetTexture(0, NULL);
 		// Restore depth hook (re-binds INTZ as DS)
 		DepthHook_Restore();
 	} __except(EXCEPTION_EXECUTE_HANDLER){
+		overrideIm2dPixelShader = nil;	// SEH: the `= nil` reset in the __try above is skipped on fault
+
 		dbglog("[PostFX] DrawVelocityBuffer CRASHED in depth pass exception=0x%08X", GetExceptionCode());
+		dev->SetTexture(0, NULL); // same unbind before the bail-out Restore
 		DepthHook_Restore(); // Restore on bail to keep Suspend/Restore balanced
 	}
 
@@ -4692,6 +6729,10 @@ static void DrawVelocityBuffer(void)
 RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
 
 	CPostEffects::ImmediateModeRenderStatesReStore();
+	if(rawGeomSaved){
+		RestoreRawGeomStates(rawGeom);
+		rawGeomSaved = false;
+	}
 	// Store VP for next frame
 	memcpy(&g_prevVPMatrix, &curVP, sizeof(D3DMATRIX));
 
@@ -4721,6 +6762,12 @@ CPostEffects::DrawMotionBlur(void)
 	int h = camRas->height;
 	if(w < 1 || h < 1)
 		return;
+
+	// Re-sync the front buffer: ColourFilter_Modern leaves pRasterFrontBuffer
+	// at the pre-tonemap grade, so binding it stale would repaint the camera
+	// from an intermediate frame and make motion blur look like it bypasses
+	// colour filtering/tonemapping. Reads the CURRENT post-grade frame.
+	CPostEffects::UpdateFrontBuffer();
 
 	// Track camera velocity for motion blur
 	static float prevCamX = 0, prevCamY = 0, prevCamZ = 0;
@@ -4758,26 +6805,57 @@ CPostEffects::DrawMotionBlur(void)
 	}
 
 	// Combine camera movement into a single factor (0=still, 1=fast movement).
-	// Gain 0.25 + gate 0.002: blur engages at slow driving speeds
-	// (~0.008 world-units/frame), not just fast camera sweeps.
-	float cameraMovement = min(1.0f, (cameraVelocity * 0.25f) + (cameraRotation * 2.0f));
+	// Gains softened from 0.25/2.0: the old values saturated mov to 1.0 at
+	// vel≈4 (and instantly on teleports where vel spikes to ~1000), pinning
+	// max blur on every fast frame. 0.15/1.0 ramps gradually at driving
+	// speeds; gate 0.002 still engages at slow driving (~0.013 units/frame).
+	float cameraMovement = min(1.0f, (cameraVelocity * 0.15f) + (cameraRotation * 1.0f));
 
 	// Skip if barely moving
 	if(cameraMovement < 0.002f)
 		return;
 
-	// Optional: reduce blur when camera is moving very fast (camera-aware mode)
-	float effectiveStrength = config->motionBlurStrength;
+	// Speed ramp — smoothstep deadzone + full-frame weight (the "ramps too
+	// fast" fix: previously ANY motion drove the velocity-buffer term straight
+	// into the 32px maxBlurPx clamp, so walking looked like driving).
+	// Telemetry from skygfx_dbg.log: idle/walking vel≈0.018, city driving
+	// 0.135..0.487; rot = 1-cos(dtheta) ≈ 0 while translating, spikes on fast
+	// mouse flicks. speedRef = max(translation, turn-rate) so flicks still blur.
+	//   speedRamp  : walking (<0.05) → 0 (no blur), full by 0.12 (bicycle/low drive)
+	//   fullFrameW : running (<0.09) → 0 = edge-only lens blur,
+	//                bicycle/vehicle (≥0.14) → 1 = uniform full-frame blur
+	float speedRef = max(cameraVelocity, cameraRotation);
+	float speedRamp;
+	if(speedRef >= 0.12f) speedRamp = 1.0f;
+	else if(speedRef <= 0.05f) speedRamp = 0.0f;
+	else { float t = (speedRef - 0.05f) / (0.12f - 0.05f); speedRamp = t * t * (3.0f - 2.0f * t); }
+	float fullFrameW;
+	if(speedRef >= 0.14f) fullFrameW = 1.0f;
+	else if(speedRef <= 0.09f) fullFrameW = 0.0f;
+	else { float t = (speedRef - 0.09f) / (0.14f - 0.09f); fullFrameW = t * t * (3.0f - 2.0f * t); }
+
+	// Optional: reduce blur when camera is moving very fast (camera-aware mode).
+	// effectiveStrength is speed-ramped FIRST: walking deadzone zeroes both the
+	// velocity-buffer term (c0.x) and the camera term (via camTermScale below).
+	float effectiveStrength = config->motionBlurStrength * speedRamp;
 	if(config->motionBlurCameraAware && cameraMovement > 0.8f){
 		effectiveStrength *= (1.0f - (cameraMovement - 0.8f) * 2.0f);
 		effectiveStrength = max(0.05f, effectiveStrength);
 	}
 
 	if(dbglog_throttle("mb_draw"))
-		dbglog("[PostFX] DrawMotionBlur: vel=%.3f rot=%.3f mov=%.3f strength=%.3f shader=%p",
-			cameraVelocity, cameraRotation, cameraMovement, effectiveStrength, MotionBlur_Burnout);
+		dbglog("[PostFX] DrawMotionBlur: vel=%.3f rot=%.3f mov=%.3f ramp=%.2f fullF=%.2f strength=%.3f shader=%p",
+			cameraVelocity, cameraRotation, cameraMovement, speedRamp, fullFrameW, effectiveStrength, MotionBlur_Burnout);
+
+	// Walking/idle deadzone: intensity ramp is 0 → nothing to blur, skip the
+	// whole pass (FB already synced by UpdateFrontBuffer above, same as the
+	// cameraMovement gate — no state left dirty on this path).
+	if(effectiveStrength < 1e-4f)
+		return;
 
 	// Setup render states
+	DWORD rawGeom[9];
+	bool rawGeomSaved = SaveRawGeomStates(rawGeom); // before Store (raw Set below)
 	CPostEffects::ImmediateModeRenderStatesStore();
 	CPostEffects::ImmediateModeRenderStatesSet();
 	RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
@@ -4824,9 +6902,24 @@ CPostEffects::DrawMotionBlur(void)
 		float c1[4] = { (float)w, (float)h, 1.0f/max((float)w, 1e-7f), 1.0f/max((float)h, 1e-7f) };
 		RwD3D9SetPixelShaderConstant(1, c1, 1);
 
-		// c2: (cameraVelocity, cameraRotation, deltaTime, 0)
-		float dt = CTimer__ms_fTimeStep / 50.0f; // GTA SA tick rate: 50 fps
-		float c2[4] = { cameraMovement, cameraRotation, dt, 0.0f };
+		// c2: (cameraTerm, fullFrameW, fbScaleU, fbScaleV)
+		// cameraTerm = camera movement x strength knob (normalized so the INI
+		//   default 0.4 keeps its prior response: 0.4 * 2.5 = 1.0). The
+		//   strength knob is already speed-ramped above, so the walking
+		//   deadzone flows into BOTH the velocity-buffer term (c0.x) and this
+		//   camera term. Lowering motionBlurStrength tames both.
+		// fullFrameW = 0 edge-only lens blur (running) .. 1 full frame (vehicle),
+		//   consumed by MotionBlur_Burnout's radial lerp.
+		// fbScale = screen/frontBuffer: pRasterFrontBuffer holds the frame 1:1
+		//   top-left of a larger (e.g. 2048^2) raster — the quad is screen-space
+		//   UV 0..1, so the s0 fetch scales into the content region. s1 (motion)
+		//   and s2 (depth) are screen-sized and sample UV 0..1 directly.
+		//   (Old code dropped cameraRotation/dt here — the shader never read them.)
+		float camTermScale = min(1.0f, max(0.0f, effectiveStrength * 2.5f));
+		RwRaster *fbRas = CPostEffects::pRasterFrontBuffer;
+		float fbU = fbRas ? (float)w / max((float)fbRas->width, 1.0f) : 1.0f;
+		float fbV = fbRas ? (float)h / max((float)fbRas->height, 1.0f) : 1.0f;
+		float c2[4] = { cameraMovement * camTermScale, fullFrameW, fbU, fbV };
 		RwD3D9SetPixelShaderConstant(2, c2, 1);
 
 		// c3: (near, far, tanFovX, maxBlurPx) — depth-aware blur scaling.
@@ -4835,20 +6928,32 @@ CPostEffects::DrawMotionBlur(void)
 		float mbNear = Scene.camera ? RwCameraGetNearClipPlane(Scene.camera) : 0.1f;
 		float mbFar = Scene.camera ? RwCameraGetFarClipPlane(Scene.camera) : 500.0f;
 		float mbTanX = Scene.camera ? Scene.camera->viewWindow.x : 0.65f;
-		float c3[4] = { mbNear, mbFar, mbTanX, 64.0f }; // maxBlurPx
+		float c3[4] = { mbNear, mbFar, mbTanX, 32.0f }; // maxBlurPx (was 64 — halved: the old cap produced a heavy 64px smear on every fast frame)
 		RwD3D9SetPixelShaderConstant(3, c3, 1);
+
+		// Screen-space white quad UV 0..1 (NOT colorfilterVerts: those are a
+		// 2048-space quad whose visible UVs only span ~0.9375 x 0.527, leaving
+		// the screen-sized motion/depth fetches covering only the top-left of
+		// their buffers and putting the radial/lens centre off-screen — the
+		// bottom half of the screen sampled a stretched top-half depth slice).
+		// FB content region is remapped in-shader via c2.zw (fbScale).
+		SetupFullscreenQuad((float)w, (float)h);
 
 		// Render fullscreen quad with motion blur shader
 		overrideIm2dPixelShader = MotionBlur_Burnout;
-		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
+		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, s_ffQuad, 4, s_ffQuadIdx, 6);
 		overrideIm2dPixelShader = nil;
 
 		// Restore depth hook after the pass (mirrors edge pass)
 		if(g_ssaoDepthTex){
+			dev->SetTexture(2, NULL); // unbind INTZ before Restore (mirrors DrawHeightFog)
 			DepthHook_Restore();
 		}
 	} __except(EXCEPTION_EXECUTE_HANDLER){
+		overrideIm2dPixelShader = nil;	// SEH: the `= nil` reset in the __try above is skipped on fault
+
 		if(g_ssaoDepthTex){
+			dev->SetTexture(2, NULL); // same unbind before the bail-out Restore
 			DepthHook_Restore(); // keep Suspend/Restore balanced on fault
 		}
 	}
@@ -4871,6 +6976,10 @@ CPostEffects::DrawMotionBlur(void)
 	RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
 
 	CPostEffects::ImmediateModeRenderStatesReStore();
+	if(rawGeomSaved){
+		RestoreRawGeomStates(rawGeom);
+		rawGeomSaved = false;
+	}
 
 	// Sync front buffer
 	UpdateFrontBuffer();
@@ -4904,14 +7013,60 @@ DrawHeightFog(void)
 	if(!g_ssaoDepthTex)
 		return;
 
+	// Re-sync the front buffer: ColourFilter_Modern leaves pRasterFrontBuffer
+	// at the pre-tonemap graded intermediate. Without this the fog pass
+	// repaints the camera from that stale buffer, which made enabling height
+	// fog look like it was replacing the colour filter / tonemapper output.
+	CPostEffects::UpdateFrontBuffer();
+
+	// Effective fog params — sanitize the values skygfx.h's comments promised
+	// but readIni never defaulted (INI ships heightFogEnable only, so falloff
+	// read as 0 => heightFactor == 1.0 at EVERY height, and menu-dragged
+	// density 0.042 => 98% fog at 100m: a full-screen blue wash stacked on top
+	// of the game's own distance fog).
+	CColourSet &tc = CTimeCycle__m_CurrentColours;
+	float fogDensity = config->heightFogDensity;
+	if(fogDensity <= 0.0f) fogDensity = 0.0015f;   // documented default
+	if(fogDensity > 0.004f) fogDensity = 0.004f;    // never a near-opaque wall
+	float fogFalloff = config->heightFogHeightFalloff;
+	if(fogFalloff <= 0.0f) fogFalloff = 0.1f;       // 0 = no height falloff anywhere
+	float tcDensity = 0.0f;
+	if(config->heightFogTimecycleScale > 0.0f && tc.fogStart > 1.0f){
+		tcDensity = config->heightFogTimecycleScale / tc.fogStart;
+		if(tcDensity > 0.001f) tcDensity = 0.001f; // capped: was the grey-wash term
+	}
+	float effectiveDensity = fogDensity + tcDensity;
+	// Colour: explicit config RGB wins, else timecycle horizon (skyBot).
+	// lowCloudsR/G/B was the low-cloud tint = the blue/cyan haze itself.
+	float fogR = config->heightFogR, fogG = config->heightFogG, fogB = config->heightFogB;
+	bool fogFromConfig = (fogR + fogG + fogB) > 0.001f;
+	if(!fogFromConfig){
+		fogR = tc.skyBotR / 255.0f;
+		fogG = tc.skyBotG / 255.0f;
+		fogB = tc.skyBotB / 255.0f;
+	}
 	if(dbglog_throttle("hfog_draw"))
-		dbglog("[PostFX] DrawHeightFog: density=%.4f falloff=%.2f startH=%.1f shader=%p",
-			config->heightFogDensity, config->heightFogHeightFalloff,
-			config->heightFogStartHeight, HeightFog);
+		dbglog("[PostFX] DrawHeightFog: density=%.4f (tc=%.4f) falloff=%.2f startH=%.1f colour=%s (%.2f,%.2f,%.2f) shader=%p",
+			effectiveDensity, tcDensity, fogFalloff, config->heightFogStartHeight,
+			fogFromConfig ? "config" : "skyBot", fogR, fogG, fogB, HeightFog);
+
+	// PS constants c0-c7 are shared by the whole postfx chain — save them so
+	// the fog pass can't leak state into later same-frame/next-frame passes
+	// (decouples height fog from tonemap/colourfilter consumers).
+	float savedPSConsts[4 * 8];
+	bool savedPSConstsValid = false;
+
+	// Declared before __try so the __except path can restore them too
+	DWORD rawGeom[9];
+	bool rawGeomSaved = false;
 
 	// Suspend depth hook so g_ssaoDepthTex can be sampled on s1
 	__try {
+		// Save raw geometry states BEFORE Suspend (it writes raw ZENABLE)
+		rawGeomSaved = SaveRawGeomStates(rawGeom);
+
 		DepthHook_Suspend();
+		savedPSConstsValid = SUCCEEDED(dev->GetPixelShaderConstantF(0, savedPSConsts, 8));
 
 		CPostEffects::ImmediateModeRenderStatesStore();
 		CPostEffects::ImmediateModeRenderStatesSet();
@@ -4929,34 +7084,18 @@ DrawHeightFog(void)
 		dev->SetSamplerState(1, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
 		dev->SetSamplerState(1, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
 
-		// Timecycle reference — used for density modulation and fog color
-		CColourSet &tc = CTimeCycle__m_CurrentColours;
-
-		// c0: fogParams — density modulated by timecycle fogStart
-		float effectiveDensity = config->heightFogDensity;
-		if(tc.fogStart > 0.0f && config->heightFogTimecycleScale > 0.0f) {
-			// fogStart lower = denser fog. DynamicSky uses 1/fogStart pattern
-			float tcDensity = config->heightFogTimecycleScale / tc.fogStart;
-			effectiveDensity += tcDensity;
-		}
+		// c0: fogParams — sanitized values computed above. maxFog 0.7 keeps a
+		// horizon line visible and compounds with the game's own distance fog
+		// instead of replacing it at full opacity.
 		float c0[4] = {
 			effectiveDensity,
-			config->heightFogHeightFalloff,
+			fogFalloff,
 			config->heightFogStartHeight,
-			1.0f // maxFog
+			0.7f // maxFog (was hardcoded 1.0 = total whiteout)
 		};
 		RwD3D9SetPixelShaderConstant(0, c0, 1);
 
-		// c1: fog color (from config or timecycle)
-		float fogR = config->heightFogR;
-		float fogG = config->heightFogG;
-		float fogB = config->heightFogB;
-		// Optionally modulate with timecycle fog color
-		if(tc.fogStart > 0.0f){
-			fogR = tc.lowCloudsR / 255.0f;
-			fogG = tc.lowCloudsG / 255.0f;
-			fogB = tc.lowCloudsB / 255.0f;
-		}
+		// c1: fog colour (config RGB or timecycle horizon — computed above)
 		float c1[4] = { fogR, fogG, fogB, 1.0f };
 		RwD3D9SetPixelShaderConstant(1, c1, 1);
 
@@ -4972,8 +7111,15 @@ DrawHeightFog(void)
 		};
 		RwD3D9SetPixelShaderConstant(2, c2, 1);
 
-		// c3: screenSize
-		float c3[4] = { (float)w, (float)h, 1.0f/max((float)w, 1e-7f), 1.0f/max((float)h, 1e-7f) };
+		// c3: front-buffer UV scale — s0 is the padded 2048² front buffer while
+		// s1 (INTZ depth) is screen-sized; the shader fetches scene × fbParams.xy
+		// and depth at raw UV (the old setup sampled BOTH at /2048 UVs).
+		float fbU = 1.0f, fbV = 1.0f;
+		if(CPostEffects::pRasterFrontBuffer){
+			fbU = (float)w / max((float)CPostEffects::pRasterFrontBuffer->width, 1.0f);
+			fbV = (float)h / max((float)CPostEffects::pRasterFrontBuffer->height, 1.0f);
+		}
+		float c3[4] = { fbU, fbV, 0.0f, 0.0f };
 		RwD3D9SetPixelShaderConstant(3, c3, 1);
 
 		// c4: camera position
@@ -4997,10 +7143,16 @@ DrawHeightFog(void)
 		}
 		RwD3D9SetPixelShaderConstant(5, c5, 1);
 
-		// Render fullscreen quad
+		// Render fullscreen quad — RT-sized with UV 0..1 (colorfilterVerts are a
+		// hardcoded 2048² quad whose /2048 UVs misalign every screen-sized buffer)
+		SetupFullscreenQuad((float)w, (float)h);
 		overrideIm2dPixelShader = HeightFog;
-		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
+		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, s_ffQuad, 4, s_ffQuadIdx, 6);
 		overrideIm2dPixelShader = nil;
+
+		// Restore PS constants saved before the pass (fog c0-c5 overwrite)
+		if(savedPSConstsValid)
+			dev->SetPixelShaderConstantF(0, savedPSConsts, 8);
 
 		// Cleanup
 		dev->SetTexture(1, NULL);
@@ -5016,10 +7168,20 @@ DrawHeightFog(void)
 		DepthHook_Restore();
 
 		CPostEffects::ImmediateModeRenderStatesReStore();
+		if(rawGeomSaved){
+			RestoreRawGeomStates(rawGeom);
+			rawGeomSaved = false;
+		}
 	} __except(EXCEPTION_EXECUTE_HANDLER){
+		overrideIm2dPixelShader = nil;	// SEH: the `= nil` reset in the __try above is skipped on fault
+
 		dbglog("[PostFX] DrawHeightFog CRASHED exception=0x%08X", GetExceptionCode());
+		if(savedPSConstsValid)
+			dev->SetPixelShaderConstantF(0, savedPSConsts, 8);
 		DepthHook_Restore(); // Restore on bail to keep Suspend/Restore balanced
 		CPostEffects::ImmediateModeRenderStatesReStore();
+		if(rawGeomSaved)
+			RestoreRawGeomStates(rawGeom);
 	}
 
 	// Sync front buffer so god rays can read the fogged scene
@@ -5049,6 +7211,11 @@ DrawGodRays(void)
 	int h = camRas->height;
 	if(w < 1 || h < 1)
 		return;
+
+	// Re-sync the front buffer so god rays read the current post-grade frame
+	// (pRasterFrontBuffer may still hold the pre-tonemap intermediate if the
+	// earlier effects were disabled this frame).
+	CPostEffects::UpdateFrontBuffer();
 
 	// Get sun direction
 	float sunD[3];
@@ -5085,11 +7252,16 @@ DrawGodRays(void)
 	   sunScreenY < -0.5f || sunScreenY > 1.5f)
 		return;
 
+	// Pass breadcrumb: fires ONLY on frames where the sun gate above passed and
+	// the ray quad is about to be drawn — if a covered-frame forensics pass ever
+	// sees this line immediately before the symptom, this is the pass.
 	if(dbglog_throttle("grad_draw"))
-		dbglog("[PostFX] DrawGodRays: sun=(%.2f,%.2f) exp=%.4f dec=%.2f shader=%p",
+		dbglog("[PostFX] DrawGodRays: sun=(%.2f,%.2f) exp=%.4f dec=%.2f shader=%p blend=ONE/ONE(rw+raw)",
 			sunScreenX, sunScreenY, config->godRaysExposure,
 			config->godRaysDecay, GodRays);
 
+	DWORD rawGeom[9];
+	bool rawGeomSaved = SaveRawGeomStates(rawGeom); // no depth hook in this pass
 	CPostEffects::ImmediateModeRenderStatesStore();
 	CPostEffects::ImmediateModeRenderStatesSet();
 	RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
@@ -5099,7 +7271,19 @@ DrawGodRays(void)
 	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
 
-	// Enable additive blending
+	// Enable additive blending — through the RW cache FIRST, raw mirror after.
+	// Doctrine (same failure mode the SSAO multiply documents): RwIm2D re-emits
+	// its cached rwRENDERSTATEVERTEXALPHAENABLE (just set FALSE above) at draw
+	// time, which rewrites D3DRS_ALPHABLENDENABLE=FALSE over these raw sets.
+	// The draw then degrades to a REPLACE of the whole screen with the shader's
+	// ray-only output (GodRays.hlsl deliberately emits NO scene colour for the
+	// additive contract) = full-screen black with bright streaks along the
+	// sun-facing edges, OUTDOORS ONLY — the sun-on-screen gate below returns
+	// early whenever the sun is behind the camera or off-screen, which is why
+	// interiors looked perfect.
+	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
+	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDONE);
+	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDONE);
 	RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
 	RwD3D9SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
 	RwD3D9SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
@@ -5126,12 +7310,12 @@ DrawGodRays(void)
 	float c2[4] = { numSamples, 0.0f, 0.0f, 0.0f };
 	RwD3D9SetPixelShaderConstant(2, c2, 1);
 
-	// Render fullscreen quad
-	overrideIm2dPixelShader = GodRays;
-	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
-	overrideIm2dPixelShader = nil;
+	// Render fullscreen quad — SEH-guarded so the override clears on fault too.
+	guardedIm2DRender(GodRays, rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6, "godrays");
 
-	// Cleanup
+	// Cleanup — push the blend factors back through BOTH layers: the rw cache
+	// now owns ONE/ONE for this pass, and leaving it there would leak additive
+	// blending into the next draw that re-emits cached states.
 	RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
 	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
 	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)TRUE);
@@ -5139,9 +7323,15 @@ DrawGodRays(void)
 	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
 	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)NULL);
 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
+	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
+	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
 	RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
 
 	CPostEffects::ImmediateModeRenderStatesReStore();
+	if(rawGeomSaved){
+		RestoreRawGeomStates(rawGeom);
+		rawGeomSaved = false;
+	}
 }
 
 void (*CPostEffects::Initialise_orig)(void);

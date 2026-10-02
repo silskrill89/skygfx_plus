@@ -690,6 +690,25 @@ WaterDrops::Render(void)
 	ms_tex->raster = CPostEffects::pRasterFrontBuffer;
 	CPostEffects::UpdateFrontBuffer();
 
+	// Three-layer save of SRC/DESTBLEND BEFORE any state write in this pass
+	// (incl. DefinedState — if it re-canonicalises blend we still restore the
+	// true pre-entry values). This pass writes SRC/DEST at L2 only and
+	// historically never restored them: pending==applied at the leaked value
+	// makes the next RwD3D9SetRenderState to that value a no-op, and a
+	// pending!=applied pair flushes the leak straight back over any raw
+	// restore (see postfx.cpp Save/RestoreRawGeomStates). Pre-seeded, never bare.
+	RwUInt32 savedSrcRw = rwBLENDSRCALPHA, savedDstRw = rwBLENDINVSRCALPHA;
+	DWORD savedSrcDrv = D3DBLEND_SRCALPHA, savedDstDrv = D3DBLEND_INVSRCALPHA;
+	DWORD savedSrcDev = D3DBLEND_SRCALPHA, savedDstDev = D3DBLEND_INVSRCALPHA;
+	RwRenderStateGet(rwRENDERSTATESRCBLEND, &savedSrcRw);
+	RwRenderStateGet(rwRENDERSTATEDESTBLEND, &savedDstRw);
+	RwD3D9GetRenderState(D3DRS_SRCBLEND, &savedSrcDrv);
+	RwD3D9GetRenderState(D3DRS_DESTBLEND, &savedDstDrv);
+	if(d3d9device){
+		d3d9device->GetRenderState(D3DRS_SRCBLEND, &savedSrcDev);
+		d3d9device->GetRenderState(D3DRS_DESTBLEND, &savedDstDev);
+	}
+
 	DefinedState();
 	RwRenderStateSet(rwRENDERSTATEFOGENABLE, 0);
 	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, 0);
@@ -720,10 +739,31 @@ WaterDrops::Render(void)
 	RwD3D9SetIndices(ms_indexBuf);
 	RwD3D9DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0, ms_numBatchedDrops * 4, 0, ms_numBatchedDrops * 2);
 
+	// Breadcrumb for the outdoor-occluder repro: proves the overlay was LIVE
+	// this frame and which front-buffer dims it sampled/aliased.
+	if(dbglog_throttle("waterdrops"))
+		dbglog("[WATERDROPS] overlay drew %d quads, frontBuffer raster=%p %dx%d",
+			ms_numBatchedDrops, (void*)CPostEffects::pRasterFrontBuffer,
+			CPostEffects::pRasterFrontBuffer ? CPostEffects::pRasterFrontBuffer->width : 0,
+			CPostEffects::pRasterFrontBuffer ? CPostEffects::pRasterFrontBuffer->height : 0);
+
 	RwD3D9SetTexture(NULL, 1);
 	RwD3D9SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
 	RwD3D9SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
 	DefinedState();
+
+	// Blend restore AFTER DefinedState so these values win on overlap
+	// (same ordering rule as postfx ReStore). L1 rw cache (rw-domain value),
+	// L2 driver pending (D3D domain — must re-sync or the next flush re-leaks),
+	// L3 raw device (authoritative).
+	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)savedSrcRw);
+	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)savedDstRw);
+	RwD3D9SetRenderState(D3DRS_SRCBLEND, savedSrcDrv);
+	RwD3D9SetRenderState(D3DRS_DESTBLEND, savedDstDrv);
+	if(d3d9device){
+		d3d9device->SetRenderState(D3DRS_SRCBLEND, savedSrcDev);
+		d3d9device->SetRenderState(D3DRS_DESTBLEND, savedDstDev);
+	}
 
 	RwRenderStateSet(rwRENDERSTATEFOGENABLE, 0);
 	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)1);

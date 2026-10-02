@@ -44,9 +44,26 @@ float4 screenSize   : register(c29); // (screenW, screenH, 1/screenW, 1/screenH)
 sampler2D clusterTex : register(s5);   // 128x128 RGBA8 tile light index texture
 float4 clusterParams : register(c45);  // (tileSize, gridW, gridH, lightCount)
 float4 layerCfg   : register(c46);  // x = vehPBRLayers layer bitmask
+// PBR BUILDING env — uploaded per mesh by the PBR cb (buildingPipe.cpp).
+// {x = enable, y = material env-map weight, z = sky reflect strength, w = 0}
+// See the env block at the end of main_building().
+float4 bldEnv     : register(c47);
+// Part A3/B: {chromeClearcoat (0.6=legacy identity), envSpecularityMult (1=identity), z, w}
+// — uploaded ONCE per CustomPipeRenderCB_Env invocation before the mesh loop
+// (vehiclePipe.cpp). c44 was VS-only (campos) repo-wide; free in every PS.
+//   .z = vehEnvStrengthMode (0/1)   .w = vehEnvGlint strength (0..1)
+// REFLECTION REGISTER CONTRACT: c44.{x,y,z,w} and c20.{y,z,w} are the only
+// vehicle-reflection config inputs of main(); the rest ride iblParams (c3),
+// fxParams (c1), layerCfg (c46) and skyParams (c28).
+float4 chromeParams : register(c44);
 float4 clusterLightPos[32] : register(c48);  // (pos.x, pos.y, pos.z, radius) per light
 float4 clusterLightCol[32] : register(c80);  // (col.r*intensity, col.g*intensity, col.b*intensity, 0) per light
-float4 iblAmbient : register(c20);  // x = sky hemisphere ambient weight (config->pbrIblAmbientWeight)
+// x = sky hemisphere ambient weight (config->pbrIblAmbientWeight)
+// y = vehEnvFallback (0/1)   z = WetRoads 0..1 (CPU-gated by config->vehWetEnv)
+// w = vehEnvMask (0/1)
+// Uploaded once per Env cb; main_building only reads .x (buildingPipe.cpp:1074
+// writes a 1-float upload, so .y/.z/.w are stale-but-unread on that path).
+float4 iblAmbient : register(c20);
 
 // Universal dynamic-sky hemisphere ambient tint, shared by the vehicle and building
 // PBR paths so both sit on one ambient/IBL timeline. Samples the per-frame DynamicSky
@@ -127,9 +144,24 @@ float4 main(PS_INPUT IN, float4 vpos : VPOS) : COLOR
         // buffer is a fullscreen half-res texture; diffuse UVs smear wrong texels
         // across the paint.
         float2 screenUV = vpos.xy * screenSize.zw;
-        float3 ssNormal = tex2D(normalBufTex, screenUV).rgb * 2.0 - 1.0;
-        if(dot(ssNormal, ssNormal) > 0.25)
-            N = normalize(lerp(N, ssNormal, 0.3));
+        float4 ssSample = tex2D(normalBufTex, screenUV);
+        float3 ssNormal = ssSample.rgb * 2.0 - 1.0;
+        float ssLen = length(ssNormal);
+        // Validity gate — hardened, backported verbatim from main_building
+        // (:560+), which needed exactly this fix. The old test here was
+        //   if(dot(ssNormal, ssNormal) > 0.25)
+        // which only rejects an all-zero texel: a never-cleared / stale /
+        // resolution-changed D3DPOOL_DEFAULT RT decodes to an ARBITRARY length
+        // (and the (0.5,0.5,1.0) sky marker is unit-length but is sky, not
+        // geometry) — those tilted N and drove GGX blowout + glints on the
+        // paint. NormalBuffer writes normalized normals, so valid texels decode
+        // to unit length; .a carries depth/far, so reject the sky marker there.
+        // Lerp the weight OUT instead of a binary accept.
+        float ssValid = smoothstep(0.55, 0.85, ssLen)
+                      * (1.0 - smoothstep(1.15, 1.45, ssLen))
+                      * (1.0 - step(0.99, ssSample.a));
+        if(ssValid > 0.001)
+            N = normalize(lerp(N, ssNormal / max(ssLen, 1e-7), 0.3 * ssValid));
     }
 
     // ---- PBR material properties (KHR_materials_pbrSpecularGlossiness workflow) ----
@@ -155,6 +187,17 @@ float4 main(PS_INPUT IN, float4 vpos : VPOS) : COLOR
     float isWheel = paintNoise.x;
     float wheelNoise = whiteNoise(IN.texcoord0 * 47.0);
     glossiness = lerp(glossiness, 0.85, isWheel * wheelNoise * 0.5);
+
+    // ---- WET ROADS (ported from main_building :550-565) ----
+    // [missing term] main_building damps the base and sharpens the surface in
+    // the rain; main() had NO wet response at all, so cars stayed dry-looking
+    // beside wet buildings. CPU folds config->vehWetEnv into PS c20.z, so this
+    // block is a no-op (c20.z == 0) whenever the toggle is off.
+    float wetRoadsVeh = saturate(iblAmbient.z);
+    if(wetRoadsVeh > 0.01){
+        baseColor *= lerp(1.0, 0.85, wetRoadsVeh);   // water absorption
+        glossiness  = lerp(glossiness, 0.9, wetRoadsVeh);
+    }
 
     // (paintNoise.y/z = noiseScale/edgeBlend, reserved for future reflection breakup)
 
@@ -206,6 +249,23 @@ float4 main(PS_INPUT IN, float4 vpos : VPOS) : COLOR
     // Env reflection strength knob. iblParams.x was the (dead) specular slot;
     // it is now repurposed so reflection tuning needs no extra register.
     float envIntensity = max(iblParams.x, 0.0);
+    // Strength placement [energy-consistent composite].
+    // Legacy scaled the env CONTENT by envIntensity while kr still REMOVED kr
+    // of the body, so turning the strength slider down darkened the paint by
+    // kr instead of weakening the reflection (lerp(body, dim*env, kr) =
+    // body*(1-kr) + dim*env*kr). Energy mode keeps the content at full scale
+    // and puts the knob on the Fresnel COVERAGE (kr *= intensity): bit-
+    // identical at intensity 1.0, body fully intact at low intensity.
+    // chromeParams.z carries the mode (0 = legacy). See config->vehEnvStrengthMode.
+    float envContent  = 1.2;
+    float envCoverage = 1.0;
+    if(chromeParams.z > 0.5)
+        envCoverage = saturate(envIntensity);
+    else
+        envContent = 1.2 * envIntensity;
+    // Wet roads widen the reflection band (a glassy film mirrors more of the
+    // hemisphere at every angle) — kr is saturate()'d at the composite below.
+    envCoverage *= lerp(1.0, 2.0, wetRoadsVeh);
     // The env map is a PERSPECTIVE render from the camera's viewpoint (60m clip),
     // so sample it by projecting the world-space reflection vector with the main
     // camera's view window (c3.zw = tanHalfFovX/Y). Upward faces now reflect the
@@ -214,12 +274,49 @@ float4 main(PS_INPUT IN, float4 vpos : VPOS) : COLOR
     float3 R_view = float3(dot(R_world, viewRight), dot(R_world, viewUp), dot(R_world, viewFwd));
     float rz = max(R_view.z, 0.05);
     float2 envReflUV = saturate(float2(
-        0.5 + 0.5 * clamp(R_view.x / (rz * iblParams.z), -1.2, 1.2),
-        0.5 - 0.5 * clamp(R_view.y / (rz * iblParams.w), -1.2, 1.2)));
+        0.5 + 0.5 * clamp(R_view.x / (rz * max(iblParams.z, 1e-7)), -1.2, 1.2),
+        0.5 - 0.5 * clamp(R_view.y / (rz * max(iblParams.w, 1e-7)), -1.2, 1.2)));
     float3 envRefl = tex2D(envMapTex, envReflUV).rgb;
     float3 iblSample = tex2D(iblTex, envReflUV).rgb;
+    // Content of the reflection TEXTURE, decided BEFORE the mask so a
+    // masked-to-black region reads as "the mask says no reflection here" and
+    // not as "reflectionTex failed to render".
+    float rawEnvHasContent = (dot(envRefl, envRefl) > 1e-6) ? 1.0 : 0.0;
+
+    // [missing term: reflection MASK — PS2 / Specular / Neo parity]
+    // main_ps2EnvSpecFx and main_specCarFx both modulate by maskTex (s2), and
+    // CarPipe::RenderEnvTex bakes CarReflectionMask into reflectionTex with a
+    // 0..1 screen quad (SRCBLEND=ZERO/DESTBLEND=SRCCOLOR) — but the
+    // RenderSphereReflections path that CAR_MOBILE/CAR_ENV/CAR_MODERN use never
+    // bakes it, and this cb bound s2 without ever reading it. The mask is
+    // authored in reflection-RT UV space, which is exactly envReflUV, so
+    // sampling it at the same UV reproduces the baked result (Mobile lerps
+    // against that baked RT, so this is bit-comparable to the reference path).
+    // CPU sends 0 when config->vehEnvMask is off OR reflectionMask failed to load.
+    if(iblAmbient.w > 0.5 && rawEnvHasContent > 0.5)
+        envRefl *= tex2D(maskTex, envReflUV).rgb;
+
+    // [missing term: env-source VALIDITY FALLBACK]
+    // layer2 = lerp(body, envTerm, kr) against an EMPTY reflectionTex replaced
+    // up to kr of the paint with black — the single biggest reason Modern read
+    // darker than Mobile. Only a texture with no content runs the chain
+    // env -> ibl -> sky (a masked-to-black region deliberately does NOT: that
+    // fade must stay a fade). envUsable is then measured on the FINAL source,
+    // so kr is forced to 0 wherever there is nothing to reflect — no lerp
+    // toward an empty environment, no double-darkening. Better than Mobile
+    // here, which lerps body*(1-k) against the masked black. Toggle
+    // config->vehEnvFallback: off skips the chain AND pins envUsable = 1,
+    // i.e. the exact legacy behaviour.
+    float3 envSrc = envRefl;
+    if(iblAmbient.y > 0.5 && rawEnvHasContent < 0.5){
+        envSrc = iblSample;
+        if(dot(envSrc, envSrc) <= 1e-6) envSrc = skyParams.rgb;
+    }
+    float envUsable = 1.0;
+    if(iblAmbient.y > 0.5)
+        envUsable = (dot(envSrc, envSrc) > 1e-6) ? 1.0 : 0.0;
     // Blend env with subtle IBL tint for depth
-    float3 iblBlend = lerp(envRefl, envRefl + iblSample * 0.08 * LF(4), 0.4);
+    float3 iblBlend = lerp(envSrc, envSrc + iblSample * 0.08 * LF(4), 0.4);
     // Sky contribution: upward-facing surfaces reflect sky color from the top of the sphere map
     float skyBlend = saturate(N.y) * skyParams.w;
     iblBlend = lerp(iblBlend, skyParams.rgb, skyBlend * 0.3 * LF(5));
@@ -230,11 +327,23 @@ float4 main(PS_INPUT IN, float4 vpos : VPOS) : COLOR
     // Clearcoat Fresnel: carcols shininess drives env gloss intensity
     // fxParams.w = envData->GetShininess() * 8 * envShininessMult — the same carcols
     // value the VS bakes into IN.envColor.a (which the glass shader reads).
-    // fxParams.y is envPower (≈20) and saturates to 1.0 — it must NOT drive gloss.
+    // fxParams.y is envPower (≈20 default) — it now drives the SUN-GLINT
+    // exponent below (envGlint), NOT paint glossiness (c22.x) — this comment
+    // is preserved: .y must not drive gloss. It must not saturate to a flat
+    // 1.0 either: min-guarded and used only as a pow() exponent.
     // Fresnel F0 rises from dielectric (0.04) toward the material F0 for metals,
     // so chrome/wheel gain a strong grazing-to-normal mirror band.
     float clearcoatFresnel = SchlickFresnelScalar(NdotV, lerp(0.04, max(specularF0, 0.04), metallicness));
-    float carcolsShine = saturate(fxParams.w);  // 0..1 normalized carcols shininess
+    // Part A2: widened from saturate() (which clamped every mult>1 back to 1.0
+    // — the "envShininessMult doesn't work" bug). cap 4.0 honors mult>1 while
+    // keeping ≤1 values bit-identical to the old saturate (CPU also clamps
+    // shininess to 1.0 whenever the shaped mult ≤ 1).
+    float carcolsShine = min(fxParams.w, 4.0f);  // 0..4 carcols shininess (1.0 = legacy normalized)
+    // Part B (chromeClearcoat, PS c44.x): strength of the dielectric clearcoat
+    // highlight band. Default 0.6 = legacy hardcode (identity when chromeClearcoat
+    // = 0.6). Blend by metallicness: chrome (metallicness≈1) gets the full config
+    // knob, paint stays on the legacy 0.6 so the slider at default changes nothing.
+    float ccStr = lerp(0.6, chromeParams.x, metallicness);
     // Gloss strength: visible env reflection at all angles (0.45 base), stronger
     // at grazing. v3 (0.10 base × 1.5 boost × 0.15 grazing weight) put face-on
     // env at ~2% — invisible. v1 (0.25-0.8 × 2.0 × 0.5) white-washed dark paint.
@@ -242,7 +351,15 @@ float4 main(PS_INPUT IN, float4 vpos : VPOS) : COLOR
     // Paint tinting: reflection tinted by paint color at normal incidence, white at grazing.
     // Metals reflect neutrally (white); paint reflections stay paint-tinted.
     float3 reflTint = lerp(matCol.rgb, float3(1,1,1), max(clearcoatFresnel, metallicness));
-    float3 envTerm = iblBlend * reflTint * (1.2 * envIntensity);
+    // Part A1 (envPower): fxParams.y as the SUN-GLINT exponent — the reflection
+    // brightens where the mirror direction lines up with the sun; higher power =
+    // tighter/more pinpoint glint, lower = broader. Never touches paint gloss
+    // (c22.x) or carcolsShine, min-guarded ≥1 so 0 can't wash the term, and the
+    // blend only ADDS (default power≈20 → a small hot spot on sun-facing
+    // reflections; no darkening anywhere, so default output stays ~parity).
+    float envPow = max(fxParams.y, 1.0f);
+    float envGlint = pow(saturate(dot(R_world, L)), envPow);
+    float3 envTerm = iblBlend * reflTint * envContent * (1.0 + 0.5 * envGlint);
     // Energy-conserving clearcoat blend (carcols-shade safe):
     // paint dominates face-on (kr ~0.15), world mirrors at grazing (kr -> ~0.7+).
     // carcols shininess widens the reflection band for shiny paints.
@@ -252,7 +369,26 @@ float4 main(PS_INPUT IN, float4 vpos : VPOS) : COLOR
     // Chrome/wheel: guarantee a visible mirror band regardless of paint carcols,
     // so metallic trim reads as metal instead of dark tinted paint.
     kr = saturate(max(kr, metallicness * 0.55));
+    // Energy-consistent composite  F*env + (1-F)*body:
+    //   * envCoverage — the strength knob scales the FRACTION OF THE BODY the
+    //     env may replace, never the env content (chromeParams.z note above);
+    //   * envUsable   — an environment with no content replaces nothing.
+    // Toggle off (config->vehEnvFallback=0) => envUsable stays 1 => legacy.
+    kr = saturate(kr * envCoverage * envUsable);
     float3 layer2 = lerp(layer1, envTerm, kr);
+
+    // [missing term: standalone MOBILE sun glint]
+    // main_mobileVehicle adds pow(dot(reflectV, sunDir), 10) * strength * 2
+    // * sunColor directly on top of its env lerp — texture-INDEPENDENT, so the
+    // highlight survives a dead reflectionTex (Modern's envGlint is multiplied
+    // by the env source and dies with it). Off by default
+    // (config->vehEnvGlint = 0) because Modern already carries the GGX sun lobe
+    // and envGlint; also gated by LF(2) (sun/spec layer) so the existing layer
+    // bitmask can switch it off independently.
+    if(chromeParams.w > 0.0){
+        float mobileGlint = pow(saturate(dot(R_world, L)), 10.0);
+        layer2 += reflTint * sunContrib * (mobileGlint * chromeParams.w * 2.0) * LF(2);
+    }
 
     // ---- Specular: GGX/Smith for direct sun highlight ----
     // glTF KHR_materials_pbrSpecularGlossiness: D_GGX and V_SmithCorrelated
@@ -270,7 +406,7 @@ float4 main(PS_INPUT IN, float4 vpos : VPOS) : COLOR
         float D_cc = D_GGX(NdotH, 0.25);  // very smooth clearcoat
         float Vis_cc = V_SmithCorrelated(NdotV, NdotL_sun, 0.25);
         float3 F_cc = F_SchlickLH(LdotH, float3(0.04, 0.04, 0.04));  // clearcoat F0
-        specTotal += D_cc * F_cc * Vis_cc * NdotL_sun * sunContrib * 0.6 * LF(6);
+        specTotal += D_cc * F_cc * Vis_cc * NdotL_sun * sunContrib * ccStr * LF(6);
     }
     for(int i = 0; i < 6; i++){
         float3 Ll = -lightDir[i];
@@ -287,7 +423,7 @@ float4 main(PS_INPUT IN, float4 vpos : VPOS) : COLOR
             float D_cc_l = D_GGX(NdotH, 0.25);
             float Vis_cc_l = V_SmithCorrelated(NdotV, NdotL, 0.25);
             float3 F_cc_l = F_SchlickLH(LdotH, float3(0.04, 0.04, 0.04));
-            specTotal += D_cc_l * F_cc_l * Vis_cc_l * NdotL * lightCol[i].rgb * 0.6 * LF(6);
+            specTotal += D_cc_l * F_cc_l * Vis_cc_l * NdotL * lightCol[i].rgb * ccStr * LF(6);
         }
     }
 
@@ -334,7 +470,7 @@ float4 main(PS_INPUT IN, float4 vpos : VPOS) : COLOR
                     float Dc_cc = D_GGX(NdotHc, 0.05);
                     float Visc_cc = V_SmithCorrelated(NdotV, NdotLc, 0.05);
                     float3 Fc_cc = F_SchlickLH(LdotHc, float3(0.04, 0.04, 0.04));
-                    specTotal += Dc_cc * Fc_cc * Visc_cc * NdotLc * clCol.rgb * atten * 0.6;
+                    specTotal += Dc_cc * Fc_cc * Visc_cc * NdotLc * clCol.rgb * atten * ccStr;
                     // Diffuse from cluster lights. Vehicles accumulated ONLY specular
                     // before this, so street lamps lit the road but left car bodies as
                     // black silhouettes at night. Mirrors main_building's clusterDiffuse.
@@ -352,6 +488,11 @@ float4 main(PS_INPUT IN, float4 vpos : VPOS) : COLOR
     float3 rimLight = sunContrib * rimFresnel * 0.18 * LF(3);
 
     specTotal *= 1.5 * LF(2);  // visible sun glints
+    // Part A3 (envSpecularityMult, PS c44.y): the CPU surfProps.specular mult was
+    // dead (main() never reads surfProps.y / c0.z), so the slider did nothing.
+    // Scale the final spec combine here instead — c44.y default 1.0 = identity.
+    // (Global specular scale approximation; chromeEnvBoost rides c3.x separately.)
+    specTotal *= max(chromeParams.y, 0.0f);
 
     // ---- COMPOSITE ----
     // layer1 = VS game lighting (ambient + 7 directional × matCol, matches building pipe)
@@ -485,6 +626,10 @@ struct PS_INPUT_BUILDING {
     float3 WorldPos    : TEXCOORD2;
     float3 ViewDir     : TEXCOORD3;
     float3 SunDir      : TEXCOORD4;
+    // Camera-space normal from buildingPBRVS (TEXCOORD5) — MUST match the VS
+    // output list or the halves drift and the env UV reads an undefined
+    // interpolator. Ported from GTAIVBuilding_vs' Texcoord1.
+    float3 CamNormal   : TEXCOORD5;
     float4 color       : COLOR0;  // vertex color (day/night blend in alpha)
     float4 dayNight    : COLOR1;  // day/night parameters
 };
@@ -530,9 +675,22 @@ float4 main_building(PS_INPUT_BUILDING IN, float4 vpos : VPOS) : COLOR
     // (buildingPipe uploads c24.w=1.0 when s4 is set). Screen UV from VPOS.
     if(ambientColor.w > 0.5){
         float2 screenUV = vpos.xy * screenSize.zw;
-        float3 ssNormal = tex2D(normalBufTex, screenUV).rgb * 2.0 - 1.0;
-        if(dot(ssNormal, ssNormal) > 0.25)
-            N = normalize(lerp(N, ssNormal, 0.3));
+        float4 ssSample = tex2D(normalBufTex, screenUV);
+        float3 ssNormal = ssSample.rgb * 2.0 - 1.0;
+        float ssLen = length(ssNormal);
+        // Validity gate (strengthened): NormalBuffer encodes normalized
+        // normals, so valid texels decode to unit length; stale/garbage texels
+        // (never-cleared RT, skipped refresh, resolution-change remnants)
+        // decode to arbitrary length and must NOT tilt N (GGX blowout — the
+        // "white ground patches"). The sky marker (0.5,0.5,1.0) is unit-length
+        // but carries depth-alpha 1.0 (NormalBuffer writes depth/far in alpha),
+        // so reject it too — one-frame-stale sky must not blend where geometry
+        // now is. Lerp-OUT invalid (weight -> 0) instead of a binary accept.
+        float ssValid = smoothstep(0.55, 0.85, ssLen)
+                      * (1.0 - smoothstep(1.15, 1.45, ssLen))
+                      * (1.0 - step(0.99, ssSample.a));
+        if(ssValid > 0.001)
+            N = normalize(lerp(N, ssNormal / max(ssLen, 1e-7), 0.3 * ssValid));
     }
 
     // Core PBR vectors
@@ -558,7 +716,7 @@ float4 main_building(PS_INPUT_BUILDING IN, float4 vpos : VPOS) : COLOR
     float3 sunContrib = directCol.rgb;
 
     // Diffuse lighting (Burley)
-    float3 H = normalize(V + L);
+    float3 H = length(V + L) > 1e-6 ? normalize(V + L) : float3(0, 0, 1);
     float VdotH = max(dot(V, H), 0.0);
     float diffuse = BurleyDiffuse(NdotL, NdotV, VdotH, roughness);
 
@@ -575,7 +733,7 @@ float4 main_building(PS_INPUT_BUILDING IN, float4 vpos : VPOS) : COLOR
         float3 Ll = -lightDir[i];
         float NdotL_l = max(dot(N, Ll), 0.0);
         if(NdotL_l > 0.0){
-            float3 Hl = normalize(V + Ll);
+            float3 Hl = length(V + Ll) > 1e-6 ? normalize(V + Ll) : float3(0, 0, 1);
             float NdotH_l = max(dot(N, Hl), 0.0);
             float Dl = D_GGX(NdotH_l, roughness);
             float Visl = V_SmithCorrelated(NdotV, NdotL_l, roughness);
@@ -616,7 +774,7 @@ float4 main_building(PS_INPUT_BUILDING IN, float4 vpos : VPOS) : COLOR
                 atten *= atten;
                 float NdotLc = max(dot(N, Lc), 0.0);
                 if(NdotLc > 0.0) {
-                    float3 Hc = normalize(V + Lc);
+                    float3 Hc = length(V + Lc) > 1e-6 ? normalize(V + Lc) : float3(0, 0, 1);
                     float NdotHc = max(dot(N, Hc), 0.0);
                     float LdotHc = max(dot(Lc, Hc), 0.0);
                     float Dc = D_GGX(NdotHc, roughness);
@@ -642,8 +800,69 @@ float4 main_building(PS_INPUT_BUILDING IN, float4 vpos : VPOS) : COLOR
     color += specTotal;
     color += clusterDiffuse;
 
-    // Output linear HDR — PostFX TonemapPass handles tonemapping uniformly
-    return float4(max(color, 0.0), diff.a);
+    // ==== ENVIRONMENT REFLECTION — PORTED FROM THE GTA IV BUILDING PATH ====
+    // [the gap this closes] IV, PS2 and Xbox ALL give materials flagged with
+    // the envmap bit (`*(int*)&material->surfaceProps.specular & 1`) a
+    // reflection: their callbacks bind CustomEnvMapPipeMaterialData::texture
+    // to s1 and run a second additive Envcolor = 192/128 * shininess pass
+    // (buildingPipe.cpp PS2 :683 / Xbox :809). The PBR cb had no equivalent
+    // branch at all, so under Building=PBR those materials rendered FLAT —
+    // PBR's reflection path was strictly WEAKER than IV's, which is what this
+    // ports (plus a superset term IV does not have).
+    //
+    // c47 = {enable, materialEnvWeight, skyReflectStrength, 0}:
+    //   .x  config->bldEnvReflect   — 0 disables the whole block
+    //   .y  1.5 * envData->GetShininess() for an env-mapped material, else 0
+    //       (192/128 == 1.5 is the exact Envcolor scale the IV/PS2 FX pass
+    //       uses; the CPU only fills it when s1 really holds an env map)
+    //   .z  config->bldSkyReflect   — Fresnel-weighted sky reflection from the
+    //       already-bound IBL capture, for materials with NO env map
+    //   UV  TEXCOORD5 = camera-space normal, `n.xy * 0.5 + 0.5` — IV's model
+    //       (GTAIVBuilding_ps does exactly this remap; its c0 = {0.5,0,0,0}
+    //       is the same affine map, folded into the expression here).
+    if(bldEnv.x > 0.0){
+        if(bldEnv.y > 0.0){
+            float2 envUV = saturate(IN.CamNormal.xy * 0.5 + 0.5);
+            float3 envSample = tex2D(envMapTex, envUV).rgb;
+            // Never let a dead/empty sample touch the body: an unbound or
+            // black s1 would ADD nothing anyway, but a NaN would poison it
+            // (NaN * w is still NaN and renders black) — the same defined-
+            // sample rule the IV callback applies by binding the diffuse to s1.
+            //
+            // ENERGY MODEL: weight the additive env term by the Schlick
+            // Fresnel F(NdotV) (PBR_Common F_Schlick) instead of adding a FLAT
+            // envSample * bldEnv.y. The PBR base above is already fully lit, so
+            // a flat add saturated env-mapped glass/metal facades to white.
+            // F is the physically correct reflectance lobe: face-on dielectrics
+            // barely add (F -> F0 ~= 0.04) while only grazing views approach a
+            // mirror (F -> 1); tinted F0 also keeps metals colour-correct.
+            // bldEnv.y remains the CPU-supplied intensity input — it is now
+            // gated by F, so a high shininess (1.5 * shininess) no longer
+            // blows out. F_atNdotV is guaranteed finite (F0 in [0,1], NdotV in
+            // [0,1]) so no NaN can reach the additive.
+            if(dot(envSample, envSample) > 1e-6)
+                color += envSample * F_atNdotV * bldEnv.y;
+        }else if(bldEnv.z > 0.0){
+            // Superset term (NOT in IV): reflect the sky capture along the
+            // mirrored view vector. s3 is already bound by the cb, and y is
+            // sampled as ELEVATION — the same convention skyFill and
+            // SkyHemisphereTint already use, so no new sampler or UV scheme.
+            float3 R = reflect(-V, N);
+            float3 skyEnv = tex2D(iblTex, float2(0.5, saturate(R.y * 0.5 + 0.5))).rgb;
+            float skyValid = (dot(skyEnv, skyEnv) > 1e-6) ? 1.0 : 0.0;
+            // Energy-consistent F*env + (1-F)*body (same rule the vehicle
+            // lane uses): an environment with no content replaces NOTHING, so
+            // a dead IBL can never darken a wall the way a raw lerp would.
+            float envW = saturate(bldEnv.z * saturate(F_atNdotV.r) * skyValid);
+            color = lerp(color, skyEnv, envW);
+        }
+    }
+
+    // Output linear HDR — PostFX TonemapPass handles tonemapping uniformly.
+    // Alpha must match PS2 simplePS (tex * IN.color * colorscale → a = tex.a
+    // * color.a): vertex/material alpha (WIND fade, decal vertex fade) was
+    // dropped → alpha-blended road decals rendered opaque → black marks.
+    return float4(max(color, 0.0), saturate(diff.a * IN.color.a));
 }
 
 // ============================================================

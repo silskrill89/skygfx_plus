@@ -25,7 +25,7 @@ sampler2D diffuseTex : register(s0);
 sampler2D envMapTex  : register(s1);
 
 float4 surfProps   : register(c0);
-float4 fxParams    : register(c1);
+float4 fxParams    : register(c1);  // .xy = tanHalfFovX/Y (env perspective projection), .z = lightmult
 float4 glassParams : register(c22);  // { tintR, tintG, tintB, opacity }
 float4 lightParams : register(c23);  // { isLight, lightBoost, tintStrength, 0 }
 float3 viewRight    : register(c25); // view matrix row 0 (world→view rotation)
@@ -55,11 +55,20 @@ float4 main(PS_INPUT IN) : COLOR
     float3 F0 = float3(0.04, 0.04, 0.04);
     float fresnel = SchlickFresnelScalar(NdotV, 0.04);
 
-    // Env map reflection — stable sphere map (view-space R for camera-rendered sphere map)
+    // Env map reflection — the env texture is a PERSPECTIVE render from the
+    // camera's viewpoint (main camera view window — same projection the body
+    // path uses in VehiclePBR_Modern.main). SphereEnvMapUV assumed a classic
+    // sphere map and produced arbitrary patches on this texture; project the
+    // view-space reflection vector instead. tanHalfFov comes from PS c1.xy
+    // (uploaded per glass mesh by the Env cb).
     float3 R_world = reflect(-V, N);
     float3 R_view = float3(dot(R_world, viewRight), dot(R_world, viewUp), dot(R_world, viewFwd));
-    float3 V_view = float3(dot(V, viewRight), dot(V, viewUp), dot(V, viewFwd));
-    float2 envUV = SphereEnvMapUV(R_view, V_view);
+    float rz = max(R_view.z, 0.05);
+    float tanX = max(fxParams.x, 1e-7);
+    float tanY = max(fxParams.y, 1e-7);
+    float2 envUV = saturate(float2(
+        0.5 + 0.5 * clamp(R_view.x / (rz * tanX), -1.2, 1.2),
+        0.5 - 0.5 * clamp(R_view.y / (rz * tanY), -1.2, 1.2)));
     float4 env = tex2D(envMapTex, envUV);
     // Clamp guards against a mis-scaled VS shininess (envPower in the .w slot)
     // blowing the gloss to white — the env sample would otherwise be ×20.

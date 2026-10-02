@@ -4,11 +4,17 @@
 // Constants:
 //   c0 = (blurStrength, radialStrength, maxSamples, speedFactor)
 //   c1 = (screenW, screenH, 1/screenW, 1/screenH)
-//   c2 = (cameraVelocity, cameraRotation, deltaTime, 0)
+//   c2 = (cameraTerm, fullFrameW, fbScaleU, fbScaleV)
+//        cameraTerm  = camera movement x strength x speed-ramp (C++ smoothstep)
+//        fullFrameW  = 0 edge-only lens blur (running) .. 1 full frame (vehicle)
+//        fbScaleU/V  = (screenW/frontBufferW, screenH/frontBufferH): the front
+//                      buffer holds the frame 1:1 at its top-left of a larger
+//                      (e.g. 2048x2048) raster, so s0 fetches scale into the
+//                      content region. s1/s2 are screen-sized -> UV 0..1 direct.
 //   c3 = (near, far, tanFovX, maxBlurPx) — depth-aware blur scaling
 //
 // Textures:
-//   s0 = current frame
+//   s0 = current frame (front buffer — fetched at tex*fbScale)
 //   s1 = motion buffer (RG=motion XY, B=motion magnitude, A=depth)
 //   s2 = depth buffer (INTZ, sampled while depth hook is suspended)
 
@@ -48,8 +54,8 @@ float4 main(PS_INPUT IN) : COLOR
     float2 pixel = screenSize.zw;
     float2 center = float2(0.5, 0.5);
     
-    // Sample current pixel
-    float3 color = tex2D(currentTex, tex).rgb;
+    // Sample current pixel (front buffer content region — see fbScale above)
+    float3 color = tex2D(currentTex, tex * cameraParams.zw).rgb;
     
     // Sample motion buffer
     float4 motionData = tex2D(motionTex, tex);
@@ -69,10 +75,20 @@ float4 main(PS_INPUT IN) : COLOR
     
     // Calculate blur amount based on:
     // 1. Motion magnitude from buffer
-    // 2. Camera velocity (global movement)
+    // 2. Camera velocity (global movement, already speed-ramped on the C++ side)
     // 3. Speed factor from config
     float blurAmount = motionMagnitude * blurParams.x;
     blurAmount += cameraParams.x * blurParams.w; // Camera velocity contribution
+
+    // Lens weight: fullFrameW (cameraParams.y) ramps 0->1 with speed on the
+    // C++ side. 0 = edge-only "running" blur (centre stays sharp, radial
+    // falloff to the frame edges), 1 = uniform full-frame blur (bicycle and
+    // vehicles). radialDist is 0 at centre .. ~0.707 at corners, so the
+    // 1.41421356 factor normalises corner weight to 1.
+    float radialW = saturate(radialDist * 1.41421356);
+    float lensW = lerp(radialW, 1.0, saturate(cameraParams.y));
+    blurAmount *= lensW;
+
     blurAmount = min(blurAmount, blurParams.z * 0.01); // Clamp to max blur
 
     // Depth-aware blur scaling: linear eye-space depth from the INTZ buffer
@@ -114,11 +130,13 @@ float4 main(PS_INPUT IN) : COLOR
         float t = (float)i / 8.0;
         float2 offset = blurStep * t;
         
-        // Sample with slight RGB separation for chromatic aberration
-        float2 sampleCoordR = tex + offset * 1.0;
-        float2 sampleCoordG = tex + offset * 0.98;
-        float2 sampleCoordB = tex + offset * 0.96;
-        
+        // Sample with slight RGB separation for chromatic aberration.
+        // Scale into the front-buffer content region AFTER combining screen
+        // UV + offset (fbScale, see header) so taps stay screen-aligned.
+        float2 sampleCoordR = (tex + offset * 1.0) * cameraParams.zw;
+        float2 sampleCoordG = (tex + offset * 0.98) * cameraParams.zw;
+        float2 sampleCoordB = (tex + offset * 0.96) * cameraParams.zw;
+
         float3 sampleR = tex2D(currentTex, sampleCoordR).rgb;
         float3 sampleG = tex2D(currentTex, sampleCoordG).rgb;
         float3 sampleB = tex2D(currentTex, sampleCoordB).rgb;

@@ -321,6 +321,97 @@ int VehShaders_GetModelIndex(void *atomic){
 }
 
 // ============================================================
+// Part C — chrome by atomic FRAME name (chassis node names like
+// "bumper_f", "trim_side", "exhaust", "grille", ...).
+//
+// Precedent: chars.cpp:189-194 walks ped clumps with GetFrameNodeName
+// (game fn 0x72FB30). Walk the atomic frame + RwFrameGetParent chain,
+// case-insensitive keyword match. Marker: OR bit 3 (value 8) into the
+// material's surfaceProps.specular float LSBs — bits 0-2 are stock SA
+// MatFX flags (env1/env2/spec), bit 3 is free (float perturbed by ~4
+// ULP, same precedent as stock's own flag packing).
+//
+// Cache: 64-slot direct-mapped on (full atomic id, atomic pointer) —
+// GetModelIndex (&0x7FF) is model-level, useless per-atomic; the pointer
+// disambiguates. Miss = one frame-name walk (cheap), then bit 3 sticks.
+// ============================================================
+
+static const char *chromeFrameKeywords[] = {
+    "chrome", "bumper", "trim", "exhaust", "grille", "muffler", "wing", "spoiler",
+};
+
+// Set bit 3 on every material of the atomic's geometry (one-shot marker).
+static void
+markAtomicMaterialsChrome(RpAtomic *atomic)
+{
+    if(!atomic || !atomic->geometry)
+        return;
+    RpGeometry *geom = atomic->geometry;
+    int n = RpGeometryGetNumMaterials(geom);
+    for(int i = 0; i < n; i++){
+        RpMaterial *mat = RpGeometryGetMaterial(geom, i);
+        if(!mat) continue;
+        RwUInt32 flags = *(RwUInt32*)&mat->surfaceProps.specular;
+        if(!(flags & 8))
+            *(RwUInt32*)&mat->surfaceProps.specular = flags | 8;
+    }
+}
+
+bool VehShaders_FrameNameIsChrome(RpAtomic *atomic){
+    // Toggle OFF = never chrome by frame name, even if bits were pre-set.
+    if(!config || !config->vehAutoChrome || !atomic)
+        return false;
+
+    // Fast path: bit 3 already marked (previous frame's walk, or a mod).
+    {
+        RwUInt32 flags = 0;
+        if(atomic->geometry && RpGeometryGetNumMaterials(atomic->geometry) > 0){
+            RpMaterial *mat = RpGeometryGetMaterial(atomic->geometry, 0);
+            if(mat)
+                flags = *(RwUInt32*)&mat->surfaceProps.specular;
+        }
+        if(flags & 8)
+            return true;
+    }
+
+    // Direct-mapped cache: key on (full atomic id, pointer). Stores the VERDICT
+    // (chrome or not) — a bare pointer hit must NOT re-mark a non-chrome atomic.
+    static struct { unsigned short id; RpAtomic *ptr; bool chrome; } cache[64];
+    unsigned short atomId = CVisibilityPlugins__GetAtomicId(atomic);
+    int slot = (atomId ^ (unsigned short)((size_t)atomic >> 4)) & 63;
+    if(cache[slot].ptr == atomic && cache[slot].id == atomId){
+        if(cache[slot].chrome){
+            // Hit chrome but bit 3 clear — geometry materials were swapped/
+            // re-created after the mark; re-mark and report chrome.
+            markAtomicMaterialsChrome(atomic);
+            return true;
+        }
+        return false; // known non-chrome atomic — skip the frame walk
+    }
+
+    // Miss: walk the frame chain.
+    RwFrame *frame = RpAtomicGetFrame(atomic);
+    bool match = false;
+    for(int depth = 0; frame && depth < 16; depth++, frame = RwFrameGetParent(frame)){
+        char *name = GetFrameNodeName(frame);
+        if(!name || !name[0])
+            continue;
+        for(size_t k = 0; k < sizeof(chromeFrameKeywords)/sizeof(chromeFrameKeywords[0]); k++)
+            if(strstri(name, chromeFrameKeywords[k])){ match = true; break; }
+        if(match) break;
+    }
+
+    if(match)
+        markAtomicMaterialsChrome(atomic);
+
+    cache[slot].id = atomId;
+    cache[slot].ptr = atomic;
+    cache[slot].chrome = match;
+    return match;
+}
+
+
+// ============================================================
 // Area-based color saturation system
 // GTA SA zones: Richman, Rodeo, Hollywood/Beverly Hills, Vinewood
 // ============================================================

@@ -148,7 +148,10 @@ CustomMode_ApplyDefaults(Config *c)
 	c->envShininessMult = 1.0f;
 	c->envSpecularityMult = 1.0f;
 	c->envPower = 128.0f;
-	c->envFresnel = 0.95f;
+	// HIGH-2: was 0.95 — clampEnvSliderRanges pins envFresnel to [0..0.4]
+	// (deliberate ceiling); match it so the preset writer doesn't rely on
+	// the clamp to fix it up every apply.
+	c->envFresnel = 0.4f;
 	c->vehEnvIntensity = 1.0f;
 	c->pbrIblAmbientWeight = 0.5f;
 	c->vehChromeEnvThreshold = 0.0f;
@@ -156,7 +159,9 @@ CustomMode_ApplyDefaults(Config *c)
 	c->tonemapAdaptSpeed = 0.12f;
 	c->tonemapKeyStrength = 1.0f;
 	c->tonemapMinExposure = 0.5f;
-	c->tonemapMaxExposure = 2.0f;
+	// HIGH-1 (same class as main.cpp:1884): was 2.0 — the clamp ceiling is
+	// 1.0, so this writer only produced an immediate clamp on every apply.
+	c->tonemapMaxExposure = 1.0f;
 }
 
 const PresetConfig*

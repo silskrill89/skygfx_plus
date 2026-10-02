@@ -12,9 +12,16 @@ IDR_VEHICLEVS           RCDATA "cso/vehicleVS.cso"
 IDR_GTAIVPS             RCDATA "cso/GTAIV_ps20.cso"
 IDR_GTAIVVEHICLEVS      RCDATA "cso/GTAIVVehicle_vs.cso"
 IDR_GTAIVVEHICLEPS      RCDATA "cso/GTAIVVehicle_ps.cso"
+IDR_GTAIVBUILDINGVS     RCDATA "cso/GTAIVBuilding_vs.cso"
+IDR_GTAIVBUILDINGPS     RCDATA "cso/GTAIVBuilding_ps.cso"
 
 // SMAA
-IDR_SSAOPS              RCDATA "cso/SSAO_ps20.cso"
+// C2 FIX: was cso/SSAO_ps20.cso (the OLD unguarded shader — unguarded
+// normalize, no ProjectToUV, no depth fail-open, no saturate-before-pow).
+// IDR_SSAOPS (120) now embeds the fixed SSAO.hlsl output (ps_3_0, same
+// entry `main`); pipelinecommon.cpp:616 makePS(IDR_SSAOPS) is unchanged.
+// SSAO_ps20.cso stays on disk but is no longer referenced (only docs).
+IDR_SSAOPS              RCDATA "cso/SSAO.cso"
 IDR_SMAAPS              RCDATA "cso/SMAA.cso"
 IDR_SMAAEDGEPS          RCDATA "cso/SMAA_Edge.cso"
 IDR_SMAABLENDWEIGHTPS   RCDATA "cso/SMAA_BlendWeight.cso"
@@ -48,6 +55,8 @@ IDR_TONEMAPPASS         RCDATA "cso/TonemapPass.cso"
 // PBR / Modern
 IDR_VEHICLEPAINT_GTAIV  RCDATA "cso/VehiclePaint_GTAIV.cso"
 IDR_WATER_PARALLAX      RCDATA "cso/Water_Parallax.cso"
+IDR_WATER_IV            RCDATA "cso/Water_IV.cso"
+IDR_WATER_V             RCDATA "cso/Water_V.cso"
 IDR_WATER_VS            RCDATA "cso/Water_VS.cso"
 IDR_VEHICLEPBR_MODERN   RCDATA "cso/VehiclePBR_Modern.cso"
 IDR_GLASS_VEHICLE       RCDATA "cso/Glass_Vehicle.cso"
@@ -61,6 +70,7 @@ IDR_SKINPBR             RCDATA "cso/SkinSSS.cso"
 
 // Vehicle legacy
 IDR_VEHICLEPBRVS         RCDATA "cso/vehiclePBRVS.cso"
+IDR_PS2ENVSPECFXPS       RCDATA "cso/ps2EnvSpecFxPS.cso"
 IDR_PS2CARFXVS          RCDATA "cso/ps2CarFxVS.cso"
 IDR_SPECCARFXVS         RCDATA "cso/specCarFxVS.cso"
 IDR_SPECCARFXPS         RCDATA "cso/specCarFxPS.cso"

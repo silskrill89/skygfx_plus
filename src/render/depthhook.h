@@ -31,3 +31,6 @@ void DepthHook_Restore(void);
 
 // Release INTZ resources (call before Reset, on device lost, DllMain detach)
 void DepthHook_ReleaseResources(void);
+
+// Central cleanup on device reset (called from hook_Reset)
+void OnDeviceReset(void);

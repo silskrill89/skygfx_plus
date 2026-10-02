@@ -170,6 +170,8 @@ WRAPPER void RwD3D9SetStreamSource(RwUInt32, void*, RwUInt32, RwUInt32) { VARJMP
 WRAPPER void RwD3D9SetFVF(RwUInt32) { EAXJMP(0x7F9F30); }
 
 WRAPPER RwMatrix *RwMatrixCreate(void) { EAXJMP(0x7F2A50); }
+// Frees a matrix from RwMatrixCreate (memory-table free at +0x148); returns TRUE
+WRAPPER RwBool RwMatrixDestroy(RwMatrix *matrix) { EAXJMP(0x7F2A20); }
 WRAPPER RwMatrix *RwMatrixInvert(RwMatrix*, const RwMatrix*) { EAXJMP(0x7F2070); }
 WRAPPER RwMatrix *RwMatrixUpdate(RwMatrix* matrix) { EAXJMP(0x7F18A0); }
 WRAPPER RwFrame *RwFrameTransform(RwFrame*, const RwMatrix*, RwOpCombineType) { EAXJMP(0x7F0F70); }

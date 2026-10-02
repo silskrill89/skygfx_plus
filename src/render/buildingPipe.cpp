@@ -1,4 +1,5 @@
 #include "skygfx.h"
+#include "postfx.h"	// GetScreenSize — trusted screen-size cache (transient-camRas fix)
 #include "brdfLibrary.h"
 //#include <fstream>
 
@@ -24,6 +25,13 @@ RxPipeline *&CCustomBuildingDNPipeline__ObjPipeline = *(RxPipeline**)0xC02C1C;
 float &CWeather__WetRoads = *(float*)0xC81308;
 
 extern CVector2D windPos;
+extern void pipeEnsureIBLBuffer(void);	// pipelinecommon.cpp — shared once-per-frame IBL gate
+extern void *ps2EnvSpecFxPS;	// vehiclePipe.cpp — PS2 env+spec dual-layer FX pass
+// pipelinecommon.cpp — THE single rw->D3D conversion point for
+// D3DRS_ALPHAFUNC. The rw and D3D compare enums are identical for 1..8 but
+// rw 0 ("NA") has no D3D counterpart, so every raw ALPHAFUNC write in this
+// file must go through it instead of pushing the rw value straight down.
+extern RwUInt32 pipeAlphaFuncToD3D(RwUInt32 rwFunc);
 //extern std::fstream lg;
 
 
@@ -52,6 +60,46 @@ enum {
 	REG_envmat	= 38,
 
 };
+
+// ============================================================
+// c20 "surfProps" packing for the building vertex shaders.
+//
+// EVERY building VS in this project reads the register as a PACKED float4:
+//     #define surfAmb  (surfProps.x)
+//     #define surfDiff (surfProps.z)   <- xboxBuildingVS / buildingPBRVS /
+//                                         GTAIVBuilding_vs / vehicleVS alike
+// (buildingPBRVS additionally reads .y as surfLightScale — the dynamic-light
+//  scale; none of the other building VS reads .y.)
+//
+// RwSurfaceProperties' MEMORY layout is { ambient, specular, diffuse }
+// (external/d3d9/rwplcore.h:1492-1497 — NOT the "ambient, diffuse, specular"
+// the doxygen prose above it suggests, which this comment previously repeated).
+// Uploading the raw 3-float struct to a 4-component constant therefore maps
+// .y=specular, .z=diffuse AND reads 4 bytes past the struct for .w. The envmap
+// flag SA keeps in surfaceProps.specular (`*(int*)&surfaceProps.specular & 1`,
+// the detect at buildingPipe:569/695, bits 0-2 are stock SA's) lands in .y,
+// not .z.
+//
+// SA assets additionally ship diffuse=0 with the lighting baked into the
+// vertex prelight (documented in the PBR cb below), so the by-contract
+// surfDiff (.z) is 0 for ordinary materials and `prelight * surfDiff`
+// collapses to 0, leaving the ambient term alone: that is the "huge black
+// floor" in the Xbox building pipe and the near-black scene in the GTAIV
+// pipe. The PBR cb has packed this BY NAME all along (buildingPipe.cpp
+// surfUpload); this helper gives the PS2/GTAIV and Xbox cbs the same layout
+// and the same diffuse==0 prelight fallback, without the raw-struct overread.
+// ============================================================
+static void
+buildingPipe_uploadSurfProps(RpMaterial *material, int loc)
+{
+	RwSurfaceProperties const &sp = material->surfaceProps;
+	float v[4] = { sp.ambient, sp.diffuse, sp.diffuse, 0.0f };
+	// diffuse==0 is the SA baked-lighting convention: prelight must pass at
+	// full strength (identical fallback to the PBR cb's surfUpload).
+	if(v[2] < 1e-4f)
+		v[2] = 1.0f;
+	RwD3D9SetVertexShaderConstant(loc, v, 1);
+}
 
 float &CCoronas__LightsMult = *(float*)0x8D4B5C;
 bool &CWeather__LightningFlash = *(bool*)0xC812CC;
@@ -91,13 +139,16 @@ CustomBuildingPipeline__Update(void)
 		buildingAmbient = { 1.0, 1.0, 1.0, 0.0 };
 }
 
+// File-level cache statics for CustomBuildingEnvMapPipeline__SetupEnv
+// (promoted from function-static so they can be nulled on device reset)
+static RwMatrix s_setupEnv_lastmat;
+static void *s_setupEnv_lastobject = NULL;
+static RwFrame *s_setupEnv_lastfrm = NULL;
+static RwUInt16 s_setupEnv_lastrenderframe = 0;
+
 void
 CustomBuildingEnvMapPipeline__SetupEnv(RpAtomic *atomic, RwFrame *envframe, RwMatrix *envmat)
 {
-	static RwMatrix lastmat;
-	static void *lastobject;
-	static RwFrame *lastfrm;
-	static RwUInt16 lastrenderframe;
 	RwMatrix inv;
 	RpClump *clump;
 	RwFrame *frame;
@@ -107,24 +158,24 @@ CustomBuildingEnvMapPipeline__SetupEnv(RpAtomic *atomic, RwFrame *envframe, RwMa
 
 	clump = RpAtomicGetClump(atomic);
 
-	if(lastobject != (clump ? (void*)clump : (void*)atomic) ||
-	   lastfrm != envframe ||
-	   lastrenderframe != RWSRCGLOBAL(renderFrame)){
+	if(s_setupEnv_lastobject != (clump ? (void*)clump : (void*)atomic) ||
+	   s_setupEnv_lastfrm != envframe ||
+	   s_setupEnv_lastrenderframe != RWSRCGLOBAL(renderFrame)){
 		frame = clump ? RpClumpGetFrame(clump) : RpAtomicGetFrame(atomic);
 		if(!frame || !envframe){
 			RwMatrixSetIdentity(envmat);
 			return;
 		}
 		RwMatrixInvert(&inv, RwFrameGetLTM(envframe));
-		RwMatrixMultiply(&lastmat, RwFrameGetLTM(frame), &inv);
-		if((rwMatrixGetFlags(&lastmat) & rwMATRIXTYPEMASK) != rwMATRIXTYPEORTHONORMAL)
-			RwMatrixOrthoNormalize(&lastmat, &lastmat);
+		RwMatrixMultiply(&s_setupEnv_lastmat, RwFrameGetLTM(frame), &inv);
+		if((rwMatrixGetFlags(&s_setupEnv_lastmat) & rwMATRIXTYPEMASK) != rwMATRIXTYPEORTHONORMAL)
+			RwMatrixOrthoNormalize(&s_setupEnv_lastmat, &s_setupEnv_lastmat);
 
-		lastobject = (clump ? (void*)clump : (void*)atomic);
-		lastfrm = envframe;
-		lastrenderframe = RWSRCGLOBAL(renderFrame);
+		s_setupEnv_lastobject = (clump ? (void*)clump : (void*)atomic);
+		s_setupEnv_lastfrm = envframe;
+		s_setupEnv_lastrenderframe = RWSRCGLOBAL(renderFrame);
 	}
-	*envmat = lastmat;
+	*envmat = s_setupEnv_lastmat;
 }
 
 void
@@ -251,6 +302,14 @@ struct BuildingRenderState {
 	int src, dst;
 	int fog;
 	int zwrite;
+	// TEXTUREADDRESS leak plug (audit item 2, building twin): the env/FX
+	// branches push rwTEXTUREADDRESSWRAP through the rw cache only and
+	// nothing ever restores it — the WRAP survived past the callback into
+	// every later pass. L1 = rw cache; there is NO D3DRS counterpart for
+	// addressing (L2 not applicable), so the device layer is the per-stage
+	// sampler addressing (L3), snapshotted here and restored on exit.
+	int textureaddress;
+	DWORD sampU[3], sampV[3];
 };
 
 void
@@ -262,6 +321,16 @@ buildingPipe_saveRenderState(BuildingRenderState *state)
 	RwRenderStateGet(rwRENDERSTATEDESTBLEND, &state->dst);
 	RwRenderStateGet(rwRENDERSTATEFOGCOLOR, &state->fog);
 	RwRenderStateGet(rwRENDERSTATEZWRITEENABLE, &state->zwrite);
+	RwRenderStateGet(rwRENDERSTATETEXTUREADDRESS, &state->textureaddress);
+	// Pre-seed: a failed Get must not make the restore write garbage.
+	state->sampU[0] = state->sampU[1] = state->sampU[2] = D3DTADDRESS_WRAP;
+	state->sampV[0] = state->sampV[1] = state->sampV[2] = D3DTADDRESS_WRAP;
+	if(d3d9device){
+		for(int i = 0; i < 3; i++){
+			d3d9device->GetSamplerState(i, D3DSAMP_ADDRESSU, &state->sampU[i]);
+			d3d9device->GetSamplerState(i, D3DSAMP_ADDRESSV, &state->sampV[i]);
+		}
+	}
 }
 
 void
@@ -273,6 +342,215 @@ buildingPipe_restoreRenderState(const BuildingRenderState *state)
 	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)state->dst);
 	RwRenderStateSet(rwRENDERSTATEFOGCOLOR, (void*)state->fog);
 	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)state->zwrite);
+	RwRenderStateSet(rwRENDERSTATETEXTUREADDRESS, (void*)state->textureaddress);
+	if(d3d9device){
+		for(int i = 0; i < 3; i++){
+			d3d9device->SetSamplerState(i, D3DSAMP_ADDRESSU, state->sampU[i]);
+			d3d9device->SetSamplerState(i, D3DSAMP_ADDRESSV, state->sampV[i]);
+		}
+	}
+}
+
+// rw RwBlendFunction -> D3D D3DBLEND. Mirrors the file-static
+// pipelinecommon.cpp pipeBlendToD3D and the vehicle twin
+// vehiclePipe_blendToD3D (vehiclePipe.cpp:112): the enums are 1:1 for
+// valid values (rwBLENDZERO=1 == D3DBLEND_ZERO ... rwBLENDSRCALPHASAT=11),
+// 0 is the rw "NA" placeholder and is not a valid D3D value, so fall back.
+static DWORD buildingPipe_blendToD3D(int rwBlend, DWORD fallback)
+{
+	if(rwBlend == rwBLENDNABLEND || rwBlend > rwBLENDSRCALPHASAT)
+		return fallback;
+	return (DWORD)rwBlend;
+}
+
+// =============================================================================
+// Three-layer alpha/blend repair — the alpha/blend half of pipeForceCullMode
+// (pipelinecommon.cpp:883 documents the layer model):
+//   (1) the rw cache behind RwRenderStateSet/Get,
+//   (2) the D3D9 driver cache behind RwD3D9SetRenderState (pending[]+dirty
+//       list, flushed by _rwD3D9RenderStateFlushCache before every draw and
+//       ONLY where pending[] differs from applied[]),
+//   (3) the raw IDirect3DDevice9 state.
+//
+// A state only ever moves layer (3) when its layer-(2) value CHANGES (the
+// flush is applied[]-gated, so it can never repair a device that drifted
+// behind an unchanged cache). pipeEnterAlphaMode canonicalises (1) and (2)
+// at pipe entry but reaches (2) only through RwD3D9SetRenderState — when the
+// cache already holds the canonical value (TRUE / ref / SRCALPHA / ADD) the
+// set is a no-op and the stale device value survives the whole atomic.
+// Raw (3) writers that create that divergence: postfx Save/RestoreRawGeomStates
+// raw-restores D3DRS_ALPHABLENDENABLE/SRCBLEND/DESTBLEND/BLENDOP from a
+// snapshot that can already disagree with the caches, DepthHook writes raw
+// ZENABLE, and the PBR cb's RenderIBLBuffer does raw D3DRS writes of its own.
+//
+// Observed evidence — skygfx_dbg.log throttled "[PipeAlpha] entry resync"
+// lines at building entry (146 samples, one run):
+//   dev src=5 dst=6 vtx=0 op=1 test=0 rw ref=0/1 fn=5   25 samples — device
+//       alpha TEST off while a live alpha mesh is about to draw
+//   dev ... op=4294967295                                1 sample — garbage
+//       BLENDOP
+//   rw ref=0                                             114 samples — the
+//       degenerate GREATEREQUAL@0 "accept everything" ref pipeEnterAlphaMode
+//       has to repair cache-side
+// An alpha-cutout road decal mesh is drawn with VERTEXALPHAENABLE=FALSE
+// (material alpha 255, no vertex alpha) and relies ONLY on the alpha test to
+// discard its transparent texels. With the device test off (or ref stuck at
+// 0 under GREATEREQUAL) every texel is accepted and, blending being off by
+// design, the cutout region's RGB=0 lands unmodulated: a solid black pool
+// that follows the decal texture's splatter shape — the road-decal artifact,
+// in EVERY building pipe (PS2/GTAIV/Xbox/PBR all route through the Switch).
+//
+// Fix: re-push (1) into (2), then raw-force (2) -> (3). Same deterministic-
+// entry contract as pipeForceCullMode / pipeEnterAlphaMode; unconditional
+// device write, so a no-op at either cache still repairs layer (3).
+//
+// Two gaps this revision closes (both reachable from the standalone
+// CSkidmarks__Render call site, which has no pipeEnterAlphaMode in front):
+//   * ref==0 was passed through untouched — GREATEREQUAL@0 accepts every
+//     texel, so the helper raw-pushed the very degenerate it exists to kill;
+//   * D3DRS_SEPARATEALPHABLENDENABLE (+SRCBLENDALPHA/DESTBLENDALPHA/
+//     BLENDOPALPHA) and D3DRS_COLORWRITEENABLE have no rw render state at
+//     all, so nothing else in the codebase could ever repair them at layer
+//     (3): a leaked separate-alpha mask rewrites DESTINATION ALPHA for every
+//     later draw, a leaked colour-write mask drops RGB entirely and leaves
+//     the frame's cleared (black) content — the "huge black floor".
+//     (STENCILENABLE and D3DRS_TEXTUREFACTOR are deliberately NOT forced
+//     here: stencil is owned by the game's own shadow passes and TFACTOR is
+//     not part of the alpha block. D3DTSS_* stage ops are also left alone —
+//     they are ignored whenever a pixel shader is bound, which every building
+//     cb does, and stage 0 is re-authored per material by RW's
+//     D3D9SetRenderMaterialProperties; stages 1-3 are already DISABLEd by
+//     buildingPipe_cleanup on every cb exit.)
+// =============================================================================
+void
+pipeForceAlphaBlock(void)
+{
+	// ---- (1) rw cache is the authority for the states that have one ----
+	// Pre-seeded: a failed RwRenderStateGet leaves the out-param untouched.
+	int fnRaw  = rwALPHATESTFUNCTIONGREATEREQUAL;
+	int refRaw = 1;
+	int srcRaw = rwBLENDSRCALPHA;
+	int dstRaw = rwBLENDINVSRCALPHA;
+	int vtxRaw = 0;
+	RwRenderStateGet(rwRENDERSTATEALPHATESTFUNCTION, &fnRaw);
+	RwRenderStateGet(rwRENDERSTATEALPHATESTFUNCTIONREF, &refRaw);
+	RwRenderStateGet(rwRENDERSTATESRCBLEND, &srcRaw);
+	RwRenderStateGet(rwRENDERSTATEDESTBLEND, &dstRaw);
+	RwRenderStateGet(rwRENDERSTATEVERTEXALPHAENABLE, &vtxRaw);
+
+	// rw NA(0) / out-of-range never reaches the device (see
+	// pipelinecommon pipeAlphaFuncToD3D / pipeBlendToD3D) — and pushing a
+	// validated value into layer (2) while layer (1) keeps the raw one would
+	// re-create the very cache/cache divergence this helper exists to kill,
+	// so a repaired value is written back rw-side too.
+	int fn  = (fnRaw  < rwALPHATESTFUNCTIONNEVER || fnRaw > rwALPHATESTFUNCTIONALWAYS)
+	          ? rwALPHATESTFUNCTIONGREATEREQUAL : fnRaw;
+	int ref = refRaw < 0 ? 0 : (refRaw > 255 ? 255 : refRaw);
+	// ref==0 under GREATEREQUAL (and every other non-NEVER func) ACCEPTS EVERY
+	// TEXEL — the exact degenerate pipeEnterAlphaMode repairs with its
+	// effRef bump. This helper must repair it too: its standalone callers
+	// (CSkidmarks__Render in main.cpp) go through it with NO
+	// pipeEnterAlphaMode in front, so a rw-cached ref of 0 used to be
+	// raw-pushed straight to the device as GREATEREQUAL@0. The rw side is
+	// written back as well (line below) so layers (1)/(2)/(3) all agree;
+	// pipeExitAlphaMode still restores the caller's own saved ref afterwards.
+	if(ref == 0 && fn != rwALPHATESTFUNCTIONNEVER)
+		ref = 1;
+	int src = (srcRaw <= rwBLENDNABLEND || srcRaw > rwBLENDSRCALPHASAT)
+	          ? rwBLENDSRCALPHA : srcRaw;
+	int dst = (dstRaw <= rwBLENDNABLEND || dstRaw > rwBLENDSRCALPHASAT)
+	          ? rwBLENDINVSRCALPHA : dstRaw;
+	int vtx = vtxRaw ? 1 : 0;
+
+	if(fn  != fnRaw)  RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION, (void*)fn);
+	if(ref != refRaw) RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTIONREF, (void*)ref);
+	if(src != srcRaw) RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)src);
+	if(dst != dstRaw) RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)dst);
+	if(vtx != vtxRaw) RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)vtx);
+
+	// ---- (1) -> (2): RwD3D9SetRenderState writes the driver cache even when
+	// an rw-only set would no-op against an unchanged rw cache ----
+	// D3DRS_* are the D3D domain, `fn` is the rw domain — convert, never
+	// pass the rw value straight down (see pipeAlphaFuncToD3D).
+	RwD3D9SetRenderState(D3DRS_ALPHAFUNC, pipeAlphaFuncToD3D((RwUInt32)fn));
+	RwD3D9SetRenderState(D3DRS_ALPHAREF, (RwUInt32)ref);
+	RwD3D9SetRenderState(D3DRS_SRCBLEND, (RwUInt32)src);
+	RwD3D9SetRenderState(D3DRS_DESTBLEND, (RwUInt32)dst);
+	RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, vtx ? TRUE : FALSE);
+	// These two have NO rw render state — only the driver cache can carry
+	// them, so they must be forced the way pipeEnterAlphaMode forces them
+	// (alpha test ON, blend op ADD) or nothing else ever repairs them.
+	RwD3D9SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
+	RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
+	// Raw-only members of the same block (they have no rw render state either):
+	//   SEPARATEALPHABLENDENABLE + its three alpha factors — setMoonAlphaBlendStates
+	//     (main.cpp) pushes separate-alpha ON with DESTBLENDALPHA=ZERO and its
+	//     restore only clears the enable bit through the driver cache; a device
+	//     stuck ON recomposites DESTINATION ALPHA for every draw afterwards and
+	//     the postfx chain reads that channel back.
+	//   COLORWRITEENABLE — a leaked channel mask drops RGB writes entirely, so
+	//     the frame keeps whatever the clear left (a black floor).
+	RwD3D9SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, FALSE);
+	RwD3D9SetRenderState(D3DRS_SRCBLENDALPHA, D3DBLEND_SRCALPHA);
+	RwD3D9SetRenderState(D3DRS_DESTBLENDALPHA, D3DBLEND_INVSRCALPHA);
+	RwD3D9SetRenderState(D3DRS_BLENDOPALPHA, D3DBLENDOP_ADD);
+	RwD3D9SetRenderState(D3DRS_COLORWRITEENABLE, D3DCOLORWRITEENABLE_ALL);
+
+	// ---- (2) -> (3): read the driver cache back (exactly the value the
+	// flush would push) and raw-write it. The flush is applied[]-gated, so
+	// this unconditional write is the only thing that repairs layer (3). ----
+	IDirect3DDevice9 *dev = d3d9device;
+	if(!dev)
+		return;
+
+	static const D3DRENDERSTATETYPE ids[12] = {
+		D3DRS_ALPHATESTENABLE, D3DRS_ALPHAREF, D3DRS_ALPHAFUNC,
+		D3DRS_SRCBLEND, D3DRS_DESTBLEND, D3DRS_BLENDOP,
+		D3DRS_ALPHABLENDENABLE,
+		D3DRS_SEPARATEALPHABLENDENABLE, D3DRS_SRCBLENDALPHA,
+		D3DRS_DESTBLENDALPHA, D3DRS_BLENDOPALPHA,
+		D3DRS_COLORWRITEENABLE,
+	};
+	static const RwUInt32 fallback[12] = {
+		TRUE, 1, (RwUInt32)D3DCMP_GREATEREQUAL, (RwUInt32)D3DBLEND_SRCALPHA,
+		(RwUInt32)D3DBLEND_INVSRCALPHA, (RwUInt32)D3DBLENDOP_ADD, FALSE,
+		FALSE, (RwUInt32)D3DBLEND_SRCALPHA, (RwUInt32)D3DBLEND_INVSRCALPHA,
+		(RwUInt32)D3DBLENDOP_ADD, D3DCOLORWRITEENABLE_ALL,
+	};
+
+	// Device readback only for the throttled evidence trail (a raw
+	// GetRenderState per atomic would cost more than the repair itself).
+	unsigned drifted = 0;
+	bool check = dbglog_throttle("bld_alpha");
+	// Both alpha-func DOMAINS in the same line so one live session proves the
+	// conversion end-to-end: `fn` is the rw-cache value (RW domain),
+	// `wantFn` is what pipeAlphaFuncToD3D maps it to and what the loop below
+	// pushes, `devFn` is what the device was actually comparing against
+	// BEFORE the repair (D3D domain). Pre-seeded to wantFn so a failed Get
+	// can never fabricate a mismatch.
+	RwUInt32 wantFn = pipeAlphaFuncToD3D((RwUInt32)fn);
+	RwUInt32 devFn = wantFn;
+	if(check){
+		DWORD have = (DWORD)wantFn;
+		dev->GetRenderState(D3DRS_ALPHAFUNC, &have);
+		devFn = (RwUInt32)have;
+	}
+	for(int i = 0; i < 12; i++){
+		RwUInt32 want = fallback[i];
+		RwD3D9GetRenderState(ids[i], &want);
+		if(check){
+			DWORD have = (DWORD)want;
+			dev->GetRenderState(ids[i], &have);
+			if((RwUInt32)have != want)
+				drifted |= 1u << i;
+		}
+		dev->SetRenderState(ids[i], want);
+	}
+	if(drifted || (check && devFn != wantFn))
+		dbglog("[BUILDING] alpha/blend layer-3 drift repaired (mask=0x%03X: "
+		       "test|ref|func|src|dst|op|blend|sepA|srcA|dstA|opA|cwr) "
+		       "rw fn=%d -> d3d want=%u dev d3d=%u (rw ref=%d)",
+		       drifted, fn, wantFn, devFn, ref);
 }
 
 void*
@@ -296,10 +574,14 @@ buildingPipe_selectPS(TexInfo *texinfo, bool hasEnvMap)
 	return simplePS;
 }
 
+// File-level frame counters (promoted from function-static so they can be zeroed on device reset)
+static int ps2FrameCount = 0;
+static int xboxFrameCount = 0;
+static int pbrFrameCount = 0;
+
 void
 CCustomBuildingDNPipeline__CustomPipeRenderCB_PS2(RwResEntry *repEntry, void *object, RwUInt8 type, RwUInt32 flags)
 {
-	static int ps2FrameCount = 0;
 	if(++ps2FrameCount % 300 == 1)
 		dbglog("PS2Building: frame %d object=%p type=%d flags=0x%X", ps2FrameCount, object, type, flags);
 
@@ -348,6 +630,20 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PS2(RwResEntry *repEntry, void *ob
 	pipeUploadLightColorPS(pDirect, REG_directCol);
 	pipeUploadLightDirectionPS(pDirect, REG_directDir);
 
+	// Forward+ clustered lights: upload c45/c48-c111 and bind the tile index
+	// texture (s5) — same call/position as the PBR building cb (:1175).
+	// pipeline=4 (BUILDING_GTAIV) dispatches HERE (switch below: GTAIV = PS2
+	// cb + IV shader swap), and this cb never called SetConstants, so the
+	// per-frame cull collected lights that never reached the GPU
+	// ("collected N lights, gpu=0"). Guarded by the config flag; the callee
+	// self-guards too (forwardplus.cpp:414) and clears stale c45/s5 when off.
+	// NOTE (verified via fxc /dumpbin): the currently bound
+	// GTAIVBuilding_ps.cso / GTAIVVehicle_ps.cso are 7-slot blends that do NOT
+	// read c45 yet (the prebuilt GTAIVForwardPlus_*.cso in shaders/ are
+	// unwired), so this fixes the upload path, not today's IV pixels.
+	if(config->forwardPlusEnable)
+		ForwardPlus_SetConstants();
+
 	BuildingRenderState rs;
 	buildingPipe_saveRenderState(&rs);
 	int alphafunc = rs.alphafunc, alpharef = rs.alpharef;
@@ -381,13 +677,51 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PS2(RwResEntry *repEntry, void *ob
 		pipeUploadMatCol(flags, material, REG_matCol);
 
 		RwD3D9SetVertexShaderConstant(REG_ambient, &buildingAmbient, 1);
-		RwD3D9SetVertexShaderConstant(REG_surfProps, &material->surfaceProps, 1);
+		buildingPipe_uploadSurfProps(material, REG_surfProps);
 
 		TexInfo *texinfo = RwTextureGetTexDBInfo(material->texture);
 
-		if(config->ivMode){
+		// IV building shader swap — iv_mode preset (config->ivMode) OR the
+		// BUILDING_GTAIV pipe selection itself, matching the vehicle side
+		// (`ivMode || vehiclePipe == CAR_GTAIV`, vehiclePipe.cpp:690) and
+		// this file's Switch (BUILDING_GTAIV = PS2 callback + IV swap).
+		// Without the pipe term, buildingPipe == BUILDING_GTAIV with
+		// ivMode = 0 rendered PS2 shaders under a "GTA IV" building pipe
+		// selection — the asymmetry the vehicle side never had.
+		//
+		// Swap ONLY when both handles were actually created. Commit e21b697 dropped the
+		// IDR_GTAIVBUILDINGVS/PS lines from resources/Resource.rc AND the
+		// makeVS/makePS calls from CreateShaders, so the handles stay NULL
+		// forever; binding NULL drops every building onto the fixed-function
+		// path while this cb only uploads WVP to VS constants c0-c3 (which
+		// FFP ignores) and never sets FFP texture-stage/transform state —
+		// that is the IV-only "floating white squares" artifact. Fall back
+		// to the proven PS2 shader path; the swap resumes automatically once
+		// the loading side (pipelinecommon/Resource.rc — other lane) is
+		// repaired.
+		bool wantIVBuilding = config->ivMode || config->buildingPipe == BUILDING_GTAIV;
+		if(wantIVBuilding && !(gtaivBuildingVS && gtaivBuildingPS) &&
+		   dbglog_throttle("ivbld_missing"))
+			dbglog("[BUILDING] IV shaders missing (ivMode=%d buildingPipe=%d; VS=%p PS=%p) — using PS2 path",
+			       config->ivMode, config->buildingPipe, gtaivBuildingVS, gtaivBuildingPS);
+
+		if(wantIVBuilding && gtaivBuildingVS && gtaivBuildingPS){
 			RwD3D9SetVertexShader(gtaivBuildingVS);
 			RwD3D9SetPixelShader(gtaivBuildingPS);
+			// GTAIVBuilding_ps computes its env UV as `uv = v1*c0.x + c0.x`
+			// (shader-local `def c0, 0.5, 0, 0, 0` — maps [-1,1] -> [0,1]).
+			// The per-mesh loop pushed colorScale (1.0, or 255/128 with
+			// ps2ModulateBuilding) into PS c0 a few lines above, which warps
+			// that remap; re-assert the shader's own constant AFTER the bind.
+			float ivPsC0[4] = { 0.5f, 0.0f, 0.0f, 0.0f };
+			RwD3D9SetPixelShaderConstant(0, ivPsC0, 1);
+			// GTAIVBuilding_ps samples s1 unconditionally (its env lerp).
+			// s1 is only ever bound for env-mapped materials further down, so
+			// for everything else the read hit a NULL stage. The lerp weight
+			// is 0 for non-env materials, but bind anyway so the sampled texel
+			// is defined (NaN-safe: NaN*0 is still NaN and renders black).
+			if(material->texture)
+				RwD3D9SetTexture(material->texture, 1);
 		}else if (definedVertexShader == DefinedVertexShader::WIND && instancedData->vertexAlpha) {
 			setWindParams(atomic, frame);
 			RwD3D9SetVertexShader(ps2BuildingWindVS);
@@ -408,6 +742,18 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PS2(RwResEntry *repEntry, void *ob
 		// Reflection
 		if(*(int*)&material->surfaceProps.specular & 1){
 			envData = *RWPLUGINOFFSET(CustomEnvMapPipeMaterialData*, material, CCustomCarEnvMapPipeline__ms_envMapPluginOffset);
+			// Three-layer mirror of vehiclePipe_fxAdditiveBlend
+			// (vehiclePipe.cpp:640-695). This branch used to push AND restore
+			// blend/alpha/zwrite/fogcolor through the rw cache (L1) ONLY: an
+			// applied[]-gated no-op could leave the DEVICE on the previous
+			// mesh's blend while the cache claimed ONE/ONE, and the
+			// VERTEXALPHA=TRUE push was never restored at all — the exact
+			// failure class the vehicle twin documents. Every state below now
+			// writes L1 (RwRenderStateSet) + L2 (RwD3D9SetRenderState driver
+			// cache) + L3 (raw device), and the per-mesh VERTEXALPHA value is
+			// snapshotted and handed back.
+			RwUInt32 savedVtxAlpha = FALSE;
+			RwRenderStateGet(rwRENDERSTATEVERTEXALPHAENABLE, &savedVtxAlpha);
 			RwRenderStateSet(rwRENDERSTATETEXTUREADDRESS, (void*)rwTEXTUREADDRESSWRAP);
 			RwD3D9SetTexture(envData->texture, 1);
 			fxParams.shininess = envData->GetShininess();
@@ -420,20 +766,70 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PS2(RwResEntry *repEntry, void *ob
 			RwD3D9SetVertexShaderConstant(REG_fxParams, &fxParams, 1);
 
 			RwD3D9SetVertexShader(ps2BuildingFxVS);
-			RwD3D9SetPixelShader(simplePS);
+			// ps2EnvSpecFxPS samples envMapTex(s1) * envcolor + maskTex(s2) *
+			// speccolor (backup_original/buildingPipe.cpp:341 used it here);
+			// the env bind above already occupies s1. simplePS samples s0
+			// (diffuse) at env UVs — wrong texture. NULL-guard: resource-load
+			// failure keeps the previous stable behaviour over a NULL PS.
+			RwD3D9SetPixelShader(ps2EnvSpecFxPS ? ps2EnvSpecFxPS : simplePS);
 
 			RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION, (void*)rwALPHATESTFUNCTIONALWAYS);
+			RwD3D9SetRenderState(D3DRS_ALPHAFUNC, (RwUInt32)D3DCMP_ALWAYS);
+			RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
 			RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
+			RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
 			RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
+			RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
 			RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDONE);
+			RwD3D9SetRenderState(D3DRS_SRCBLEND, (RwUInt32)D3DBLEND_ONE);
 			RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDONE);
+			RwD3D9SetRenderState(D3DRS_DESTBLEND, (RwUInt32)D3DBLEND_ONE);
 			RwRenderStateSet(rwRENDERSTATEFOGCOLOR, (void*)0);
+			RwD3D9SetRenderState(D3DRS_FOGCOLOR, 0);
+			if(d3d9device){
+				d3d9device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+				d3d9device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+				d3d9device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
+				d3d9device->SetRenderState(D3DRS_ALPHAFUNC, D3DCMP_ALWAYS);
+				d3d9device->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
+				d3d9device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+				d3d9device->SetRenderState(D3DRS_FOGCOLOR, 0);
+			}
 			D3D9Render(resEntryHeader, instancedData);
+			// Restore: SAME values as before (the cb-entry snapshot locals at
+			// :612-614 — note the vehicle twin hard-codes ZWRITE=TRUE here;
+			// the building branch keeps its snapshot semantics), now pushed
+			// through all three layers.
 			RwRenderStateSet(rwRENDERSTATEFOGCOLOR, (void*)fog);
+			RwD3D9SetRenderState(D3DRS_FOGCOLOR, (RwUInt32)fog);
 			RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)zwrite);
+			RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, (RwUInt32)zwrite);
 			RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)src);
+			RwD3D9SetRenderState(D3DRS_SRCBLEND, buildingPipe_blendToD3D(src, D3DBLEND_SRCALPHA));
 			RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)dst);
+			RwD3D9SetRenderState(D3DRS_DESTBLEND, buildingPipe_blendToD3D(dst, D3DBLEND_INVSRCALPHA));
 			RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION, (void*)alphafunc);
+			RwD3D9SetRenderState(D3DRS_ALPHAFUNC, pipeAlphaFuncToD3D((RwUInt32)alphafunc));
+			// Close the VERTEXALPHA=TRUE leak through all three layers (L1 read
+			// back per mesh; L2 is what D3D9RenderDual's gate reads).
+			RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)savedVtxAlpha);
+			RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, savedVtxAlpha ? TRUE : FALSE);
+			// TEXTUREADDRESS: no D3DRS counterpart (L2 N/A) — restore the L1
+			// cache and the L3 device sampler addressing for the stages this
+			// pass samples (0 diffuse, 1 env) to the cb-entry snapshot.
+			RwRenderStateSet(rwRENDERSTATETEXTUREADDRESS, (void*)rs.textureaddress);
+			if(d3d9device){
+				d3d9device->SetRenderState(D3DRS_ZWRITEENABLE, (DWORD)zwrite);
+				d3d9device->SetRenderState(D3DRS_SRCBLEND, buildingPipe_blendToD3D(src, D3DBLEND_SRCALPHA));
+				d3d9device->SetRenderState(D3DRS_DESTBLEND, buildingPipe_blendToD3D(dst, D3DBLEND_INVSRCALPHA));
+				d3d9device->SetRenderState(D3DRS_ALPHAFUNC, pipeAlphaFuncToD3D((RwUInt32)alphafunc));
+				d3d9device->SetRenderState(D3DRS_ALPHABLENDENABLE, savedVtxAlpha ? TRUE : FALSE);
+				d3d9device->SetRenderState(D3DRS_FOGCOLOR, (DWORD)fog);
+				d3d9device->SetSamplerState(0, D3DSAMP_ADDRESSU, rs.sampU[0]);
+				d3d9device->SetSamplerState(0, D3DSAMP_ADDRESSV, rs.sampV[0]);
+				d3d9device->SetSamplerState(1, D3DSAMP_ADDRESSU, rs.sampU[1]);
+				d3d9device->SetSamplerState(1, D3DSAMP_ADDRESSV, rs.sampV[1]);
+			}
 		}
 	}
 	buildingPipe_restoreRenderState(&rs);
@@ -444,7 +840,6 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PS2(RwResEntry *repEntry, void *ob
 void
 CCustomBuildingDNPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *object, RwUInt8 type, RwUInt32 flags)
 {
-	static int xboxFrameCount = 0;
 	if(++xboxFrameCount % 300 == 1)
 		dbglog("XboxBuilding: frame %d object=%p type=%d flags=0x%X", xboxFrameCount, object, type, flags);
 
@@ -468,8 +863,29 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *o
 	atomic = (RpAtomic*)object;
 	RwMatrixSetIdentity(&ident);
 
+	// TEXTUREADDRESS/sampler/vertex-alpha bundle — mirror of the PS2/GTAIV cb
+	// (save :647-648 / restore :835) and the building twin of the vehicle
+	// three-layer doctrine. The Xbox env branch (:952) pushes
+	// rwTEXTUREADDRESSWRAP through the rw cache (L1) ONLY and this cb never
+	// saved/restored anything — the WRAP and the last mesh's
+	// VERTEXALPHAENABLE (:932) leaked into every later draw.
+	// BuildingRenderState covers all three TEXTUREADDRESS layers: L1 (rw
+	// cache), L2 (N/A — addressing has no D3DRS counterpart), L3 (per-stage
+	// device sampler addressing, stages 0-2 = the stages this cb samples:
+	// s0 diffuse, s1 env, s2 detail via buildingPipe_selectPS). Saved BEFORE
+	// the frame check so the early return below also restores — save/restore
+	// stay paired on every path.
+	BuildingRenderState rs;
+	buildingPipe_saveRenderState(&rs);
+	RwUInt32 savedVtxAlpha = FALSE;
+	RwRenderStateGet(rwRENDERSTATEVERTEXALPHAENABLE, &savedVtxAlpha);
+
 	RwFrame* frame = (RwFrame*)atomic->object.object.parent;
-	if(!frame) return;
+	if(!frame){
+		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)savedVtxAlpha);
+		buildingPipe_restoreRenderState(&rs);
+		return;
+	}
 
 	if (RWSRCGLOBAL(curCamera)) { _rwD3D9EnableClippingIfNeeded(object, type); }
 	// NULL curCamera → 0x7FAD4D fault
@@ -519,12 +935,15 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *o
 		
 		if(flags & rpGEOMETRYLIGHT){
 			pipeUploadMatCol(flags, material, REG_matCol);
-			RwD3D9SetVertexShaderConstant(REG_surfProps, &material->surfaceProps, 1);
+			buildingPipe_uploadSurfProps(material, REG_surfProps);
 		}else{
 			static float white[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-			RwSurfaceProperties surf = { 1.0f, 1.0f, 1.0f };
+			// float4 with defined .w — a raw RwSurfaceProperties{3 floats}
+			// upload would read 4 bytes past the struct (same class as the
+			// c20 surfProps contract above).
+			float surf[4] = { 1.0f, 1.0f, 1.0f, 0.0f };
 			RwD3D9SetVertexShaderConstant(REG_matCol, white, 1);
-			RwD3D9SetVertexShaderConstant(REG_surfProps, &surf, 1);
+			RwD3D9SetVertexShaderConstant(REG_surfProps, surf, 1);
 		}
 
 		TexInfo *texinfo = RwTextureGetTexDBInfo(material->texture);
@@ -552,6 +971,20 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *o
 
 		D3D9RenderDual(config->dualPassBuilding, resEntryHeader, instancedData, texinfo);
 	}
+	// Close the cb-level leaks. The per-mesh VERTEXALPHAENABLE sets (:932) and
+	// the env branch's TEXTUREADDRESS=WRAP (:952) otherwise survive past this
+	// cb into every later pass. Vertex alpha restored through L1 + its L2/L3
+	// mirror (D3DRS_ALPHABLENDENABLE) — same savedVtxAlpha pattern as the
+	// PS2/GTAIV reflection branch (:815-816 + :826). TEXTUREADDRESS (L1 + L3
+	// sampler addressing for stages 0-2, L2 N/A) and the alpha/blend/fog/zwrite
+	// bundle come back through buildingPipe_restoreRenderState. TagRenderCB's
+	// `continue` (:968) skips a draw, not the function — it lands here
+	// like every other mesh. Same ordering as the PS2 cb exit (:835).
+	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)savedVtxAlpha);
+	RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, savedVtxAlpha ? TRUE : FALSE);
+	if(d3d9device)
+		d3d9device->SetRenderState(D3DRS_ALPHABLENDENABLE, savedVtxAlpha ? TRUE : FALSE);
+	buildingPipe_restoreRenderState(&rs);
 	buildingPipe_cleanup();
 }
 
@@ -629,7 +1062,9 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Sphere(RwResEntry *repEntry, void 
 		pipeUploadMatCol(flags, material, REG_matCol);
 
 		RwD3D9SetVertexShaderConstant(REG_ambient, &buildingAmbient, 1);
-		RwD3D9SetVertexShaderConstant(REG_surfProps, &material->surfaceProps, 1);
+		// By-name c20 build (sphereBuildingVS reads only surfAmb=.x, but the
+		// raw 3-float RwSurfaceProperties struct would overread .w).
+		buildingPipe_uploadSurfProps(material, REG_surfProps);
 
 		D3D9Render(resEntryHeader, instancedData);
 
@@ -641,28 +1076,73 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Sphere(RwResEntry *repEntry, void 
 void
 CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *object, RwUInt8 type, RwUInt32 flags)
 {
-	// Render IBL cubemap once per frame (sky capture for vehicle environment reflections)
-	// Buildings render before vehicles, so this is the right time
-	{
-		static RwUInt32 lastIBLFrame = 0;
-		RwUInt32 curFrame = RWSRCGLOBAL(renderFrame);
-		if(curFrame != lastIBLFrame){
-			// Gate on valid camera state: on frame 1 the game renders
-			// building atomics before any RwCameraBeginUpdate has run,
-			// so the exe-side Im2D dispatch reads a NULL camera global
-			// and faults (crash 0x7FBD4A). Defer to a later frame;
-			// the previous/stale IBL stays in use until then.
-			if(Scene.camera && RwCameraGetRaster(Scene.camera)){
-				extern void RenderIBLBuffer(void);
-				RenderIBLBuffer();
-			}else if(dbglog_throttle("ibl_nocam")){
-				dbglog("RenderIBL: skip, camera not ready (frame %d)", curFrame);
-			}
-			lastIBLFrame = curFrame;
-		}
-	}
+	// Render IBL cubemap once per frame (sky capture for vehicle environment
+	// reflections). Buildings render before vehicles, so this is usually the
+	// right time. The frame stamp + camera gate now live in
+	// pipeEnsureIBLBuffer (pipelinecommon.cpp) and are SHARED with the
+	// vehicle Env cb — the only other g_iblTex consumer — so combos with
+	// buildingPipe != PBR (e.g. BUILDING_GTAIV buildings + CAR_MODERN
+	// vehicles) still get a rendered IBL, and neither pipe can render it
+	// twice in one frame.
+	pipeEnsureIBLBuffer();
 
-	static int pbrFrameCount = 0;
+	// RenderIBLBuffer draws a fullscreen Im2D pass (ImmediateMode
+	// Store/Set/ReStore + raw D3DRS writes). Only re-asserting cull left
+	// D3DRS_ALPHATESTENABLE / ALPHAREF / blend on the DEVICE free to drift
+	// from the rw cache Switch already canonicalised — alpha-cutout road
+	// decals then accept their fully-transparent black texels and paint
+	// ink blots across the road (PS2/Xbox never call RenderIBLBuffer, so
+	// only Building=PBR shows this). Re-force the same dual-layer entry
+	// states pipeEnterAlphaMode sets, WITHOUT a nested save/exit (the
+	// Switch owns the save). Per-mesh VERTEXALPHAENABLE sets after this
+	// still reach the device because the baseline is cache/device aligned.
+	{
+		RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
+		RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
+		RwD3D9SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+		RwD3D9SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+		RwD3D9SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
+		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
+		RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+
+		int aref = 0, afn = 0;
+		RwRenderStateGet(rwRENDERSTATEALPHATESTFUNCTIONREF, &aref);
+		RwRenderStateGet(rwRENDERSTATEALPHATESTFUNCTION, &afn);
+		// ref=0 + GREATEREQUAL accepts every texel (same degenerate the
+		// pipelinecommon entry repairs) — force ref>=1 and ON.
+		if(aref == 0){
+			aref = 1;
+			RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTIONREF, (void*)aref);
+		}
+		// rw -> D3D conversion is pipeAlphaFuncToD3D's job (pipelinecommon);
+		// its LUT pins rw NA/garbage to D3DCMP_GREATEREQUAL and is the
+		// identity for 1..8 (both enums verified against the headers).
+		// `afn` stays untouched in the RW cache on purpose — the
+		// pipeForceAlphaBlock() call a few lines below normalises it
+		// rw-side as well, so layers (1)/(2)/(3) converge there.
+		DWORD d3dfn = (DWORD)pipeAlphaFuncToD3D((RwUInt32)afn);
+		RwD3D9SetRenderState(D3DRS_ALPHAREF, (DWORD)aref);
+		RwD3D9SetRenderState(D3DRS_ALPHAFUNC, d3dfn);
+		RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
+
+		// Switch forced zwrite TRUE both layers; the IBL pass can leave
+		// the raw device side off again.
+		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
+		RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+	}
+	// Re-assert the pipe cull (Im2D fullscreen pass may leave CULLNONE):
+	// rw-only was not enough — when the rw cache already said BACK the
+	// set no-opped while the device kept the pass's leftover value
+	// (double no-op, see pipelinecommon pipeForceCullMode block comment).
+	pipeForceCullMode(rwCULLMODECULLBACK);
+	// RenderIBLBuffer's Im2D pass also raw-writes the alpha/blend block, and
+	// the Switch's repair above ran BEFORE it: re-run it so the IBL pass's
+	// leftovers (device alpha test/blend left off, ref left at 0) cannot
+	// reach this cb's decal sublayers. PBR never re-asserts alpha itself
+	// inside the mesh loop, so this is the last repair point before the
+	// draws.
+	pipeForceAlphaBlock();
+
 	if(++pbrFrameCount % 300 == 1)
 		dbglog("PBRBuilding: frame %d object=%p type=%d flags=0x%X", pbrFrameCount, object, type, flags);
 
@@ -753,6 +1233,9 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 	// Bind the dynamic-sky IBL capture to stage 3 (raw D3D9, same as the proven
 	// vehicle path). Without this, main_building's iblTex sample reads stale/black
 	// state. Stage 0 stays RW-cached, so no rwRENDERSTATETEXTURERASTER resync needed.
+	// iblBound feeds the per-mesh bldEnv upload: the sky-reflect term must be
+	// 0 whenever s3 is unbound (an unbound sampler reads undefined).
+	bool iblBound = false;
 	{
 		extern IDirect3DTexture9 *g_iblTex;
 		IDirect3DDevice9 *dev = d3d9device;
@@ -762,25 +1245,69 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 			dev->SetSamplerState(3, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
 			dev->SetSamplerState(3, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
 			dev->SetSamplerState(3, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+			iblBound = true;
 		}
 	}
 
 	// Bind the half-res normal buffer on stage 4 (s4 = normalBufTex in
 	// main_building) — mirrors the vehicle pipe. ambientPS[3] gates the shader
 	// via c24.w (1.0 when bound, 0.0 otherwise; old shaders ignore the flag).
+	// Gates: normalBufferEnable — DrawNormalBufferToTexture early-returns when
+	// disabled (postfx.cpp:4426), so g_normalBufferTex may hold stale/garbage
+	// content; without the gate main_building lerps N toward random normals
+	// → GGX blowout (white ground patches) + glints (foliage sparkle).
+	// WIND: foliage has no meaningful screen-space normal (cutout/background
+	// shows through), same garbage path — keep c24.w=0 for vegetation.
+	// Content: g_normalBufferHasContent is only true after a completed
+	// DrawNormalBufferToTexture write — a fresh D3DPOOL_DEFAULT RT holds
+	// driver garbage (now also cleared to the invalid-normal marker), and a
+	// skipped refresh (menu/shader-missing/depth-missing) leaves the buffer
+	// stale. Never bind without real content.
+	// TRANSIENT-camRas FIX (wavy floor): the live RwCameraGetRaster read can
+	// return a NON-SCREEN raster while the scene pass runs (log evidence:
+	// "[FxAlpha] Coronas.Reflections camRas=... 2048x1024 != screen 1920x1080"
+	// ×23 — a reflection-class RT left live as the camera raster). Two
+	// consumers downstream were poisoned by it:
+	//  1. c29 (screenSize) built from the 2048x1024 raster scales VPOS by
+	//     1/2048,1/1024 instead of 1/1920,1/1080 → main_building's screenUV
+	//     samples the normal buffer at drifting offsets → the SS-normal blend
+	//     tilts N per-pixel → BOTH the GGX specular AND the env Fresnel gate
+	//     (F_atNdotV) wave → "the whole floor moves like water/lava".
+	//  2. s4 itself: a normal buffer bound while the viewport belongs to a
+	//     non-screen raster feeds the same wavy N.
+	// Fix: derive the screen size from the trusted postfx cache (captured at
+	// ColourFilter_switch with the camera provably on the screen — the same
+	// source the pipe-chain classify RT and IBL capture use), fall back to the
+	// live read only before the first capture, and SKIP the SS-normal path
+	// entirely whenever the live camera raster disagrees with the cached
+	// screen size (transient window → no stable screenUV → no blend).
+	RwRaster *camRas = Scene.camera ? RwCameraGetRaster(Scene.camera) : NULL; // NULL camera → 0x7FAD4D-class fault
+	int scrW = 0, scrH = 0;
+	bool screenKnown = GetScreenSize(&scrW, &scrH);
+	bool camRasIsScreen = camRas && (!screenKnown ||
+		(camRas->width == scrW && camRas->height == scrH));
 	{
 		extern IDirect3DTexture9 *g_normalBufferTex;
+		extern bool g_normalBufferHasContent;
 		IDirect3DDevice9 *dev = d3d9device;
-		if(dev && g_normalBufferTex){
+		// camRasIsScreen gate: during a transient non-screen-raster window the
+		// viewport no longer matches the normal buffer's screen frame — skip
+		// the bind (c24.w stays 0 → shader skips the SS-normal blend) instead
+		// of feeding wavy normals. See the TRANSIENT-camRas FIX comment below.
+		if(dev && g_normalBufferTex && g_normalBufferHasContent
+		   && config->normalBufferEnable
+		   && camRasIsScreen
+		   && definedVertexShader != DefinedVertexShader::WIND){
 			dev->SetTexture(4, g_normalBufferTex);
 			ambientPS[3] = 1.0f;
 			RwD3D9SetPixelShaderConstant(24, ambientPS, 1);
 		}
-
-		// c29 = (screenW, screenH, 1/screenW, 1/screenH) — lets main_building
-		// convert VPOS pixels to screen UV for sampling the half-res normal buffer.
-		RwRaster *camRas = Scene.camera ? RwCameraGetRaster(Scene.camera) : NULL; // NULL camera → 0x7FAD4D-class fault
-		if(camRas){
+		if(screenKnown){
+			float sw = (float)scrW, sh = (float)scrH;
+			float screenP[4] = { sw, sh, 1.0f/max(sw, 1e-7f), 1.0f/max(sh, 1e-7f) };
+			RwD3D9SetPixelShaderConstant(29, screenP, 1);
+		}else if(camRas){
+			// First-frame fallback only (cache not yet captured).
 			float sw = (float)camRas->width, sh = (float)camRas->height;
 			float screenP[4] = { sw, sh, 1.0f/max(sw, 1e-7f), 1.0f/max(sh, 1e-7f) };
 			RwD3D9SetPixelShaderConstant(29, screenP, 1);
@@ -820,13 +1347,101 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 		// Material color and surface properties
 		if(flags & rpGEOMETRYLIGHT){
 			pipeUploadMatCol(flags, material, REG_matCol);
-			RwD3D9SetVertexShaderConstant(REG_surfProps, &material->surfaceProps, 1);
+			// c20 layout for buildingPBRVS: x=ambient scale, y=dynamic-light
+			// scale, z=prelight scale (float4 upload — the old
+			// RwSurfaceProperties{3 floats} upload read 4 bytes past the
+			// struct for the 4th component).
+			//
+			// SA assets commonly ship diffuse=0 (lighting baked into vertex
+			// colours; ps2BuildingVS never uses surfDiff) → surfDiff=0 zeroes
+			// the prelight term → black silhouette trees/palms/decals. The old
+			// blanket fallback (diffuse → 1.0) boosted the prelight AND the
+			// 7-direct-light sum to full, stacking live sun ON TOP of the
+			// baked prelight lighting → ~2x energy → white blown-out
+			// roads/terrain. Fix: boost the PRELIGHT scale only and keep the
+			// dynamic-light scale at the material's original diffuse (~0 for
+			// baked-lighting assets) → prelight + ambient, no double sun —
+			// exactly the fallback's documented "PS2-equivalent" intent
+			// (ps2BuildingVS = prelight + ambient*surfAmb, no light sum).
+			// Materials with a real diffuse value are a complete no-op.
+			RwSurfaceProperties surf = material->surfaceProps;
+			float surfUpload[4] = { surf.ambient, surf.diffuse, surf.diffuse, 0.0f };
+			if(surf.diffuse < 1e-4f)
+				surfUpload[2] = 1.0f; // prelight passes at full strength
+			RwD3D9SetVertexShaderConstant(REG_surfProps, surfUpload, 1);
 		}else{
 			static float white[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-			RwSurfaceProperties surf = { 1.0f, 1.0f, 1.0f };
+			static float surfW[4] = { 1.0f, 1.0f, 1.0f, 0.0f };
 			RwD3D9SetVertexShaderConstant(REG_matCol, white, 1);
-			RwD3D9SetVertexShaderConstant(REG_surfProps, &surf, 1);
+			RwD3D9SetVertexShaderConstant(REG_surfProps, surfW, 1);
 		}
+
+		// ---- ENVIRONMENT REFLECTION (ported from the IV / PS2 / Xbox cbs) ----
+		// PS2 :683 and Xbox :809 both branch on the envmap material flag and
+		// run an additive Envcolor = 192/128 * shininess pass; the GTA IV path
+		// inherits that branch (it is the PS2 cb with an IV shader swap), so
+		// IV/PS2/Xbox all reflect and the PBR cb — which had NO branch here —
+		// rendered those materials flat. Bind the material env map on s1 and
+		// hand the shader the exact Envcolor weight those paths use.
+		// Non-env materials still get a DEFINED s1 sample (the IV callback's
+		// own trick — GTAIVBuilding bind of the diffuse at :655 — so a
+		// speculatively-hoisted tex2D can never read an unbound stage; the
+		// shader additionally rejects empty samples). s1 is released by
+		// buildingPipe_cleanup() on cb exit.
+		float envWeight = 0.0f;
+		if(config->bldEnvReflect && (*(int*)&material->surfaceProps.specular & 1)){
+			CustomEnvMapPipeMaterialData *envMat =
+				*RWPLUGINOFFSET(CustomEnvMapPipeMaterialData*, material,
+				                CCustomCarEnvMapPipeline__ms_envMapPluginOffset);
+			// NULL-guard + REAL-texture guard: the PS2/Xbox cbs dereference this
+			// unchecked — an envmap-flagged material whose plugin was never
+			// allocated, or whose texture slot holds a raster-less entry (an
+			// uninitialised plugin slot), must NOT be bound and sampled. A
+			// garbage s1 texel added at Envcolor weight renders the mesh flat.
+			// Require a real texture WITH a valid raster; otherwise fall through
+			// to the non-env path below (envWeight stays 0 -> no env sample).
+			if(envMat && envMat->texture && envMat->texture->raster){
+				// RASTER-CLASSIFICATION GUARD (wavy floor, defence-in-depth):
+				// s1 must ONLY ever hold a STATIC env texture from the asset
+				// (rwRASTERTYPENORMAL / rwRASTERTYPETEXTURE rasters). A
+				// CAMERATEXTURE/ZBUFFER/CAMERA raster here is a render-target
+				// (envFB sphere-capture, Coronas reflection RT, pipe-chain pack
+				// buffer — anything the envmap/water lanes swap through the
+				// plugin slot): sampling it binds ANIMATED screen-space content
+				// into the building reflection → the floor "waves like water".
+				// Never bind an RT-class raster on s1; fall through to the
+				// non-env path (envWeight stays 0, s1 gets the diffuse).
+				RwUInt32 envRasType = envMat->texture->raster->cType & rwRASTERTYPEMASK;
+				if(envRasType == rwRASTERTYPENORMAL || envRasType == rwRASTERTYPETEXTURE){
+				pipeSetTexture(envMat->texture, 1);
+				// Envcolor weight. PS2/Xbox add `192/128*shininess` (=1.5*) to a
+				// FLAT `prelight*surfDiff + ambient*surfAmb` pass (ps2BuildingFxVS:31)
+				// where the additive IS the only bright term. The PBR base is
+				// ALREADY fully lit (ambient + prelight + live sun + GGX specular
+				// + IBL), so the same full additive double-counts the reflection
+				// energy and saturates env-mapped materials to white — the "all
+				// buildings blank/white" regression. Keep the PS2 formula shape
+				// (scaled by shininess) but cap it to a Fresnel-average broad-
+				// reflection level that sits on the lit base without pushing it
+				// to 1.0: low-shininess materials keep near-PS2 strength, only
+				// the high-shininess ones that drove `base + 0.75*envSample > 1`
+				// are reined in. The sharp reflection already lives in the base's
+				// GGX specular; this term is only the broad env wash.
+				float envShine = envMat->GetShininess();	// 0..1 (shininess/255)
+				envWeight = 1.5f * envShine;	// PS2/Xbox Envcolor scale (192/128 == 1.5)
+				if(envWeight > 0.20f) envWeight = 0.20f;
+				} // end raster-classification guard
+			}
+		}
+		if(envWeight <= 0.0f)
+			pipeSetTexture(material->texture, 1);
+		// Sky term only for materials WITHOUT their own env map, and only when
+		// s3 really holds the IBL capture (the PS's validity gate is the second
+		// line of defence against a dead sample).
+		float skyRefl = (config->bldEnvReflect && envWeight <= 0.0f && iblBound)
+		                ? config->bldSkyReflect : 0.0f;
+		float bldEnvP[4] = { config->bldEnvReflect ? 1.0f : 0.0f, envWeight, skyRefl, 0.0f };
+		RwD3D9SetPixelShaderConstant(47, bldEnvP, 1);
 
 		// PBR material params (c22/c23)
 		int surfaceType = GetSurfaceTypeFromMaterial(material);
@@ -840,10 +1455,80 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 			continue;
 		}
 
-		D3D9Render(resEntryHeader, instancedData);
+		// Dual-pass parity with PS2/Xbox (dualPassBuilding=1 in skygfx.ini):
+		// hasAlpha+zwrite road decals need the zwriteThreshold cutout pair —
+		// plain D3D9Render was the only building pipe without it, so PBR
+		// alone showed black alpha-blend artifacts on road sublayers.
+		// texinfo: per-texture dualPass opt-outs (dualPass=0) and
+		// zwriteThreshold from texdb.txt — both PS2 (:439) and Xbox (:590)
+		// already pass it; NULL-safe (falls back to faketexinfo, dualPass=1).
+		TexInfo *texinfo = RwTextureGetTexDBInfo(material->texture);
+		D3D9RenderDual(config->dualPassBuilding, resEntryHeader, instancedData, texinfo);
+
+		// PipeChain classify: second draw of this mesh into the full-res pack
+		// buffer (PipeChainShader forced, c0.x=9 pack mode). Runs AFTER the
+		// main draw so ZTEST sees the real depth (same Z, LESSEQUAL passes);
+		// Begin keeps ZWRITE off, so the depth buffer is untouched. Values
+		// are the same brdfLibrary ones pipeUploadPBR sent in c22/c23.
+		{
+			extern bool PipeChain_ClassifyBegin(float, float, float, float);
+			extern void PipeChain_ClassifyEnd(void);
+			if(PipeChain_ClassifyBegin((float)surfaceType, brdf->glossiness, brdf->specular, 0.0f)){
+				D3D9Render(resEntryHeader, instancedData);
+				PipeChain_ClassifyEnd();
+				RwD3D9SetPixelShader(buildingPBRPS); // Begin forced PipeChainShader
+			}
+		}
 	}
 
 	buildingPipe_restoreRenderState(&rs);
+
+	// PBR cb never called buildingPipe_cleanup (PS2 :447 / Xbox :561 do)
+	// and additionally raw-binds s3 (g_iblTex), s4 (normal buffer) and s5
+	// (forward+ tile). Leave a clean handoff: vehicles rebind what they
+	// need, but FFP/HUD/particle draws between the building and vehicle
+	// passes must not keep sampling the PBR samplers or a stage1 colour
+	// op the env/Xbox passes may have left enabled from an earlier pipe.
+	buildingPipe_cleanup();          // s1 unbind + stage1 COLOROP/ALPHAOP DISABLE
+	RwD3D9SetTexture(NULL, 2);
+	RwD3D9SetTexture(NULL, 3);
+	RwD3D9SetTexture(NULL, 4);
+	RwD3D9SetTexture(NULL, 5);
+	// s3/s4/s5 were bound RAW above (dev->SetTexture — g_iblTex, the normal
+	// buffer, the forward+ tile), so RW's per-stage texture cache for them can
+	// still be NULL while the DEVICE still holds the texture: the
+	// RwD3D9SetTexture(NULL, n) calls above then no-op (cache already NULL)
+	// and the handoff leaves the IBL cubemap / half-res normal buffer bound on
+	// stages the next pass may rebind as render targets (feedback lock /
+	// black read). rw-set first keeps the cache NULL, the raw call then
+	// guarantees the device side regardless of what the cache thought.
+	if(d3d9device){
+		d3d9device->SetTexture(3, NULL);
+		d3d9device->SetTexture(4, NULL);
+		d3d9device->SetTexture(5, NULL);
+		// HIGH-5: these raw SetSamplerState calls were OUTSIDE the guard
+		// (null-deref on a lost device). Reset s3-s5 addressing the vehicle
+		// cleanup also resets (CLAMP/POINT left behind would stick on the
+		// next consumer of those stages).
+		d3d9device->SetSamplerState(3, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP);
+		d3d9device->SetSamplerState(3, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
+		d3d9device->SetSamplerState(3, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+		d3d9device->SetSamplerState(3, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+		d3d9device->SetSamplerState(4, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP);
+		d3d9device->SetSamplerState(4, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
+		d3d9device->SetSamplerState(4, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+		d3d9device->SetSamplerState(4, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+		d3d9device->SetSamplerState(5, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP);
+		d3d9device->SetSamplerState(5, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
+		d3d9device->SetSamplerState(5, D3DSAMP_MINFILTER, D3DTEXF_POINT);
+		d3d9device->SetSamplerState(5, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
+	}
+	// Stage2 ops: PBR never enables them, but an inherited MULTIPLYADD
+	// from a prior pipeline would blend against an undefined texel.
+	RwD3D9SetTextureStageState(2, D3DTSS_COLOROP, D3DTOP_DISABLE);
+	RwD3D9SetTextureStageState(2, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
+	RwD3D9SetTextureStageState(3, D3DTSS_COLOROP, D3DTOP_DISABLE);
+	RwD3D9SetTextureStageState(3, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
 
 	RwD3D9SetVertexShader(NULL);
 	RwD3D9SetPixelShader(NULL);
@@ -855,12 +1540,82 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Switch(RwResEntry *repEntry, void 
 //	if(GetAsyncKeyState(VK_F4) & 0x8000)
 //		return;
 
+	RwUInt32 savedCull = pipeEnterCullMode();
+	PipeAlphaState savedAlpha = pipeEnterAlphaMode();
+	// ZWRITE three-layer guard — mirrors vehiclePipe.cpp:2570. The alpha guard
+	// above covers blend/alpha-test but NOT zwrite. postfx raw
+	// D3DRS_ZWRITEENABLE writes (postfx.cpp:3451, 3630, 3703, 3741, 3791,
+	// 5140) leave the DEVICE with zwrite off while the rw cache still says
+	// TRUE (its rw-side restore no-ops against an unchanged cache), so the
+	// building cbs — which read rw (buildingPipe_saveRenderState,
+	// D3D9RenderDual) and never force the device side — draw with no depth
+	// writes: near geometry doesn't occlude far (far drawn later overwrites
+	// it), vegetation/skidmarks drawn after the buildings pass depth-test
+	// against an empty buffer and paint over them. PBR is worst hit because
+	// it uses plain D3D9Render (no dual-pass ZWRITE roundtrip to
+	// accidentally repair the device like PS2's hasAlpha path does). Force
+	// TRUE through ALL THREE layers (rw cache / D3D9 driver cache / raw
+	// device) for the duration of the cb; exit restores each layer to its own
+	// pre-entry value (postfx manages the raw device side itself with its own
+	// save/restore — syncing the sides here would fight that contract).
+	RwBool savedZWriteRw = TRUE;
+	DWORD savedZWriteDrv = TRUE;
+	DWORD savedZWriteDev = TRUE;
+	RwRenderStateGet(rwRENDERSTATEZWRITEENABLE, &savedZWriteRw);
+	RwD3D9GetRenderState(D3DRS_ZWRITEENABLE, &savedZWriteDrv);
+	d3d9device->GetRenderState(D3DRS_ZWRITEENABLE, &savedZWriteDev);
+	if(!savedZWriteRw || !savedZWriteDrv || !savedZWriteDev){
+		if(dbglog_throttle("BuildingZWrite"))
+			dbglog("[BUILDING] ZWRITE off/desynced on entry (rw=%d drv=%d dev=%d) — forcing TRUE for cb",
+				(int)savedZWriteRw, (int)savedZWriteDrv, (int)savedZWriteDev);
+	}
+	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
+	RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+	d3d9device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+
+	// Non-screen-raster probe — geometry half of the blank-world hunt
+	// (main.cpp:1570 m0170/m0171 documents the failure class: a mid-frame
+	// RwCameraSetRaster swap makes the SCENE render into a non-screen raster
+	// so "the screen never receives the world ... only effects-phase sprites
+	// on top"). Current skygfx_dbg.log shows camRas is ALWAYS the screen at
+	// scene entry ([RENDER] scene-entry probe: 0 hits) and at postfx copy
+	// (UpdateFrontBuffer SKIP: 0 hits), but a 2048x1024 raster IS live at the
+	// effects phase ([FxAlpha] Coronas.Reflections camRas=... 2048x1024 x23,
+	// pointer recycled 1D59F1A8 -> 1D5B0790 -> 272837A0). The open question
+	// that splits the suspect list is whether GEOMETRY ever sees it too:
+	//   hit here  -> the world really is drawn into the foreign raster (the
+	//                covered-display root cause); correlate this pointer with
+	//                the [FxAlpha] one to name the owning pass;
+	//   no hit    -> the swap is strictly post-geometry and the owner lives
+	//                in the effects phase, not in any pipe.
+	// Mismatch-only + throttled: zero cost when camRas is the screen.
+	if(dbglog_throttle("bld_camras")){
+		RwRaster *cbRas = Scene.camera ? RwCameraGetRaster(Scene.camera) : NULL;
+		if(cbRas && RsGlobal && cbRas->width > 0 &&
+		   (cbRas->width != (int)RsGlobal->MaximumWidth ||
+		    cbRas->height != (int)RsGlobal->MaximumHeight))
+			dbglog("[BUILDING] cb camRas=%p %dx%d != screen %dx%d — non-screen raster LIVE during building cb",
+			       (void*)cbRas, cbRas->width, cbRas->height,
+			       (int)RsGlobal->MaximumWidth, (int)RsGlobal->MaximumHeight);
+	}
+
+	// Three-layer alpha/blend repair — pipeEnterAlphaMode canonicalised the
+	// rw + driver caches above, but its RwD3D9SetRenderState writes are
+	// applied[]-gated and cannot repair a DEVICE that drifted behind an
+	// unchanged cache (postfx raw restores, the Im2D pass). Every building
+	// pipe (PS2/GTAIV/Xbox/PBR/Sphere) draws its alpha-cutout decal
+	// sublayers from this device state for the WHOLE atomic, so repair it
+	// before dispatch — see pipeForceAlphaBlock.
+	pipeForceAlphaBlock();
+
 	if(gRenderingSpheremap)
 		CCustomBuildingDNPipeline__CustomPipeRenderCB_Sphere(repEntry, object, type, flags);
 	else switch(config->buildingPipe){
 	default:
 	case BUILDING_PS2:
-	case BUILDING_GTAIV:  // GTAIV = PS2 callback + ivMode shader swap
+	case BUILDING_GTAIV:  // GTAIV = PS2 callback + IV shader swap
+	                         // (ivMode || buildingPipe==BUILDING_GTAIV —
+	                         // parity with vehiclePipe.cpp:690)
 		CCustomBuildingDNPipeline__CustomPipeRenderCB_PS2(repEntry, object, type, flags);
 		break;
 	case BUILDING_XBOX:
@@ -870,6 +1625,12 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Switch(RwResEntry *repEntry, void 
 		CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(repEntry, object, type, flags);
 		break;
 	}
+	pipeExitAlphaMode(savedAlpha);
+	// Restore each zwrite layer to its own pre-entry value (see entry comment).
+	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)savedZWriteRw);
+	RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, savedZWriteDrv);
+	d3d9device->SetRenderState(D3DRS_ZWRITEENABLE, savedZWriteDev);
+	pipeExitCullMode(savedCull);
 	fixSAMP();
 }
 
@@ -1206,4 +1967,19 @@ hookBuildingPipe(void)
 
 //	Patch<BYTE>(0x732B40, 0xC3);	// disable fading entities
 //	Patch<BYTE>(0x732610, 0xC3);	// disable fading atomic
+}
+
+// Release building pipe caches on device reset
+void ReleaseBuildingPipeCaches(void)
+{
+	s_setupEnv_lastobject = NULL;
+	s_setupEnv_lastfrm = NULL;
+	s_setupEnv_lastrenderframe = 0;
+	// RwMatrix doesn't need explicit destroy, just zero it
+	memset(&s_setupEnv_lastmat, 0, sizeof(RwMatrix));
+
+	// Frame counters
+	ps2FrameCount = 0;
+	xboxFrameCount = 0;
+	pbrFrameCount = 0;
 }

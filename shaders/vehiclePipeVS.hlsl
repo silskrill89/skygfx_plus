@@ -56,6 +56,12 @@ VS_OUTPUT_VEH main_vehicle(VS_INPUT_VEH IN)
 float4   fxParams    : register(c21);
 float4x4 world       : register(c30);
 float3   eyePos      : register(c34);
+// VS c28.x = vehPrelightFallback (config). c22..c29 are otherwise unused by
+// main_vehiclePBR (c5..c11 = directCol[7], c12..c18 = directDir[7], c19 matCol,
+// c20 surfProps, c21 fxParams, c30..c33 world, c34 eye). Uploaded once per
+// Env cb invocation from vehiclePipe.cpp; every path that binds vehiclePBRVS
+// (opaque paint, glass, rubber) therefore sees the same value.
+float4   vehLitFallback : register(c28);
 
 #define fresnel   (fxParams.x)
 #define shininess (fxParams.w)
@@ -84,7 +90,23 @@ VS_OUTPUT_VPBR main_vehiclePBR(VS_INPUT_VEH IN)
         float l = max(0.0, dot(IN.Normal, -directDir[i]));
         OUT.Color.xyz += l * directCol[i] * surfDiff;
     }
-    OUT.Color = saturate(OUT.Color) * matCol;
+    OUT.Color = saturate(OUT.Color);
+    // Non-prelit prelight fallback (config->vehPrelightFallback, VS c28.x).
+    // SA vehicle geometry ships WITHOUT rpGEOMETRYPRELIT (1793/1793 meshes in
+    // skygfx_dbg.log), so surfPrelight = 0, the prelight line above is
+    // identically 0, and the shade side is left with only timecycle ambient
+    // * material ambient — live log 0.03 * 0.5 = 0.02 — while the sun-lit side
+    // reaches 1.47: a dark silhouette box. Rather than invent a fake prelight
+    // (which would flatten every lit face), FLOOR the already-lit colour:
+    //   * max() only raises values below the floor -> shade lifts,
+    //   * sun-lit faces are already >= floor -> bit-identical, and
+    //   * the branch is skipped entirely when the geometry IS prelit, so
+    //     baked-lit geometry is untouched (no wash-out).
+    // Applied before the material-colour multiply so the floor keeps the
+    // paint's hue; c28 = 0 (unuploaded) degrades to the exact legacy result.
+    if(surfPrelight <= 0.5)
+        OUT.Color.rgb = max(OUT.Color.rgb, vehLitFallback.rgb);
+    OUT.Color = OUT.Color * matCol;
 
     float4 WorldPos = mul(IN.Position, world);
     float3 wn = mul(IN.Normal, (float3x3)world);
