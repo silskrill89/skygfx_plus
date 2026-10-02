@@ -12,7 +12,7 @@
 //
 // Pipeline config:
 //   buildingPipe  = BUILDING_GTAIV  (falls through to BUILDING_PS2 + ivMode)
-//   vehiclePipe   = CAR_GTAIV       (no handler — uses CAR_NEO via presets)
+//   vehiclePipe   = CAR_GTAIV       (handler at vehiclePipe.cpp:2177 — same body as CAR_NEO)
 //   colorFilter   = COLORFILTER_GTAIV (bypass)
 //   ps2Modulate   = 0
 //   dualPass      = 0
@@ -41,7 +41,7 @@
 static const PresetConfig iv_preset = {
 	"GTA IV",
 	BUILDING_GTAIV,
-	CAR_NEO,                    // GTA IV presets use NEO pipe (CarPipe class)
+	CAR_GTAIV,                  // matches IV presets (presets.cpp:59/61); handler at vehiclePipe.cpp:2177 has the same body as CAR_NEO
 	COLORFILTER_GTAIV,
 	0,                          // ps2ModulateGlobal
 	0,                          // dualPassGlobal
@@ -63,8 +63,12 @@ void
 IVMode_ApplyDefaults(Config *c)
 {
 	c->buildingPipe = BUILDING_GTAIV;
-	c->vehiclePipe = CAR_NEO;
+	c->vehiclePipe = CAR_GTAIV;
 	c->colorFilter = COLORFILTER_GTAIV;
+
+	// Keep the debug-menu Style combo in sync with IV mode (was left stale,
+	// so toggling IV mode still displayed whatever preset was active before).
+	c->preset = PRESET_IV_PC;
 
 	c->ps2ModulateGlobal = 0;
 	c->ps2ModulateBuilding = 0;
@@ -87,15 +91,16 @@ IVMode_ApplyDefaults(Config *c)
 	c->smaaEnable = 0;
 
 	c->ivMode = 1;
-	c->ivDesaturation = 1.0f;
-	c->ivGamma = 1.0f;
+	// Grade sliders are intentionally NOT stomped here: ivDesaturation,
+	// ivGamma, ivVignette*, ivBloomIntensity and ivExposure are user-tunable
+	// INI values (main.cpp writes sane defaults on first run: desaturation
+	// 0.15, vignette 0.15/0.70/1.5, exposure 2.5). Resetting them to preset
+	// constants on every toggle-ON — desaturation 1.0 maps to 50% grey wash
+	// in IVGrade's saturate(desat*0.5) — was the grey-wash bug: whatever the
+	// player tuned in the INI was overwritten the moment they re-ticked the
+	// checkbox. Only the non-INI-backed experimental fields reset:
 	c->ivSaturation = 0.0f;
 	c->ivCurves = 0.0f;
-	c->ivVignetteIntensity = 0.75f;
-	c->ivVignetteRadius = 0.75f;
-	c->ivVignetteContrast = 1.5f;
-	c->ivBloomIntensity = 0.0f;
-	c->ivExposure = 1.0f;
 
 	c->detailMaps = 0;
 	c->stochastic = 0;

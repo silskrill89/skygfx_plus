@@ -362,11 +362,17 @@ def get_shader_list():
         for f in shader_dir.glob('*.hlsl'):
             root_stems.add(f.stem)
         for f in shader_dir.rglob('*.hlsl'):
-            if 'GTAIV' in f.name and subdir == 'vs':
+            # GTAIV VS CSOs are prebuilt binaries with no source; compiling a
+            # same-named .hlsl would silently replace them. GTAIVBuilding_vs is
+            # the ONE exception: it now has an audited source (shaders/vs/
+            # GTAIVBuilding_vs.hlsl) that matches what the building callback
+            # uploads, so it must be rebuilt into resources/cso/.
+            if 'GTAIV' in f.name and subdir == 'vs' and f.name != 'GTAIVBuilding_vs.hlsl':
                 continue
             # Skip files handled by multi_entry (dedicated entry points)
             if f.name in ('VehiclePBR_Modern.hlsl', 'normMapVehiclePS.hlsl',
-                           'mobileVehiclePS.hlsl', 'mobileVehicleVS.hlsl'):
+                           'mobileVehiclePS.hlsl', 'mobileVehicleVS.hlsl',
+                           'Water_Parallax.hlsl'):
                 continue
             # Skip subdirectrory files whose stem collides with a root file
             # (root file takes priority; multi_entry handles redirects)
@@ -394,6 +400,10 @@ def get_shader_list():
         ('ps_3_0', 'VehiclePBR_Modern.hlsl', 'main_building', 'BuildingPBRPS.cso'),
         ('ps_3_0', 'VehiclePBR_Modern.hlsl', 'main_rubber', 'Rubber_Vehicle_Modern.cso'),
         ('ps_3_0', 'VehiclePBR_Modern.hlsl', 'main_ps2EnvSpecFx', 'ps2EnvSpecFxPS.cso'),
+        # Water_Parallax.hlsl — water style entries (waterStyle INI selector)
+        ('ps_3_0', 'Water_Parallax.hlsl', 'main_xbox', 'Water_Parallax.cso'),
+        ('ps_3_0', 'Water_Parallax.hlsl', 'main_iv', 'Water_IV.cso'),
+        ('ps_3_0', 'Water_Parallax.hlsl', 'main_v', 'Water_V.cso'),
     ]
 
     for profile, src_file, entry, out_cso in multi_entry:

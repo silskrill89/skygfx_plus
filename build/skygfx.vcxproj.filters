@@ -107,6 +107,9 @@
     <ClCompile Include="..\src\texdb.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\render\utilitynoise.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
     <ClCompile Include="..\src\vehiclePipe.cpp">
       <Filter>src</Filter>
     </ClCompile>

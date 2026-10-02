@@ -2,6 +2,18 @@
 // Compiled via /E main -> SSAO.cso
 // Uses depth buffer + normal buffer for hemisphere-oriented ambient occlusion
 // Based on Alex Tardif's SSAO (https://alextardif.com/SSAO.html)
+//
+// Output contract (black-SSAO fixes):
+//   Greyscale AO, WHITE = no occlusion. The C++ composite multiplies the
+//   scene by this texture (Photoshop multiply: final = scene * ao). Every
+//   invalid input fails OPEN to white — SSAO must degrade to "off", never
+//   black:
+//     - depth >= 1.0 (sky) or <= 1e-6 (never-written INTZ) -> white
+//     - garbage/missing normal buffer -> depth-derivative fallback
+//     - degenerate fallback (zero-length cross) -> white
+//     - occlusion saturate()d before pow(): pow(negative) = NaN in SM3.0,
+//       NaN renders as black through the multiply composite (was the
+//       primary cause of the fully-black SSAO buffer)
 
 uniform sampler2D depthTexture : register(s0);
 uniform sampler2D randomTexture : register(s1);
@@ -25,11 +37,18 @@ float3 GetViewPos(float2 texCoord, float depth)
     return float3(viewXY, viewZ);
 }
 
-float3 GetNormal(float2 texCoord)
+// Exact inverse of GetViewPos: view-space position -> screen UV.
+// GetViewPos does: ndc = uv*2-1; ndc.y = -ndc.y; viewXY = ndc * viewZ * projInfo.xy
+// so the reverse must divide by projInfo.xy AND un-flip y. The old code did
+// neither (plain samplePos.xy / samplePos.z), so every occlusion sample was
+// fetched from a mirrored, projection-scaled wrong texel — garbage occlusion
+// everywhere (the other primary cause of the black AO buffer).
+float2 ProjectToUV(float3 viewPos)
 {
-    float3 normal = tex2D(normalTexture, texCoord).rgb;
-    // Decode from [0,1] back to [-1,1]
-    return normal * 2.0 - 1.0;
+    float invZ = 1.0 / max(viewPos.z, 1e-7);
+    float nx = viewPos.x * invZ / max(projInfo.x, 1e-7);
+    float ny = viewPos.y * invZ / max(projInfo.y, 1e-7);
+    return float2(nx * 0.5 + 0.5, 0.5 - ny * 0.5);
 }
 
 float3x3 BuildTBN(float3 normal, float2 texCoord, float2 noiseScale)
@@ -44,17 +63,32 @@ float4 main(PS_INPUT IN) : COLOR
 {
     float centerDepth = tex2D(depthTexture, IN.texCoord).r;
 
-    if (centerDepth >= 1.0)
+    // Fail-open: sky (>=1.0) and never-written depth (<=1e-6, garbage INTZ
+    // rows below/around the real Z) both return white instead of feeding
+    // GetViewPos bad values that produced wild occlusion.
+    if (centerDepth >= 1.0 || centerDepth <= 1e-6)
         return float4(1, 1, 1, 1);
 
     float3 centerPos = GetViewPos(IN.texCoord, centerDepth);
 
-    // Get normal from buffer (oriented hemisphere)
-    float3 normal = GetNormal(IN.texCoord);
+    // Normal from buffer, decoded from [0,1] to [-1,1]. Valid data is
+    // unit-length (NormalBuffer.hlsl writes n*0.5+0.5 of a normalized
+    // view-space normal; sky = (0,0,1)). A NULL/unbound texture samples as
+    // black -> decodes to (-1,-1,-1), length 1.73 — the old `len < 0.5`
+    // check PASSED that garbage, and the un-normalized dot product let
+    // occlusion go negative -> pow(negative) = NaN -> black frame. Accept
+    // only a sane unit-length window (normalize), else reconstruct from
+    // depth derivatives.
+    float3 normal = tex2D(normalTexture, IN.texCoord).rgb * 2.0 - 1.0;
     float normalLen = length(normal);
-    if(normalLen < 0.5){
-        // Normal buffer not available — decode D3D9 NULL texture (0,0,0,0) gives (-1,-1,-1)
-        // or genuinely small normal. Reconstruct from depth as fallback.
+    if (normalLen >= 0.5 && normalLen <= 1.5)
+    {
+        normal /= normalLen;
+    }
+    else
+    {
+        // Normal buffer not available — reconstruct from depth (5-tap cross,
+        // same bilateral pair selection as NormalBuffer.hlsl).
         float2 texel = screenSize.zw;
         float dc = centerDepth;
         float dl = tex2D(depthTexture, IN.texCoord - float2(texel.x, 0)).r;
@@ -72,7 +106,12 @@ float4 main(PS_INPUT IN) : COLOR
         float3 dy2 = pc - pu;
         float3 dx = (abs(dx1.z) < abs(dx2.z)) ? dx1 : dx2;
         float3 dy = (abs(dy1.z) < abs(dy2.z)) ? dy1 : dy2;
-        normal = normalize(cross(dx, dy) + 1e-7);
+        float3 fn = cross(dx, dy);
+        float flen = length(fn);
+        // Degenerate (flat surface / equal taps) — fail open white
+        if (flen < 1e-7)
+            return float4(1, 1, 1, 1);
+        normal = fn / flen;
     }
 
     float2 noiseScale = ssaoParams.z * screenSize.xy;
@@ -102,27 +141,42 @@ float4 main(PS_INPUT IN) : COLOR
     for (int i = 0; i < 16; ++i)
     {
         float3 samplePos = centerPos + kernel[i];
+        if (samplePos.z <= 1e-7)
+            continue;
 
-        // Project sample position to screen space
-        float2 sampleCoord = samplePos.xy / samplePos.z;
-        sampleCoord = (sampleCoord + 1.0) * 0.5;
+        // Project the kernel-lifted sample to screen space (exact GetViewPos
+        // inverse — see ProjectToUV)
+        float2 sampleCoord = ProjectToUV(samplePos);
 
         if (sampleCoord.x >= 0.0 && sampleCoord.x <= 1.0 &&
             sampleCoord.y >= 0.0 && sampleCoord.y <= 1.0)
         {
             float sampleDepth = tex2D(depthTexture, sampleCoord).r;
+            // Invalid/sky depth is not an occluder — skip it (old code let
+            // depth=0 garbage occlude whole screen regions)
+            if (sampleDepth <= 1e-6 || sampleDepth >= 1.0)
+                continue;
             float3 sampleViewPos = GetViewPos(sampleCoord, sampleDepth);
 
             // Range check and angle-aware occlusion
             float diff = length(sampleViewPos - centerPos);
             float rangeCheck = smoothstep(radius, 0.0, diff);
-            float nDotS = max(dot(normal, normalize(samplePos - centerPos)), 0.0);
-            occlusion += rangeCheck * step(sampleViewPos.z, centerPos.z) * nDotS;
+            float3 sdir = samplePos - centerPos;
+            float slen = length(sdir);
+            // Guard normalize(): a zero-length kernel direction is NaN in SM3.0
+            float nDotS = slen > 1e-7 ? max(dot(normal, sdir / slen), 0.0) : 0.0;
+            // Compare against the kernel-LIFTED point (hemisphere test), not the
+            // surface point: kernel[i] lifts the sample along the normal, so
+            // using centerPos.z over-occluded on tilted surfaces.
+            occlusion += rangeCheck * step(sampleViewPos.z, samplePos.z) * nDotS;
         }
     }
 
-    occlusion = 1.0 - (occlusion / 16.0);
-    occlusion = pow(occlusion, power);
+    // Each term is in [0,1] (rangeCheck, step, nDotS), but saturate anyway —
+    // a negative base makes pow() NaN in SM3.0 and NaN reads black through
+    // the multiply composite.
+    occlusion = saturate(1.0 - (occlusion / 16.0));
+    occlusion = pow(occlusion, max(power, 1e-3));
 
     return float4(occlusion, occlusion, occlusion, 1.0);
 }

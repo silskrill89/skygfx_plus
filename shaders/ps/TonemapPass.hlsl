@@ -21,15 +21,21 @@
 //
 // c7 = blackLiftParams:
 //   x = blackLift (0.0-0.05, sRGB black-level lift to preserve shadow detail)
-//   y = minExposure (auto-exposure clamp low)
-//   z = maxExposure (auto-exposure clamp high)
+//   y = minExposure (auto-exposure clamp low, [-0.5..0.5]; negative = darkening)
+//   z = maxExposure (auto-exposure clamp high, [-0.5..1.0])
 //   w = keyStrength (0 = pure timecycle exposure, 1 = full frame-adaptive)
+//
+// c8 = curveParams (user pivot curve, applied at the OUTPUT):
+//   x = Curve Intensity Lows  [-1..1], default 0 (0 = identity)
+//   y = Curve Intensity Highs [-1..1], default 0 (0 = identity)
+//   z = Curve Mid Point       [0..1],  default 0.5 (pivot)
 
 uniform sampler2D tex : register(s0);
 uniform sampler2D lumTex : register(s1);
 uniform float4 tonemapParams : register(c5);
 uniform float4 gradeParams : register(c6);
 uniform float4 blackLiftParams : register(c7);
+uniform float4 curveParams : register(c8);
 
 struct PS_INPUT
 {
@@ -148,6 +154,47 @@ float3 FilmicGrading(float3 c, float sceneLuma)
 	return saturate(c);
 }
 
+// === User pivot curve (c8) — applied at the output, Photoshop-style ===
+// Region below the mid pivot is driven by Curve Intensity Lows (negative
+// darkens shadows, positive lifts them); region above mid by Curve Intensity
+// Highs (negative pulls highlights down, positive boosts). The pivot itself
+// anchors at gain 1.0 from BOTH sides (continuity: x/m == 1 and
+// (x-m)/(x-m)==0 evaluate exactly at the pivot).
+// Implemented as a per-channel gain ramp:  out = x * gain(x).
+// Both intensities 0 => early-out in PivotCurve BEFORE any math on c, so
+// the disabled path is bit-exact passthrough (existing tuning unaffected).
+// Guarded at the mid extremes (m~0 / m~1) so the region divisions never
+// divide by zero (AGENTS division-safety rule).
+float PivotCurve1(float x)
+{
+	float lows  = curveParams.x;
+	float highs = curveParams.y;
+	float m     = saturate(curveParams.z);
+
+	// Guarded pivots: mid <= 0 => empty low region (all high region);
+	// mid >= 1 => empty high region (all low region). Division-safe forms:
+	// m~0:  gain ramps 1 -> (1+highs) across [0,1]
+	// m~1:  gain ramps (1+lows) -> 1 across [0,1]
+	if (m <= 1e-5)
+		return x * (1.0 + highs * x);
+	if (m >= 1.0 - 1e-5)
+		return x * (1.0 + lows * (1.0 - x));
+
+	if (x <= m)
+		return x * (1.0 + lows * (1.0 - x / m));       // gain: (1+lows)@0 -> 1@m
+	return x * (1.0 + highs * (x - m) / (1.0 - m));    // gain: 1@m -> (1+highs)@1
+}
+
+float3 PivotCurve(float3 c)
+{
+	// CRITICAL bit-exact identity: both intensities exactly 0.0 (the CPU
+	// clamps/defaults write exact 0.0f) => return c untouched, zero
+	// arithmetic — output is bit-identical to the pre-curve shader.
+	if (curveParams.x == 0.0 && curveParams.y == 0.0)
+		return c;
+	return float3(PivotCurve1(c.r), PivotCurve1(c.g), PivotCurve1(c.b));
+}
+
 float4 main(PS_INPUT IN) : COLOR
 {
 	float3 c = tex2D(tex, IN.texcoord0.xy);
@@ -172,8 +219,13 @@ float4 main(PS_INPUT IN) : COLOR
 	// Pre-compress extreme highlights so filmic tonemap can spread them
 	c = SoftKnee(c);
 
-	// Adaptive Hable/Uncharted 2 filmic tonemap (time-of-day toe strength)
-	c = FilmicTonemap(c, tonemapParams.y);
+	// Division-safety guard for NEGATIVE exposure (min/max exposure ranges
+	// now allow -0.5 for deliberate darkening): c*exposure < 0 would hit the
+	// Hable denominator's real roots (x ≈ -0.21 / -1.15 for D in [0.18,0.55])
+	// => Inf/NaN pixels. Clamping negatives to 0 maps them cleanly to black
+	// (deliberate darkening). max(x,0) is bit-exact for all x >= 0, so the
+	// normal (non-negative) path is provably unchanged.
+	c = FilmicTonemap(max(c, 0.0), tonemapParams.y);
 
 	// Exact sRGB gamma encode
 	c = saturate(LinearToSRGB(c));
@@ -189,6 +241,10 @@ float4 main(PS_INPUT IN) : COLOR
 	// Black-level lift: preserve deep shadow detail without a gray veil.
 	// Small constant (0.015-0.02) only affects near-black; midtones untouched.
 	c = c * (1.0f - blackLiftParams.x) + blackLiftParams.x;
+
+	// User pivot curve — final OUTPUT stage (after black lift). Identity
+	// (bit-exact passthrough) when both intensities are 0 (the default).
+	c = PivotCurve(c);
 
 	return float4(c, 1.0f);
 }

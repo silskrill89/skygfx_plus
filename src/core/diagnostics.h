@@ -38,6 +38,11 @@ void diag_removeVEH(void);
 // Lets the VEH pass through untouched so frame SEH containment can fire.
 extern volatile LONG g_inGuardedIm2DPass;
 
+// Current render-phase tag for the guarded choke-points (forensics only).
+// Set at each SMAA pass boundary, cleared whenever the hoisted guard exits.
+// The VEH reads it to tag GUARD-FAULT ring entries. Never NULL.
+extern const char *g_renderPhase;
+
 // Get the current log file path (for external code that needs it).
 const char* diag_getLogPath(void);
 

@@ -1,7 +1,12 @@
 
 #include "skygfx.h"
+#include "diagnostics.h"
 #include <d3d9types.h>
 #include <DirectXMath.h>
+
+extern void *overrideIm2dPixelShader;	// postfx.cpp — Im2D override pixel shader dispatch
+extern void *gtaivBuildingVS, *gtaivBuildingPS;	// buildingPipe.cpp — IV-mode building forward pass
+extern void *ps2EnvSpecFxPS;	// vehiclePipe.cpp — PS2 env+spec dual-layer FX (also used by the building FX pass)
 
 void *SMAA = nullptr;
 void *SMAA_Edge = nullptr;
@@ -23,6 +28,8 @@ void *ColorFilter_CrossMix = nullptr;
 void *SSS_Blur = nullptr;
 void *VehiclePaint_GTAIV = nullptr;
 void *Water_Parallax = nullptr;
+void *Water_IV = nullptr;
+void *Water_V = nullptr;
 void *Water_VS = nullptr;
 void *VehiclePBR_Modern = nullptr;
 void *Glass_Vehicle = nullptr;
@@ -49,6 +56,48 @@ void *GTAIV_PS = nullptr;
 static RwRGBAReal s_tcAmbient = {0, 0, 0, 0};   // pure timecycle ambient (no multiplier)
 static float s_lightsMult = 1.0f;                 // CCoronas__LightsMult
 
+// ============================================================
+// Night brightness law — no material may out-shine the sky from
+// ambient/IBL alone; only lights (directional sun/moon, Forward+
+// tiled point lights, emissives) may exceed it.
+// Single shared choke point: GetTimecycleAmbient() feeds buildings
+// (via GetTimecycleAmbientPBR -> buildingAmbient -> VS c4/PS c24),
+// vehicles (uploadLights / PS c24), peds (pAmbient override in
+// main.cpp) and neoCarpipe — so every pipe inherits the ceiling.
+// ============================================================
+static void
+ClampAmbientToSky(RwRGBAReal &c)
+{
+	extern CColourSet &CTimeCycle__m_CurrentColours;
+	const CColourSet &tc = CTimeCycle__m_CurrentColours;
+	// Sky luminance the player sees: zenith (skyTop) + horizon (skyBot),
+	// the same timecycle values the game draws the sky from (gta.h CColourSet).
+	float topL = (0.2126f*(float)tc.skyTopR + 0.7152f*(float)tc.skyTopG + 0.0722f*(float)tc.skyTopB) / 255.0f;
+	float botL = (0.2126f*(float)tc.skyBotR + 0.7152f*(float)tc.skyBotG + 0.0722f*(float)tc.skyBotB) / 255.0f;
+	float skyL = 0.5f * (topL + botL);
+	// < 1/255 => timecycle not populated yet (startup frame) — treat as
+	// no-data and leave ambient alone rather than crushing it to black.
+	if(skyL < 0.003f)
+		return;
+	float ambL = 0.2126f*c.red + 0.7152f*c.green + 0.0722f*c.blue;
+	if(ambL <= skyL)
+		return;                    // already <= sky (normal daytime case: factor = 1)
+	float k = skyL / ambL;
+	// Day release: as the sky itself brightens, fade the clamp out so a
+	// bright-sky frame can never be changed by this (factor -> 1 by skyL=0.45).
+	if(skyL >= 0.45f)
+		return;
+	float t = (skyL - 0.25f) / (0.45f - 0.25f);
+	if(t < 0.0f) t = 0.0f;
+	if(t > 1.0f) t = 1.0f;
+	k = k + (1.0f - k) * t;
+	c.red   *= k;
+	c.green *= k;
+	c.blue  *= k;
+	if(dbglog_throttle("night_ceiling"))
+		dbglog("[PBR-Ambient] night ceiling k=%.3f skyL=%.3f ambL=%.3f", k, skyL, ambL);
+}
+
 RwRGBAReal GetTimecycleAmbient(void)
 {
 	// Return ambient WITH multiplier applied (for backward compat).
@@ -64,6 +113,7 @@ RwRGBAReal GetTimecycleAmbient(void)
 	out.red   = (float)CTimeCycle_GetAmbientRed()   * mult * 0.85f;
 	out.green = (float)CTimeCycle_GetAmbientGreen() * mult * 0.85f;
 	out.blue  = (float)CTimeCycle_GetAmbientBlue()  * mult * 0.85f;
+	ClampAmbientToSky(out); // night law: ambient can never exceed sky luminance
 	return out;
 }
 
@@ -88,6 +138,10 @@ RwRGBAReal GetTimecycleAmbientPBR(void)
 			out.green = min(out.green + add, 1.0f);
 			out.blue  = min(out.blue  + add, 1.0f);
 		}
+		// Night law re-assert AFTER the floor: the floor must never lift
+		// ambient above the sky either (ceiling inside GetTimecycleAmbient
+		// ran before the floor was added).
+		ClampAmbientToSky(out);
 	}
 	if(dbglog_throttle("pbr_ambient"))
 		dbglog("[PBR-Ambient] final=(%.3f,%.3f,%.3f) floor=%.3f raw=(%.3f,%.3f,%.3f)",
@@ -591,6 +645,8 @@ CreateShaders(void)
 	// PBR / Modern
 	makePS(IDR_VEHICLEPAINT_GTAIV, &VehiclePaint_GTAIV);
 	makePS(IDR_WATER_PARALLAX, &Water_Parallax);
+	makePS(IDR_WATER_IV, &Water_IV);
+	makePS(IDR_WATER_V, &Water_V);
 	makeVS(IDR_WATER_VS, &Water_VS);
 	makePS(IDR_VEHICLEPBR_MODERN, &VehiclePBR_Modern);
 	makePS(IDR_GLASS_VEHICLE, &Glass_Vehicle);
@@ -614,6 +670,13 @@ CreateShaders(void)
 	makeVS(IDR_PS2CARFXVS, &ps2CarFxVS);
 	makeVS(IDR_SPECCARFXVS, &specCarFxVS);
 	makePS(IDR_SPECCARFXPS, &specCarFxPS);
+	// PS2 env+spec dual-layer FX pass (VehiclePBR_Modern.hlsl entry
+	// main_ps2EnvSpecFx, cso/ps2EnvSpecFxPS.cso) — used by BOTH the vehicle
+	// and building FX callbacks; simplePS cannot stand in for it (it samples
+	// s0 diffuse only, so env-UV lookups returned the diffuse texel).
+	makePS(IDR_PS2ENVSPECFXPS, &ps2EnvSpecFxPS);
+	if(ps2EnvSpecFxPS == NULL)
+		dbglog("  WARNING: ps2EnvSpecFxPS not created — PS2 FX passes fall back to simplePS");
 	makeVS(IDR_XBOXCARVS, &xboxCarVS);
 	makeVS(IDR_LEEDSCARFXVS, &leedsCarFxVS);
 	makeVS(IDR_MOBILEVEHICLEVS, &mobileVehiclePipeVS);
@@ -623,6 +686,8 @@ CreateShaders(void)
 	if(gtaivVehicleVS == NULL || gtaivVehiclePS == NULL)
 		dbglog("  WARNING: gtaivVehicleVS/PS not created (VS=%p PS=%p) — ivMode vehicle path will render with null shaders",
 			gtaivVehicleVS, gtaivVehiclePS);
+	makeVS(IDR_GTAIVBUILDINGVS, &gtaivBuildingVS);
+	makePS(IDR_GTAIVBUILDINGPS, &gtaivBuildingPS);
 
 	// Building legacy
 	makeVS(IDR_PS2BUILDINGVS, &ps2BuildingVS);
@@ -644,6 +709,8 @@ CreateShaders(void)
 		VehiclePBR_Modern, buildingPBRVS, buildingPBRPS);
 	dbglog("CreateShaders GTAIV vehicle handles: gtaivVehicleVS=%p gtaivVehiclePS=%p",
 		gtaivVehicleVS, gtaivVehiclePS);
+	dbglog("CreateShaders GTAIV building handles: gtaivBuildingVS=%p gtaivBuildingPS=%p",
+		gtaivBuildingVS, gtaivBuildingPS);
 	dbglog("CreateShaders PBR handles: vehiclePBRVS=%p Glass_Vehicle=%p Rubber_Vehicle_Modern=%p",
 		vehiclePBRVS, Glass_Vehicle, Rubber_Vehicle_Modern);
 	dbglog("CreateShaders PBR handles: PBR_Lighting=%p CarPaint_Reflections=%p",
@@ -684,4 +751,487 @@ void pipeUploadPBR(float glossiness, float specular, float c22_3, float c22_4,
 	float c23[4] = { c23_1, c23_2, c23_3, 0.0f };
 	RwD3D9SetPixelShaderConstant(22, c22, 1);
 	RwD3D9SetPixelShaderConstant(23, c23, 1);
+}
+
+// ============================================================
+// Class-proof SEH choke-points — contract documented in skygfx.h.
+// POD-only bodies (C2712-safe): no C++ objects with destructors live
+// across the __try, so MSVC accepts SEH here and callers (DrawSMAA etc.)
+// never need __try in functions that hold C++ locals.
+// ============================================================
+volatile LONG g_guardDepth = 0;
+
+// Bind a raster as render-target 0. NULL raster fails without SEH; any fault
+// inside RwD3D9SetRenderTarget (e.g. CAMERATEXTURE raster with no D3D9
+// surface -> null COM vtable read at 0x7F9ECB) is caught, logged with the
+// phase tag, and reported as false so the caller fails open.
+bool guardedSetRT(RwRaster *ras, const char *phase)
+{
+	const char *ph = phase ? phase : "?";
+	if(!ras){
+		if(dbglog_throttle("gsetrt_null"))
+			dbglog("[GUARD] guardedSetRT: raster NULL (phase=%s)", ph);
+		return false;
+	}
+	bool ok = true;
+	LONG outerGuard = g_inGuardedIm2DPass;
+	InterlockedIncrement(&g_guardDepth);
+	g_inGuardedIm2DPass = 1;
+	__try {
+		RwD3D9SetRenderTarget(0, ras);
+	} __except(EXCEPTION_EXECUTE_HANDLER){
+		dbglog("[GUARD] guardedSetRT: FAULT phase=%s code=0x%08X raster=%p",
+			ph, GetExceptionCode(), ras);
+		ok = false;
+	}
+	g_inGuardedIm2DPass = outerGuard;
+	InterlockedDecrement(&g_guardDepth);
+	return ok;
+}
+
+// Fullscreen Im2D draw (quad + override pixel shader). Pre-checks replace the
+// common fault classes (null verts/idx, missing camera, camera not begun yet)
+// with cheap false returns; anything else is caught by SEH. Same
+// g_inGuardedIm2DPass save/restore semantics as the old inline __try blocks,
+// so calling this from inside an already-hoisted guarded region is safe.
+bool guardedIm2DRender(void *ps, RwInt32 primType, RwIm2DVertex *verts, RwInt32 numVerts,
+                       RwImVertexIndex *indices, RwInt32 numIndices, const char *phase)
+{
+	const char *ph = phase ? phase : "?";
+
+	if(!verts || !indices || numVerts <= 0 || numIndices <= 0){
+		if(dbglog_throttle("gim2d_param"))
+			dbglog("[GUARD] guardedIm2DRender: bad params (phase=%s verts=%p idx=%p n=%d/%d)",
+				ph, verts, indices, (int)numVerts, (int)numIndices);
+		return false;
+	}
+	if(!Scene.camera){
+		if(dbglog_throttle("gim2d_nocam"))
+			dbglog("[GUARD] guardedIm2DRender: Scene.camera NULL (phase=%s)", ph);
+		return false;
+	}
+	// Begun-camera gate: Scene.camera can exist before the first
+	// RwCameraBeginUpdate; Im2D dispatch dereferences the exe-side camera
+	// global at 0xC9BCC0 -> null deref (same Lane G gate as postfx).
+	if(*(void**)0xC9BCC0 == NULL){
+		if(dbglog_throttle("gim2d_nobegun"))
+			dbglog("[GUARD] guardedIm2DRender: camera not begun (phase=%s)", ph);
+		return false;
+	}
+
+	bool ok = true;
+	LONG outerGuard = g_inGuardedIm2DPass;
+	InterlockedIncrement(&g_guardDepth);
+	g_inGuardedIm2DPass = 1;
+	__try {
+		overrideIm2dPixelShader = ps;
+		RwIm2DRenderIndexedPrimitive((RwPrimitiveType)primType, verts, numVerts, indices, numIndices);
+		overrideIm2dPixelShader = nil;
+	} __except(EXCEPTION_EXECUTE_HANDLER){
+		overrideIm2dPixelShader = nil;
+		dbglog("[GUARD] guardedIm2DRender: FAULT phase=%s code=0x%08X ps=%p",
+			ph, GetExceptionCode(), ps);
+		ok = false;
+	}
+	g_inGuardedIm2DPass = outerGuard;
+	InterlockedDecrement(&g_guardDepth);
+	return ok;
+}
+
+// ============================================================
+// ============================================================
+// RenderIBLBuffer — once-per-frame gate shared by every pipe that
+// consumes g_iblTex (dynamic-sky capture, bound raw on s3 by the
+// vehicle Env cb's opaque :2099 and rubber :1876 paths, and by the
+// PBR building cb).
+//
+// This used to live as a function-local stamp inside the PBR building
+// callback ONLY, so any combo with buildingPipe != PBR (e.g.
+// BUILDING_GTAIV buildings + CAR_MODERN vehicles) never rendered the
+// IBL target: g_iblTex stayed undefined, the vehicle cb skipped its
+// s3 bind, and vehicle IBL reflections went black. The Env cb calls
+// this too now; the shared stamp guarantees at most ONE render per
+// frame regardless of which pipe wins the race (buildings normally
+// render before vehicles, so the building call usually wins — same
+// timing as before; when no PBR building draws this frame, the
+// vehicle side fills the gap instead).
+//
+// The stamp advances even when the camera gate fails (defer; do not
+// retry within the frame) — same contract the building cb had.
+// ============================================================
+void
+pipeEnsureIBLBuffer(void)
+{
+	static RwUInt32 lastIBLFrame = 0;
+	RwUInt32 curFrame = RWSRCGLOBAL(renderFrame);
+	if(curFrame == lastIBLFrame)
+		return;
+	lastIBLFrame = curFrame;
+
+	// Gate on valid camera state: on frame 1 the game renders building
+	// atomics before any RwCameraBeginUpdate has run, so the exe-side
+	// Im2D dispatch reads a NULL camera global and faults (crash
+	// 0x7FBD4A). Defer to a later frame; the previous/stale IBL stays
+	// in use until then.
+	if(Scene.camera && RwCameraGetRaster(Scene.camera)){
+		RenderIBLBuffer();
+	}else if(dbglog_throttle("ibl_nocam")){
+		dbglog("RenderIBL: skip, camera not ready (frame %u)", curFrame);
+	}
+}
+
+// ============================================================
+// Cull-mode guard for pipe render callbacks.
+//
+// THREE layers must agree or back-face culling goes wrong:
+//   (1) the rw cache RwRenderStateSet/Get read+write,
+//   (2) the D3D9 driver cache behind RwD3D9SetRenderState
+//       (gta_sa 0x7FC2D0: pending[state] + dirty list; flushed by
+//       _rwD3D9RenderStateFlushCache 0x7FC200 before every draw and
+//       ONLY when its applied[] shadow differs from pending[]),
+//   (3) the raw IDirect3DDevice9 state.
+// Layers (1) and (2) both skip work when they already hold the
+// requested value, so anything that moves only one layer — raw
+// dev->SetRenderState in postfx Save/RestoreRawGeomStates, a direct
+// RwD3D9SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE) that layer (1)
+// never sees, or a D3D9 device reset restoring D3D's own default
+// CULLMODE — leaves (3) desynced from (1)/(2) PERMANENTLY: every
+// later RwRenderStateSet(rwCULLMODECULLBACK) is a double no-op
+// (layer 1 already says BACK, layer 2 already says BACK) and the
+// device keeps the stale value. Stuck at D3DCULL_NONE -> backfaces
+// show (double-sided); stuck at the opposite winding -> front faces
+// culled. That is the "cull reversed on PBR vehicles/buildings"
+// report: the pipes only ever touched layer (1).
+//
+// Fix: pipeForceCullMode() parks layer (1) on the other canonical
+// value first (guarantees a real cache transition even when the
+// cache already holds the target), re-requests the target through
+// the rw layer, reads layer (2) back for the exact device-domain
+// value RW itself will flush (no hand-rolled rw->D3D table — and
+// thus immune to getting the mapping backwards), then writes that
+// value to the raw device (layer 3). Device==cache on every
+// enter/exit unconditionally.
+//
+// Mapping reference (verified in gta_sa.exe + RW docs): rw enum
+// {NACULLMODE=0, CULLNONE=1, CULLBACK=2, CULLFRONT=3}, D3D enum
+// {NONE=1, CW=2, CCW=3}; every cull value the game/RW ever pushes
+// raw is 1 or 2, and back faces are clockwise on screen (RW User
+// Guide 7.2.4: visible = anti-clockwise) so rwCULLBACK(2) lands on
+// D3DCULL_CW(2). We do not hard-code it: layer (2) tells us.
+//
+// Saved-value contract unchanged: RwRenderStateGet can fail leaving
+// the out-param untouched (garbage), so saved stays pre-seeded and
+// is clamped to NONE/BACK only — a foreign/garbage value can never
+// leak out of a pipe callback. Enter always forces CULLBACK (the
+// game's own world-geometry default, see envmap.cpp / CRenderer).
+// ============================================================
+void
+pipeForceCullMode(RwUInt32 rwCull)
+{
+	// Defensive: only the two canonical values are ever pushed.
+	if(rwCull != rwCULLMODECULLNONE && rwCull != rwCULLMODECULLBACK)
+		rwCull = rwCULLMODECULLBACK;
+
+	// (1) Force an rw-cache TRANSITION first: if layer (1) already
+	// holds rwCull a plain RwRenderStateSet below would no-op and
+	// could never repair layers (2)/(3). Park on the other value
+	// (no draw can happen between the two sets, so the transient
+	// never reaches the device), then request the real target.
+	RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)
+		(rwCull == rwCULLMODECULLBACK ? rwCULLMODECULLNONE : rwCULLMODECULLBACK));
+	RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)rwCull);
+
+	// (2) Read the driver cache: exactly the device-domain value
+	// _rwD3D9RenderStateFlushCache will push for D3DRS_CULLMODE.
+	// Pre-seeded so a failed read still yields the canonical value.
+	RwUInt32 dev = (RwUInt32)rwCull;
+	RwD3D9GetRenderState(D3DRS_CULLMODE, &dev);
+
+	// (3) Raw device write. The flush is applied[]-gated, so it can
+	// never repair a device that drifted behind an unchanged cache —
+	// this unconditional write is what actually re-syncs layer (3).
+	if(d3d9device)
+		d3d9device->SetRenderState(D3DRS_CULLMODE, dev);
+}
+
+RwUInt32
+pipeEnterCullMode(void)
+{
+	// Pre-seeded so a failed Get leaves a known-good value.
+	RwUInt32 saved = (RwUInt32)rwCULLMODECULLBACK;
+	RwRenderStateGet(rwRENDERSTATECULLMODE, &saved);
+
+	// Allow only NONE or BACK to survive (never FRONT / garbage:
+	// restoring BACK is always safe for world geometry).
+	if(saved != rwCULLMODECULLNONE && saved != rwCULLMODECULLBACK)
+		saved = rwCULLMODECULLBACK;
+
+	pipeForceCullMode(rwCULLMODECULLBACK);
+	return saved;
+}
+
+void
+pipeExitCullMode(RwUInt32 saved)
+{
+	// Defensive re-clamp in case a caller passes something else.
+	if(saved != rwCULLMODECULLNONE && saved != rwCULLMODECULLBACK)
+		saved = rwCULLMODECULLBACK;
+	pipeForceCullMode(saved);
+}
+
+// ============================================================
+// Alpha/blend-mode guard — see skygfx.h for the contract.
+//
+// The building callbacks set only rwRENDERSTATEVERTEXALPHAENABLE
+// per mesh and round-trip their other D3D states through the rw
+// cache (buildingPipe_saveRenderState). But RwRenderStateGet/Set
+// only ever see values that went through RwRenderStateSet — foreign
+// raw RwD3D9SetRenderState(D3DRS_*) writes bypass that cache
+// entirely:
+//   - postfx.cpp:814     D3DRS_BLENDOP = REVSUBTRACT (no rw state
+//                        exists for BLENDOP — unfixable rw-side)
+//   - postfx.cpp:800+    D3DRS_ALPHATESTENABLE = FALSE (~a dozen
+//                        sites; restore balance unverified)
+//   - chars.cpp:445-447  SRCBLEND = BLENDFACTOR / DESTBLEND = ONE
+//                        (SSS blend-back; rw-set restore of these
+//                        no-ops against an unchanged cache)
+// so the cache happily reports "canonical" while the device still
+// holds the leftover — washed-out/wrongly translucent geometry when
+// blend factors disagree, solid-black cutouts when the alpha test
+// is off at the device. This pair forces parity at pipe entry and
+// closes it at exit, mirroring pipeEnterCullMode's deterministic-
+// entry style.
+// ============================================================
+
+// RwBlendFunction matches D3DBLEND 1:1 for valid values
+// (rwBLENDZERO=1 == D3DBLEND_ZERO=1 ... rwBLENDSRCALPHASAT=11);
+// 0 is the RW "NA" placeholder and is not a valid D3D value.
+static RwUInt32
+pipeBlendToD3D(RwUInt32 rwBlend, RwUInt32 fallback)
+{
+	if(rwBlend == rwBLENDNABLEND || rwBlend > rwBLENDSRCALPHASAT)
+		return fallback;
+	return rwBlend;
+}
+
+// ---------------------------------------------------------------------------
+// rw RwAlphaTestFunction  ->  D3D D3DCMPFUNC   (RW-domain in, D3D-domain out)
+//
+// VERIFIED against both headers this project compiles against:
+//   external/d3d9/rwplcore.h:5426-5446  enum RwAlphaTestFunction:
+//       0 = NA, 1 = NEVER, 2 = LESS, 3 = EQUAL, 4 = LESSEQUAL,
+//       5 = GREATER, 6 = NOTEQUAL, 7 = GREATEREQUAL, 8 = ALWAYS
+//   DirectX SDK d3d9types.h:263-273     typedef enum _D3DCMPFUNC:
+//       1 = NEVER, 2 = LESS, 3 = EQUAL, 4 = LESSEQUAL, 5 = GREATER,
+//       6 = NOTEQUAL, 7 = GREATEREQUAL, 8 = ALWAYS
+// The two enums are index-for-index IDENTICAL for 1..8 — RW picked its
+// ordering to match D3D exactly, the same trick its RwBlendFunction uses
+// (see pipeBlendToD3D). So the mapping really is the identity there, and
+// any hand-written "correction" that permutes 4..7 (e.g. rw GREATER(5) ->
+// D3D LESSEQUAL(4)) would INVERT the test: with the ref==0->1 bump,
+// D3D LESS/LESSEQUAL accepts alpha==0, i.e. it draws precisely the
+// transparent texels this pipeline exists to discard — the solid-black
+// cutout pools. The ONLY non-identity entry is rw 0 = "NA", which has no
+// D3D counterpart (D3DRS_ALPHAFUNC must hold 1..8).
+//
+// The table is spelled out rather than `return rwFunc` for that reason: it
+// is the single auditable conversion point every raw D3DRS_ALPHAFUNC writer
+// must go through, and it pins the NA fallback to D3DCMP_GREATEREQUAL —
+// paired with the ref==0->1 bump that becomes GREATEREQUAL@1, which rejects
+// alpha==0. D3DCMP_ALWAYS would reproduce the original accept-everything
+// bug; D3DCMP_NEVER would hide the geometry entirely.
+//
+// Callers pass the value they read from the RW cache (RwRenderStateGet).
+// Do NOT feed this a raw D3DCMP_*: those equal the rw value for 1..8 only by
+// coincidence of the table above — normalize at the source instead.
+// ---------------------------------------------------------------------------
+static const RwUInt32 s_alphaFuncLut[9] = {
+	/* 0 rw NA            */ (RwUInt32)D3DCMP_GREATEREQUAL,
+	/* 1 rw NEVER         */ (RwUInt32)D3DCMP_NEVER,
+	/* 2 rw LESS          */ (RwUInt32)D3DCMP_LESS,
+	/* 3 rw EQUAL         */ (RwUInt32)D3DCMP_EQUAL,
+	/* 4 rw LESSEQUAL     */ (RwUInt32)D3DCMP_LESSEQUAL,
+	/* 5 rw GREATER       */ (RwUInt32)D3DCMP_GREATER,
+	/* 6 rw NOTEQUAL      */ (RwUInt32)D3DCMP_NOTEQUAL,
+	/* 7 rw GREATEREQUAL  */ (RwUInt32)D3DCMP_GREATEREQUAL,
+	/* 8 rw ALWAYS        */ (RwUInt32)D3DCMP_ALWAYS,
+};
+
+RwUInt32
+pipeAlphaFuncToD3D(RwUInt32 rwFunc)
+{
+	// Index 0 is the NA slot; rwFunc > 8 is garbage and lands on it too.
+	if(rwFunc > rwALPHATESTFUNCTIONALWAYS)
+		return s_alphaFuncLut[0];
+	return s_alphaFuncLut[rwFunc];
+}
+
+PipeAlphaState
+pipeEnterAlphaMode(void)
+{
+	PipeAlphaState s;
+
+	// Pre-seeded: a failed Get leaves the out-param untouched, so
+	// garbage must never reach the device or a later restore.
+	s.vtxAlpha  = FALSE;
+	s.srcBlend  = rwBLENDSRCALPHA;
+	s.dstBlend  = rwBLENDINVSRCALPHA;
+	s.alphaFunc = rwALPHATESTFUNCTIONGREATEREQUAL;
+	s.alphaRef  = 0;
+
+	RwRenderStateGet(rwRENDERSTATEVERTEXALPHAENABLE, &s.vtxAlpha);
+	RwRenderStateGet(rwRENDERSTATESRCBLEND, &s.srcBlend);
+	RwRenderStateGet(rwRENDERSTATEDESTBLEND, &s.dstBlend);
+	RwRenderStateGet(rwRENDERSTATEALPHATESTFUNCTION, &s.alphaFunc);
+	RwRenderStateGet(rwRENDERSTATEALPHATESTFUNCTIONREF, &s.alphaRef);
+
+	// Device-side snapshot before repair — only feeds the throttled
+	// leak report below (5 gets per atomic; cheap vs a draw).
+	RwUInt32 dSrc = 0, dDst = 0, dVtx = 0, dOp = 0, dTest = 0;
+	RwD3D9GetRenderState(D3DRS_SRCBLEND, &dSrc);
+	RwD3D9GetRenderState(D3DRS_DESTBLEND, &dDst);
+	RwD3D9GetRenderState(D3DRS_ALPHABLENDENABLE, &dVtx);
+	RwD3D9GetRenderState(D3DRS_BLENDOP, &dOp);
+	RwD3D9GetRenderState(D3DRS_ALPHATESTENABLE, &dTest);
+
+	// ---- deterministic entry: rw-set (cache) + raw force (device) ----
+	// RwRenderStateSet is a no-op when the cache already holds the
+	// target — exactly what a foreign raw write leaves behind — so
+	// every state is written through both layers.
+
+	// Blend factors -> world-canonical pair (what TagRenderCB,
+	// envmap corona restore and the plant renderer all assume).
+	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
+	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
+	RwD3D9SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+	RwD3D9SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+
+	// Blend op has NO rw render state — nobody can restore it
+	// rw-side; postfx radiosity leaves REVSUBTRACT behind.
+	RwD3D9SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
+
+	// Vertex-alpha baseline OFF: all four building callbacks set
+	// rwRENDERSTATEVERTEXALPHAENABLE per mesh before drawing, so
+	// this is only the cache/device alignment those per-mesh sets
+	// need to actually reach the device (a stale device
+	// ALPHABLENDENABLE=TRUE under an already-false cache is
+	// invisible to RwRenderStateSet).
+	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
+	RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+
+	// Alpha test: keep the caller's rw func/ref semantics (grass
+	// dual pass 2 legitimately runs LESS@zwriteThresholdGrass;
+	// exterior renderer sets ref=140) but force the DEVICE back in
+	// line with the rw cache — postfx raw-sets
+	// D3DRS_ALPHATESTENABLE=FALSE in a dozen places — and repair
+	// the degenerate ref==0 that CPlantMgr::Render restores
+	// (PC_PlantsMgr.cpp:610) while envmap.cpp:280 only re-fixes it
+	// outdoors (CGame__currArea==0): GREATEREQUAL@0 accepts every
+	// texel, so an alpha-cutout drawn with blending off shows its
+	// fully-transparent black texels — the solid-black potted
+	//     plant. ref=1 rejects exactly those invisible texels and
+	//     nothing a player can see.
+	//
+	// REF==0 -> 1 BUMP: KEPT. Re-evaluated 2026-09-30 once
+	// pipeAlphaFuncToD3D was pinned to the real header values (the rw and
+	// D3D enums are identical for 1..8, so the funcs below are the true
+	// rw-domain comparison the device ends up running). alpha is 0..255:
+	//   GREATEREQUAL(7): >=0 accepts EVERY texEL — the degenerate this bump
+	//                    exists for; >=1 rejects alpha==0.  [REQUIRED]
+	//   GREATER(5)     : >0 already rejects alpha==0. This is the fn the
+	//                    game parks the cache at (every "[PipeAlpha] entry
+	//                    resync" sample reports rw fn=5), so for the real
+	//                    world path the bump is a no-op safety net that
+	//                    additionally drops the invisible alpha==1 texel.
+	//   NOTEQUAL(6)    : same shape as GREATER — no-op safety net.
+	//   NEVER(1)/ALWAYS(8): ref does not affect the outcome.
+	//   LESS/EQUAL/LESSEQUAL(2,3,4): ref=0 is degenerate as well, but no
+	//                    ref value turns them into a correct cutout and
+	//                    nothing in this codebase selects them for one —
+	//                    the bump neither helps nor hurts them.
+	// Net: required for GREATEREQUAL, harmless everywhere else; dropping it
+	// would regress the solid-black-potted-plant fix above.
+	// pipeForceAlphaBlock (buildingPipe.cpp:406) mirrors the same rule for
+	// its standalone callers (CSkidmarks__Render) that have no enter here.
+	RwUInt32 effRef = (s.alphaRef == 0) ? 1u : s.alphaRef;
+	if(effRef != s.alphaRef)
+		RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTIONREF, (void*)effRef);
+	RwD3D9SetRenderState(D3DRS_ALPHAREF, effRef);
+	RwD3D9SetRenderState(D3DRS_ALPHAFUNC, pipeAlphaFuncToD3D(s.alphaFunc));
+	RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
+
+	// ---- raw-only members of the alpha block (see skygfx.h PipeAlphaState) ----
+	// Pre-seeded so a failed device Get still restores sane values.
+	s.sepAlphaBlend = FALSE;
+	s.colorWrite    = D3DCOLORWRITEENABLE_ALL;
+	if(d3d9device){
+		DWORD v = s.sepAlphaBlend;
+		d3d9device->GetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, &v); s.sepAlphaBlend = v;
+		v = s.colorWrite;
+		d3d9device->GetRenderState(D3DRS_COLORWRITEENABLE, &v);         s.colorWrite    = v;
+	}
+	// Canonical on BOTH cache layers (same pattern as the states above), so the
+	// restore at exit is a real cache transition instead of a double no-op.
+	RwD3D9SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, FALSE);
+	RwD3D9SetRenderState(D3DRS_SRCBLENDALPHA, D3DBLEND_SRCALPHA);
+	RwD3D9SetRenderState(D3DRS_DESTBLENDALPHA, D3DBLEND_INVSRCALPHA);
+	RwD3D9SetRenderState(D3DRS_BLENDOPALPHA, D3DBLENDOP_ADD);
+	RwD3D9SetRenderState(D3DRS_COLORWRITEENABLE, D3DCOLORWRITEENABLE_ALL);
+	if(d3d9device){
+		d3d9device->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, FALSE);
+		d3d9device->SetRenderState(D3DRS_SRCBLENDALPHA, D3DBLEND_SRCALPHA);
+		d3d9device->SetRenderState(D3DRS_DESTBLENDALPHA, D3DBLEND_INVSRCALPHA);
+		d3d9device->SetRenderState(D3DRS_BLENDOPALPHA, D3DBLENDOP_ADD);
+		d3d9device->SetRenderState(D3DRS_COLORWRITEENABLE, D3DCOLORWRITEENABLE_ALL);
+	}
+
+	// Throttled evidence trail: only logs when the device was
+	// actually out of line (or the ref=0 leak was live). The last two terms
+	// cover the raw-only members (read straight from the device BEFORE the
+	// force above) — they are the only signal those states ever give.
+	if(dbglog_throttle("pipe_alpha") && (
+	   dSrc != (RwUInt32)D3DBLEND_SRCALPHA ||
+	   dDst != (RwUInt32)D3DBLEND_INVSRCALPHA ||
+	   dVtx != 0u || dOp != (RwUInt32)D3DBLENDOP_ADD ||
+	   dTest != 1u || s.alphaRef == 0 ||
+	   s.sepAlphaBlend != (RwUInt32)FALSE ||
+	   s.colorWrite != (RwUInt32)D3DCOLORWRITEENABLE_ALL))
+		dbglog("[PipeAlpha] entry resync: dev src=%u dst=%u vtx=%u op=%u test=%u rw ref=%u fn=%u sepA=%u cwr=0x%X",
+		       dSrc, dDst, dVtx, dOp, dTest, s.alphaRef, s.alphaFunc,
+		       s.sepAlphaBlend, s.colorWrite);
+
+	return s;
+}
+
+void
+pipeExitAlphaMode(PipeAlphaState saved)
+{
+	// rw-first (so nested/consumer Gets see the restore), then
+	// raw-force: if the cache already reads `saved` the rw call
+	// is a no-op — we may have raw-forced only the device away
+	// from it, and the raw force is what closes that gap. This
+	// is the restore direction cache-only save/restore cannot do.
+	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)saved.vtxAlpha);
+	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)saved.srcBlend);
+	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)saved.dstBlend);
+	RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION, (void*)saved.alphaFunc);
+	RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTIONREF, (void*)saved.alphaRef);
+
+	RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, saved.vtxAlpha ? TRUE : FALSE);
+	RwD3D9SetRenderState(D3DRS_SRCBLEND, pipeBlendToD3D(saved.srcBlend, D3DBLEND_SRCALPHA));
+	RwD3D9SetRenderState(D3DRS_DESTBLEND, pipeBlendToD3D(saved.dstBlend, D3DBLEND_INVSRCALPHA));
+	RwD3D9SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
+	RwD3D9SetRenderState(D3DRS_ALPHAREF, saved.alphaRef);   // faithful, incl. 0
+	RwD3D9SetRenderState(D3DRS_ALPHAFUNC, pipeAlphaFuncToD3D(saved.alphaFunc));
+	RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
+
+	// Raw-only members: cache first (so a later raw read agrees), then raw —
+	// the raw write is what closes the gap when the cache already held the
+	// saved value (same argument as the block above).
+	RwD3D9SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, saved.sepAlphaBlend);
+	RwD3D9SetRenderState(D3DRS_COLORWRITEENABLE, saved.colorWrite);
+	if(d3d9device){
+		d3d9device->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, saved.sepAlphaBlend);
+		d3d9device->SetRenderState(D3DRS_COLORWRITEENABLE, saved.colorWrite);
+	}
 }

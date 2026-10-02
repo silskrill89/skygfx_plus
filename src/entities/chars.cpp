@@ -280,6 +280,15 @@ extern IDirect3DTexture9 *g_ssaoDepthTex;
 extern void *overrideIm2dPixelShader;
 extern RwIm2DVertex *colorfilterVerts;
 extern RwImVertexIndex *colorfilterIndices;
+// Trusted screen-size cache — defined in postfx.cpp, captured at the on-screen
+// postfx entry (ColourFilter_switch -> CaptureScreenSize). A live
+// RwCameraGetRaster read can observe a transient/swapped raster (the env-map
+// reflection pass briefly swaps Scene.camera onto the reflection targets) and
+// mis-size the SSS helper rasters; this cache is the same source the rest of
+// the postfx chain sizes from. NOTE: postfx.cpp currently declares this
+// `static`; it must be exported (remove `static`, add the declaration to
+// postfx.h) for this call to link.
+bool GetScreenSize(int *w, int *h);
 
 static RwRaster *sssBlurRasterA = nil;
 static RwRaster *sssBlurRasterB = nil;
@@ -303,6 +312,16 @@ void chars_drawSSSBlur(void)
 		dbglog("[PostFX] chars_drawSSSBlur ENTER sssPostProcessEnable=%d SSS_Blur=%p pRasterFrontBuffer=%p skinEnhance=%d",
 			config->sssPostProcessEnable, SSS_Blur, CPostEffects::pRasterFrontBuffer,
 			config->skinEnhanceEnable);
+	// Master switch: menu "Screen-space SSS". This key was read/written by
+	// the config code but NEVER consulted by any draw path — the toggle was
+	// dead. Now it gates the whole pass (sssPostProcessEnable remains the
+	// per-effect switch below, so every SSS knob stays individually
+	// toggleable).
+	if(!config->sssEnable){
+		if(dbglog_throttle( "sss_bail0"))
+			dbglog("[PostFX] chars_drawSSSBlur bailing: sssEnable=0 (master switch)");
+		return;
+	}
 	if(!config->sssPostProcessEnable){
 		if(dbglog_throttle( "sss_bail1"))
 			dbglog("[PostFX] chars_drawSSSBlur bailing: sssPostProcessEnable=0");
@@ -333,9 +352,20 @@ void chars_drawSSSBlur(void)
 	if(!dev) return;
 	if(!Scene.camera) return;
 
-	RwRaster *camRas = RwCameraGetRaster(Scene.camera);
-	int w = camRas->width;
-	int h = camRas->height;
+	// Size from the trusted screen-size cache (GetScreenSize, postfx.cpp):
+	// captured at the on-screen postfx entry and immune to transient camRas
+	// reads (the env-map reflection pass swaps Scene.camera onto the
+	// reflection raster for part of the frame — a live read here can observe
+	// it and mis-size the SSS/classify rasters). Fall back to the live camera
+	// raster only before the first capture of the session, mirroring
+	// postfx.cpp GetIBLTexture.
+	int w = 0, h = 0;
+	if(!GetScreenSize(&w, &h)){
+		RwRaster *camRas = RwCameraGetRaster(Scene.camera);
+		if(!camRas) return;
+		w = camRas->width;
+		h = camRas->height;
+	}
 	if(w < 1 || h < 1) return;
 
 	EnsureSSSRasters(w, h);
@@ -346,8 +376,22 @@ void chars_drawSSSBlur(void)
 	float farClip = Scene.camera->farPlane;
 	float pixelW = 1.0f / (float)w;
 	float pixelH = 1.0f / (float)h;
+	// Clamp the INI-driven intensity inputs (the menu sliders bound them, but
+	// a hand-edited skygfx.ini does not): radius scales kernO[16]=8 in the
+	// shader, strength feeds the composite blend factor — at the old
+	// DESTBLEND=ONE an INI strength near 1.0 was a full-strength additive
+	// over-blend (white blowout).
 	float sssWidth = config->sssPostProcessRadius;
+	if(!(sssWidth > 0.0f)) sssWidth = 0.0f;	// also catches NaN
+	if(sssWidth > 16.0f) sssWidth = 16.0f;
 	float strength = config->sssPostProcessStrength;
+	if(!(strength > 0.0f)) strength = 0.0f;
+	if(strength > 1.0f) strength = 1.0f;
+	// Ambient-match knob (menu "SSS ambient boost"): scales the timecycle
+	// ambient the shader adds to character pixels (c21). 0 = pure blur.
+	float ambBoost = config->sssAmbientBoost;
+	if(!(ambBoost >= 0.0f)) ambBoost = 0.0f;
+	if(ambBoost > 2.0f) ambBoost = 2.0f;
 
 	// Skin enhancement: boost SSS for character depth pixels
 	bool skinEnhanced = (config->skinEnhanceEnable != 0) && (config->skinSSSStrength > 0.01f);
@@ -360,6 +404,17 @@ void chars_drawSSSBlur(void)
 			skinSSSStrength, warmTint, rimStrength);
 
 	RwRaster *origRaster = RwCameraGetRaster(Scene.camera);
+
+	// Three-layer state contract: snapshot the raw device states BEFORE the
+	// game's Store. The pass writes ALPHATESTENABLE/ZENABLE/ZWRITEENABLE and
+	// driver-cache SRCBLEND/DESTBLEND/ALPHABLENDENABLE/BLENDFACTOR — none of
+	// which ImmediateModeRenderStatesReStore's 10-state rw round-trip sees.
+	// Leaked into the following frame's scene they meant: no depth test,
+	// alpha-test off (which is also why alpha "looked better" with SSS on —
+	// the leak was masking an alpha bug), and BLENDFACTOR/ONE additive blend
+	// stuck on (white blowout on particle/splash draws).
+	DWORD rawGeom[RAW_GEOM_STATE_COUNT];
+	bool rawGeomSaved = SaveRawGeomStates(rawGeom);
 
 	// Common render state
 	CPostEffects::ImmediateModeRenderStatesStore();
@@ -391,10 +446,14 @@ void chars_drawSSSBlur(void)
 	// Timecycle ambient for brightness matching: c21 = (ambientR, ambientG, ambientB, luminance)
 	// Building PBR uses GetTimecycleAmbient() for PS c24 (world ambient * 0.85).
 	// Previously used ambientObj which caused peds to be dimmer than buildings.
+	// Scaled by the sssAmbientBoost knob — the shader adds c21 once per blur
+	// pass (so the ambient match compounds across the two passes), and that
+	// boost is then composited over the whole depth-masked lower half of the
+	// frame (water surface included — the mask is depth-only).
 	RwRGBAReal tcAmbient = GetTimecycleAmbientPBR();
-	float ambR = tcAmbient.red;
-	float ambG = tcAmbient.green;
-	float ambB = tcAmbient.blue;
+	float ambR = tcAmbient.red * ambBoost;
+	float ambG = tcAmbient.green * ambBoost;
+	float ambB = tcAmbient.blue * ambBoost;
 	float ambLuma = ambR * 0.2126f + ambG * 0.7152f + ambB * 0.0722f;
 	float tcAmbP[4] = { ambR, ambG, ambB, ambLuma };
 	RwD3D9SetPixelShaderConstant(21, tcAmbP, 1);
@@ -410,9 +469,13 @@ void chars_drawSSSBlur(void)
 
 		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, CPostEffects::pRasterFrontBuffer);
 
-		overrideIm2dPixelShader = SSS_Blur;
-		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
-		overrideIm2dPixelShader = nil;
+		// guardedIm2DRender (not a bare RwIm2DRenderIndexedPrimitive): it sets
+		// overrideIm2dPixelShader itself AND clears it in __except — a fault
+		// in the unguarded form used to skip the `override = nil` line, leaving
+		// SSS_Blur bound as the override for EVERY later Im2D dispatch (HUD,
+		// front-buffer sync), i.e. a full-screen composite of this shader.
+		guardedIm2DRender(SSS_Blur, rwPRIMTYPETRILIST, colorfilterVerts, 4,
+			colorfilterIndices, 6, "SSS_Blur_H");
 	}
 
 	// ---- Pass 1: Vertical blur ----
@@ -426,9 +489,8 @@ void chars_drawSSSBlur(void)
 
 		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, sssBlurRasterA);
 
-		overrideIm2dPixelShader = SSS_Blur;
-		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
-		overrideIm2dPixelShader = nil;
+		guardedIm2DRender(SSS_Blur, rwPRIMTYPETRILIST, colorfilterVerts, 4,
+			colorfilterIndices, 6, "SSS_Blur_V");
 	}
 
 	// ---- Pass 2: Blend back ----
@@ -437,30 +499,88 @@ void chars_drawSSSBlur(void)
 		RwCameraSetRaster(Scene.camera, origRaster);
 		RwCameraBeginUpdate(Scene.camera);
 
-		// Copy original scene
+		// Copy original scene — force blend OFF through BOTH driver layers.
+		// colorfilterVerts carry alpha=0, so if a stale device
+		// ALPHABLENDENABLE survived (rw cache already FALSE -> rw set no-ops)
+		// the copy would blend instead of replace.
+		RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+		dev->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
 		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, CPostEffects::pRasterFrontBuffer);
-		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
+		guardedIm2DRender(NULL, rwPRIMTYPETRILIST, colorfilterVerts, 4,
+			colorfilterIndices, 6, "SSS_Copy");
 
-		// Additive blend of blurred result
+		// Blend blurred result back with a BOUNDED lerp, not a plain additive:
+		//   out = blur*factor + scene*(1-factor),  factor = strength (0..1)
+		// (SRCBLEND=BLENDFACTOR, DESTBLEND=INVBLENDFACTOR). The old
+		// DESTBLEND=ONE over-blended: out = scene + strength*blur could exceed
+		// 1.0 and clipped to white on bright content (glow plume). Both the
+		// RwD3D9 push and the raw write are needed — RwD3D9SetRenderState
+		// no-ops against an unchanged pending[] value, which is exactly how a
+		// device drift survives a cache-only set.
+		// Three-layer doctrine (rw cache / RwD3D9 driver cache / raw device,
+		// see pipelinecommon.cpp:883): all three must carry the blend state or
+		// a later restore can no-op against a stale/hidden layer.
+		// BLENDFACTOR/INVBLENDFACTOR (14/15) are OUTSIDE the RwBlendFunction
+		// enum (rwplcore.h:5299-5314: 0=NA .. 11=SRCALPHASAT) — pushing them
+		// through RwRenderStateSet makes the game's RW D3D9 driver index its
+		// rw->D3D blend conversion table out of bounds (undefined device
+		// state / garbage blend). So the layers SPLIT by domain:
+		//   (1) rw cache gets the closest VALID rw pair, SRCALPHA/INVSRCALPHA
+		//       (5/6) — the canonical lerp modes — so any later rw round-trip
+		//       of the cache stays in-domain and sane;
+		//   (2)+(3) driver pending[] and raw device get the real
+		//       BLENDFACTOR/INVBLENDFACTOR (raw D3D domain: RwD3D9SetRenderState
+		//       stores pending[] verbatim with no enum conversion, so 14/15 are
+		//       valid THERE) — these drive the actual composite draw.
+		// (1) is written first; the explicit (2) write below then wins the
+		// pending[] slot (pending holds 5/6 from (1), 14/15 differ → real
+		// device write), so the device ends on BLENDFACTOR/INVBLENDFACTOR
+		// exactly as before — visual unchanged, OOB table read gone.
+		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE); // == D3DRS_ALPHABLENDENABLE
+		RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
+		RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
 		RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
 		RwD3D9SetRenderState(D3DRS_SRCBLEND, D3DBLEND_BLENDFACTOR);
-		RwD3D9SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
+		RwD3D9SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVBLENDFACTOR);
 		int blendAmt = (int)(strength * 255.0f);
+		if(blendAmt < 0) blendAmt = 0;
 		if(blendAmt > 255) blendAmt = 255;
+		// D3DRS_BLENDFACTOR has NO rw render state — it is raw-only, so only
+		// layers (2)/(3) can carry it; layer (1) has no slot for it.
 		RwD3D9SetRenderState(D3DRS_BLENDFACTOR, D3DCOLOR_ARGB(0xFF, blendAmt, blendAmt, blendAmt));
+		dev->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+		dev->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_BLENDFACTOR);
+		dev->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVBLENDFACTOR);
+		dev->SetRenderState(D3DRS_BLENDFACTOR, D3DCOLOR_ARGB(0xFF, blendAmt, blendAmt, blendAmt));
 
 		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, sssBlurRasterB);
-		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
+		guardedIm2DRender(NULL, rwPRIMTYPETRILIST, colorfilterVerts, 4,
+			colorfilterIndices, 6, "SSS_Composite");
 
 		RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+		dev->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
 	}
 
 	// Cleanup
 	dev->SetTexture(1, NULL);
+	// Stage-1 sampler was forced to CLAMP for the depth bind — put the
+	// default back or every later s1 consumer inherits the leak.
+	dev->SetSamplerState(1, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP);
+	dev->SetSamplerState(1, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
 	RwRenderStateSet(rwRENDERSTATETEXTUREADDRESSU, (void*)rwTEXTUREADDRESSWRAP);
 	RwRenderStateSet(rwRENDERSTATETEXTUREADDRESSV, (void*)rwTEXTUREADDRESSWRAP);
+	// The device pixel shader is still SSS_Blur after the last override draw
+	// (the Im2D hook only rewrites it on the NEXT Im2D dispatch). Clear it so
+	// a non-Im2D full-screen blit in between (front-buffer sync) can't run
+	// through SSS_Blur and composite garbage to the screen.
+	RwD3D9SetPixelShader(NULL);
 
 	CPostEffects::ImmediateModeRenderStatesReStore();
+	// Restore LAST so it wins over ReStore's rw-only round-trip: this pushes
+	// all 9 raw states (incl. the 6 that ReStore never sees) through rw +
+	// driver cache + raw device.
+	if(rawGeomSaved)
+		RestoreRawGeomStates(rawGeom);
 }
 
 // ============================================================

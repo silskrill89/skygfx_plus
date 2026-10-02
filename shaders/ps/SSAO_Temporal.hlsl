@@ -41,9 +41,27 @@ float3 GetViewPos(float2 texCoord, float depth)
 {
     float2 ndc = texCoord * 2.0 - 1.0;
     ndc.y = -ndc.y;
-    float viewZ = projInfo.z / max(depth - projInfo.w, 1e-7);
+    // denom = depth - f/(f-n) is ALWAYS negative for on-screen depths (see
+    // SSAO.hlsl). The old max(denom, 1e-7) clamped it to +eps and produced
+    // viewZ ~ -1e9 garbage everywhere -> broken/blank temporal AO. Guard by
+    // MAGNITUDE only, preserving the sign.
+    float denom = depth - projInfo.w;
+    if(abs(denom) < 1e-9)
+        denom = denom < 0.0 ? -1e-9 : 1e-9;
+    float viewZ = projInfo.z / denom;
     float2 viewXY = ndc * viewZ * projInfo.xy;
     return float3(viewXY, viewZ);
+}
+
+// Exact inverse of GetViewPos (same corrected math as SSAO.hlsl): divide by
+// projInfo.xy AND un-flip y. The old samplePos.xy/samplePos.z here fetched
+// every occlusion sample from a mirrored, projection-scaled wrong texel.
+float2 ProjectToUV(float3 viewPos)
+{
+    float invZ = 1.0 / max(viewPos.z, 1e-7);
+    float nx = viewPos.x * invZ / max(projInfo.x, 1e-7);
+    float ny = viewPos.y * invZ / max(projInfo.y, 1e-7);
+    return float2(nx * 0.5 + 0.5, 0.5 - ny * 0.5);
 }
 
 // ---------------------------------------------------------------------------
@@ -90,7 +108,11 @@ float3 ReconstructNormalFromDepth(float2 texCoord)
 // ---------------------------------------------------------------------------
 float3x3 BuildTBN(float3 normal, float2 texCoord)
 {
-    float noiseScale = ssaoParams.z;
+    // Must tile like SSAO.hlsl: ssaoParams.z = 4/w, needs * screenSize.xy
+    // to become ~4 tiles across the screen. The old scalar multiply sampled
+    // a 0.002-wide UV window = ONE noise texel for the whole frame ->
+    // constant TBN orientation everywhere (bias/blank AO).
+    float2 noiseScale = ssaoParams.z * screenSize.xy;
     float3 randVec = tex2D(noiseTexture, texCoord * noiseScale).rgb * 2.0 - 1.0;
     float3 tangent = normalize(randVec - normal * dot(randVec, normal));
     float3 bitangent = cross(normal, tangent);
@@ -104,8 +126,8 @@ float4 main(PS_INPUT IN) : COLOR
 {
     float centerDepth = tex2D(depthTexture, IN.texCoord).r;
 
-    // Sky pixel — output fully unoccluded
-    if (centerDepth >= 0.999)
+    // Sky pixel / never-written INTZ (garbage rows) — output unoccluded white
+    if (centerDepth >= 0.999 || centerDepth <= 1e-6)
         return float4(1.0, 1.0, 0.0, 1.0);
 
     float3 centerPos = GetViewPos(IN.texCoord, centerDepth);
@@ -123,7 +145,7 @@ float4 main(PS_INPUT IN) : COLOR
     float occlusion = 0.0;
     float radius = ssaoParams.x;
     float power = ssaoParams.y;
-    float noiseScale = ssaoParams.z;
+    float2 noiseScale = ssaoParams.z * screenSize.xy; // same tiling as BuildTBN
 
     // --- 16-sample hemisphere kernel ---
     float3 rand = tex2D(noiseTexture, IN.texCoord * noiseScale).rgb * 2.0 - 1.0;
@@ -141,29 +163,39 @@ float4 main(PS_INPUT IN) : COLOR
 
         float3 samplePos = centerPos + kernelSample;
 
-        // Project to screen space
-        float2 sampleCoord = samplePos.xy / samplePos.z;
-        sampleCoord = (sampleCoord + 1.0) * 0.5;
+        // Project to screen space (exact GetViewPos inverse — see ProjectToUV)
+        float2 sampleCoord = ProjectToUV(samplePos);
 
         if (sampleCoord.x >= 0.0 && sampleCoord.x <= 1.0 &&
             sampleCoord.y >= 0.0 && sampleCoord.y <= 1.0)
         {
             float sampleDepth = tex2D(depthTexture, sampleCoord).r;
+            // Invalid/sky depth is not an occluder (parity with SSAO.hlsl)
+            if (sampleDepth <= 1e-6 || sampleDepth >= 1.0)
+                continue;
             float3 sampleViewPos = GetViewPos(sampleCoord, sampleDepth);
 
             // Range check and angle-aware occlusion
             float diff = length(sampleViewPos - centerPos);
             float rangeCheck = smoothstep(radius, 0.0, diff);  // FIXED: inverted
-            float nDotS = max(dot(normal, normalize(samplePos - centerPos)), 0.0);
-            occlusion += rangeCheck * step(sampleViewPos.z, centerPos.z) * nDotS;
+            // Guard normalize(): zero-length kernel direction = NaN in SM3.0
+            // (NaN propagates black through the multiply composite).
+            float3 sdir = samplePos - centerPos;
+            float slen = length(sdir);
+            float nDotS = slen > 1e-7 ? max(dot(normal, sdir / slen), 0.0) : 0.0;
+            // Compare against the kernel-LIFTED point (hemisphere test),
+            // matching SSAO.hlsl — centerPos over-occludes on tilted surfaces.
+            occlusion += rangeCheck * step(sampleViewPos.z, samplePos.z) * nDotS;
         }
 
         // Advance noise for next sample
         rand = tex2D(noiseTexture, float2(i * 0.1, 0.0)).rgb * 2.0 - 1.0;
     }
 
-    occlusion = 1.0 - (occlusion / 16.0);
-    occlusion = pow(occlusion, power);
+    // saturate BEFORE pow: a negative/NaN base makes pow() NaN in SM3.0 and
+    // NaN reads black through the multiply composite.
+    occlusion = saturate(1.0 - (occlusion / 16.0));
+    occlusion = pow(occlusion, max(power, 1e-3));
 
     // --- Temporal reprojection ---
     float2 velocity = tex2D(velocityTexture, IN.texCoord).rg;
@@ -197,9 +229,15 @@ float4 main(PS_INPUT IN) : COLOR
         if (histFlags.x > 0.5)
         {
             float prevFrameDepth = tex2D(prevDepthTexture, prevUV).r;
-            // Linearize both depths using same reconstruction as GetViewPos
-            float curViewZ  = projInfo.z / max(centerDepth - projInfo.w, 1e-7);
-            float prevViewZ = projInfo.z / max(prevFrameDepth - projInfo.w, 1e-7);
+            // Linearize both depths with the signed denominator guard
+            // (the old max(denom, 1e-7) inverted the sign -> garbage delta
+            // -> confidence killed everywhere -> history behaved randomly).
+            float dcDenom = centerDepth - projInfo.w;
+            if(abs(dcDenom) < 1e-9) dcDenom = dcDenom < 0.0 ? -1e-9 : 1e-9;
+            float pvDenom = prevFrameDepth - projInfo.w;
+            if(abs(pvDenom) < 1e-9) pvDenom = pvDenom < 0.0 ? -1e-9 : 1e-9;
+            float curViewZ  = projInfo.z / dcDenom;
+            float prevViewZ = projInfo.z / pvDenom;
             float depthDelta = abs(curViewZ - prevViewZ);
             // Normalize by current viewZ with epsilon guard
             float normDepthDelta = depthDelta / max(abs(curViewZ), 1e-7);
@@ -223,11 +261,12 @@ float4 main(PS_INPUT IN) : COLOR
         }
 
         // ---- Cloud-shadow-style exponential history blend ----
-        // Never fully discard history at any confidence level.
-        // Even complete disocclusion keeps a small history fraction,
-        // so portal/interior transitions blend smoothly over a few frames.
+        // NO confidence floor: confidence must be able to reach 0 on hard
+        // disocclusion (helicopter blades, camera whipping past geometry).
+        // The old max(confidence, 0.1) kept ~10% stale history every frame
+        // and left ghost trails behind moving cutouts.
         float temporalBlend = ssaoParams.w;
-        float confidenceWeight = max(confidence, 0.1);  // floor: never below 10% history
+        float confidenceWeight = confidence;
         occlusion = lerp(occlusion, historyOcclusion, temporalBlend * confidenceWeight);
     }
 

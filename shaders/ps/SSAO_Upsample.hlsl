@@ -88,5 +88,13 @@ float4 main(PS_INPUT IN) : COLOR
     float upsampledOcclusion = totalOcclusion / max(totalWeight, 1e-7);
     float upsampledConfidence = totalConfidence / max(totalWeight, 1e-7);
 
-    return float4(upsampledOcclusion, upsampledConfidence, 0.0, 1.0);
+    // GRAYSCALE RGB — the C++ composite multiplies scene RGB by this texture
+    // (Photoshop multiply). The old (occ, conf, 0.0, 1.0) output zeroed the
+    // blue channel of the whole frame on every composite and dimmed green by
+    // confidence — that was the "full black screen with SSAO on" on the
+    // Overhaul path (ValidateSSAOOutput only checks R, so the fail-open gate
+    // passed). Confidence goes to alpha (unread downstream); any consumer of
+    // G before this stage (the blur) is already done.
+    return float4(upsampledOcclusion, upsampledOcclusion, upsampledOcclusion,
+                  upsampledConfidence);
 }
