@@ -6,7 +6,7 @@
 > python tools/gen_ini_ref.py
 > ```
 
-Source fingerprint: `main.cpp 28c6237b9811` · `skygfx.h 0152222082c7` · `modeManager.cpp 2c957ca1a4a2`
+Source fingerprint: `main.cpp 28c6237b9811` · `skygfx.h 0152222082c7` · `modeManager.cpp 778dbd592e0c`
 
 **253 keys resolved** (71 with a preset/field-dependent default, shown explicitly) · **1 unresolved** · **438 scalar Config fields** parsed from `struct Config`.
 
