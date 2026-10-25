@@ -291,8 +291,8 @@ A `default` of `c-><field> (field default)` means the source uses the current Co
 | `vignetteIntensity` | float | `0.0f` | [0.0, 1.0] | main.cpp:6245; mode-owned: GTA IV |
 | `pedShadows` | int | `-1` | [-1, 1] | main.cpp:5755; via parseShadowToggle (bool keywords + numeric); clamped [-1, 1]; mode-owned: PS2, Xbox, Legacy PC, Mobile |
 | `stencilShadows` | int | `-1` | [-1, 1] | main.cpp:5756; via parseShadowToggle (bool keywords + numeric); clamped [-1, 1]; mode-owned: PS2, Xbox, Legacy PC, Mobile |
-| `forwardPlusFallback` | int | `unresolved (reader supplies it)` | - | forwardplus.cpp:257; read via GetPrivateProfile*; global, not a Config field |
-| `enableNormalMaps` | string | `unresolved (reader supplies it)` | - | normalmap.cpp:304; read via GetPrivateProfile*; global, not a Config field |
+| `forwardPlusFallback` | int | `UNRESOLVED (reader default not parsed)` | - | forwardplus.cpp:257; read via GetPrivateProfile*; global, not a Config field |
+| `enableNormalMaps` | string | `UNRESOLVED (reader default not parsed)` | - | normalmap.cpp:304; read via GetPrivateProfile*; global, not a Config field |
 
 ## Unresolved / dynamic reads
 
