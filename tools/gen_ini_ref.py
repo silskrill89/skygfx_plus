@@ -301,7 +301,7 @@ def parse_external_ini_keys(read_keys: set[tuple[str, str]]) -> list[dict]:
                     "section": section,
                     "key": key,
                     "type": kind,
-                    "default": "unresolved (reader supplies it)",
+                    "default": "UNRESOLVED (reader default not parsed)",
                     "clamp": "-",
                     "field": "",
                     "note": (
