@@ -112,7 +112,7 @@ python tools\compile_shaders.py
 
 ### Original SkyGFX
 - **aap** - Original SkyGFX author, the foundation of this project
-- **Junior (JuniorDjjr)** - JuniorDjjr fork with extensive additional features and improvements
+- **Zeneric09 (Zeneric skygfx)** - This project is a fork of the Zeneric skygfx with extensive changes: full render-state integrity doctrine, PBR/Xbox/IV pipelines, water overhaul, peds pipe, physics integration
 - **DK22Pac** - Normal mapping plugin for GTA SA
 - **Silent** - SilentPatch and various GTA SA fixes
 - **_AG** - RenderWare documentation and reverse engineering
