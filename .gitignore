@@ -134,3 +134,10 @@ third_party/bullet/
 /-nologo
 archive/
 temp_bullet/
+
+# local junk / never-commit
+n1
+qc
+skygfx_plus_expIV.7z
+_backup/
+_memes/

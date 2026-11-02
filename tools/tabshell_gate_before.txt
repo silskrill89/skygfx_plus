@@ -1,0 +1,651 @@
+﻿PRE-FLIGHT SNAPSHOT 2026-09-29T17:04:46.2271192+01:00
+=== HKLM\SYSTEM\CurrentControlSet\Control\FeatureManagement\Overrides\0 ===
+  bucket value count=0 subkey count=91
+  1069110925 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  109186703 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  113393295 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1170578060 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1204219535 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1280814733 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1299769998 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1341070989 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1354689679 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1405459084 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1430172815 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:0
+  1509761676 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0 | Variant=DWord:1 | VariantPayloadKind=DWord:0
+  1538349197 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:0
+  156965516 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:0
+  1599010959 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:0
+  1604211854 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  16391309 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1648701580 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1659663503 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:0
+  1691223182 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1710619790 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1733039758 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0 | Variant=DWord:1 | VariantPayload=DWord:3 | VariantPayloadKind=DWord:1
+  183894671 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1853569164 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:0
+  1870495884 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1882309773 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  190088334 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:0
+  1943131788 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1954267788 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1959005327 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1987994252 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2018395790 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2083071627 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2093230218 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  210811534 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2110813839 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:0
+  2147398287 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:0
+  2184581775 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  224549006 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:0
+  2275941518 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2282555532 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2295090830 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2453548686 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2514815117 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:0
+  2545920652 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2570613902 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2592313997 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2646583948 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2748857998 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2779909263 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2790667918 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2850228364 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:0
+  2894147212 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:0
+  2914480781 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2920622221 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2992924303 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:0
+  3008297102 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3050712719 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:0
+  3054127758 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:0
+  3061528717 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3278481037 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3301575310 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  330697359 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3380017294 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3421751949 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3482069646 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3547696268 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3648452751 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3649240719 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  368780 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:0
+  3711653005 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3847904910 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3923883660 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3947987596 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:0
+  405124747 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:0
+  4138427020 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  4194803853 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:0
+  4204803727 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  4259681421 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:0
+  449578127 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  475278991 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  570133133 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  633441933 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:0
+  633829003 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  733361290 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:0
+  804783758 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  858660494 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  902142604 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  90972815 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  992482959 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  995622031 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+=== HKLM\SYSTEM\CurrentControlSet\Control\FeatureManagement\Overrides\4 ===
+  bucket value count=0 subkey count=126
+  100681871 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:13681B46 | RolloutState=DWord:0 | RolloutType=DWord:0
+  1122397326 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:1377CBEC | RolloutState=DWord:0 | RolloutType=DWord:0 | ImpressionTime=QWord:134133294497755507
+  1137576077 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:13AB9D86 | RolloutState=DWord:0 | RolloutType=DWord:0 | ImpressionTime=QWord:134241436066723549
+  1182775948 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:12B8450E | RolloutState=DWord:0 | RolloutType=DWord:0
+  129910414 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:1368895E | RolloutState=DWord:0 | RolloutType=DWord:0
+  1370702989 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:13491259 | RolloutState=DWord:0 | RolloutType=DWord:0
+  1398707342 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:1360E5B1 | RolloutState=DWord:0 | RolloutType=DWord:0 | ImpressionTime=QWord:134133684670987916
+  1417361548 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:13160C53 | RolloutState=DWord:0 | RolloutType=DWord:0 | ImpressionTime=QWord:134133294355549213
+  1437223054 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:136E5B19 | RolloutState=DWord:0 | RolloutType=DWord:0
+  1474580623 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:1360E5B2 | RolloutState=DWord:0 | RolloutType=DWord:0
+  1598765196 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:13023F9D | RolloutState=DWord:0 | RolloutType=DWord:0 | ImpressionTime=QWord:134133294353830347
+  1607741071 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:13764641 | RolloutState=DWord:0 | RolloutType=DWord:0 | ImpressionTime=QWord:134133294499916074
+  1642357390 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:135B9AB5 | RolloutState=DWord:0 | RolloutType=DWord:0
+  1676238988 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:13483AB2 | RolloutState=DWord:0 | RolloutType=DWord:0
+  175978637 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:131273C6 | RolloutState=DWord:0 | RolloutType=DWord:0 | ImpressionTime=QWord:134133294354611649
+  1790733455 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:135374DC | RolloutState=DWord:0 | RolloutType=DWord:0
+  1809881231 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:133D50AE | RolloutState=DWord:0 | RolloutType=DWord:0
+  1849825932 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:12BD6E73 | RolloutState=DWord:0 | RolloutType=DWord:0
+  1851987596 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:135289B5 | RolloutState=DWord:0 | RolloutType=DWord:0
+  1926513293 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:128979F9 | RolloutState=DWord:0 | RolloutType=DWord:0
+  1940399247 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:13785AB1 | RolloutState=DWord:0 | RolloutType=DWord:0 | ImpressionTime=QWord:134133295031949506
+  1952983181 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:129E053F | RolloutState=DWord:0 | RolloutType=DWord:0
+  1960844429 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:12840617 | RolloutState=DWord:0 | RolloutType=DWord:0
+  210811534 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:135E0C6C | RolloutState=DWord:0 | RolloutType=DWord:0
+  2108311695 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:13676C76 | RolloutState=DWord:0 | RolloutType=DWord:0
+  2110813839 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:136CDC1D | RolloutState=DWord:0 | RolloutType=DWord:0
+  2147398287 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:13457F92 | RolloutState=DWord:0 | RolloutType=DWord:0
+  2168968332 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:12C3331B | RolloutState=DWord:0 | RolloutType=DWord:0
+  2179361423 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:13570F49 | RolloutState=DWord:0 | RolloutType=DWord:0
+  2216818319 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:138E9666 | RolloutState=DWord:0 | RolloutType=DWord:0 | ImpressionTime=QWord:134133291563568405
+  224549006 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:136A7DFC | RolloutState=DWord:0 | RolloutType=DWord:0
+  2272050315 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:1 | VariantPayloadKind=DWord:1 | VariantPayload=DWord:177209344 | FlightId=String:FX:11C0E96C | RolloutState=DWord:0 | RolloutType=DWord:0
+  2374250638 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:136F15D6 | RolloutState=DWord:0 | RolloutType=DWord:0
+  2467214479 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:1342B470 | RolloutState=DWord:0 | RolloutType=DWord:0 | ImpressionTime=QWord:134133684670377781
+  2499885196 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:13499FAF | RolloutState=DWord:0 | RolloutType=DWord:0
+  254089868 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:13214552 | RolloutState=DWord:0 | RolloutType=DWord:0
+  2541179020 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:12F0AC91 | RolloutState=DWord:0 | RolloutType=DWord:0
+  258260111 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:133BFFE3 | RolloutState=DWord:0 | RolloutType=DWord:0
+  2597083790 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:13610A49 | RolloutState=DWord:0 | RolloutType=DWord:0
+  2597163660 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:132EF552 | RolloutState=DWord:0 | RolloutType=DWord:0
+  2626207372 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:124117A5 | RolloutState=DWord:0 | RolloutType=DWord:0
+  2627634318 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:1352605E | RolloutState=DWord:0 | RolloutType=DWord:0
+  2641672846 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:136F4532 | RolloutState=DWord:0 | RolloutType=DWord:0 | ImpressionTime=QWord:134133294464603602
+  2642149007 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:138E9668 | RolloutState=DWord:0 | RolloutType=DWord:0 | ImpressionTime=QWord:134133291564408605
+  2746292876 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:12FF5D3C | RolloutState=DWord:0 | RolloutType=DWord:0
+  2819345549 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:133A07C7 | RolloutState=DWord:0 | RolloutType=DWord:0
+  2883349134 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:13537369 | RolloutState=DWord:0 | RolloutType=DWord:0
+  2897279119 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:131B67AB | RolloutState=DWord:0 | RolloutType=DWord:0 | ImpressionTime=QWord:134133294356643034
+  299084943 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:13B89E7A | RolloutState=DWord:0 | RolloutType=DWord:0
+  2992924303 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:136A7DFB | RolloutState=DWord:0 | RolloutType=DWord:0
+  300175502 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:137B3AB3 | RolloutState=DWord:0 | RolloutType=DWord:0 | ImpressionTime=QWord:134133294472572869
+  3008297102 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:13460078 | RolloutState=DWord:0 | RolloutType=DWord:0 | ImpressionTime=QWord:134133294361643361
+  3054127758 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:137B6A75 | RolloutState=DWord:0 | RolloutType=DWord:0
+  3107333262 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:1378003B | RolloutState=DWord:0 | RolloutType=DWord:0
+  3112606860 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:1 | VariantPayloadKind=DWord:1 | VariantPayload=DWord:35895 | FlightId=String:FX:12AB734D | RolloutState=DWord:0 | RolloutType=DWord:0
+  3156852877 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:12D281C4 | RolloutState=DWord:0 | RolloutType=DWord:0
+  3161203855 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:1 | VariantPayloadKind=DWord:1 | VariantPayload=DWord:12 | FlightId=String:FX:1397CC49 | RolloutState=DWord:0 | RolloutType=DWord:0 | ImpressionTime=QWord:134133294478522375
+  3185470606 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:1362CF96 | RolloutState=DWord:0 | RolloutType=DWord:0
+  318922895 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:135A3DDF | RolloutState=DWord:0 | RolloutType=DWord:0
+  3192272015 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:136D1427 | RolloutState=DWord:0 | RolloutType=DWord:0
+  3257931404 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:1330B1E6 | RolloutState=DWord:0 | RolloutType=DWord:0
+  3265066127 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:1 | VariantPayloadKind=DWord:1 | VariantPayload=DWord:90 | FlightId=String:FX:1319230E | RolloutState=DWord:0 | RolloutType=DWord:0
+  3283198604 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:12C7D66E | RolloutState=DWord:0 | RolloutType=DWord:0
+  3300406415 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:13759633 | RolloutState=DWord:0 | RolloutType=DWord:0 | ImpressionTime=QWord:134135211010646971
+  3301973132 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:1283FFE8 | RolloutState=DWord:0 | RolloutType=DWord:0
+  3327508108 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:12D1574C | RolloutState=DWord:0 | RolloutType=DWord:0
+  3348771470 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:136E3D2F | RolloutState=DWord:0 | RolloutType=DWord:0 | ImpressionTime=QWord:134135649243359594
+  3349825679 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:13685C57 | RolloutState=DWord:0 | RolloutType=DWord:0 | ImpressionTime=QWord:134133294485410945
+  3380017294 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:1335985C | RolloutState=DWord:0 | RolloutType=DWord:0 | ImpressionTime=QWord:134133294359299453
+  3416332940 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:134128A5 | RolloutState=DWord:0 | RolloutType=DWord:0
+  3425201292 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:127FC878 | RolloutState=DWord:0 | RolloutType=DWord:0
+  342524559 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:1353736B | RolloutState=DWord:0 | RolloutType=DWord:0
+  3438558862 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:136DCE03 | RolloutState=DWord:0 | RolloutType=DWord:0 | ImpressionTime=QWord:134133294486192243
+  3479606415 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:1 | VariantPayloadKind=DWord:1 | VariantPayload=DWord:88000861 | FlightId=String:FX:1353F06D | RolloutState=DWord:0 | RolloutType=DWord:0
+  3482069646 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:1372811F | RolloutState=DWord:0 | RolloutType=DWord:0 | ImpressionTime=QWord:134133294451542166
+  3522173582 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:137C7801 | RolloutState=DWord:0 | RolloutType=DWord:0
+  3571799692 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:1318C8D4 | RolloutState=DWord:0 | RolloutType=DWord:0
+  3572456589 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:12E8312D | RolloutState=DWord:0 | RolloutType=DWord:0
+  36234383 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:1353CDD5 | RolloutState=DWord:0 | RolloutType=DWord:0
+  3624147599 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:137C7800 | RolloutState=DWord:0 | RolloutType=DWord:0
+  3648452751 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:133BD387 | RolloutState=DWord:0 | RolloutType=DWord:0 | ImpressionTime=QWord:134133294360549535
+  3658565261 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:1375450B | RolloutState=DWord:0 | RolloutType=DWord:0 | ImpressionTime=QWord:134133294479590908
+  3757384332 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:1318CBED | RolloutState=DWord:0 | RolloutType=DWord:0
+  3792581772 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:129135BB | RolloutState=DWord:0 | RolloutType=DWord:0
+  3801880718 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:137B0285 | RolloutState=DWord:0 | RolloutType=DWord:0 | ImpressionTime=QWord:134133294496192907
+  3840331919 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:131FC0B1 | RolloutState=DWord:0 | RolloutType=DWord:0
+  3863680141 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:1318CAEF | RolloutState=DWord:0 | RolloutType=DWord:0
+  3869389966 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:137B6858 | RolloutState=DWord:0 | RolloutType=DWord:0
+  3935468174 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:1353736A | RolloutState=DWord:0 | RolloutType=DWord:0
+  3947987596 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:1332D04C | RolloutState=DWord:0 | RolloutType=DWord:0 | ImpressionTime=QWord:134134138050732557
+  3972079756 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:1318CAEE | RolloutState=DWord:0 | RolloutType=DWord:0
+  3989181068 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:12A74DB5 | RolloutState=DWord:0 | RolloutType=DWord:0
+  4011992206 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:1385DE0E | RolloutState=DWord:0 | RolloutType=DWord:0 | ImpressionTime=QWord:134133291562738229
+  4014535310 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:1318CBF1 | RolloutState=DWord:0 | RolloutType=DWord:0
+  4016020109 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:134FD9F0 | RolloutState=DWord:0 | RolloutType=DWord:0 | ImpressionTime=QWord:134133497089453343
+  4054083214 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:135A3451 | RolloutState=DWord:0 | RolloutType=DWord:0
+  4089168525 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:1 | VariantPayloadKind=DWord:1 | VariantPayload=DWord:4263551 | FlightId=String:FX:136F82BA | RolloutState=DWord:0 | RolloutType=DWord:0
+  4089848974 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:136F8A4D | RolloutState=DWord:0 | RolloutType=DWord:0 | ImpressionTime=QWord:134133294498380546
+  4175703694 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:1385DE0F | RolloutState=DWord:0 | RolloutType=DWord:0
+  4204803727 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:136DFA94 | RolloutState=DWord:0 | RolloutType=DWord:0 | ImpressionTime=QWord:134133294482128480
+  4222249614 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:13644590 | RolloutState=DWord:0 | RolloutType=DWord:0
+  4238144655 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:13283A3B | RolloutState=DWord:0 | RolloutType=DWord:0
+  4240983183 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:136D1454 | RolloutState=DWord:0 | RolloutType=DWord:0
+  4253080206 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:134B0F33 | RolloutState=DWord:0 | RolloutType=DWord:0
+  4258940559 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:136565CA | RolloutState=DWord:0 | RolloutType=DWord:0
+  426540682 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:1 | VariantPayloadKind=DWord:1 | VariantPayload=DWord:540818612 | FlightId=String:FX:1240931B | ImpressionTime=QWord:134133282265478656 | RolloutState=DWord:0 | RolloutType=DWord:0
+  4276513934 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:1352FF5B | RolloutState=DWord:0 | RolloutType=DWord:0
+  437154958 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:1368E361 | RolloutState=DWord:0 | RolloutType=DWord:0 | ImpressionTime=QWord:134133294484317117
+  468093583 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:135B18A0 | RolloutState=DWord:0 | RolloutType=DWord:0
+  520052877 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:12EC0B54 | RolloutState=DWord:0 | RolloutType=DWord:0
+  542924943 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:135CC220 | RolloutState=DWord:0 | RolloutType=DWord:0 | ImpressionTime=QWord:134133295032739687
+  579795087 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:132CC947 | RolloutState=DWord:0 | RolloutType=DWord:0 | ImpressionTime=QWord:134133294357893111
+  607246477 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:135DF0BB | ImpressionTime=QWord:134133282171053165 | RolloutState=DWord:0 | RolloutType=DWord:0
+  639438477 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:13143E2F | RolloutState=DWord:0 | RolloutType=DWord:0
+  653262991 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:13B72E01 | RolloutState=DWord:0 | RolloutType=DWord:0
+  665085583 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:135A3450 | RolloutState=DWord:0 | RolloutType=DWord:0
+  681647757 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:13083122 | RolloutState=DWord:0 | RolloutType=DWord:0
+  681885326 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:13404069 | RolloutState=DWord:0 | RolloutType=DWord:0
+  689457807 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:13698233 | RolloutState=DWord:0 | RolloutType=DWord:0 | ImpressionTime=QWord:134133915759261517
+  710808207 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:1386AF94 | RolloutState=DWord:0 | RolloutType=DWord:0 | ImpressionTime=QWord:134138189237519147
+  714282636 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:1318CA30 | RolloutState=DWord:0 | RolloutType=DWord:0
+  803034764 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:132DEB0C | RolloutState=DWord:0 | RolloutType=DWord:0 | ImpressionTime=QWord:134133294459759528
+  844505230 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:137B6811 | RolloutState=DWord:0 | RolloutType=DWord:0
+  888721551 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:135830CE | RolloutState=DWord:0 | RolloutType=DWord:0 | ImpressionTime=QWord:134133294483223298
+  928132238 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:137544CF | RolloutState=DWord:0 | RolloutType=DWord:0
+  949103247 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:1 | Variant=DWord:0 | VariantPayloadKind=DWord:0 | VariantPayload=DWord:0 | FlightId=String:FX:137A851F | RolloutState=DWord:0 | RolloutType=DWord:0 | ImpressionTime=QWord:134133294487129800
+=== HKLM\SYSTEM\CurrentControlSet\Control\FeatureManagement\Overrides\8 ===
+  bucket value count=0 subkey count=18
+  123295368 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0 | Variant=DWord:0 | VariantPayload=DWord:0 | VariantPayloadKind=DWord:0
+  1365873800 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0 | Variant=DWord:0 | VariantPayload=DWord:0 | VariantPayloadKind=DWord:0
+  1527625864 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0 | Variant=DWord:0 | VariantPayload=DWord:0 | VariantPayloadKind=DWord:0
+  1533381256 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0 | Variant=DWord:0 | VariantPayload=DWord:0 | VariantPayloadKind=DWord:0
+  1822753929 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0 | Variant=DWord:0 | VariantPayload=DWord:0 | VariantPayloadKind=DWord:0
+  2018602121 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0 | Variant=DWord:0 | VariantPayload=DWord:0 | VariantPayloadKind=DWord:0
+  2485751945 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0 | Variant=DWord:0 | VariantPayload=DWord:0 | VariantPayloadKind=DWord:0
+  2603427976 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0 | Variant=DWord:0 | VariantPayload=DWord:0 | VariantPayloadKind=DWord:0
+  3134666377 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0 | Variant=DWord:0 | VariantPayload=DWord:0 | VariantPayloadKind=DWord:0
+  3167312009 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0 | Variant=DWord:0 | VariantPayload=DWord:0 | VariantPayloadKind=DWord:0
+  3192474248 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0 | Variant=DWord:0 | VariantPayload=DWord:0 | VariantPayloadKind=DWord:0
+  3200978568 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0 | Variant=DWord:0 | VariantPayload=DWord:0 | VariantPayloadKind=DWord:0
+  3403740811 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0 | Variant=DWord:0 | VariantPayload=DWord:0 | VariantPayloadKind=DWord:0
+  4044914313 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0 | Variant=DWord:0 | VariantPayload=DWord:0 | VariantPayloadKind=DWord:0
+  4152297609 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0 | Variant=DWord:0 | VariantPayload=DWord:0 | VariantPayloadKind=DWord:0
+  466560648 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0 | Variant=DWord:0 | VariantPayload=DWord:0 | VariantPayloadKind=DWord:0
+  768013962 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0 | Variant=DWord:0 | VariantPayload=DWord:0 | VariantPayloadKind=DWord:0
+  935071368 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0 | Variant=DWord:0 | VariantPayload=DWord:0 | VariantPayloadKind=DWord:0
+=== HKLM\SYSTEM\CurrentControlSet\Control\FeatureManagement\Overrides\9 ===
+  bucket value count=0 subkey count=345
+  1004546702 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1033642126 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1045440143 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1070466191 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1089350287 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1092748431 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1134571151 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  114819215 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1153448078 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1164459151 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  116804750 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1172971663 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1191862927 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  119690383 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1207702159 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1210323598 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1223436943 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1233134734 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  124391055 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1262888079 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1264340623 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1267618959 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1284385423 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1324231310 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1326314126 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1333543567 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1336159887 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1347159183 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1359223951 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1364344463 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1374033551 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1378494606 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1391209102 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  139726990 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1405758094 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1406544526 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1414136974 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1423197326 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1428693647 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1430004876 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1436561038 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1436692110 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1452026511 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1452808846 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1457943183 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1478363278 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  147999886 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1496730767 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1499080335 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1501310606 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1504200847 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1504719503 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1507607695 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1508787855 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1513752719 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1527912079 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1537624206 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1549034638 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1556370575 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1582699151 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  160313998 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1614822543 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1615075471 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1624772238 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1625174159 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1625959054 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1639834254 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1649164942 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1653484174 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1660429967 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1669341327 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1669742223 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  168963726 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1718615183 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1720332431 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1753228943 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1758083215 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1760307855 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1792538766 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1801731214 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1803688079 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1823479950 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1824665742 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1829770894 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1857173646 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1893802636 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1917584527 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1925582990 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1929034382 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1944212110 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1949585038 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1973563023 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1987970190 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1989932174 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1996241039 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2006671 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2006728332 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2009344142 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  202123919 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2038706830 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2039239822 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2049583246 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2050901646 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2055752335 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2061383822 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2078947982 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  21240975 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2133217423 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2147112078 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2159940239 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2166358158 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2179621518 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2214335119 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2238454415 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2245410959 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2247758478 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2264419471 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2274894478 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2279746190 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2289069199 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2297309838 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2330864271 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2339644558 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2340688015 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2382364815 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2391404175 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2394966670 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2397710990 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2408845966 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2421716111 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2430080142 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2449756303 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2485797518 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2489460878 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  249304206 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2505854607 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  251286159 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2539528846 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2545957007 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2550144655 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2556716174 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2572685455 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2578073743 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2581867151 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2597066382 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2605194381 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:0
+  2610966158 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2616731278 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2632723086 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2633374862 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  265950862 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2660391567 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2666406030 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2672317582 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2681869966 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2689607310 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2693013134 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2699963022 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2704151695 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2745183887 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2747930255 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  275259535 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2755531407 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2758679695 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2766809742 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2789088910 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2826173582 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2826832526 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2831167631 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2834844814 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2841918606 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2869827726 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2873757839 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2877698703 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2879532686 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2894211727 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2901953679 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2909408398 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  293876366 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2959616142 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2974687887 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2984403598 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2994096783 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3011531407 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3044674191 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3052410510 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3053195919 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3063939215 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3068928655 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3079146126 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3131318926 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3134067855 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3169593998 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  318641295 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3208384655 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3210480270 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3215340687 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3215854735 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3222425742 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3224630927 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  323108494 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3231189647 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3246666383 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  325598351 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3268693134 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3274450574 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3281134734 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3294248078 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3302234766 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3304607374 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3310225039 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3311291534 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3315213455 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3334615183 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3339848334 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3340784782 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  335155854 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3353625742 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3377465998 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3389397646 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3405913230 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3422294670 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3441185934 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  344595087 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3476710031 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3477490831 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3497668238 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3513388687 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3525585038 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3527425167 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3534108814 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3538561678 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3591527566 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3616020111 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3616156302 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  363077263 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3641317518 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3647487118 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3683102348 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3694808719 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3704764558 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3720362127 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3767412879 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3774368910 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3780394126 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3782349966 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  379067022 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3807515791 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3834260111 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3836623502 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3840813710 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3841075342 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3870429839 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3876722319 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3881968270 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3882630286 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3902295182 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3903742606 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3907922575 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  392969359 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  393100942 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3941607566 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  394195598 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3945275022 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3951692431 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3954193038 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3965724814 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3972142734 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3980659343 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3986960014 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3992720015 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  4008598670 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  4013580943 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  4021428878 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  402281615 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  4030073999 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  4038863502 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  4053422735 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  4054856334 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  4083432590 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  4127344783 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  4139162255 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  4145813646 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  4152767119 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  4200736910 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  4204279950 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  4209648270 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  421022350 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  422060687 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  4227866254 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  424464526 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  4252766863 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  4274154639 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  4275841678 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  428359311 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  4288687758 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  446454414 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  47230094 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  478172302 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  480125070 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  482752655 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  491566735 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  49300110 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  497168015 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  517601423 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  549075087 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  5643406 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  569382543 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  585771662 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  595217550 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  601766030 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  602278031 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  616568463 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  62014606 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  62684303 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  639124111 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  64507022 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  646195854 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  663135886 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  663620238 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  686953102 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  695476879 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  729687182 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  740960398 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  750923918 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  776360079 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  777403535 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  77865614 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  786697358 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  787373199 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  804263566 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  814761615 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  816866959 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  832607375 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  842275471 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  847650959 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  873246350 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  874256526 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  875960975 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  883439758 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  904792718 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  94249102 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  944792719 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  955524750 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  9835150 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+=== HKLM\SYSTEM\CurrentControlSet\Control\FeatureManagement\Overrides\15 ===
+  bucket value count=0 subkey count=47
+  1144365196 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1278582924 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1345822861 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  137732236 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1417361548 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1513463948 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1598765196 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1681367181 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1748344972 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  175978637 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1785564300 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:0
+  1849139341 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  1882562700 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2042173580 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2050465932 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2218238093 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2419564685 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2628617864 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:0
+  2688000141 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2760040589 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2897279119 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  2989990029 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3255279757 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3288834189 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3359088781 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3423051917 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3490160781 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3493306509 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3512539789 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3523715213 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3593969805 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3624378509 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3792150669 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3814529677 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3859259533 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3959922829 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  3963068557 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  4027031693 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  4030177420 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  406167692 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  4197949581 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  573939852 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  579795087 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  775266444 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  909484172 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+  962466445 :: EnabledState=DWord:1 | EnabledStateOptions=DWord:0
+  976593036 :: EnabledState=DWord:2 | EnabledStateOptions=DWord:0
+=== SIX OBFUSCATED NAME PRESENCE CHECK (buckets 0/4/8/9/15) ===
+  fid 10727725 TabShell -> subkey 1527625864 : PRESENT in bucket(s): 8
+  fid 11895592 TabShellWinRtApi -> subkey 1365873800 : PRESENT in bucket(s): 8
+  fid 13849566 TabShellVisibility -> subkey 3167312009 : PRESENT in bucket(s): 8
+  fid 14291807 TabShellVisibilityOverrideToOnForGates -> subkey 3192474248 : PRESENT in bucket(s): 8
+  fid 17093654 TabSettingStateRepoIntegration -> subkey 768013962 : PRESENT in bucket(s): 8
+  fid 17057765 TabShellAutoTabbingPreference -> subkey 3403740811 : PRESENT in bucket(s): 8
+=== FORMAT EXAMPLES: existing Overrides\4 subkeys ===
+  100681871 :: value names/kinds: EnabledState(DWord), EnabledStateOptions(DWord), Variant(DWord), VariantPayloadKind(DWord), VariantPayload(DWord), FlightId(String), RolloutState(DWord), RolloutType(DWord)
+  1122397326 :: value names/kinds: EnabledState(DWord), EnabledStateOptions(DWord), Variant(DWord), VariantPayloadKind(DWord), VariantPayload(DWord), FlightId(String), RolloutState(DWord), RolloutType(DWord), ImpressionTime(QWord)
+  1137576077 :: value names/kinds: EnabledState(DWord), EnabledStateOptions(DWord), Variant(DWord), VariantPayloadKind(DWord), VariantPayload(DWord), FlightId(String), RolloutState(DWord), RolloutType(DWord), ImpressionTime(QWord)
+  1182775948 :: value names/kinds: EnabledState(DWord), EnabledStateOptions(DWord), Variant(DWord), VariantPayloadKind(DWord), VariantPayload(DWord), FlightId(String), RolloutState(DWord), RolloutType(DWord)
+  129910414 :: value names/kinds: EnabledState(DWord), EnabledStateOptions(DWord), Variant(DWord), VariantPayloadKind(DWord), VariantPayload(DWord), FlightId(String), RolloutState(DWord), RolloutType(DWord)

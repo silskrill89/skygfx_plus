@@ -3,6 +3,12 @@
 // Compile with /E <entry> ps_2_0 for each pass
 //
 // Merges: simplePS, simpleDetailPS, simpleFogPS, xboxBuildingPS, normMapBuildingPS
+//
+// NOTE: this file has no noise-detail entries. The noise-detail variants live in
+// shaders/noiseDetailBuildingPS.hlsl (main_simpleNoiseDetail, main_simpleDetailNoiseDetail,
+// main_xboxBuildingNoiseDetail) and use the blue-noise jitter from include/Noise.hlsl
+// (s9.a, amplitude c52.x). Nothing here to convert; the five entries below stay
+// deterministic on purpose.
 
 // ============================================================
 // Pass 0: Simple building (texture * color * colorscale)
@@ -84,8 +90,19 @@ struct PS_INPUT_XBOX {
 
 float4 main_xboxBuilding(PS_INPUT_XBOX IN) : COLOR
 {
-    return tex2D(tex0_xbox, IN.texcoord0 * 0.5) * IN.color * 10.0 +
-           tex2D(tex1_xbox, IN.texcoord1 * 0.5) * IN.envcolor;
+    // aap parity contract: raw interpolated UVs (texcoords are NOT halved and
+    // the diffuse gets no *10.0 multiplier). Albedo is tex0 * IN.color; the
+    // reflection addend is tex1 * IN.envcolor.
+    // IN.envcolor is written by the Xbox VS as
+    // float4(1,1,1,0) * saturate(shininess) * lightmult * kXboxEnvScale, so the
+    // env lane can never invert (int8 shininess >= 128 wraps negative) and can
+    // never swamp albedo.
+    // The env UV is a normal-only sphere map (mul(envmat, Normal).xy *
+    // envXform.zw): flat surfaces legitimately sample a small region, which is
+    // why a baked sphere map can read as a pale "lightmap" patch. The C++ side
+    // now rejects invalid/RT rasters and zero env scales before this pass runs.
+    return tex2D(tex0_xbox, IN.texcoord0) * IN.color +
+           tex2D(tex1_xbox, IN.texcoord1) * IN.envcolor;
 }
 
 // ============================================================

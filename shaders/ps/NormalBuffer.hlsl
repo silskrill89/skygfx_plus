@@ -79,12 +79,13 @@ float4 main(PS_INPUT IN) : COLOR
 
     float3 normal = normalize(cross(dx, dy) + 1e-7);
 
-    // Normal is in view space. We need world space for the vehicle/building shaders.
-    // However, the vehicle PBR shader blends this with its own geometric normal,
-    // and view-space normals work well for edge detection and screen-space effects.
-    // For now, output view-space normal remapped to [0,1].
-    // TODO: multiply by inverse view matrix for true world-space normals.
-
+    // Normal is in VIEW space, and this buffer's contract stays VIEW space:
+    //   * VehiclePBR_Modern.hlsl (main / main_building, s4) transforms it to
+    //     world with the c25-c27 world->view rotation rows before blending.
+    //   * SSAO / SSAO_Temporal (s2), SMAA_Temporal (s4) and PipeChain (s1)
+    //     consume it as view-space directly.
+    // Do NOT write world-space normals here without updating every consumer
+    // above (and binding a view/inverse-view matrix to this pass).
     float3 encoded = normal * 0.5 + 0.5;
 
     return float4(encoded, dc / DepthParams.y); // depth normalized to [0,1]

@@ -1,3 +1,5 @@
+> SUPERSEDED by .serena/memories/swarm-round3-2026-10-01.md (kept for history)
+
 # Fixer-Swarm Deploy — 2026-10-01
 
 Parallel fixer lane plan for the pipe/effects restructure. 8 interchangeable fixers, one writer per

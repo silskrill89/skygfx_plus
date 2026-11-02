@@ -21,7 +21,7 @@
 | **rpskin.lib** | 62 KB | Skinned mesh pipeline, bone access, D3D9 skin pipeline | **HIGH** — SkinPBR needs RpSkinGetSkinToBoneMatrices, bone weights/indices, RpSkinGetD3D9Pipeline |
 | **rpworld.lib** | 4.7 MB | World/atomic rendering, render callbacks, pipeline get/set | **HIGH** — RpAtomicSetRenderCallBack already used via WRAPPER; link for type-safe calls |
 | **rpmatfx.lib** | 72 KB | Material effects (env map, bump, dual texture) | **HIGH** — env map setup, MatFX atomic enable; GTA SA uses MatFX heavily |
-| **rpnormmap.lib** | 37 KB | Normal map plugin | **HIGH** — Normal-map PBR buildings already use normalmap_plugin.cpp; link for RpNormMapMaterialSetNormMapTexture |
+| **rpnormmap.lib** | 37 KB | Normal map plugin | **HIGH** — Normal-map PBR buildings already use `src/texdefs.cpp`; link for RpNormMapMaterialSetNormMapTexture |
 | **rphanim.lib** | 39 KB | HAnim hierarchy (ped bones) | **HIGH** — Character PBR needs bone matrices; RpHAnimHierarchyGetSkinHAnimHierarchy |
 | **rwcore.lib** | 633 KB | Core RW: rasters, textures, cameras, lights, frames | **HIGH** — RwRasterCreate, RwTextureSetAddressing, camera/light manipulation |
 
@@ -244,7 +244,7 @@ Gradually replace hardcoded address calls with type-safe SDK calls:
 - `RpMatFXAtomicEnableEffects` — **new** — ensure MatFX atomics are properly set up for our env map pass
 
 ### Phase 3: SkinPBR Pipeline Integration
-1. In `normalmap_plugin.cpp` `MyNormalMapSkinRenderCallBack`:
+1. In `src/rw/normalmap.cpp` `MyNormalMapSkinRenderCallBack`:
    - After setting up lights, query `RpSkinAtomicGetHAnimHierarchy(atomic)` to get bone matrices
    - Upload bone matrices to VS constants for PBR skinning
    - Use `RpSkinGetSkinToBoneMatrices` to get bind-pose inverse matrices

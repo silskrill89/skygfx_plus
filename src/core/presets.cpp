@@ -1,4 +1,5 @@
 #include "skygfx.h"
+#include "modeManager.h"	// ModeManager_GetMode / ClearLatch — preset vs mode-latch desync
 
 // Preset name strings (NULL-terminated array for UI)
 const char *presetNames[NUM_PRESETS + 1] = {
@@ -111,11 +112,21 @@ void ApplyPreset(Config *c, int preset)
 		return;
 	}
 
+	// A preset is a direct whole-Config write that bypasses the mode
+	// manager. Drop any active mode latch BEFORE writing grade/ivMode so
+	// a later same-id toggle-off cannot restore the pre-mode base over
+	// this preset (and a latched foreign mode can't stay lit over non-IV
+	// pipes). ClearLatch touches neither the per-slot base nor the Config.
+	if(ModeManager_GetMode() != MODE_NONE)
+		ModeManager_ClearLatch();
+
 	const PresetConfig *p = &presetConfigs[preset];
 	c->preset = preset;
 
-	c->buildingPipe = p->buildingPipe;
-	c->vehiclePipe = p->vehiclePipe;
+	// pipes owned by ApplyMode: buildingPipe/vehiclePipe are authoritative
+	// mode state and must never be overwritten by this whole-Config preset
+	// path (doc E1-E4). The colour filter / feature toggles below stay
+	// preset-owned while no mode is active (the latch was cleared above).
 	c->colorFilter = p->colorFilter;
 	c->ps2ModulateGlobal = p->ps2ModulateGlobal;
 	c->dualPassGlobal = p->dualPassGlobal;

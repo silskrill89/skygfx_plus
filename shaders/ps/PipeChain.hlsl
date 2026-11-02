@@ -138,7 +138,7 @@ PS_OUTPUT pass_output(PS_INPUT IN)
         float3 n = tex2D(normalTex, uv).rgb * 2.0 - 1.0;
         float nlen = length(n);
         float d = tex2D(depthTex, uv).r;
-        if(nlen > 0.5 && d < 0.999){
+        if(nlen > 0.9 && d < 0.999){
             n /= nlen;
             float denom = d - projInfo.w;
             if(abs(denom) > 1e-9){
@@ -163,14 +163,60 @@ PS_OUTPUT pass_output(PS_INPUT IN)
                         // across every silhouette that reflected off-screen.
                         if(envUV.x > 0.0 && envUV.x < 1.0 &&
                            envUV.y > 0.0 && envUV.y < 1.0){
-                            float3 env = tex2D(sceneTex, envUV * fbParams.xy).rgb;
+                            // Depth-consistency gate: the fixed 2m march reprojects
+                            // to a GUESSED envUV — without checking what is actually
+                            // rendered there, dark texels (night sky / unlit or dark
+                            // geometry) paint amorphous ink-blot pools where
+                            // reflBlend peaks at grazing angles. Fetch the SAME
+                            // depth source the surface gate uses (depthTex, raw UV)
+                            // at envUV and REJECT the env sample when
+                            // (a) the target is sky (d_env >= 0.999), or
+                            // (b) the marched point's view Z (pr.z) disagrees with
+                            //     the scene depth at envUV beyond a 1.0m thickness
+                            //     tolerance. Depth -> view Z uses the same
+                            //     reconstruction as vp above:
+                            //     lin = projInfo.z / (d - projInfo.w).
+                            float d_env = tex2D(depthTex, envUV).r;
+                            float envOK = 0.0;
+                            if(d_env < 0.999){
+                                float envDenom = d_env - projInfo.w;
+                                if(abs(envDenom) > 1e-9){
+                                    float envLin = projInfo.z / envDenom;
+                                    // Asymmetric SSR hit test (replaces the old
+                                    // symmetric |pr.z - envLin| < 1.0): the scene
+                                    // surface at envUV must sit AT or IN FRONT of
+                                    // the marched point (envLin <= pr.z + slop).
+                                    // A surface BEHIND the marched point means the
+                                    // ray missed. The symmetric form also accepted
+                                    // two false-hit classes that painted the
+                                    // ink-blot pools:
+                                    //  - grazing rays SKIMMING the same surface
+                                    //    (ray stays within the 1m view-Z band of
+                                    //    the receding plane -> samples the surface
+                                    //    itself: grey asphalt blotch top-down,
+                                    //    dark surface texels at night), and
+                                    //  - mirror-toward-camera reflections where
+                                    //    envUV lands ~on the source pixel
+                                    //    (envLin - pr.z = 2*|V.z|, passed whenever
+                                    //    V.z < 0.5).
+                                    // slop 0.25m covers depth precision and
+                                    // curved/rough-surface hits at the march end.
+                                    if(envLin > 0.01 &&
+                                       envLin <= pr.z + 0.25){
+                                        envOK = 1.0;
+                                    }
+                                }
+                            }
+                            if(envOK > 0.5){
+                                float3 env = tex2D(sceneTex, envUV * fbParams.xy).rgb;
 
-                            float NdV = saturate(dot(n, -V));
-                            float fres = 0.25 + 0.75 * pow(1.0 - NdV, 3.0);
-                            float brdfW = saturate(pack.z * 1.6) * pack.y;
-                            float reflBlend = saturate(pipeParams.z * brdfW * fres
-                                                       * (1.0 - edge * 0.8));
-                            result = lerp(result, env, reflBlend);
+                                float NdV = saturate(dot(n, -V));
+                                float fres = 0.25 + 0.75 * pow(1.0 - NdV, 3.0);
+                                float brdfW = saturate(pack.z * 1.6) * pack.y;
+                                float reflBlend = saturate(pipeParams.z * brdfW * fres
+                                                           * (1.0 - edge * 0.8));
+                                result = lerp(result, env, reflBlend);
+                            }
                         }
                     }
                 }

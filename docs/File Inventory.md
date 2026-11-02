@@ -6,37 +6,36 @@
 | File | Lines | Purpose |
 |------|-------|---------|
 | `skygfx.h` | 739 | Root umbrella header, Config struct, externs |
+| `texdefs.cpp` | 1123 | Texture-definition layer: texdb.txt metadata, NM pairing, EDED plugin registry (merged from `texdb.cpp`, `rw/normalmap.cpp`, `render/normalmap.cpp`, `extendedplg.cpp`) |
+| `texdefs.h` | — | Texdefs header |
 
 ### Core (src/Core/) — 11 files
 | File | Lines | Purpose |
 |------|-------|---------|
 | `main.cpp` | 1996 | Entry point, hooks, config, crash handler |
-| `config.cpp` | 483 | Expanded INI parsing (239+ config fields) |
+| `modeManager.cpp` | 1357 | Mode profile tables, `ApplyMode`, owned-field queries |
 | `hooks.cpp` | 243 | Standalone hook installation |
 | `hooks.h` | — | Hooks header |
-| `diagnostics.cpp` | 145 | Debug logging, performance timers, crash handler |
-| `diagnostics.h` | — | Diagnostics header |
+| `debug_handl.cpp` | 1207 | Debug logging, VEH/minidump crash handling, watchdog, native menu inject (merged from `diagnostics.cpp` + `crashhandler.cpp` + `menu_inject.cpp`) |
+| `debug_handl.h` | — | Merged debug header |
 | `main_exports.h` | — | Main exports header |
 | `weather.cpp` | 282 | Weather/timecycle expansion (GTA V style) |
 | `weather.h` | — | Weather header |
 | `presets.cpp` | 133 | Game preset definitions (16 presets) |
 | `debugmenu_ui.cpp` | 514 | ImGui debug menu |
 
-### Entities (src/entities/) — 3 files + 4 planned
+### Entities (src/entities/) — 5 files
 | File | Lines | Purpose |
 |------|-------|---------|
 | `chars.cpp` | 368 | Character rendering |
 | `chars.h` | — | Character header |
 | `PlantSurfPropMgr.h` | — | Plant surface property manager |
-| `ragdoll.h` | — | **PLANNED:** Ragdoll_c + RagdollManager_c class declarations |
-| `ragdoll.cpp` | — | **PLANNED:** Core ragdoll physics (gravity, torque, friction) |
-| `ragdoll_bone.h` | — | **PLANNED:** RagdollBoneData (velocity + keyframe quat wrapper) |
-| `bone_data.cpp` | — | **PLANNED:** ms_boneInfos[32] + aBONETAG_ENUM_TAB[32] |
+| `sftbdyphsx.cpp` | 1184 | Ragdoll physics + dismemberment (merged from `ragdoll.cpp` + `dismember.cpp`; bone data inline) |
+| `sftbdyphsx.h` | — | Merged ragdoll/dismember header |
 
-### Extras (src/extras/) — 10 files
+### Extras (src/extras/) — 8 files
 | File | Lines | Purpose |
 |------|-------|---------|
-| `texdb.cpp` | 251 | Texture database with per-texture overrides |
 | `debugmenu_public.h` | 141 | Debug menu API |
 | `wheels.cpp` | 139 | Wheel rendering |
 | `wheels.h` | — | Wheels header |
@@ -44,7 +43,6 @@
 | `wheels_extender.h` | — | Wheel extender header |
 | `vehicles.cpp` | 314 | Vehicle registry |
 | `veh_shaders.cpp` | 375 | Vehicle shader data bridge |
-| `skygfx_bridge.cpp` | 108 | Shared memory IPC bridge |
 | `brdfLibrary.h` | — | BRDF library header |
 
 ### Render (src/render/) — 28 files
@@ -56,8 +54,7 @@
 | `postfx.h` | — | PostFX header |
 | `envmap.cpp` | 560 | Reflection map rendering |
 | `pipelinecommon.cpp` | 460 | Matrix helpers, shader loading, light uploaders |
-| `SMAA.cpp` | 316 | SMAA anti-aliasing implementation |
-| `SMAA.h` | — | SMAA header |
+| `postfx_smaa.cpp` | 1434 | SMAA anti-aliasing implementation |
 | `AreaTex.h` | — | SMAA area texture data |
 | `SearchTex.h` | — | SMAA search texture data |
 | `waterPipe.cpp` | 138 | Parallax water rendering |
@@ -79,18 +76,16 @@
 | `custom_mode.cpp` | 142 | Custom rendering mode |
 | `pc_patched_mode.cpp` | 96 | PC patched mode defaults |
 
-### RenderWare (src/rw/) — 16 files
+### RenderWare (src/rw/) — 12 files
 | File | Lines | Purpose |
 |------|-------|---------|
 | `gta.h` | 335 | GTA SA type definitions, reversed functions |
 | `gta.cpp` | 171 | GTA SA function hooks and wrappers |
 | `pipeplg.cpp` | 63 | Pipeline plugin attach |
 | `defaultFuncs.cpp` | 439 | Default render callback functions |
-| `normalmap.cpp` | 280 | Normal map pipeline implementation |
 | `normmap_stubs.cpp` | 70 | Normal map stubs |
-| `HLSL_hook.cpp` | 32 | HLSL shader hook |
-| `HLSL_hook.h` | — | HLSL hook header |
-| `extendedplg.cpp` | 42 | EDED plugin for per-atomic shader assignment |
+| `rphanim.h` | 673 | HAnim hierarchy types (ped bones) |
+| `rtanim.h` | 654 | Animation types |
 | `ModuleList.hpp` | 185 | Module enumeration for hooking |
 | `MemoryMgr.h` | 89 | Memory management utilities |
 | `Pools.h` | 136 | Object pool management |
@@ -105,7 +100,7 @@
 | File | Purpose |
 |------|---------|
 | `buildingPipePS.hlsl` | Consolidated building PS (5 entry points) |
-| `stochasticBuildingPS.hlsl` | Consolidated stochastic building PS (3 entry points) |
+| `noiseDetailBuildingPS.hlsl` | Consolidated noise-detail building PS (3 entry points) |
 | `vehiclePipeVS.hlsl` | Consolidated vehicle VS (10 entry points) |
 | `unifiedPipe.hlsl` | Forward+ unified pipeline (WIP) |
 | `shaders.bat` | Shader compilation batch script |
@@ -180,7 +175,7 @@
 | File | Purpose |
 |------|---------|
 | `PBR_Common.hlsl` | Shared GGX/Smith/Schlick functions |
-| `StochasticSamplerPS.hlsl` | Hash-based stochastic sampling |
+| `Noise.hlsl` | Packed noise tile fetch helpers (s9 / c49-c52) |
 | `SubsurfaceScattering.hlsl` | SSS material IDs |
 | `CarPaintNoise.hlsl` | Paint noise functions |
 | `colorSpace.hlsl` | Color space conversions |

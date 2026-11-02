@@ -14,6 +14,8 @@ IDR_GTAIVVEHICLEVS      RCDATA "cso/GTAIVVehicle_vs.cso"
 IDR_GTAIVVEHICLEPS      RCDATA "cso/GTAIVVehicle_ps.cso"
 IDR_GTAIVBUILDINGVS     RCDATA "cso/GTAIVBuilding_vs.cso"
 IDR_GTAIVBUILDINGPS     RCDATA "cso/GTAIVBuilding_ps.cso"
+IDR_GTAIVFPVS           RCDATA "cso/GTAIVForwardPlus_vs.cso"
+IDR_GTAIVFPPS           RCDATA "cso/GTAIVForwardPlus_ps.cso"
 
 // SMAA
 // C2 FIX: was cso/SSAO_ps20.cso (the OLD unguarded shader — unguarded
@@ -85,11 +87,11 @@ IDR_PS2BUILDINGFXVS     RCDATA "cso/ps2BuildingFxVS.cso"
 IDR_PS2BUILDINGWINDVS   RCDATA "cso/ps2BuildingWindVS.cso"
 IDR_XBOXBUILDINGVS      RCDATA "cso/xboxBuildingVS.cso"
 IDR_XBOXBUILDINGPS      RCDATA "cso/xboxBuildingPS.cso"
-IDR_XBOXBUILDINGSTOCHASTICPS RCDATA "cso/xboxBuildingStochasticPS.cso"
+IDR_XBOXBUILDINGNOISEDETAILPS RCDATA "cso/xboxBuildingNoiseDetailPS.cso"
 IDR_XBOXBUILDINGWINDVS  RCDATA "cso/xboxBuildingWindVS.cso"
 IDR_SPHEREBUILDINGVS    RCDATA "cso/sphereBuildingVS.cso"
 IDR_SIMPLEDETAILPS      RCDATA "cso/simpleDetailPS.cso"
-IDR_SIMPLEDETAILSTOCHASTICPS RCDATA "cso/simpleDetailStochasticPS.cso"
+IDR_SIMPLEDETAILNOISEDETAILPS RCDATA "cso/simpleDetailNoiseDetailPS.cso"
 IDR_SIMPLEFOGPS         RCDATA "cso/simpleFogPS.cso"
 IDR_CUSTOMBUILDINGVS    RCDATA "cso/customBuildingVS.cso"
 IDR_NORMMAPBUILDINGPS   RCDATA "cso/normMapBuildingPS.cso"
@@ -107,3 +109,41 @@ IDR_VELOCITYRECONSTRUCT  RCDATA "cso/VelocityReconstruct.cso"
 // Unified tonemap (frame-adaptive exposure)
 IDR_LUMINANCEREDUCE      RCDATA "cso/LuminanceReduce.cso"
 IDR_LUMINANCEADAPT       RCDATA "cso/LuminanceAdapt.cso"
+
+// New effects (260-275)
+IDR_FXAA3                RCDATA "cso/FXAA3.cso"
+IDR_GRAIN                RCDATA "cso/Grain.cso"
+IDR_CA                   RCDATA "cso/CA.cso"
+IDR_VIGNETTE             RCDATA "cso/Vignette.cso"
+IDR_VECTORMOTIONBLUR     RCDATA "cso/vectorMotionBlur.cso"
+IDR_DOF_COC              RCDATA "cso/DOF_CoC.cso"
+IDR_DOF_BOKEH            RCDATA "cso/DOF_Bokeh.cso"
+IDR_DOF_TENT             RCDATA "cso/DOF_Tent.cso"
+IDR_DOF_COMBINE          RCDATA "cso/DOF_Combine.cso"
+IDR_TONEMAPLUT           RCDATA "cso/TonemapLUT.cso"
+IDR_BLOOM_EXTRACT        RCDATA "cso/Bloom_Extract.cso"
+IDR_BLOOM_DOWNSAMPLE     RCDATA "cso/Bloom_Downsample.cso"
+IDR_BLOOM_UPSAMPLE       RCDATA "cso/Bloom_Upsample.cso"
+IDR_BLOOM_COMPOSITE      RCDATA "cso/Bloom_Composite.cso"
+IDR_SUNSHAFTS            RCDATA "cso/SunShafts.cso"
+IDR_PEDPBRVS             RCDATA "cso/pedPBRVS.cso"
+
+// W7-C: mirror distortion fix composite (277; 276 reserved for W7-D)
+IDR_MIRROR_COMPOSITE     RCDATA "cso/Mirror_Composite.cso"
+
+// Underwater volume fog + SSS (W7-D)
+IDR_WATER_UNDERWATER      RCDATA "cso/Water_Underwater.cso"
+IDR_TREEALPHA            RCDATA "cso/TreeAlpha.cso"
+
+// Legacy simple (non-detail-map) noise-detail building PS (aap SkyGfx parity)
+IDR_SIMPLENOISEDETAILPS  RCDATA "cso/simpleNoiseDetailPS.cso"
+
+// W8 clouds (CloudsPS.hlsl: main alias -> CloudsPS.cso, main_cloudsSky -> cloudsSkyPS.cso)
+IDR_CLOUDPS             RCDATA "cso/CloudsPS.cso"
+IDR_CLOUDSSKYPS         RCDATA "cso/cloudsSkyPS.cso"
+
+// IV grade (see IDR_IVGRADEPS in resource.h)
+IDR_IVGRADEPS           RCDATA "cso/IVGrade.cso"
+
+// m0336 GPU particle lane (particles_gpu.cpp): SM3.0 sprite PS
+IDR_WAKEPARTICLEPS      RCDATA "cso/WakeParticlePS.cso"

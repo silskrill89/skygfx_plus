@@ -6,11 +6,11 @@
 > python tools/gen_ini_ref.py
 > ```
 
-Source fingerprint: `main.cpp 28c6237b9811` · `skygfx.h 0152222082c7` · `modeManager.cpp 778dbd592e0c`
+Source fingerprint: `main.cpp a6a17f2e0088` · `skygfx.h 93389acd28b3` · `modeManager.cpp c77536a9cb31`
 
-**253 keys resolved** (71 with a preset/field-dependent default, shown explicitly) · **1 unresolved** · **438 scalar Config fields** parsed from `struct Config`.
+**257 keys resolved** (72 with a preset/field-dependent default, shown explicitly) · **1 unresolved** · **442 scalar Config fields** parsed from `struct Config`.
 
-`ADD_IF_MISSING` cross-check: **105** default-writer keys found, **0** of them with no matching read site.
+`ADD_IF_MISSING` cross-check: **0** default-writer keys found, **0** of them with no matching read site.
 
 Keys marked `global, not a Config field` are read into file-scope globals (or by another TU via `GetPrivateProfile*`), not into `struct Config`.
 
@@ -28,7 +28,7 @@ A `default` of `c-><field> (field default)` means the source uses the current Co
 
 | Key | Type | Default | Clamp | Note |
 |---|---|---|---|---|
-| `active` | enum alias | `None (absent/unknown)` | - | main.cpp:5327; map modeAliasMap; unknown/absent = None; whitespace around '=' is trimmed; global, not a Config field |
+| `active` | enum alias | `None (absent/unknown)` | - | main.cpp:5955; map modeAliasMap; unknown/absent = None; whitespace around '=' is trimmed; global, not a Config field |
 
 `[Modes] active` accepts the aliases `None`, `PS2`, `Xbox`, `PC`, `GTAIV`, `GTAV`, `Modern`, `Custom`, `Mobile` (case-insensitive `StrAssoc`). `linb::ini` trims whitespace on both sides of `=`, so `active = Xbox` and `active=Xbox` are equivalent.
 
@@ -36,261 +36,265 @@ A `default` of `c-><field> (field default)` means the source uses the current Co
 
 | Key | Type | Default | Clamp | Note |
 |---|---|---|---|---|
-| `NoiseQuality` | int | `0` | - | main.cpp:5340; 0=32, 1=128, 2=512, >=3=1024 utility noise; global, not a Config field |
+| `NoiseQuality` | int | `0` | - | main.cpp:5968; 0=32, 1=128, 2=512, >=3=1024 utility noise; global, not a Config field |
 
 ### `[SkyGfx]`
 
 | Key | Type | Default | Clamp | Note |
 |---|---|---|---|---|
-| `keySwitch` | hex (DWORD) | `0 (missing key keeps current binding)` | - | main.cpp:5297; readhex; hotkey |
-| `keyReload` | hex (DWORD) | `0 (missing key keeps current binding)` | - | main.cpp:5300; readhex; hotkey |
-| `pipeline` | int | `PBR (map default; alias Modern)` | - | main.cpp:5353; map pipelineMap; keyword map; mode profiles may own pipes; mode-owned (6 profiles) |
-| `pipelineOverride` | int | `-1` | - | main.cpp:5356; 0..4 applied; -1 = disabled |
-| `qualityPreset` | int | `3` | - | main.cpp:5401; file-static; seeds the preset block; global, not a Config field |
-| `ps2Modulate` | bool (RwBool) | `0` | - | main.cpp:5561; mode-owned (5 profiles) |
-| `dualPass` | bool (RwBool) | `0` | - | main.cpp:5562; mode-owned (5 profiles) |
-| `buildingPipe` | int | `-1 (map default = no override)` | - | main.cpp:5572; map buildingPipeMap; explicit override; ignored by pipe-owning modes; mode-owned (6 profiles) |
-| `vehiclePipe` | int | `-1 (map default = no override)` | - | main.cpp:5590; map vehiclePipeMap; explicit override; ignored by pipe-owning modes; mode-owned (6 profiles) |
-| `detailMaps` | bool (RwBool) | `c->detailMaps (field default)` | - | main.cpp:5601; mode-owned (6 profiles) |
-| `noiseDetail` | bool (RwBool) | `c->noiseDetail (field default)` | - | main.cpp:5606; current key; legacy aliases stochasticTexturing/stochastic still read; mode-owned (6 profiles) |
-| `stochasticTexturing` | bool (RwBool) | `c->noiseDetail (field default)` | - | main.cpp:5608; LEGACY ALIAS for noiseDetail; read only when noiseDetail is absent; mode-owned (6 profiles) |
-| `stochastic` | bool (RwBool) | `c->noiseDetail (field default)` | - | main.cpp:5612; LEGACY ALIAS for noiseDetail; read only when noiseDetail is absent; mode-owned (6 profiles) |
-| `ps2ModulateBuilding` | bool (RwBool) | `config->ps2ModulateGlobal (field default)` | - | main.cpp:5621; mode-owned (6 profiles) |
-| `dualPassBuilding` | bool (RwBool) | `config->dualPassGlobal (field default)` | - | main.cpp:5622; mode-owned (6 profiles) |
-| `bldEnvReflect` | bool (RwBool) | `1` | [0, 1] | main.cpp:5629 |
-| `bldSkyReflect` | float | `0.15f` | [0.0, 1.0] | main.cpp:5632 |
-| `dualPassVehicle` | bool (RwBool) | `config->dualPassGlobal (field default)` | - | main.cpp:5636; mode-owned (6 profiles) |
-| `leedsShininessMult` | float | `1.0` | - | main.cpp:5637 |
-| `neoShininessMult` | float | `1.0` | - | main.cpp:5638 |
-| `neoSpecularityMult` | float | `1.0` | - | main.cpp:5639 |
-| `envShininessMult` | float | `1.0` | - | main.cpp:5640; mode-owned: Modern |
-| `envSpecularityMult` | float | `1.0` | - | main.cpp:5641; mode-owned: Modern |
-| `envPower` | float | `20.0` | [1.0, 128.0] | main.cpp:5642; mode-owned: Modern |
-| `envFresnel` | float | `0.4f` | helper clampEnvSliderRanges(): [0.0, 0.4]; helper clampEnvSliderRanges(): [0.0, 0.4] | main.cpp:5657; mode-owned: Modern |
-| `vehPBRLayers` | int | `255` | - | main.cpp:5659; mode-owned: Modern |
-| `vehEnvIntensity` | float | `1.0f` | helper clampEnvSliderRanges(): [0.0, 0.4]; helper clampEnvSliderRanges(): [0.0, 0.4] | main.cpp:5660; mode-owned: Modern |
-| `vehChromeEnvThreshold` | float | `0.0f` | - | main.cpp:5665; mode-owned: Modern |
-| `vehAutoChrome` | bool (RwBool) | `1` | - | main.cpp:5668 |
-| `chromeF0` | float | `0.56f` | helper clampChromeParams(): [0.0, 1.0]; helper clampChromeParams(): [0.0, 1.0] | main.cpp:5669 |
-| `chromeGloss` | float | `0.90f` | helper clampChromeParams(): [0.0, 1.0]; helper clampChromeParams(): [0.0, 1.0] | main.cpp:5670 |
-| `chromeMetallic` | float | `1.0f` | helper clampChromeParams(): [0.0, 1.0]; helper clampChromeParams(): [0.0, 1.0] | main.cpp:5671 |
-| `chromeEnvBoost` | float | `1.0f` | helper clampChromeParams(): [0.0, 4.0]; helper clampChromeParams(): [0.0, 4.0] | main.cpp:5672 |
-| `chromeClearcoat` | float | `0.6f` | helper clampChromeParams(): [0.0, 1.0]; helper clampChromeParams(): [0.0, 1.0] | main.cpp:5673 |
-| `tonemapAutoExposure` | int | `1` | - | main.cpp:5675; mode-owned: GTA IV, Modern |
-| `tonemapAdaptSpeed` | float | `0.12f` | helper clampTonemapExposureRanges(): [0.01, 1.0]; helper clampTonemapExposureRanges(): [0.01, 1.0] | main.cpp:5676; mode-owned: Modern |
-| `tonemapKeyStrength` | float | `1.0f` | helper clampTonemapExposureRanges(): [0.0, 1.0]; helper clampTonemapExposureRanges(): [0.0, 1.0] | main.cpp:5677; mode-owned: Modern |
-| `tonemapMinExposure` | float | `0.5f` | helper clampTonemapExposureRanges(): [-0.5, 0.5]; helper clampTonemapExposureRanges(): [-0.5, 0.5] | main.cpp:5678; mode-owned: Modern |
-| `tonemapMaxExposure` | float | `1.0f` | helper clampTonemapExposureRanges(): [0.2, 4.0]; helper clampTonemapExposureRanges(): [0.2, 4.0] | main.cpp:5681; mode-owned: Modern |
-| `tonemapCurveLows` | float | `0.0f` | helper clampTonemapExposureRanges(): [-0.35, 0.35]; helper clampTonemapExposureRanges(): [-0.35, 0.35] | main.cpp:5683 |
-| `tonemapCurveHighs` | float | `0.0f` | helper clampTonemapExposureRanges(): [-0.35, 0.35]; helper clampTonemapExposureRanges(): [-0.35, 0.35] | main.cpp:5684 |
-| `tonemapCurveMid` | float | `0.5f` | helper clampTonemapExposureRanges(): [0.0, 1.0]; helper clampTonemapExposureRanges(): [0.0, 1.0] | main.cpp:5685 |
-| `envMapSize` | int | `c->envMapSize (field default)` | rounded up to next power of two | main.cpp:5689; mode-owned (6 profiles) |
-| `envMapFarClipMult` | float | `c->envMapFarClipMult (field default)` | - | main.cpp:5693; mode-owned (6 profiles) |
-| `envMapUseLODs` | bool (RwBool) | `0` | - | main.cpp:5694; mode-owned: PS2, Xbox |
-| `reflectionMsaaLevel` | int | `0` | snapped {0,2,4,8} | main.cpp:5698; mode-owned: PS2, Xbox |
-| `mirrorDistortionFix` | bool (RwBool) | `0` | - | main.cpp:5703 |
-| `normalMapEnable` | bool (RwBool) | `0` | - | main.cpp:5706; mode-owned: PS2, Xbox, Mobile |
-| `normalMapIntensity` | float | `1.0f` | - | main.cpp:5707 |
-| `normalMapPlayerOnly` | bool (RwBool) | `1` | - | main.cpp:5708 |
-| `sunGlare` | bool (RwBool) | `-1` | min 0 | main.cpp:5710; mode-owned: GTA IV |
-| `ps2ModulateGrass` | bool (RwBool) | `config->ps2ModulateGlobal (field default)` | - | main.cpp:5716; mode-owned (5 profiles) |
-| `dualPassGrass` | bool (RwBool) | `config->dualPassGlobal (field default)` | - | main.cpp:5717; mode-owned (6 profiles) |
-| `grassAddAmbient` | bool (RwBool) | `0` | - | main.cpp:5718; mode-owned: PS2, Xbox |
-| `grassFixPlacement` | bool (RwBool) | `0` | - | main.cpp:5720; mode-owned: PS2, Xbox |
-| `grassBackfaceCull` | bool (RwBool) | `1` | - | main.cpp:5721; mode-owned: PS2, Xbox, Mobile |
-| `dualPassDefault` | bool (RwBool) | `config->dualPassGlobal (field default)` | - | main.cpp:5730; mode-owned (6 profiles) |
-| `dualPassPed` | bool (RwBool) | `config->dualPassGlobal (field default)` | - | main.cpp:5731; mode-owned (6 profiles) |
-| `disableClouds` | int | `0` | - | main.cpp:5757; global, not a Config field |
-| `cloudRenderFix` | int | `1` | - | main.cpp:5761; global, not a Config field |
-| `disableGamma` | int | `0` | - | main.cpp:5762; global, not a Config field |
-| `transparentLockon` | int | `0` | - | main.cpp:5763; global, not a Config field |
-| `fixShadows` | int | `0` | - | main.cpp:5764; global, not a Config field |
-| `lightningIlluminatesWorld` | int | `0` | - | main.cpp:5765 |
-| `colorFilter` | int | `PC (map default); PBR forces Modern` | - | main.cpp:5784; map colorFilterMap; keyword map; PBR forces Modern; mode-owned (6 profiles) |
-| `rgb1Mult` | float | `1.0f` | - | main.cpp:5801; mode-owned: PS2, Xbox |
-| `rgb2Mult` | float | `1.0f` | - | main.cpp:5802; mode-owned: PS2, Xbox |
-| `infraredVision` | int | `1 (map default)` | - | main.cpp:5803; map ps2pcMap; mode-owned (6 profiles) |
-| `nightVision` | int | `1 (map default)` | - | main.cpp:5804; map ps2pcMap; mode-owned (6 profiles) |
-| `grainFilter` | int | `1 (map default)` | - | main.cpp:5805; map ps2pcMap; mode-owned (6 profiles) |
-| `usePCTimecyc` | bool (RwBool) | `0` | - | main.cpp:5806; mode-owned (5 profiles) |
-| `blurLeft` | int | `4000` | - | main.cpp:5808; 4000 = use defaultColourLeftUOffset |
-| `blurTop` | int | `4000` | - | main.cpp:5810; 4000 = use defaultColourTopVOffset |
-| `blurRight` | int | `4000` | - | main.cpp:5812; 4000 = use defaultColourRightUOffset |
-| `blurBottom` | int | `4000` | - | main.cpp:5814; 4000 = use defaultColourBottomVOffset |
-| `doRadiosity` | bool (RwBool) | `4000` | - | main.cpp:5817; 4000 = use original_bRadiosity; mode-owned (6 profiles) |
-| `radiosity` | int | `1 (map default)` | - | main.cpp:5825; map ps2shdrMap; mode-owned (6 profiles) |
-| `vcsTrails` | bool (RwBool) | `0` | - | main.cpp:5827; mode-owned (6 profiles) |
-| `trailsLimit` | int | `80` | - | main.cpp:5828 |
-| `trailsIntensity` | int | `38` | - | main.cpp:5829 |
-| `trailsResolution` | int | `1` | - | main.cpp:5830 |
-| `radiosityFilterPasses` | int | `2` | - | main.cpp:5832 |
-| `radiosityRenderPasses` | int | `1` | - | main.cpp:5833 |
-| `radiosityIntensity` | int | `0x23` | - | main.cpp:5834 |
-| `neoWaterDrops` | bool (RwBool) | `-1` | min 0 | main.cpp:5836; mode-owned: GTA IV |
-| `neoBloodDrops` | bool (RwBool) | `0` | - | main.cpp:5841 |
-| `fixPcCarLight` | int | `0` | - | main.cpp:5842; global, not a Config field |
-| `explicitBuildingPipe` | int | `-1` | - | main.cpp:5843; global, not a Config field |
-| `zwriteThreshold` | int | `128` | [0, 255] | main.cpp:5847; mode-owned: PS2, Xbox, Mobile |
-| `zwriteThresholdGrass` | int | `128` | [0, 255] | main.cpp:5851; mode-owned: PS2, Xbox, Mobile |
-| `zwriteThresholdPed` | int | `128` | [0, 255] | main.cpp:5855; mode-owned: PS2, Xbox, Mobile |
-| `coronaZtest` | int | `-1` | [-1, 1] | main.cpp:5859; mode-owned (5 profiles) |
-| `YCbCrCorrection` | bool | `0` | - | main.cpp:5871; mode-owned: PS2, Xbox |
-| `lumaScale` | float | `219.0f/255.0f` | - | main.cpp:5872 |
-| `lumaOffset` | float | `16.0f/255.0f` | - | main.cpp:5873 |
-| `CbScale` | float | `1.23f` | - | main.cpp:5874 |
-| `CbOffset` | float | `0.0f` | - | main.cpp:5875 |
-| `CrScale` | float | `1.23f` | - | main.cpp:5876 |
-| `CrOffset` | float | `0.0f` | - | main.cpp:5877 |
-| `ssaoEnable` | bool (RwBool) | `c->ssaoEnable (field default)` | - | main.cpp:5880; mode-owned (6 profiles) |
-| `ssaoRadius` | float | `c->ssaoRadius (field default)` | - | main.cpp:5881; mode-owned: GTA IV, Modern |
-| `ssaoPower` | float | `c->ssaoPower (field default)` | helper clampSsaoPower(): [0.5, 4.0]; helper clampSsaoPower(): [0.5, 4.0] | main.cpp:5882; mode-owned: GTA IV, Modern |
-| `ssaoKernelSize` | float | `c->ssaoKernelSize (field default)` | - | main.cpp:5883; mode-owned: Modern |
-| `ssaoSampleCount` | int | `c->ssaoSampleCount (field default)` | - | main.cpp:5884; mode-owned: Modern |
-| `smaaEnable` | bool (RwBool) | `c->smaaEnable (field default)` | - | main.cpp:5889; mode-owned (6 profiles) |
-| `motionBlurEnable` | bool (RwBool) | `c->motionBlurEnable (field default)` | - | main.cpp:5892; mode-owned (6 profiles) |
-| `motionBlurStrength` | float | `c->motionBlurStrength (field default)` | - | main.cpp:5893; mode-owned: GTA IV, Modern |
-| `motionBlurRadial` | float | `c->motionBlurRadial (field default)` | - | main.cpp:5894; mode-owned: Modern |
-| `motionBlurSpeedFactor` | float | `c->motionBlurSpeedFactor (field default)` | - | main.cpp:5895; mode-owned: Modern |
-| `motionBlurCameraAware` | bool (RwBool) | `c->motionBlurCameraAware (field default)` | - | main.cpp:5896; mode-owned: Modern |
-| `velocityBufferEnable` | bool (RwBool) | `1` | - | main.cpp:5899; mode-owned: GTA IV, Modern |
-| `depthHookEnable` | bool (RwBool) | `1` | - | main.cpp:5902; mode-owned: PS2, Xbox, Modern, Mobile |
-| `normalBufferEnable` | bool (RwBool) | `1` | - | main.cpp:5905; mode-owned (5 profiles) |
-| `normalBufferOffset` | float | `0.5f` | - | main.cpp:5906 |
-| `normalBufferScale` | float | `1.0f` | - | main.cpp:5907 |
-| `pipeChainEnable` | bool (RwBool) | `0` | - | main.cpp:5910; mode-owned: PS2, Xbox, Modern, Mobile |
-| `pipeChainIntensity` | float | `0.3f` | - | main.cpp:5911 |
-| `pipeChainReflEnable` | int | `0` | - | main.cpp:5912 |
-| `texAlphaClassify` | int | `1` | [0, 1] | main.cpp:5920; mode-owned (6 profiles) |
-| `stateBaselineEnable` | int | `1` | [0, 1] | main.cpp:5923; mode-owned (6 profiles) |
-| `defaultCbShaderHygiene` | int | `1` | [0, 1] | main.cpp:5926; mode-owned (6 profiles) |
-| `pedOpaqueContract` | int | `1` | [0, 1] | main.cpp:5931; mode-owned (6 profiles) |
-| `ambientFloor` | float | `0.03f` | [0.0, 0.2] | main.cpp:5937 |
-| `colorFilterEnable` | bool (RwBool) | `1` | - | main.cpp:5944; records user intent; PBR forces 1; mode-owned: PS2, Xbox |
-| `radiosityEnable` | bool (RwBool) | `1` | - | main.cpp:5959 |
-| `grainEnable` | bool (RwBool) | `1` | - | main.cpp:5960; mode-owned: GTA IV |
-| `postfxDumpDebug` | bool (RwBool) | `0` | - | main.cpp:5961 |
-| `ivMode` | bool (RwBool) | `(c->pipeline == PIPELINE_GTAIV` | - | main.cpp:5967; mode-owned (6 profiles) |
-| `ivDesaturation` | float | `c->ivDesaturation (field default)` | - | main.cpp:5969; mode-owned: PS2, Xbox, Modern |
-| `ivGamma` | float | `c->ivGamma (field default)` | - | main.cpp:5970; mode-owned: PS2, Xbox, Modern |
-| `ivSaturation` | float | `c->ivSaturation (field default)` | - | main.cpp:5971; mode-owned: Modern |
-| `ivCurves` | float | `c->ivCurves (field default)` | - | main.cpp:5972; mode-owned: Modern |
-| `ivVignetteIntensity` | float | `c->ivVignetteIntensity (field default)` | - | main.cpp:5973; mode-owned: PS2, Xbox, Modern |
-| `ivVignetteRadius` | float | `c->ivVignetteRadius (field default)` | - | main.cpp:5974; mode-owned: Modern |
-| `ivVignetteContrast` | float | `c->ivVignetteContrast (field default)` | - | main.cpp:5975; mode-owned: Modern |
-| `ivBloomIntensity` | float | `c->ivBloomIntensity (field default)` | - | main.cpp:5976; mode-owned: PS2, Xbox, Modern |
-| `ivExposure` | float | `c->ivExposure (field default)` | - | main.cpp:5977; mode-owned: Modern |
-| `privateHooks` | int | `0` | - | main.cpp:5979; global, not a Config field |
-| `forceWindShader` | bool | `0` | - | main.cpp:5980; global flag; only ==1 enables; global, not a Config field |
-| `ragdollEnable` | bool (RwBool) | `1` | - | main.cpp:5983 |
-| `pbrAmbientFloor` | float | `0.0f` | - | main.cpp:5987 |
-| `pedAmbientFloor` | float | `0.20f` | [0.0, 1.0] | main.cpp:5992 |
-| `ambientMult` | float | `1.0f` | [0.0, 2.0] | main.cpp:5997 |
-| `pbrIblAmbientWeight` | float | `0.5f` | - | main.cpp:6000; mode-owned: Modern |
-| `tonemapBlackLift` | float | `0.0f` | - | main.cpp:6001 |
-| `vehPrelightFallback` | float | `0.15f` | [0.0, 1.0] | main.cpp:6005 |
-| `vehEnvFallback` | bool (RwBool) | `1` | - | main.cpp:6012 |
-| `vehEnvStrengthMode` | bool (RwBool) | `1` | - | main.cpp:6013 |
-| `vehEnvMask` | bool (RwBool) | `1` | - | main.cpp:6014 |
-| `vehWetEnv` | bool (RwBool) | `1` | - | main.cpp:6015 |
-| `vehEnvGlint` | float | `0.0f` | [0.0, 1.0] | main.cpp:6016; mode-owned: Modern |
-| `heightFogEnable` | bool (RwBool) | `c->heightFogEnable (field default)` | - | main.cpp:6022; mode-owned: GTA IV |
-| `heightFogDensity` | float | `c->heightFogDensity (field default)` | - | main.cpp:6023 |
-| `heightFogHeightFalloff` | float | `c->heightFogHeightFalloff (field default)` | - | main.cpp:6024 |
-| `heightFogStartHeight` | float | `c->heightFogStartHeight (field default)` | - | main.cpp:6025 |
-| `heightFogR` | float | `c->heightFogR (field default)` | - | main.cpp:6026 |
-| `heightFogG` | float | `c->heightFogG (field default)` | - | main.cpp:6027 |
-| `heightFogB` | float | `c->heightFogB (field default)` | - | main.cpp:6028 |
-| `heightFogTimecycleScale` | float | `c->heightFogTimecycleScale (field default)` | - | main.cpp:6029 |
-| `godRaysEnable` | bool (RwBool) | `c->godRaysEnable (field default)` | - | main.cpp:6032; mode-owned: GTA IV |
-| `godRaysExposure` | float | `c->godRaysExposure (field default)` | - | main.cpp:6033 |
-| `godRaysDecay` | float | `c->godRaysDecay (field default)` | - | main.cpp:6034 |
-| `godRaysDensity` | float | `c->godRaysDensity (field default)` | - | main.cpp:6035 |
-| `godRaysWeight` | float | `c->godRaysWeight (field default)` | - | main.cpp:6036 |
-| `godRaysNumSamples` | int | `c->godRaysNumSamples (field default)` | - | main.cpp:6037 |
-| `ssaoTemporalEnable` | bool (RwBool) | `1` | - | main.cpp:6044 |
-| `ssaoTemporalBlend` | float | `0.1f` | - | main.cpp:6045 |
-| `ssaoBlurPasses` | int | `2` | - | main.cpp:6046 |
-| `ssaoBlurRadius` | float | `3.0f` | - | main.cpp:6047 |
-| `ssaoDepthThreshold` | float | `0.01f` | - | main.cpp:6048 |
-| `sssPostProcessStrength` | float | `c->sssPostProcessStrength (field default)` | - | main.cpp:6051; mode-owned: Modern |
-| `sssPostProcessRadius` | float | `c->sssPostProcessRadius (field default)` | - | main.cpp:6052; mode-owned: Modern |
-| `sssPostProcessThreshold` | float | `c->sssPostProcessThreshold (field default)` | - | main.cpp:6053 |
-| `sssAmbientBoost` | float | `1.0f` | - | main.cpp:6057 |
-| `skinWrapFactor` | float | `c->skinWrapFactor (field default)` | - | main.cpp:6060 |
-| `skinSpecularPower` | float | `c->skinSpecularPower (field default)` | - | main.cpp:6061 |
-| `skinSpecularStrength` | float | `c->skinSpecularStrength (field default)` | - | main.cpp:6062 |
-| `skinSSSStrength` | float | `c->skinSSSStrength (field default)` | - | main.cpp:6063 |
-| `hairAnisotropicPower` | float | `c->hairAnisotropicPower (field default)` | - | main.cpp:6066 |
-| `hairAnisotropicStrength` | float | `c->hairAnisotropicStrength (field default)` | - | main.cpp:6067 |
-| `hairSSSStrength` | float | `c->hairSSSStrength (field default)` | - | main.cpp:6068 |
-| `vegetationSSSStrength` | float | `c->vegetationSSSStrength (field default)` | - | main.cpp:6071 |
-| `vegetationAmbientBoost` | float | `c->vegetationAmbientBoost (field default)` | - | main.cpp:6072 |
-| `sssPostProcessEnable` | bool (RwBool) | `c->sssPostProcessEnable (field default)` | - | main.cpp:6076; mode-owned (5 profiles) |
-| `skinEnhanceEnable` | bool (RwBool) | `c->skinEnhanceEnable (field default)` | - | main.cpp:6077; mode-owned (5 profiles) |
-| `hairEnhanceEnable` | bool (RwBool) | `c->hairEnhanceEnable (field default)` | - | main.cpp:6078; mode-owned (5 profiles) |
-| `vegetationEnhanceEnable` | bool (RwBool) | `c->vegetationEnhanceEnable (field default)` | - | main.cpp:6079; mode-owned (5 profiles) |
-| `sssEnable` | bool (RwBool) | `1` | - | main.cpp:6085 |
-| `sssIntensity` | float | `c->sssIntensity (field default)` | - | main.cpp:6086 |
-| `sssVegIntensity` | float | `c->sssVegIntensity (field default)` | - | main.cpp:6087 |
-| `sssSkinIntensity` | float | `c->sssSkinIntensity (field default)` | - | main.cpp:6088 |
-| `sssClothIntensity` | float | `c->sssClothIntensity (field default)` | - | main.cpp:6089 |
-| `gamePreset` | int | `PRESET_CUSTOM` | - | main.cpp:6092; mode-owned (5 profiles) |
-| `forwardPlusEnable` | bool (RwBool) | `1` | - | main.cpp:6095; mode-owned (5 profiles) |
-| `forwardPlusDebug` | bool (RwBool) | `0` | - | main.cpp:6096 |
-| `sunCoronaIntensity` | float | `c->sunCoronaIntensity (field default)` | - | main.cpp:6099; mode-owned: PS2, Xbox, Mobile |
-| `sunCoreIntensity` | float | `c->sunCoreIntensity (field default)` | - | main.cpp:6100; mode-owned: PS2, Xbox, Mobile |
-| `sunStreakIntensity` | float | `c->sunStreakIntensity (field default)` | - | main.cpp:6101; mode-owned: PS2, Xbox, Mobile |
-| `sunStreakSize` | float | `c->sunStreakSize (field default)` | - | main.cpp:6102; mode-owned: PS2, Xbox, Mobile |
-| `altTimecycEnable` | int | `0` | - | main.cpp:6105 |
-| `waterParallaxEnable` | bool (RwBool) | `1` | - | main.cpp:6118; mode-owned: GTA IV |
-| `waterParallaxScale` | float | `1.0f` | - | main.cpp:6119 |
-| `waterNormalStrength` | float | `1.0f` | - | main.cpp:6120 |
-| `waterFresnelPower` | float | `5.0f` | - | main.cpp:6121 |
-| `waterSpecularPower` | float | `512.0f` | - | main.cpp:6122 |
-| `waterSpecularIntensity` | float | `1.0f` | - | main.cpp:6123 |
-| `waterUnderwaterFog` | float | `1.0f` | - | main.cpp:6124 |
-| `waterFoamThreshold` | float | `0.6f` | - | main.cpp:6125 |
-| `waterFoamSoftness` | float | `0.2f` | - | main.cpp:6126 |
-| `waterShoreFoam` | bool (RwBool) | `1` | 0\|1 | main.cpp:6129 |
-| `waterBodyClassify` | bool (RwBool) | `1` | 0\|1 | main.cpp:6130 |
-| `waterShallowR` | float | `0.13f` | - | main.cpp:6133 |
-| `waterShallowG` | float | `0.45f` | - | main.cpp:6134 |
-| `waterShallowB` | float | `0.55f` | - | main.cpp:6135 |
-| `waterDeepR` | float | `0.01f` | - | main.cpp:6136 |
-| `waterDeepG` | float | `0.03f` | - | main.cpp:6137 |
-| `waterDeepB` | float | `0.08f` | - | main.cpp:6138 |
-| `waterTileScale` | float | `1.0f` | - | main.cpp:6142 |
-| `waterShoreFade` | float | `2.0f` | - | main.cpp:6143 |
-| `waterTranslucency` | float | `1.0f` | - | main.cpp:6144 |
-| `waterReflectionStrength` | float | `0.55f` | - | main.cpp:6145 |
-| `waterUseTimecycle` | int | `1` | - | main.cpp:6146 |
-| `treeFx` | int | `0` | [0, 3] | main.cpp:6150; mode-owned: PS2, Xbox, Modern, Mobile |
-| `treeWind` | bool (RwBool) | `0` | 0\|1 | main.cpp:6161; mode-owned: PS2, Xbox, Modern, Mobile |
-| `grassInstancing` | bool (RwBool) | `0` | 0\|1 | main.cpp:6166; mode-owned: PS2, Xbox, Modern, Mobile |
-| `profilerEnable` | int | `1` | 0\|1 | main.cpp:6175; mode-owned: PS2, Xbox, Modern, Mobile |
-| `profilerGpuTimers` | int | `0` | 0\|1 | main.cpp:6176 |
-| `waterStyle` | int | `0 (map default)` | - | main.cpp:6193; map waterStyleMap; mode-owned (5 profiles) |
-| `waterQuality` | int | `3` | [0, 3] | main.cpp:6194; mode-owned: GTA IV, GTA V |
-| `waterFresnelSplit` | int | `1` | - | main.cpp:6201; global, not a Config field |
-| `dofEnable` | int | `0` | - | main.cpp:6208; mode-owned: PS2, Xbox, GTA IV, Mobile |
-| `dofFocusDistance` | float | `20.0f` | min 0.0 | main.cpp:6209; mode-owned: GTA IV |
-| `dofFocusRange` | float | `15.0f` | min 0.0 | main.cpp:6211; mode-owned: GTA IV |
-| `dofBokehRadius` | float | `4.0f` | min 0.0 | main.cpp:6213; mode-owned: GTA IV |
-| `dofMaxBlur` | float | `0.5f` | [0.0, 1.0] | main.cpp:6215; mode-owned: GTA IV |
-| `tonemapOperator` | int | `0` | [0, 5] | main.cpp:6218; mode-owned: GTA IV |
-| `bloomEnable` | int | `0` | - | main.cpp:6221; mode-owned: PS2, Xbox, GTA IV, Mobile |
-| `bloomQuality` | int | `2` | [0, 3] | main.cpp:6222; mode-owned: GTA IV |
-| `bloomThreshold` | float | `1.0f` | min 0.0 | main.cpp:6225; mode-owned: GTA IV |
-| `bloomIntensity` | float | `0.8f` | min 0.0 | main.cpp:6227; mode-owned: GTA IV |
-| `sunShaftsEnable` | int | `0` | - | main.cpp:6229; mode-owned: PS2, Xbox, GTA IV, Mobile |
-| `sunShaftsDensity` | float | `0.84f` | [0.0, 1.0] | main.cpp:6230; mode-owned: GTA IV |
-| `sunShaftsDecay` | float | `1.0f` | [0.0, 1.0] | main.cpp:6233; mode-owned: GTA IV |
-| `fxaaEnable` | int | `0` | - | main.cpp:6236; mode-owned: PS2, Xbox, GTA IV, Mobile |
-| `grainIntensity` | float | `0.0f` | [0.0, 1.0] | main.cpp:6237; mode-owned: PS2, Xbox, GTA IV |
-| `caIntensity` | float | `0.0f` | [0.0, 1.0] | main.cpp:6240; mode-owned: PS2, Xbox, GTA IV |
-| `vignetteIntensity` | float | `0.0f` | [0.0, 1.0] | main.cpp:6245; mode-owned: GTA IV |
-| `pedShadows` | int | `-1` | [-1, 1] | main.cpp:5755; via parseShadowToggle (bool keywords + numeric); clamped [-1, 1]; mode-owned: PS2, Xbox, Legacy PC, Mobile |
-| `stencilShadows` | int | `-1` | [-1, 1] | main.cpp:5756; via parseShadowToggle (bool keywords + numeric); clamped [-1, 1]; mode-owned: PS2, Xbox, Legacy PC, Mobile |
+| `keySwitch` | hex (DWORD) | `0 (missing key keeps current binding)` | - | main.cpp:5925; readhex; hotkey |
+| `keyReload` | hex (DWORD) | `0 (missing key keeps current binding)` | - | main.cpp:5928; readhex; hotkey |
+| `pipeline` | int | `PBR (map default; alias Modern)` | - | main.cpp:5981; map pipelineMap; keyword map; mode profiles may own pipes; mode-owned (6 profiles) |
+| `pipelineOverride` | int | `-1` | - | main.cpp:5984; 0..4 applied; -1 = disabled |
+| `qualityPreset` | int | `3` | - | main.cpp:6029; file-static; seeds the preset block; global, not a Config field |
+| `ps2Modulate` | bool (RwBool) | `0` | - | main.cpp:6189; mode-owned (6 profiles) |
+| `dualPass` | bool (RwBool) | `0` | - | main.cpp:6190; mode-owned (6 profiles) |
+| `buildingPipe` | int | `-1 (map default = no override)` | - | main.cpp:6200; map buildingPipeMap; explicit override; ignored by pipe-owning modes; mode-owned (6 profiles) |
+| `vehiclePipe` | int | `-1 (map default = no override)` | - | main.cpp:6218; map vehiclePipeMap; explicit override; ignored by pipe-owning modes; mode-owned (6 profiles) |
+| `detailMaps` | bool (RwBool) | `c->detailMaps (field default)` | - | main.cpp:6229; mode-owned (6 profiles) |
+| `noiseDetail` | bool (RwBool) | `c->noiseDetail (field default)` | - | main.cpp:6234; current key; legacy aliases stochasticTexturing/stochastic still read; mode-owned (6 profiles) |
+| `stochasticTexturing` | bool (RwBool) | `c->noiseDetail (field default)` | - | main.cpp:6236; LEGACY ALIAS for noiseDetail; read only when noiseDetail is absent; mode-owned (6 profiles) |
+| `stochastic` | bool (RwBool) | `c->noiseDetail (field default)` | - | main.cpp:6240; LEGACY ALIAS for noiseDetail; read only when noiseDetail is absent; mode-owned (6 profiles) |
+| `ps2ModulateBuilding` | bool (RwBool) | `config->ps2ModulateGlobal (field default)` | - | main.cpp:6249; mode-owned (6 profiles) |
+| `dualPassBuilding` | bool (RwBool) | `config->dualPassGlobal (field default)` | - | main.cpp:6250; mode-owned (6 profiles) |
+| `bldEnvReflect` | bool (RwBool) | `1` | [0, 1] | main.cpp:6257 |
+| `bldSkyReflect` | float | `0.15f` | [0.0, 1.0] | main.cpp:6260 |
+| `dualPassVehicle` | bool (RwBool) | `config->dualPassGlobal (field default)` | - | main.cpp:6264; mode-owned (6 profiles) |
+| `leedsShininessMult` | float | `1.0` | - | main.cpp:6265 |
+| `neoShininessMult` | float | `1.0` | - | main.cpp:6266 |
+| `neoSpecularityMult` | float | `1.0` | - | main.cpp:6267 |
+| `envShininessMult` | float | `1.0` | - | main.cpp:6268; mode-owned: Modern |
+| `envSpecularityMult` | float | `1.0` | - | main.cpp:6269; mode-owned: Modern |
+| `envPower` | float | `c->envPower (field default)` | [1.0, 128.0] | main.cpp:6270; mode-owned: Modern |
+| `envFresnel` | float | `0.4f` | helper clampEnvSliderRanges(): [0.0, 0.4]; helper clampEnvSliderRanges(): [0.0, 0.4] | main.cpp:6285; mode-owned: Modern |
+| `vehPBRLayers` | int | `255` | - | main.cpp:6287; mode-owned: Modern |
+| `vehEnvIntensity` | float | `0.4f` | helper clampEnvSliderRanges(): [0.0, 0.4]; helper clampEnvSliderRanges(): [0.0, 0.4] | main.cpp:6288; mode-owned: Modern |
+| `vehChromeEnvThreshold` | float | `0.0f` | - | main.cpp:6293; mode-owned: Modern |
+| `vehAutoChrome` | bool (RwBool) | `1` | - | main.cpp:6296 |
+| `chromeF0` | float | `0.56f` | helper clampChromeParams(): [0.0, 1.0]; helper clampChromeParams(): [0.0, 1.0] | main.cpp:6297 |
+| `chromeGloss` | float | `0.90f` | helper clampChromeParams(): [0.0, 1.0]; helper clampChromeParams(): [0.0, 1.0] | main.cpp:6298 |
+| `chromeMetallic` | float | `1.0f` | helper clampChromeParams(): [0.0, 1.0]; helper clampChromeParams(): [0.0, 1.0] | main.cpp:6299 |
+| `chromeEnvBoost` | float | `1.0f` | helper clampChromeParams(): [0.0, 4.0]; helper clampChromeParams(): [0.0, 4.0] | main.cpp:6300 |
+| `chromeClearcoat` | float | `0.6f` | helper clampChromeParams(): [0.0, 1.0]; helper clampChromeParams(): [0.0, 1.0] | main.cpp:6301 |
+| `tonemapAutoExposure` | int | `1` | - | main.cpp:6303; mode-owned: GTA IV, Modern |
+| `tonemapAdaptSpeed` | float | `0.12f` | helper clampTonemapExposureRanges(): [0.01, 1.0]; helper clampTonemapExposureRanges(): [0.01, 1.0] | main.cpp:6304; mode-owned: Modern |
+| `tonemapKeyStrength` | float | `1.0f` | helper clampTonemapExposureRanges(): [0.0, 1.0]; helper clampTonemapExposureRanges(): [0.0, 1.0] | main.cpp:6305; mode-owned: Modern |
+| `tonemapMinExposure` | float | `0.5f` | helper clampTonemapExposureRanges(): [-0.5, 0.5]; helper clampTonemapExposureRanges(): [-0.5, 0.5] | main.cpp:6306; mode-owned: Modern |
+| `tonemapMaxExposure` | float | `1.0f` | helper clampTonemapExposureRanges(): [0.2, 4.0]; helper clampTonemapExposureRanges(): [0.2, 4.0] | main.cpp:6309; mode-owned: Modern |
+| `tonemapCurveLows` | float | `0.0f` | helper clampTonemapExposureRanges(): [-0.35, 0.35]; helper clampTonemapExposureRanges(): [-0.35, 0.35] | main.cpp:6311 |
+| `tonemapCurveHighs` | float | `0.0f` | helper clampTonemapExposureRanges(): [-0.35, 0.35]; helper clampTonemapExposureRanges(): [-0.35, 0.35] | main.cpp:6312 |
+| `tonemapCurveMid` | float | `0.5f` | helper clampTonemapExposureRanges(): [0.0, 1.0]; helper clampTonemapExposureRanges(): [0.0, 1.0] | main.cpp:6313 |
+| `envMapSize` | int | `c->envMapSize (field default)` | rounded up to next power of two | main.cpp:6317; mode-owned (6 profiles) |
+| `envMapFarClipMult` | float | `c->envMapFarClipMult (field default)` | - | main.cpp:6321; mode-owned (6 profiles) |
+| `envMapUseLODs` | bool (RwBool) | `0` | - | main.cpp:6322; mode-owned: PS2, Xbox |
+| `reflectionMsaaLevel` | int | `0` | snapped {0,2,4,8} | main.cpp:6326; mode-owned: PS2, Xbox |
+| `mirrorDistortionFix` | bool (RwBool) | `0` | - | main.cpp:6331 |
+| `normalMapEnable` | bool (RwBool) | `0` | - | main.cpp:6334; mode-owned: PS2, Xbox, Modern, Mobile |
+| `normalMapIntensity` | float | `1.0f` | - | main.cpp:6335; mode-owned: Modern |
+| `normalMapPlayerOnly` | bool (RwBool) | `1` | - | main.cpp:6336 |
+| `sunGlare` | bool (RwBool) | `c->doglare (field default)` | min 0 | main.cpp:6338; mode-owned (6 profiles) |
+| `ps2ModulateGrass` | bool (RwBool) | `config->ps2ModulateGlobal (field default)` | - | main.cpp:6344; mode-owned (6 profiles) |
+| `dualPassGrass` | bool (RwBool) | `config->dualPassGlobal (field default)` | - | main.cpp:6345; mode-owned (6 profiles) |
+| `grassAddAmbient` | bool (RwBool) | `0` | - | main.cpp:6346; mode-owned: PS2, Xbox |
+| `grassFixPlacement` | bool (RwBool) | `0` | - | main.cpp:6348; mode-owned: PS2, Xbox |
+| `grassBackfaceCull` | bool (RwBool) | `1` | - | main.cpp:6349; mode-owned: PS2, Xbox, Mobile |
+| `dualPassDefault` | bool (RwBool) | `config->dualPassGlobal (field default)` | - | main.cpp:6358; mode-owned (6 profiles) |
+| `dualPassPed` | bool (RwBool) | `config->dualPassGlobal (field default)` | - | main.cpp:6359; mode-owned (6 profiles) |
+| `disableClouds` | int | `0` | - | main.cpp:6385; global, not a Config field |
+| `cloudRenderFix` | int | `1` | - | main.cpp:6389; global, not a Config field |
+| `disableGamma` | int | `0` | - | main.cpp:6390; global, not a Config field |
+| `transparentLockon` | int | `0` | - | main.cpp:6391; global, not a Config field |
+| `fixShadows` | int | `0` | - | main.cpp:6392; global, not a Config field |
+| `lightningIlluminatesWorld` | int | `0` | - | main.cpp:6393 |
+| `colorFilter` | int | `PC (map default); PBR forces Modern` | - | main.cpp:6412; map colorFilterMap; keyword map; PBR forces Modern; mode-owned (6 profiles) |
+| `rgb1Mult` | float | `c->rgb1Mult (field default)` | - | main.cpp:6429; mode-owned: PS2, Xbox |
+| `rgb2Mult` | float | `c->rgb2Mult (field default)` | - | main.cpp:6430; mode-owned: PS2, Xbox |
+| `infraredVision` | int | `1 (map default)` | - | main.cpp:6431; map ps2pcMap; mode-owned (6 profiles) |
+| `nightVision` | int | `1 (map default)` | - | main.cpp:6432; map ps2pcMap; mode-owned (6 profiles) |
+| `grainFilter` | int | `1 (map default)` | - | main.cpp:6433; map ps2pcMap; mode-owned (6 profiles) |
+| `usePCTimecyc` | bool (RwBool) | `0` | - | main.cpp:6434; mode-owned (5 profiles) |
+| `blurLeft` | int | `4000` | - | main.cpp:6436; 4000 = use defaultColourLeftUOffset |
+| `blurTop` | int | `4000` | - | main.cpp:6438; 4000 = use defaultColourTopVOffset |
+| `blurRight` | int | `4000` | - | main.cpp:6440; 4000 = use defaultColourRightUOffset |
+| `blurBottom` | int | `4000` | - | main.cpp:6442; 4000 = use defaultColourBottomVOffset |
+| `doRadiosity` | bool (RwBool) | `4000` | - | main.cpp:6445; 4000 = use original_bRadiosity; mode-owned (6 profiles) |
+| `radiosity` | int | `1 (map default)` | - | main.cpp:6453; map ps2shdrMap; mode-owned (6 profiles) |
+| `vcsTrails` | bool (RwBool) | `0` | - | main.cpp:6455; mode-owned (6 profiles) |
+| `trailsLimit` | int | `80` | - | main.cpp:6456 |
+| `trailsIntensity` | int | `38` | - | main.cpp:6457 |
+| `trailsResolution` | int | `1` | - | main.cpp:6458 |
+| `radiosityFilterPasses` | int | `2` | - | main.cpp:6460 |
+| `radiosityRenderPasses` | int | `1` | - | main.cpp:6461 |
+| `radiosityIntensity` | int | `0x23` | - | main.cpp:6462 |
+| `neoWaterDrops` | bool (RwBool) | `c->neoWaterDrops (field default)` | min 0 | main.cpp:6464; mode-owned (6 profiles) |
+| `neoBloodDrops` | bool (RwBool) | `0` | - | main.cpp:6469 |
+| `fixPcCarLight` | int | `0` | - | main.cpp:6470; global, not a Config field |
+| `explicitBuildingPipe` | int | `-1` | - | main.cpp:6471; global, not a Config field |
+| `zwriteThreshold` | int | `128` | [0, 255] | main.cpp:6475; mode-owned: PS2, Xbox, Mobile |
+| `zwriteThresholdGrass` | int | `128` | [0, 255] | main.cpp:6479; mode-owned: PS2, Xbox, Mobile |
+| `zwriteThresholdPed` | int | `128` | [0, 255] | main.cpp:6483; mode-owned: PS2, Xbox, Mobile |
+| `coronaZtest` | int | `-1` | [-1, 1] | main.cpp:6487; mode-owned (5 profiles) |
+| `YCbCrCorrection` | bool | `0` | - | main.cpp:6499; mode-owned: PS2, Xbox |
+| `lumaScale` | float | `219.0f/255.0f` | - | main.cpp:6500 |
+| `lumaOffset` | float | `16.0f/255.0f` | - | main.cpp:6501 |
+| `CbScale` | float | `1.23f` | - | main.cpp:6502 |
+| `CbOffset` | float | `0.0f` | - | main.cpp:6503 |
+| `CrScale` | float | `1.23f` | - | main.cpp:6504 |
+| `CrOffset` | float | `0.0f` | - | main.cpp:6505 |
+| `ssaoEnable` | bool (RwBool) | `c->ssaoEnable (field default)` | - | main.cpp:6508; mode-owned (6 profiles) |
+| `ssaoRadius` | float | `c->ssaoRadius (field default)` | - | main.cpp:6509; mode-owned: GTA IV, Modern |
+| `ssaoPower` | float | `c->ssaoPower (field default)` | helper clampSsaoPower(): [0.5, 4.0]; helper clampSsaoPower(): [0.5, 4.0] | main.cpp:6510; mode-owned: GTA IV, Modern |
+| `ssaoKernelSize` | float | `c->ssaoKernelSize (field default)` | - | main.cpp:6511; mode-owned: Modern |
+| `ssaoSampleCount` | int | `c->ssaoSampleCount (field default)` | - | main.cpp:6512; mode-owned: Modern |
+| `smaaEnable` | bool (RwBool) | `c->smaaEnable (field default)` | - | main.cpp:6517; mode-owned (6 profiles) |
+| `motionBlurEnable` | bool (RwBool) | `c->motionBlurEnable (field default)` | - | main.cpp:6520; mode-owned (6 profiles) |
+| `motionBlurStrength` | float | `c->motionBlurStrength (field default)` | - | main.cpp:6521; mode-owned: GTA IV, Modern |
+| `motionBlurRadial` | float | `c->motionBlurRadial (field default)` | - | main.cpp:6522; mode-owned: Modern |
+| `motionBlurSpeedFactor` | float | `c->motionBlurSpeedFactor (field default)` | - | main.cpp:6523; mode-owned: Modern |
+| `motionBlurCameraAware` | bool (RwBool) | `c->motionBlurCameraAware (field default)` | - | main.cpp:6524; mode-owned: Modern |
+| `velocityBufferEnable` | bool (RwBool) | `1` | - | main.cpp:6527; mode-owned: GTA IV, Modern |
+| `depthHookEnable` | bool (RwBool) | `1` | - | main.cpp:6530; mode-owned: PS2, Xbox, Modern, Mobile |
+| `normalBufferEnable` | bool (RwBool) | `1` | - | main.cpp:6533; mode-owned (5 profiles) |
+| `normalBufferOffset` | float | `0.5f` | - | main.cpp:6534 |
+| `normalBufferScale` | float | `1.0f` | - | main.cpp:6535 |
+| `pipeChainEnable` | bool (RwBool) | `0` | - | main.cpp:6538; mode-owned: PS2, Xbox, Modern, Mobile |
+| `pipeChainIntensity` | float | `0.3f` | - | main.cpp:6539 |
+| `pipeChainReflEnable` | int | `0` | [0, 1] | main.cpp:6540 |
+| `texAlphaClassify` | int | `1` | [0, 1] | main.cpp:6555; mode-owned (6 profiles) |
+| `stateBaselineEnable` | int | `1` | [0, 1] | main.cpp:6558; mode-owned (6 profiles) |
+| `spriteStateShield` | int | `1` | [0, 1] | main.cpp:6561 |
+| `shadowContractEnable` | int | `0` | [0, 1] | main.cpp:6569 |
+| `defaultCbShaderHygiene` | int | `1` | [0, 1] | main.cpp:6572; mode-owned (6 profiles) |
+| `pedOpaqueContract` | int | `1` | [0, 1] | main.cpp:6577; mode-owned (6 profiles) |
+| `pedCullMode` | int | `-1` | - | main.cpp:6583 |
+| `pedAlphaTestEnable` | int | `1` | [0, 1] | main.cpp:6587 |
+| `ambientFloor` | float | `0.03f` | [0.0, 0.2] | main.cpp:6593 |
+| `colorFilterEnable` | bool (RwBool) | `1` | - | main.cpp:6600; records user intent; PBR forces 1; mode-owned: PS2, Xbox |
+| `radiosityEnable` | bool (RwBool) | `1` | - | main.cpp:6615 |
+| `grainEnable` | bool (RwBool) | `1` | - | main.cpp:6616; mode-owned: GTA IV, Modern |
+| `postfxDumpDebug` | bool (RwBool) | `0` | - | main.cpp:6617 |
+| `ivMode` | bool (RwBool) | `(c->pipeline == PIPELINE_GTAIV` | - | main.cpp:6623; mode-owned (6 profiles) |
+| `ivDesaturation` | float | `c->ivDesaturation (field default)` | - | main.cpp:6625; mode-owned (6 profiles) |
+| `ivGamma` | float | `c->ivGamma (field default)` | - | main.cpp:6626; mode-owned (6 profiles) |
+| `ivSaturation` | float | `c->ivSaturation (field default)` | - | main.cpp:6627; mode-owned: GTA IV, Modern |
+| `ivCurves` | float | `c->ivCurves (field default)` | - | main.cpp:6628; mode-owned: GTA IV, Modern |
+| `ivVignetteIntensity` | float | `c->ivVignetteIntensity (field default)` | - | main.cpp:6629; mode-owned (6 profiles) |
+| `ivVignetteRadius` | float | `c->ivVignetteRadius (field default)` | - | main.cpp:6630; mode-owned: Modern |
+| `ivVignetteContrast` | float | `c->ivVignetteContrast (field default)` | - | main.cpp:6631; mode-owned: Modern |
+| `ivBloomIntensity` | float | `c->ivBloomIntensity (field default)` | - | main.cpp:6632; mode-owned (6 profiles) |
+| `ivExposure` | float | `c->ivExposure (field default)` | - | main.cpp:6633; mode-owned: GTA IV, Modern |
+| `privateHooks` | int | `0` | - | main.cpp:6635; global, not a Config field |
+| `forceWindShader` | bool | `0` | - | main.cpp:6636; global flag; only ==1 enables; global, not a Config field |
+| `ragdollEnable` | bool (RwBool) | `1` | - | main.cpp:6639 |
+| `pbrAmbientFloor` | float | `0.0f` | [0.0, 1.0] | main.cpp:6643 |
+| `pedAmbientFloor` | float | `0.20f` | [0.0, 1.0] | main.cpp:6652 |
+| `ambientMult` | float | `1.0f` | [0.0, 2.0] | main.cpp:6657 |
+| `pbrIblAmbientWeight` | float | `0.5f` | - | main.cpp:6660; mode-owned: Modern |
+| `tonemapBlackLift` | float | `0.0f` | - | main.cpp:6661 |
+| `vehPrelightFallback` | float | `0.15f` | [0.0, 1.0] | main.cpp:6665 |
+| `vehEnvFallback` | bool (RwBool) | `1` | - | main.cpp:6672 |
+| `vehEnvStrengthMode` | bool (RwBool) | `1` | - | main.cpp:6673 |
+| `vehEnvMask` | bool (RwBool) | `1` | - | main.cpp:6674 |
+| `vehWetEnv` | bool (RwBool) | `1` | - | main.cpp:6675 |
+| `vehEnvGlint` | float | `0.0f` | [0.0, 1.0] | main.cpp:6676; mode-owned: Modern |
+| `heightFogEnable` | bool (RwBool) | `c->heightFogEnable (field default)` | - | main.cpp:6682; mode-owned: GTA IV, Modern |
+| `heightFogDensity` | float | `c->heightFogDensity (field default)` | - | main.cpp:6683 |
+| `heightFogHeightFalloff` | float | `c->heightFogHeightFalloff (field default)` | - | main.cpp:6684 |
+| `heightFogStartHeight` | float | `c->heightFogStartHeight (field default)` | - | main.cpp:6685 |
+| `heightFogR` | float | `c->heightFogR (field default)` | - | main.cpp:6686 |
+| `heightFogG` | float | `c->heightFogG (field default)` | - | main.cpp:6687 |
+| `heightFogB` | float | `c->heightFogB (field default)` | - | main.cpp:6688 |
+| `heightFogTimecycleScale` | float | `c->heightFogTimecycleScale (field default)` | - | main.cpp:6689 |
+| `godRaysEnable` | bool (RwBool) | `c->godRaysEnable (field default)` | - | main.cpp:6692; mode-owned: GTA IV |
+| `godRaysExposure` | float | `c->godRaysExposure (field default)` | - | main.cpp:6693 |
+| `godRaysDecay` | float | `c->godRaysDecay (field default)` | - | main.cpp:6694 |
+| `godRaysDensity` | float | `c->godRaysDensity (field default)` | - | main.cpp:6695 |
+| `godRaysWeight` | float | `c->godRaysWeight (field default)` | - | main.cpp:6696 |
+| `godRaysNumSamples` | int | `c->godRaysNumSamples (field default)` | - | main.cpp:6697 |
+| `ssaoTemporalEnable` | bool (RwBool) | `1` | - | main.cpp:6704 |
+| `ssaoTemporalBlend` | float | `0.1f` | - | main.cpp:6705 |
+| `ssaoBlurPasses` | int | `2` | - | main.cpp:6706 |
+| `ssaoBlurRadius` | float | `3.0f` | - | main.cpp:6707 |
+| `ssaoDepthThreshold` | float | `0.01f` | - | main.cpp:6708 |
+| `sssPostProcessStrength` | float | `c->sssPostProcessStrength (field default)` | - | main.cpp:6711; mode-owned: Modern |
+| `sssPostProcessRadius` | float | `c->sssPostProcessRadius (field default)` | - | main.cpp:6712; mode-owned: Modern |
+| `sssPostProcessThreshold` | float | `c->sssPostProcessThreshold (field default)` | - | main.cpp:6713 |
+| `sssAmbientBoost` | float | `1.0f` | - | main.cpp:6717 |
+| `skinWrapFactor` | float | `c->skinWrapFactor (field default)` | - | main.cpp:6720; mode-owned: Modern |
+| `skinSpecularPower` | float | `c->skinSpecularPower (field default)` | - | main.cpp:6721; mode-owned: Modern |
+| `skinSpecularStrength` | float | `c->skinSpecularStrength (field default)` | - | main.cpp:6722; mode-owned: Modern |
+| `skinSSSStrength` | float | `c->skinSSSStrength (field default)` | - | main.cpp:6723; mode-owned: Modern |
+| `hairAnisotropicPower` | float | `c->hairAnisotropicPower (field default)` | - | main.cpp:6726; mode-owned: Modern |
+| `hairAnisotropicStrength` | float | `c->hairAnisotropicStrength (field default)` | - | main.cpp:6727; mode-owned: Modern |
+| `hairSSSStrength` | float | `c->hairSSSStrength (field default)` | - | main.cpp:6728; mode-owned: Modern |
+| `vegetationSSSStrength` | float | `c->vegetationSSSStrength (field default)` | - | main.cpp:6731; mode-owned: Modern |
+| `vegetationAmbientBoost` | float | `c->vegetationAmbientBoost (field default)` | - | main.cpp:6732; mode-owned: Modern |
+| `sssPostProcessEnable` | bool (RwBool) | `c->sssPostProcessEnable (field default)` | - | main.cpp:6736; mode-owned (5 profiles) |
+| `skinEnhanceEnable` | bool (RwBool) | `c->skinEnhanceEnable (field default)` | - | main.cpp:6737; mode-owned (5 profiles) |
+| `hairEnhanceEnable` | bool (RwBool) | `c->hairEnhanceEnable (field default)` | - | main.cpp:6738; mode-owned (5 profiles) |
+| `vegetationEnhanceEnable` | bool (RwBool) | `c->vegetationEnhanceEnable (field default)` | - | main.cpp:6739; mode-owned (5 profiles) |
+| `sssEnable` | bool (RwBool) | `1` | - | main.cpp:6745 |
+| `sssIntensity` | float | `c->sssIntensity (field default)` | - | main.cpp:6746 |
+| `sssVegIntensity` | float | `c->sssVegIntensity (field default)` | - | main.cpp:6747 |
+| `sssSkinIntensity` | float | `c->sssSkinIntensity (field default)` | - | main.cpp:6748 |
+| `sssClothIntensity` | float | `c->sssClothIntensity (field default)` | - | main.cpp:6749 |
+| `gamePreset` | int | `PRESET_CUSTOM` | - | main.cpp:6752; mode-owned (5 profiles) |
+| `forwardPlusEnable` | bool (RwBool) | `1` | - | main.cpp:6755; mode-owned (5 profiles) |
+| `forwardPlusDebug` | bool (RwBool) | `0` | - | main.cpp:6756 |
+| `sunCoronaIntensity` | float | `0.4f` | - | main.cpp:6759; mode-owned: PS2, Xbox, Mobile |
+| `sunCoreIntensity` | float | `0.6f` | - | main.cpp:6760; mode-owned: PS2, Xbox, Mobile |
+| `sunStreakIntensity` | float | `0.5f` | - | main.cpp:6761; mode-owned: PS2, Xbox, Mobile |
+| `sunStreakSize` | float | `0.6f` | - | main.cpp:6762; mode-owned: PS2, Xbox, Mobile |
+| `altTimecycEnable` | int | `0` | - | main.cpp:6765 |
+| `waterParallaxEnable` | bool (RwBool) | `1` | - | main.cpp:6778; mode-owned (7 profiles) |
+| `waterParallaxScale` | float | `1.0f` | - | main.cpp:6779 |
+| `waterNormalStrength` | float | `1.0f` | - | main.cpp:6780 |
+| `waterFresnelPower` | float | `5.0f` | - | main.cpp:6781 |
+| `waterSpecularPower` | float | `512.0f` | - | main.cpp:6782 |
+| `waterSpecularIntensity` | float | `1.0f` | - | main.cpp:6783 |
+| `waterUnderwaterFog` | float | `1.0f` | - | main.cpp:6784 |
+| `waterFoamThreshold` | float | `0.6f` | - | main.cpp:6785 |
+| `waterFoamSoftness` | float | `0.2f` | - | main.cpp:6786 |
+| `waterShoreFoam` | bool (RwBool) | `1` | 0\|1 | main.cpp:6789 |
+| `waterBodyClassify` | bool (RwBool) | `1` | 0\|1 | main.cpp:6790 |
+| `waterShallowR` | float | `0.13f` | - | main.cpp:6793 |
+| `waterShallowG` | float | `0.45f` | - | main.cpp:6794 |
+| `waterShallowB` | float | `0.55f` | - | main.cpp:6795 |
+| `waterDeepR` | float | `0.01f` | - | main.cpp:6796 |
+| `waterDeepG` | float | `0.03f` | - | main.cpp:6797 |
+| `waterDeepB` | float | `0.08f` | - | main.cpp:6798 |
+| `waterTileScale` | float | `1.0f` | - | main.cpp:6802 |
+| `waterShoreFade` | float | `2.0f` | - | main.cpp:6803 |
+| `waterTranslucency` | float | `1.0f` | - | main.cpp:6804 |
+| `waterReflectionStrength` | float | `0.55f` | - | main.cpp:6805 |
+| `waterUseTimecycle` | int | `1` | - | main.cpp:6806 |
+| `treeFx` | int | `0` | [0, 3] | main.cpp:6810; mode-owned: PS2, Xbox, Modern, Mobile |
+| `treeWind` | bool (RwBool) | `0` | 0\|1 | main.cpp:6821; mode-owned: PS2, Xbox, Modern, Mobile |
+| `grassInstancing` | bool (RwBool) | `0` | 0\|1 | main.cpp:6826; mode-owned: PS2, Xbox, Modern, Mobile |
+| `profilerEnable` | int | `1` | 0\|1 | main.cpp:6835; mode-owned: PS2, Xbox, Modern, Mobile |
+| `profilerGpuTimers` | int | `0` | 0\|1 | main.cpp:6836 |
+| `waterStyle` | int | `0 (map default)` | - | main.cpp:6853; map waterStyleMap; mode-owned (6 profiles) |
+| `waterQuality` | int | `3` | [0, 3] | main.cpp:6854; mode-owned (7 profiles) |
+| `waterFresnelSplit` | int | `1` | - | main.cpp:6861; global, not a Config field |
+| `dofEnable` | int | `0` | - | main.cpp:6868; mode-owned (5 profiles) |
+| `dofFocusDistance` | float | `20.0f` | min 0.0 | main.cpp:6869; mode-owned: GTA IV |
+| `dofFocusRange` | float | `15.0f` | min 0.0 | main.cpp:6871; mode-owned: GTA IV |
+| `dofBokehRadius` | float | `4.0f` | min 0.0 | main.cpp:6873; mode-owned: GTA IV |
+| `dofMaxBlur` | float | `0.5f` | [0.0, 1.0] | main.cpp:6875; mode-owned: GTA IV |
+| `tonemapOperator` | int | `0` | [0, 5] | main.cpp:6878; mode-owned: GTA IV |
+| `bloomEnable` | int | `0` | - | main.cpp:6881; mode-owned (5 profiles) |
+| `bloomQuality` | int | `2` | [0, 3] | main.cpp:6882; mode-owned: GTA IV |
+| `bloomThreshold` | float | `1.0f` | min 0.0 | main.cpp:6885; mode-owned: GTA IV |
+| `bloomIntensity` | float | `0.8f` | min 0.0 | main.cpp:6887; mode-owned: GTA IV |
+| `sunShaftsEnable` | int | `0` | - | main.cpp:6889; mode-owned (5 profiles) |
+| `sunShaftsDensity` | float | `0.84f` | [0.0, 1.0] | main.cpp:6890; mode-owned: GTA IV |
+| `sunShaftsDecay` | float | `1.0f` | [0.0, 1.0] | main.cpp:6893; mode-owned: GTA IV |
+| `fxaaEnable` | int | `0` | - | main.cpp:6896; mode-owned (5 profiles) |
+| `grainIntensity` | float | `0.0f` | [0.0, 1.0] | main.cpp:6897; mode-owned: PS2, Xbox, GTA IV |
+| `caIntensity` | float | `0.0f` | [0.0, 1.0] | main.cpp:6900; mode-owned: PS2, Xbox, GTA IV, Modern |
+| `vignetteIntensity` | float | `0.0f` | [0.0, 1.0] | main.cpp:6905; mode-owned: GTA IV, Modern |
+| `pedShadows` | int | `-1` | [-1, 1] | main.cpp:6383; via parseShadowToggle (bool keywords + numeric); clamped [-1, 1]; mode-owned: PS2, Xbox, Legacy PC, Mobile |
+| `stencilShadows` | int | `-1` | [-1, 1] | main.cpp:6384; via parseShadowToggle (bool keywords + numeric); clamped [-1, 1]; mode-owned: PS2, Xbox, Legacy PC, Mobile |
 | `forwardPlusFallback` | int | `UNRESOLVED (reader default not parsed)` | - | forwardplus.cpp:257; read via GetPrivateProfile*; global, not a Config field |
 | `enableNormalMaps` | string | `UNRESOLVED (reader default not parsed)` | - | normalmap.cpp:304; read via GetPrivateProfile*; global, not a Config field |
 
@@ -300,7 +304,7 @@ These sites were found in `readIniFile()` but were deliberately **not** turned i
 
 | Section | Key / site | Line | Why unresolved |
 |---|---|---|---|
-| `[SkyGfx]` | `ps2grassFiles` | `main.cpp:5719` | read site is commented out in the current tree |
+| `[SkyGfx]` | `ps2grassFiles` | `main.cpp:6347` | read site is commented out in the current tree |
 
 ## Legacy aliases
 

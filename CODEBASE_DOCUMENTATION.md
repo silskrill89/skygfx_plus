@@ -1,5 +1,22 @@
 # SkyGfx Plus expIV - Complete Codebase Documentation
 
+> [!warning] SUPERSEDED — historical record, do not use for current facts
+> **Status (2026-10-31):** this document describes the OLD project shape and is kept only as a
+> historical snapshot. It is superseded by:
+> - **docs/FEATURE_LIST.md** — single authoritative feature/status list (source of truth)
+> - **AGENTS.md** — current layout, build commands, shader pipeline
+> - **docs/plans/2026-10-31-source-inventory.md** — current file/LOC/dead-code inventory
+>
+> What has changed since this was written:
+> - Source tree is no longer flat `src/*.cpp` — now `src/core| render| entities| peds| extras| rw`
+>   (86 files, ~84.6k LOC; main.cpp alone is no longer the 2,266-line file described here)
+> - Build is `python tools/fast_build.py` (incremental; MSBuild/fxc under the hood), NOT
+>   `build\build.bat`; shader sources live under `shaders/ps|vs|include` by platform folders
+> - Output is `build\Release\skygfx.dll` → deployed as `skygfx.asi` (~2.5 MB at
+>   `E:\games\gtasa_skygfx_plus\skygfx.asi`), not the old 421 KB bin\Release DLL
+> - Key path claims below (e.g. "src/main.cpp 2266 lines", "build\build.bat", "bin\Release
+>   skygfx.dll 421,376 bytes") are stale — treat everything below accordingly.
+
 > [!info] Migrated
 > This document has been refactored into the Obsidian vault.
 > Start at [[00 - Index]] for the current documentation.

@@ -6,7 +6,12 @@
 // while simultaneously bound as the depth-stencil, eliminating all
 // StretchRect depth copies that DXVK blocks.
 //
-// INI kill-switch: [SkyGFX] depthHookEnable=0 (default 1)
+// INI kill-switch: [SkyGFX] depthHookEnable=0 (default 1) — gates ONLY the
+// depth-surface hooking (SetDepthStencilSurface + INTZ substitution). The
+// Reset hook is ALWAYS installed: it owns the pre-Reset D3DPOOL_DEFAULT
+// release sequence and the post-Reset recreate sequence, without which the
+// loading->gameplay Reset fails D3DERR_INVALIDCALL and RW's restore path
+// crashes at 0x7F9A3C (startup device-Reset crash fix, 2026-10-31).
 //
 // If INTZ is unsupported by the GPU, the hook logs once and passes
 // through — SSAO/velocity/fog consumers bail on NULL g_intzTex.
@@ -14,6 +19,7 @@
 #include "depthhook.h"
 #include "skygfx.h"
 #include "../rw/gta.h" // for d3d9device, Scene
+#include "noise.h"     // SkyNoise::ReleaseDeviceObjects / OnDeviceReset
 
 // ============================================================
 // INTZ resources
@@ -135,16 +141,16 @@ static bool DpGetTrustedScreenSize(int *w, int *h)
 // depth-stencil at the same time — the next draw is a feedback loop and is
 // rejected/undefined (draw dropped or coloured garbage).
 //
-// Six postfx passes bind g_ssaoDepthTex (which IS g_intzTex) on a sampler and
-// hand control back to DepthHook_Restore without unbinding it:
-//   postfx.cpp CopyDepthToPrev (s0), DrawNormalBufferToTexture (s0),
-//   DrawPipeChain (s2), DrawSMAA_EdgeDetect (s2), DrawVelocityBuffer (s0),
-//   DrawMotionBlur (s2)
-// (DrawSSAO / DrawSSAO_Overhaul / DrawHeightFog do unbind first.) If INTZ then
-// becomes the device DS — either from hook_SetDS's substitution on the next
-// screen SetDepthStencilSurface or from Restore's INTZ fallback paths — any
-// stage still holding it turns the following draws into a feedback loop.
-// Scrub every stage that still references g_intzTex before binding it as DS.
+// The six postfx passes that bind g_ssaoDepthTex (which IS g_intzTex) on a
+// sampler — postfx.cpp CopyDepthToPrev (s0), DrawNormalBufferToTexture (s0),
+// DrawPipeChain (s2), DrawSMAA_EdgeDetect (s2), DrawVelocityBuffer (s0),
+// DrawMotionBlur (s2) — now unbind it themselves before handing control
+// back to DepthHook_Restore. DpUnbindIntzFromSamplers below is therefore a
+// SAFETY NET, not the primary mechanism: it catches any missed or future
+// path that still holds INTZ when it becomes the device DS — either from
+// hook_SetDS's substitution on the next screen SetDepthStencilSurface or
+// from Restore's INTZ fallback paths — where any stage still holding it
+// turns the following draws into a feedback loop.
 static void DpUnbindIntzFromSamplers(IDirect3DDevice9 *dev)
 {
 	if(!dev || !g_intzTex) return;
@@ -321,6 +327,16 @@ static HRESULT STDMETHODCALLTYPE hook_SetDS(IDirect3DDevice9 *dev, IDirect3DSurf
 // Forward declaration of postfx's pool resource release
 extern void ReleaseDefaultPoolResources(void);
 extern void OnDeviceReset(void);
+// pipelinecommon.cpp — drops the CreateShaders one-shot guard + forces the
+// next CreateShaders pass to recreate every handle (device Reset dead-handles
+// them). No skygfx.h edit: same function-local extern idiom used above.
+extern void Pipeline_InvalidateShaders(void);
+// debugmenu_theme.cpp — ImGui's DX9 vertex/index buffers and font atlas
+// live in D3DPOOL_DEFAULT. Invalidate them before Reset and rebuild after;
+// both are no-ops until the menu backend has initialised. Same
+// function-local extern idiom: no skygfx.h edit.
+extern void UI_ImGuiInvalidateDeviceObjects(void);
+extern void UI_ImGuiCreateDeviceObjects(void);
 
 static HRESULT STDMETHODCALLTYPE hook_Reset(IDirect3DDevice9 *dev, D3DPRESENT_PARAMETERS *pParams) {
 	// Release ALL D3DPOOL_DEFAULT resources BEFORE calling original Reset
@@ -337,7 +353,35 @@ static HRESULT STDMETHODCALLTYPE hook_Reset(IDirect3DDevice9 *dev, D3DPRESENT_PA
 	// Clear suspend state so Suspend/Restore doesn't desync after Reset
 	g_depthSuspended = false;
 
+	// ImGui's DX9 buffers and font atlas are D3DPOOL_DEFAULT as well: release
+	// them while the device is still valid, before the real Reset.
+	UI_ImGuiInvalidateDeviceObjects();
+
+	// Universal noise tile (SkyNoise) is D3DPOOL_DEFAULT too: drop it in the
+	// pre-Reset/invalidate region so the Reset cannot be failed by a leaked
+	// DEFAULT-pool texture. OnDeviceReset below clears its stats.
+	SkyNoise::ReleaseDeviceObjects();
+
+	// Water pipe RTs (scene colour / R32F depth / reflection) are
+	// D3DPOOL_DEFAULT and are created lazily at tier>=2: a leaked DEFAULT
+	// resource makes Reset fail with D3DERR_INVALIDCALL, after which RW's
+	// restore path derefs a NULL surface (0xC0000005 at 0x7F9A3C). Release
+	// them here, while the device is still valid; they recreate lazily.
+	extern void WaterPipe_ReleaseDeviceObjects(void);
+	WaterPipe_ReleaseDeviceObjects();
+
 	HRESULT hr = orig_Reset(dev, pParams);
+
+	// Diagnostic: the vanilla RW restore path (D3D9DeviceRestoreVideoMemory)
+	// runs UNCONDITIONALLY after this Reset — retail DXCHECK compiles out, so
+	// a failed Reset leaves the device lost, GetRenderTarget(0,
+	// &_RwD3D9RenderSurface) fails without writing the out-param, and RW's
+	// unchecked IDirect3DSurface9_Release(_RwD3D9RenderSurface) derefs NULL
+	// (0xC0000005 READ at 0x7F9A3C). Log the failure so a future crash here
+	// is immediately attributable to a Reset failure (typically a leaked
+	// D3DPOOL_DEFAULT resource).
+	if(FAILED(hr))
+		dbglog("DepthHook: orig_Reset FAILED hr=0x%08X - RW restore path will run on a lost device", hr);
 
 	// After Reset the device's ZENABLE is the D3D9 default (TRUE with the
 	// autodepthstencil), but if a suspend window was open when Reset hit, the
@@ -347,6 +391,81 @@ static HRESULT STDMETHODCALLTYPE hook_Reset(IDirect3DDevice9 *dev, D3DPRESENT_PA
 	// test). Re-seed all three layers to the post-Reset default so they agree
 	// with the device.
 	if(SUCCEEDED(hr)) {
+		// Device Reset dead-handles every shader handle CreateShaders cached
+		// and clears the device's shader bindings, while RW's value-compare
+		// caches still name the old handles. Invalidate the one-shot guard and
+		// rebuild immediately: a dead VS bind fails silently, leaving the
+		// previous VS bound (wrong constant layout -> giant/exploded geometry)
+		// and fixed-function draws black.
+		Pipeline_InvalidateShaders();
+		CreateShaders();
+
+		// Lazy shader-latch resetters: those TUs create their shader handles
+		// lazily on first use and cache them behind TU-local latches, which
+		// CreateShaders/Pipeline_InvalidateShaders do NOT cover. Each resetter
+		// clears its latch and nulls its cached device handle so the next use
+		// re-creates it against the new device generation, failing open to
+		// the existing fallback when a reload fails. Function-local externs:
+		// no skygfx.h edit — same idiom as Pipeline_InvalidateShaders above.
+		extern void FxResetShaderLatches(void);        // postfx_newfx.cpp (lane L10 provides)
+		extern void UWResetShaderLatches(void);        // postfx_underwater.cpp (L10)
+		extern void GrassResetShaderLatches(void);     // grasssys.cpp (L11)
+		extern void BuildingResetShaderLatches(void);  // buildingPipe.cpp (L11)
+		extern void MirrorResetShaderLatches(void);    // mirrorPass.cpp — ALREADY DEFINED at mirrorPass.cpp:576
+		FxResetShaderLatches();
+		UWResetShaderLatches();
+		GrassResetShaderLatches();
+		BuildingResetShaderLatches();
+		MirrorResetShaderLatches();
+
+		// Canonical frame-boundary state for the new device generation
+		// (L1 rw cache + L2 RW driver cache + flush + raw L3). Function-local
+		// extern: no skygfx.h edit — same idiom as Pipeline_InvalidateShaders
+		// above.
+		// stateBaselineEnable gate — SAME rule as the four frame-boundary
+		// call sites (main.cpp SceneStart/EffectsExit x3): =0 must skip EVERY
+		// baseline call including this one, or the suspect-2 A/B test is not
+		// isolating (known gap, fixed 2026-10-30). The ZENABLE re-seed below
+		// is deliberately OUTSIDE the gate: it pairs DepthHook_Suspend's raw
+		// write and is a hook-lifecycle invariant, not the world baseline.
+		extern void pipeApplyWorldBaseline(const char *tag);
+		if(!config || config->stateBaselineEnable)
+			pipeApplyWorldBaseline("DeviceReset");
+
+		// main.cpp (other lane) — close the corona window so no sprite state
+		// from the pre-Reset device is reused against the new one.
+		extern void CoronaWindow_Close(void);
+		CoronaWindow_Close();
+
+		// Texture-alpha classifier: drop its per-texture cache so the next
+		// frame re-classifies against the new device generation.
+		extern void TexAlpha_OnDeviceReset(void);
+		TexAlpha_OnDeviceReset();
+
+		// Universal noise tile: stats cleared, CPU tile kept. The texture is
+		// recreated lazily by the next pipeBindNoise()/BindAndUpload() from the
+		// cached CPU bytes (no rebake). ReleaseDeviceObjects already ran in the
+		// pre-Reset region above; this is the post-Reset bookkeeping half.
+		SkyNoise::OnDeviceReset();
+
+		// IVGrade's pixel shader is created with a raw dev->CreatePixelShader and
+		// is NOT covered by CreateShaders/Pipeline_InvalidateShaders. Invalidate
+		// it POST-Reset only (pre-Reset would orphan a live device object); the
+		// next DrawIVGrade recreates it against the new device generation.
+		extern void PostFX_IVGradeInvalidateShader(void);
+		PostFX_IVGradeInvalidateShader();
+
+		// Rebuild ImGui's device objects for the new device generation and
+		// re-apply the theme style. No-op if the menu never initialised.
+		UI_ImGuiCreateDeviceObjects();
+
+		// The device has NO shader bound after Reset, while RW's value-compare
+		// caches still name the old (dead) handles: seed both bookkeeping
+		// globals to none so the next RW set is a real cache transition instead
+		// of a cache-hit skip over a dead handle.
+		*(void**)0x8E2448 = NULL;	// _rwD3D9LastVertexShaderUsed
+		*(void**)0x8E244C = NULL;	// _rwD3D9LastPixelShaderUsed
+
 		RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
 		RwD3D9SetRenderState(D3DRS_ZENABLE, TRUE);
 		dev->SetRenderState(D3DRS_ZENABLE, TRUE);
@@ -364,11 +483,20 @@ void DepthHook_Install(IDirect3DDevice9 *dev) {
 	if(g_hookInstalled) return;
 	if(!dev) return;
 
-	// INI kill-switch
-	if(!config || !config->depthHookEnable) {
-		dbglog("DepthHook: disabled by config (depthHookEnable=%d)", config ? config->depthHookEnable : -1);
-		return;
-	}
+	// Startup device-Reset crash fix (0x7F9A3C): the Reset hook is LIFECYCLE,
+	// not a feature — it owns the pre-Reset D3DPOOL_DEFAULT release sequence
+	// (OnDeviceReset / game DS / ImGui / SkyNoise / water RTs) and the
+	// post-Reset recreate sequence (shaders, latches, baseline, corona,
+	// texalpha, noise, ImGui). Skipping it when depthHookEnable=0 leaves every
+	// DEFAULT-pool resource alive, the loading->gameplay Reset fails with
+	// D3DERR_INVALIDCALL, and RW's restore path derefs the NULL back buffer
+	// (0xC0000005 at 0x7F9A3C). So the Reset vtable hook is ALWAYS installed;
+	// depthHookEnable gates ONLY the depth-surface hooking (SetDS + INTZ
+	// substitution). With the depth hook off, every INTZ-dependent path
+	// (hook_SetDS / Suspend / Restore) no-ops on g_intzSurf == NULL.
+	bool depthHookOn = (config && config->depthHookEnable);
+	if(!depthHookOn)
+		dbglog("DepthHook: depth-surface hooking disabled by config (depthHookEnable=0) - Reset hook still installed");
 
 	dbglog("DepthHook: installing vtable hooks on device %p", dev);
 
@@ -382,15 +510,21 @@ void DepthHook_Install(IDirect3DDevice9 *dev) {
 	orig_Reset = (ResetType)vtable[16];
 	orig_SetDS = (SetDSType)vtable[39];
 
-	// Write hooks (D3D9 vtable is writable)
+	// Reset hook: ALWAYS (lifecycle owner of the pre/post-Reset sequences).
 	DWORD oldProtect = 0;
 	VirtualProtect(&vtable[16], sizeof(void*), PAGE_READWRITE, &oldProtect);
 	vtable[16] = (void*)hook_Reset;
 	VirtualProtect(&vtable[16], sizeof(void*), oldProtect, &oldProtect);
 
-	VirtualProtect(&vtable[39], sizeof(void*), PAGE_READWRITE, &oldProtect);
-	vtable[39] = (void*)hook_SetDS;
-	VirtualProtect(&vtable[39], sizeof(void*), oldProtect, &oldProtect);
+	// Depth-surface hook (SetDepthStencilSurface + INTZ substitution): gated
+	// on depthHookEnable. orig_SetDS stays the saved real vtable pointer, so
+	// the (unreachable-while-INTZ-less) Suspend/Restore helpers would still
+	// call the true function if they ever ran.
+	if(depthHookOn) {
+		VirtualProtect(&vtable[39], sizeof(void*), PAGE_READWRITE, &oldProtect);
+		vtable[39] = (void*)hook_SetDS;
+		VirtualProtect(&vtable[39], sizeof(void*), oldProtect, &oldProtect);
+	}
 
 	g_hookedDev = dev;
 	g_hookInstalled = true;
@@ -405,7 +539,9 @@ void DepthHook_Install(IDirect3DDevice9 *dev) {
 	// the camera raster at install time can be the transient swap raster
 	// (2048x1024), and an INTZ created at that size fails SetDS on every
 	// normal-resolution frame (D3D9 rejects a DS smaller than the RT).
-	{
+	// Depth-surface behaviour: only when the depth hook is enabled (the lazy
+	// recreate in hook_SetDS is likewise unreachable when it is not).
+	if(depthHookOn) {
 		int iw = 0, ih = 0;
 		if(!DpGetTrustedScreenSize(&iw, &ih)) {
 			RwRaster *camRas = Scene.camera ? RwCameraGetRaster(Scene.camera) : NULL;
@@ -414,7 +550,8 @@ void DepthHook_Install(IDirect3DDevice9 *dev) {
 		CreateINTZResources(dev, iw, ih);
 	}
 
-	dbglog("DepthHook: installed successfully (INTZ=%s)", g_intzSupported ? "yes" : "no");
+	dbglog("DepthHook: installed successfully (resetHook=always, depthHook=%s, INTZ=%s)",
+	       depthHookOn ? "on" : "off", g_intzSupported ? "yes" : "no");
 }
 
 void DepthHook_Suspend(void) {

@@ -9,6 +9,8 @@ import os
 TOOLS_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, TOOLS_DIR)
 
+from _toolutil import PROJECT_DIR, setup_console  # noqa: E402
+
 COMMANDS = {
     # Build
     "build": "Fast incremental build",
@@ -44,6 +46,8 @@ COMMANDS = {
     
     # System
     "status": "Overall system status",
+    "doctor": "Health check: env, SDKs, deploy, git, logs, INI",
+    "logs": "Scan skygfx_dbg.log for errors/MISMATCH/crash tags",
     "sync": "Full sync: ingest + xref + graph",
     "help": "Show this help",
 }
@@ -58,7 +62,7 @@ def show_help():
         "Knowledge": ["ingest", "xref", "graph", "gaps", "push"],
         "Memory": ["mem", "dream", "moon", "optimize", "procedure"],
         "Research": ["yt", "research"],
-        "System": ["status", "sync", "help"],
+        "System": ["status", "doctor", "logs", "sync", "help"],
     }
     
     for cat, cmds in categories.items():
@@ -68,18 +72,23 @@ def show_help():
     
     print(f"\nUsage: skytool <command> [args...]")
     print(f"  Example: skytool build --fast")
+    print(f"  Example: skytool doctor")
+    print(f"  Example: skytool logs --errors -n 20")
     print(f"  Example: skytool gaps --query 'SSR'")
     print(f"  Example: skytool yt --search 'PBR rendering'")
 
 def dispatch(cmd, args):
+    if cmd in ("doctor", "logs"):
+        from doctor import logs_main, main as doctor_main
+        return doctor_main(args) if cmd == "doctor" else logs_main(args)
+
     # Build commands
     if cmd in ("build", "rebuild", "shaders"):
         from fast_build import main
-        sys.argv = ["fast_build.py"] + (
-            ["--rebuild"] if cmd == "rebuild" else
-            ["--shaders"] if cmd == "shaders" else
-            ["--fastest"] + args
-        )
+        flags = (["--rebuild"] if cmd == "rebuild" else
+                 ["--shaders"] if cmd == "shaders" else
+                 ["--fastest"])
+        sys.argv = ["fast_build.py"] + flags + args
         return main()
     
     if cmd == "proto":
@@ -106,11 +115,8 @@ def dispatch(cmd, args):
     # Memory commands
     if cmd in ("mem", "moon", "optimize"):
         from memory import main
-        sys.argv = ["memory.py"] + (
-            ["compact"] if cmd == "mem" else
-            ["status"] if cmd == "moon" else
-            [cmd] + args
-        )
+        sub = {"mem": "compact", "moon": "lunar"}.get(cmd, cmd)
+        sys.argv = ["memory.py", sub] + args
         return main()
     
     if cmd == "dream":
@@ -161,7 +167,7 @@ def run_memory_procedure():
     from datetime import datetime
     import json
     
-    PROJECT = Path(os.environ.get("SKYGFX_PROJECT", "E:/dev(dave)/skygfx_plus_expIV"))
+    PROJECT = Path(os.environ.get("SKYGFX_PROJECT") or PROJECT_DIR)
     CACHE = PROJECT / "memory-bank/.cache"
     
     print("Memory Procedure — skygfx_plus_expIV")
@@ -217,9 +223,9 @@ def run_memory_procedure():
     # Step 4: Knowledge stats
     print("\n[4/10] Knowledge System")
     try:
-        xref = json.loads((CACHE / "cross-reference.json").read_text())
-        graph = json.loads((CACHE / "knowledge-graph.json").read_text())
-        ingest = json.loads((CACHE / "ingest-sync.json").read_text())
+        xref = json.loads((CACHE / "cross-reference.json").read_text(encoding="utf-8"))
+        graph = json.loads((CACHE / "knowledge-graph.json").read_text(encoding="utf-8"))
+        ingest = json.loads((CACHE / "ingest-sync.json").read_text(encoding="utf-8"))
         print(f"  Cross-reference: {xref['stats']['concepts']} concepts, {xref['stats']['total_links']} links")
         print(f"  Knowledge graph: {len(graph['relationships'])} concepts, {len(graph['chains'])} chains")
         print(f"  Ingestion: {len(ingest['files'])} files tracked")
@@ -242,7 +248,7 @@ def run_memory_procedure():
     print("\n[6/10] Knowledge Timeline")
     timeline = CACHE / "knowledge-timeline.md"
     if timeline.exists():
-        content = timeline.read_text()
+        content = timeline.read_text(encoding="utf-8")
         known = content.count("[x]")
         missing = content.count("[ ]")
         total = known + missing
@@ -293,7 +299,8 @@ def run_memory_procedure():
     return 0
 
 def main():
-    if len(sys.argv) < 2:
+    setup_console()
+    if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):
         show_help()
         return 0
     

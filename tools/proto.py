@@ -20,8 +20,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
-PROJECT_DIR = Path(r'E:\dev(dave)\skygfx_plus_expIV')
-GAME_DIR = Path(r'E:\games\gtasa_skygfx_plus')
+PROJECT_DIR = Path(os.environ.get('SKYGFX_PROJECT') or Path(__file__).resolve().parent.parent)
+GAME_DIR = Path(os.environ.get('SKYGFX_GAME') or r'E:\games\gtasa_skygfx_plus')
 SHADERS_DIR = PROJECT_DIR / 'shaders'
 CSO_DIR = PROJECT_DIR / 'resources' / 'cso'
 BUILD_DIR = PROJECT_DIR / 'build'
@@ -170,14 +170,14 @@ def restart_cycle():
 
 def tail_log():
     """Tail the debug log."""
-    log = GAME_DIR / 'skygfx_new_dbg.log'
+    log = GAME_DIR / 'skygfx_dbg.log'
     if not log.exists():
         print(f"  {log} not found")
         return
 
     print(f"Tailing {log} (Ctrl+C to stop)...")
     try:
-        with open(log, 'r') as f:
+        with open(log, 'r', encoding='utf-8', errors='replace') as f:
             f.seek(0, 2)  # Seek to end
             while True:
                 line = f.readline()
@@ -197,9 +197,9 @@ def git_diff(filepath):
     print(result.stdout if result.stdout else "No changes")
 
 def main():
-    if len(sys.argv) < 2:
+    if len(sys.argv) < 2 or sys.argv[1] in ('-h', '--help'):
         print(__doc__)
-        return
+        return 0
 
     cmd = sys.argv[1]
 
@@ -223,4 +223,4 @@ def main():
         print(__doc__)
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main() or 0)

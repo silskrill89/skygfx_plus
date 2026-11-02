@@ -1,18 +1,23 @@
 # SkyGFX Plus - Future Features (Deferred)
 
-Features planned for later implementation. Not in current roadmap.
+Features NOT in the active roadmap. Statuses reconciled 2026-10-31 against docs/FEATURE_LIST.md
+(authoritative), TODO.md and premake5.lua. Authoritative deferred list: docs/FEATURE_LIST.md §11.
 
 ## ImGui Debug Menu
-- **Status:** Deferred
-- **Reason:** Requires ImGui SDK integration, low priority vs rendering features
-- **Dependencies:** ImGui library (E:\SDKs\imgui-master)
-- **Notes:** Code exists in debugmenu_ui.cpp but excluded from build
+- **Status:** LANDED (updated 2026-10-31)
+- **Dependencies:** ImGui SDK (external\imgui, merged into repo tree)
+- **Notes:** debugmenu_ui.cpp is an active compiled TU (~4,300 LOC; premake5.lua:233) with
+  debugmenu_theme.cpp. Features live: All Settings tab (235 rows, search/reset/copy-as-INI),
+  diagnostics, Atmospheric header (13 sliders),   mode chips + MODE pill rows (Wave 8).
+  Pending defects tracked in docs/plans/2026-10-24-imgui-settings-coverage.md
+  (parser/save/clamp fixes partially landed).
 
-## Normal Map Plugin Integration
-- **Status:** Deferred
-- **Reason:** Requires DK22Pac normalmap SDK, complex dependencies
-- **Dependencies:** normalmap_byDK SDK (E:\SDKs\normalmap_byDK_1.01)
-- **Notes:** Code exists in normalmap.cpp/normalmap_plugin.cpp but excluded from build
+## Normal Map Plugin Integration (txd `_n`)
+- **Status:** GROUNDWORK LANDED; final `_n` wiring is DEFERRED-LAST (see TODO.md golden rule §C)
+- **Dependencies:** DK22Pac rwnormal SDK — `rpnormmap.lib` is LINKED (premake5.lua:353)
+- **Notes:** src/texdefs.cpp (unified texture-def layer: texdb + normalmap + plugin registry,
+  normalmap.cpp/plugin TUs merged away) and src/normmap_stubs.cpp landed in the Wave-8 merge.
+  What remains deferred-LAST: the actual `_n` texture wiring into the render shaders.
 
 ## Multi-pass Vehicle Glass with Parallax
 - **Status:** Partially implemented

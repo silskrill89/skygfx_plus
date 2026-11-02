@@ -32,7 +32,12 @@ float4 main(PS_INPUT IN) : COLOR
 	}
 
 	float measured = max(acc * (1.0 / 16.0), 1e-4);
+	// test-4: NaN/huge guard — a NaN acc (unresolved FB tap) or garbage-huge
+	// tile must not enter the temporal chain (NaN prev fails the `prev <= 0`
+	// reset test and poisons every later frame -> dark/black at noon).
+	if (!(measured < 1e4)) measured = 0.18; // NaN or >= 1e4 -> neutral key
 	float prev = tex2D(prevTex, float2(0.5, 0.5)).r;
+	if (!(prev < 1e4)) prev = 0.18;         // NaN/huge prev -> neutral reset
 
 	// First frame (or reset): adopt the measurement immediately.
 	if (prev <= 0.0)

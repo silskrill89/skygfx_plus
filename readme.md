@@ -4,15 +4,29 @@ A rewrite of [SkyGFX](https://github.com/aap/skygfx) by aap, bringing modern ren
 
 ## Screenshots
 
-![Screenshot 1](screenshots/01.jpg)
-![Screenshot 2](screenshots/02.jpg)
-![Screenshot 3](screenshots/03.jpg)
-![Screenshot 4](screenshots/04.jpg)
-![Screenshot 5](screenshots/05.jpg)
-![Screenshot 6](screenshots/06.jpg)
-![Screenshot 7](screenshots/07.jpg)
-![Screenshot 8](screenshots/08.jpg)
-![Screenshot 9](screenshots/09.jpg)
+Latest test captures (auto-synced by tools/shot_sync.py):
+
+![gta_sa_zWCLRk1sSg](screenshots/gta_sa_zWCLRk1sSg.png)
+![gta_sa_uMLeIJ6nhB](screenshots/gta_sa_uMLeIJ6nhB.png)
+![gta_sa_D5vqjATLj2](screenshots/gta_sa_D5vqjATLj2.jpg)
+![gta_sa_jENKG75i6c](screenshots/gta_sa_jENKG75i6c.png)
+![gta_sa_pWMxm86B2O](screenshots/gta_sa_pWMxm86B2O.png)
+![gta_sa_cLneuBtUKm](screenshots/gta_sa_cLneuBtUKm.png)
+![gta_sa_2h0tH8900g](screenshots/gta_sa_2h0tH8900g.jpg)
+![gta_sa_NomwmKSYko](screenshots/gta_sa_NomwmKSYko.jpg)
+![gta_sa_t0idNpsNoI](screenshots/gta_sa_t0idNpsNoI.jpg)
+![gta_sa_arM5aX5MrE](screenshots/gta_sa_arM5aX5MrE.jpg)
+![gta_sa_d4sj764zat](screenshots/gta_sa_d4sj764zat.jpg)
+![gta_sa_2VYUXpvPfP](screenshots/gta_sa_2VYUXpvPfP.jpg)
+![gta_sa_KaX3iULhgq](screenshots/gta_sa_KaX3iULhgq.jpg)
+![gta_sa_KqXoLsbVnt](screenshots/gta_sa_KqXoLsbVnt.jpg)
+![gta_sa_JFPSAJiLOh](screenshots/gta_sa_JFPSAJiLOh.jpg)
+![gta_sa_ZPcpLoffyc](screenshots/gta_sa_ZPcpLoffyc.jpg)
+![gta_sa_wgLt4OWyWa](screenshots/gta_sa_wgLt4OWyWa.png)
+![gta_sa_7It4dZ6I1b](screenshots/gta_sa_7It4dZ6I1b.jpg)
+![gta_sa_xnjRrn7f1L](screenshots/gta_sa_xnjRrn7f1L.jpg)
+![gta_sa_5ZInjMpBUF](screenshots/gta_sa_5ZInjMpBUF.png)
+
 
 ## Features
 

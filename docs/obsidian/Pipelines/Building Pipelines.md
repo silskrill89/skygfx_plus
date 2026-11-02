@@ -51,7 +51,7 @@ explicitBuildingPipe=-1   ; Force specific pipeline (-1=auto)
 dualPassBuilding=1        ; PS2 alpha test emulation
 ps2ModulateBuilding=0     ; PS2 colour modulation
 detailMaps=1              ; Enable detail textures
-stochasticTexturing=1     ; Stochastic sampling (reduces tiling)
+noiseDetail=1             ; Blue-noise jitter on tiled detail textures (canonical; stochastic*/stochasticTexturing are deprecated aliases)
 ```
 
 ## See Also

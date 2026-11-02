@@ -1,6 +1,11 @@
 // wheels.h — Wheel DFF management system
 // Hash-based wheel selection (same pattern as veh_shaders paint/tire)
 // Loads extracted wheel DFFs, provides random selection per vehicle
+//
+// 2026-11-01 dead-code sweep (source-inventory §2): the four zero-caller
+// accessors (Wheels_SelectForVehicle / Wheels_GetEntry /
+// Wheels_GetClassForModel / Wheels_GetCount) were removed; only the wired
+// Wheels_Init (vehiclePipe.cpp) remains.
 
 #pragma once
 
@@ -30,15 +35,3 @@ struct WheelEntry {
 
 // Initialize wheel system (loads metadata, classifies wheels)
 void Wheels_Init(const char *gameDir);
-
-// Select a wheel for a given vehicle model (deterministic hash)
-int Wheels_SelectForVehicle(int modelID, unsigned int hash);
-
-// Get wheel entry by index
-WheelEntry *Wheels_GetEntry(int index);
-
-// Get wheel class for a vehicle model
-WheelClass Wheels_GetClassForModel(int modelID);
-
-// Total number of extracted wheels
-int Wheels_GetCount(void);

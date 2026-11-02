@@ -9,7 +9,7 @@
 - **Normal Buffer** — Stereo disparity faux normals (half-screen)
 - **Cloud Shadow FBM** — Ground vehicle cloud shadows
 - **Wind Animation** — Building wind shaders (inherited from junior)
-- **Stochastic Texturing** — Grain-free detail maps (inherited from junior)
+- **Noise-Detail Texturing** — Blue-noise UV jitter on tiled detail textures hides repeats (junior heritage; INI key `noiseDetail`, deprecated aliases `stochastic`/`stochasticTexturing` still accepted)
 - **Adaptive Tonemap** — Hable filmic with timecycle-driven exposure, toe, and grade
 
 ## Vehicle System
@@ -22,7 +22,7 @@
 ## Building Pipeline
 - **4 Building Pipes** — PS2, Xbox/PC, GTAIV, PBR (timecycle ambient, no hardcoded floor)
 - **Wind Animation** — Building wind shaders (PS2 + Xbox)
-- **Stochastic Building Shaders** — Grain-free detail for buildings
+- **Noise-Detail Building Shaders** — Jittered detail/env sampling for buildings (`noiseDetailBuildingPS.hlsl`)
 - **Sphere Map Buildings** — Sphere-mapped environment mapping
 
 ## Anti-Aliasing

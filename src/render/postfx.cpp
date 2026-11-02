@@ -1,14 +1,47 @@
 #include "skygfx.h"
-#include "diagnostics.h"
+#include "debug_handl.h"
 #include "ModuleList.hpp"
 #include "postfx.h"
 #include "chars.h"
 #include "depthhook.h"
+#include "postfx_underwater.h"
+#include "profiler.h"
 
-RwIm2DVertex *colorfilterVerts = (RwIm2DVertex*)0xC400D8;
-RwImVertexIndex *colorfilterIndices = (RwImVertexIndex*)0x8D5174;
+// ---- PERF log spam gate (postfx.cpp-local; skygfx.h untouched) ----------
+// skygfx.h's PerfTimer logs UNCONDITIONALLY at scope exit, and this file's
+// PERF_SCOPE sites (NormalBuf, SSAO, PipeChain, SunShafts, DOF, Bloom, CA,
+// Grain, Vignette, IVGrade, MotionBlur, HeightFog, GodRays, FXAA3 — ~18)
+// fired every draw -> 13,988 "PERF [...]" lines accumulated in skygfx_dbg.log.
+// Per-draw file I/O is unacceptable. #undef skygfx.h's macro here and swap in
+// a local gated variant that only logs at scope exit when config->profilerEnable
+// is set. Timing is preserved when profilerEnable=1 (identical "PERF [x] y ms"
+// line). The scoped object is only used in non-__try functions (first __try in
+// this file is :2751, after the last PERF_SCOPE at :1990), so no C2712.
+#undef PERF_SCOPE
+struct PostfxPerfGate {
+	const char *name;
+	double startMs;
+	PostfxPerfGate(const char *n) : name(n), startMs(perfNow()) {}
+	~PostfxPerfGate(){
+		if(config && config->profilerEnable)
+			dbglog("PERF [%s] %.2f ms", name, perfNow() - startMs);
+	}
+};
+#define PERF_SCOPE(name) PostfxPerfGate _perf##__LINE__(name)
+
+// Forward decls (definitions live further down this file) — the pass-entry
+// instrumentation logs below reference these handles.
+extern void *radiosityPS, *blurPS;
+extern void ForwardPlus_DrawClusterDebug(void);
+
+// Peds pipe device-reset latch invalidation (peds/peds_pipe.cpp:188, declared
+// in peds/peds_pipe.h:78 — header not included here; chars.h precedent is a
+// plain extern for the same reason). Called from OnDeviceReset after
+// chars_OnDeviceReset().
+extern void PedsPipe_OnDeviceReset(void);
 
 Imf &CPostEffects::ms_imf = *(Imf*)0xC40150;
+
 
 WRAPPER void CPostEffects::DarknessFilter(uint8 alpha) { EAXJMP(0x702F00); }
 WRAPPER void CPostEffects::Grain(int strengh, bool generate) { EAXJMP(0x7037C0); }
@@ -83,17 +116,138 @@ float CPostEffects::m_crOffset = 0.0f;
 static RwRaster *ssaoRaster = nil;
 
 // ============================================================
+// Cutscene≠menu postfx gate (expIV gate fix)
+//
+// IsGameInMenuOrPaused() (postfx_utils.cpp) bundles CCutsceneMgr__ms_running
+// into its skip bool. Git-blame rationale (545bc02, 2026-07-30): the guard
+// was introduced as a blanket "skip expensive PostFX during menus/loading/
+// pause" performance guard for SMAA/SSAO — cutscene was bundled in without
+// any pass-specific reason (no double-tonemap protection involved). But
+// cutscenes are RENDERED SCENES: the grading chain must run on them, and
+// skipped frames displayed the PBR pipes' linear HDR untonemapped ->
+// washed-out white/pink (expIV session 07:26:29, airport cutscene).
+//
+// These helpers gate on REAL menu/pause + the game's disable flag only.
+// Passes that run on cutscene frames emit a one-shot
+// "[PF] cutscene postfx: ENABLED (was skipped)" breadcrumb for log
+// verification. Deliberately duplicated as static inline in
+// postfx_colourfilter.cpp — postfx.h is outside this fix's edit set.
+// ============================================================
+static inline bool PostfxMenuPauseOnly(void)
+{
+	return CMenuManager__m_bMenuActive || CPostEffects::m_bDisableAllPostEffect;
+}
+
+// One-shot per pass: first cutscene frame where the pass now runs (it was
+// skipped before the cutscene≠menu fix). Fires once per session, no throttle
+// needed.
+static inline void
+CutscenePostfxEnabledLog(const char *pass, bool *fired)
+{
+	if(*fired) return;
+	*fired = true;
+	dbglog("[PF] cutscene postfx: ENABLED (was skipped) pass=%s", pass);
+}
+
+// ============================================================
 // Debug BMP dump checkpoints (INI-gated: postfxDumpDebug=1)
-// Saves key surfaces to <gameDir>\skygfx_dump_<tag>_<frame>.bmp
-// on the first 5 frames to diagnose black-screen issues.
+// Saves key surfaces to <gameDir>\skygfx_dump_<tag>_<frame>.bmp.
+//
+// Two capture windows:
+//   1. AUTO  — the first POSTFX_DUMP_AUTO_FRAMES frames of the session.
+//   2. ARMED — POSTFX_DUMP_ARM_FRAMES frames starting at the next frame after
+//      the F10 hotkey (or PostFX_ArmDump()) fires.
+//
+// The AUTO window alone was useless for the black-screen bug: the first frames
+// of a session are the loading/spawn screen, so every auto dump captured a
+// healthy frame. The arming window is what lets the user capture AFTER they
+// can see the bug. F10 was checked to be unclaimed (F5 is config->keys[],
+// F8 is main.cpp, F7/F4 are commented out).
 // ============================================================
 static int g_postfxDumpFrame = 0;   // incremented once per ColourFilter_switch
 static bool g_postfxDumpLoggedVerts = false;
 
-static void DumpRasterToBMP(const char* tag, IDirect3DSurface9* src)
+#define POSTFX_DUMP_AUTO_FRAMES 5
+#define POSTFX_DUMP_ARM_FRAMES  3
+#define POSTFX_DUMP_HOTKEY      VK_F10
+
+static int  g_postfxDumpArmCount = 0;     // armed frames remaining
+static bool g_postfxDumpKeyPrevDown = false;
+
+// --- per-frame tag bookkeeping (one-line summary at end of frame) ---
+#define POSTFX_DUMP_MAX_TAGS 32
+static char g_postfxDumpTagBuf[POSTFX_DUMP_MAX_TAGS][24];
+static int  g_postfxDumpTagCount = 0;
+static int  g_postfxDumpTagFrame = -1;
+
+// SINGLE SOURCE OF TRUTH for the dump gate. Every checkpoint (postfx.cpp,
+// postfx_ssao.cpp) must route through this so "armed" bypasses the
+// first-5-frames cap uniformly.
+static bool PostFX_DumpActive(void)
+{
+	return g_postfxDumpArmCount > 0 || g_postfxDumpFrame < POSTFX_DUMP_AUTO_FRAMES;
+}
+
+// Records a tag on the first SUCCESSFUL BMP write. Deliberately NOT reset on
+// a frame-counter change: scene_cam runs before ColourFilter_switch bumps
+// g_postfxDumpFrame, so a per-counter reset there would silently discard the
+// most important tag of the capture. The buffer is cleared by
+// PostFX_DumpFlushTags() at the end of each rendered frame instead, so one
+// group == one displayed frame (tags numbered N and N+1 by write time, which
+// is why the group is labelled with the frame of its FIRST tag).
+static void PostFX_DumpNoteTag(const char *tag)
+{
+	if(!tag) return;
+	if(g_postfxDumpTagCount == 0)
+		g_postfxDumpTagFrame = g_postfxDumpFrame;
+	if(g_postfxDumpTagCount < POSTFX_DUMP_MAX_TAGS){
+		strncpy(g_postfxDumpTagBuf[g_postfxDumpTagCount], tag,
+			sizeof(g_postfxDumpTagBuf[0]) - 1);
+		g_postfxDumpTagBuf[g_postfxDumpTagCount][sizeof(g_postfxDumpTagBuf[0]) - 1] = '\0';
+		g_postfxDumpTagCount++;
+	}
+}
+
+// Called once per frame from DrawFinalEffects, AFTER every checkpoint that
+// frame can produce (scene_cam, fb_after_copy, after_ssao, after_pipechain,
+// the dfe_*/cf_* fine-grained probes) has had its chance to fire.
+static void PostFX_DumpFlushTags(void)
+{
+	if(g_postfxDumpTagCount <= 0) return;
+	char line[1024];
+	size_t used = 0;
+	int n = snprintf(line, sizeof(line),
+		"[Dump] frame=%d wrote %d tag(s):", g_postfxDumpTagFrame, g_postfxDumpTagCount);
+	if(n <= 0) return;
+	used = (size_t)n < sizeof(line) ? (size_t)n : sizeof(line) - 1;
+	for(int i = 0; i < g_postfxDumpTagCount; i++){
+		size_t tl = strlen(g_postfxDumpTagBuf[i]);
+		if(used + tl + 2 >= sizeof(line)) break;
+		line[used++] = ' ';
+		memcpy(line + used, g_postfxDumpTagBuf[i], tl);
+		used += tl;
+	}
+	line[used] = '\0';
+	dbglog("%s", line);
+	g_postfxDumpTagCount = 0;
+}
+
+// Arm the harness for the NEXT `frames` frames (bypasses the AUTO cap).
+void PostFX_ArmDump(int frames, const char *source)
+{
+	if(frames <= 0) frames = POSTFX_DUMP_ARM_FRAMES;
+	g_postfxDumpArmCount = frames;
+	dbglog("[Dump] ARMED by %s for %d frame(s) from frame=%d (postfxDumpDebug=%d, F10)",
+		source ? source : "call", frames, g_postfxDumpFrame,
+		config ? (int)config->postfxDumpDebug : -1);
+	if(!config || !config->postfxDumpDebug)
+		dbglog("[Dump] WARNING: postfxDumpDebug is off — no BMPs will be written until it is enabled");
+}
+
+void DumpRasterToBMP(const char* tag, IDirect3DSurface9* src)
 {
 	if(!config || !config->postfxDumpDebug) return;
-	if(g_postfxDumpFrame >= 5) return;
+	if(!PostFX_DumpActive()) return;
 	if(!src) { dbglog("[Dump] %s: src NULL", tag); return; }
 	IDirect3DDevice9 *dev = d3d9device;
 	if(!dev) { dbglog("[Dump] %s: no device", tag); return; }
@@ -101,9 +255,14 @@ static void DumpRasterToBMP(const char* tag, IDirect3DSurface9* src)
 	D3DSURFACE_DESC desc;
 	if(FAILED(src->GetDesc(&desc))) { dbglog("[Dump] %s: GetDesc failed", tag); return; }
 
+	// The staging surface MUST match the source format exactly: GetRenderTargetData
+	// rejects a mismatch with D3DERR_INVALIDCALL (0x8876086C), which is what killed
+	// every dump in the 23:28 session (151x "GetRenderTargetData failed") and left
+	// the black screen visually undiagnosable. The camera/FB rasters are not
+	// guaranteed A8R8G8B8 (X8R8G8B8 / R5G6B5 are in play).
 	IDirect3DSurface9 *sysSurf = NULL;
 	HRESULT hr = dev->CreateOffscreenPlainSurface(desc.Width, desc.Height,
-		D3DFMT_A8R8G8B8, D3DPOOL_SYSTEMMEM, &sysSurf, NULL);
+		desc.Format, D3DPOOL_SYSTEMMEM, &sysSurf, NULL);
 	if(FAILED(hr) || !sysSurf) { dbglog("[Dump] %s: CreateOffscreenPlainSurface failed hr=0x%08X", tag, hr); return; }
 
 	hr = dev->GetRenderTargetData(src, sysSurf);
@@ -142,18 +301,32 @@ static void DumpRasterToBMP(const char* tag, IDirect3DSurface9* src)
 		// Write rows bottom-up (BMP origin is bottom-left)
 		for(int y = h - 1; y >= 0; y--){
 			const BYTE *srcRow = (const BYTE*)lr.pBits + (size_t)y * lr.Pitch;
+			// Bytes-per-pixel must match desc.Format now that the staging
+			// surface mirrors it — a hardcoded 4 mis-reads R5G6B5 sources.
+			const int bpp = (desc.Format == D3DFMT_R5G6B5 || desc.Format == D3DFMT_X1R5G5B5 ||
+			                 desc.Format == D3DFMT_A1R5G5B5) ? 2 : 4;
 			BYTE row[4096 * 3];
-			for(int x = 0; x < w; x++){
-				// A8R8G8B8 → BGR
-				row[x*3+0] = srcRow[x*4+0]; // B
-				row[x*3+1] = srcRow[x*4+1]; // G
-				row[x*3+2] = srcRow[x*4+2]; // R
+			if(bpp == 4){
+				for(int x = 0; x < w; x++){
+					// X8R8G8B8 / A8R8G8B8 -> BGR
+					row[x*3+0] = srcRow[x*4+0]; // B
+					row[x*3+1] = srcRow[x*4+1]; // G
+					row[x*3+2] = srcRow[x*4+2]; // R
+				}
+			}else{
+				for(int x = 0; x < w; x++){
+					const WORD p = *(const WORD*)(srcRow + x*2);
+					row[x*3+0] = (BYTE)((p & 0x001F) << 3);  // B (5->8)
+					row[x*3+1] = (BYTE)((p & 0x07E0) >> 3);  // G (6->8)
+					row[x*3+2] = (BYTE)((p & 0xF800) >> 8);  // R (5->8)
+				}
 			}
 			fwrite(row, 1, w*3, f);
 			// pad to 4-byte boundary
 			for(int p = w*3; p < rowSize; p++) fputc(0, f);
 		}
 		fclose(f);
+		PostFX_DumpNoteTag(tag);
 		dbglog("[Dump] %s: wrote %dx%d BMP", tag, w, h);
 	} else {
 		dbglog("[Dump] %s: fopen failed", tag);
@@ -164,10 +337,10 @@ static void DumpRasterToBMP(const char* tag, IDirect3DSurface9* src)
 }
 
 // Dump the current bound render target (RT0)
-static void DumpCurrentRT(const char* tag)
+void DumpCurrentRT(const char* tag)
 {
 	if(!config || !config->postfxDumpDebug) return;
-	if(g_postfxDumpFrame >= 5) return;
+	if(!PostFX_DumpActive()) return;
 	IDirect3DDevice9 *dev = d3d9device;
 	if(!dev) return;
 	IDirect3DSurface9 *rt = NULL;
@@ -184,8 +357,48 @@ static void DumpCurrentRT(const char* tag)
 void PostFX_DumpSceneCamera(void)
 {
 	if(!config || !config->postfxDumpDebug) return;
-	if(g_postfxDumpFrame >= 5) return;
+	if(!PostFX_DumpActive()) return;
 	DumpCurrentRT("scene_cam");
+}
+
+// ============================================================
+// colorfilterVerts white-init (black-screen hardening)
+//
+// colorfilterVerts (0xC400D8) is the game's shared 2048x2048 fullscreen quad,
+// consumed by EVERY post pass: the colorFilterEnable=0 bypass composite, the
+// FXAA3 late-AA pass, the YCbCr filter in DrawFinalEffects, the IV grade,
+// GodRays and FxFramePass. It is drawn with VERTEXALPHA blending, so the
+// vertex colour MULTIPLIES every one of those draws.
+//
+// The log proves its emissiveColor is 0x00000000 (fully black) every frame:
+// its only writer in vanilla was CPostEffects::ColourFilter (0x703650), which
+// stamps rgb2/rgb1 into the verts immediately before drawing. That writer no
+// longer runs on the colorFilterEnable==0 path (the bypass early-returns above
+// the switch) and never ran for the shader-driven filters, so nothing ever
+// re-initialises the verts and a black vertex colour silently blackens every
+// consumer — exactly the "world outdoors is black, HUD/particles fine"
+// symptom, because only the world goes through colorfilterVerts.
+//
+// Fix: re-seed the verts to opaque white (0xFFFFFFFF) — the neutral for a
+// multiply-style composite (src * 1). Alpha is set to 0xFF too, which under
+// SRCALPHA/INVSRCALPHA makes the quad a clean source-over copy. Positions and
+// UVs are deliberately untouched. Idempotent and cheap: a compare pass over
+// 4 words, and nothing is written once the verts already hold white.
+// ============================================================
+static void EnsureColorfilterVertsVisible(void)
+{
+	bool needs = false;
+	for(int i = 0; i < 4; i++){
+		if(colorfilterVerts[i].emissiveColor != 0xFFFFFFFFu){ needs = true; break; }
+	}
+	if(!needs) return;
+	const RwUInt32 old0 = colorfilterVerts[0].emissiveColor;
+	for(int i = 0; i < 4; i++)
+		colorfilterVerts[i].emissiveColor = 0xFFFFFFFFu;
+	if(dbglog_throttle("cfv_white"))
+		dbglog("[PostFX] EnsureColorfilterVertsVisible: colorfilterVerts[0] 0x%08X -> 0xFFFFFFFF "
+			"(black vertex colour was multiplying every colorfilterVerts draw to black)",
+			old0);
 }
 
 // Log colorfilterVerts raw values once
@@ -206,258 +419,15 @@ static void LogColorfilterVerts(void)
 	}
 }
 
-// SMAA intermediate rasters (file-scope for cleanup on shutdown)
-static RwRaster *g_smaaEdgeRaster = NULL;
-static RwRaster *g_smaaBlendRaster = NULL;
-static RwRaster *g_smaaPrevFrameRaster = NULL;
-// Camera-sized copy of the final graded frame, refreshed at SMAA entry.
-// SMAA sampling doctrine: every raster the SMAA shaders touch (scene input,
-// edge, blend, prevFrame history, velocity, depth) must be CAMERA-sized with
-// content filling UV 0..1, drawn with s_ffQuad (UV 0..1). The game's
-// colorfilterVerts are a hardcoded 2048x2048 quad (positions 0..2048, UV
-// 0..1) whose visible window only spans UV 0..0.9375 x 0..0.5273 — correct
-// for the padded front buffer, but WRONG for camera-sized rasters: pass 3's
-// prevFrame/velocity samples landed on the top-left 93.75%x52.7% sub-rect of
-// the history (spatially compressed vs the current frame) -> ghosting/
-// doubling; and the c1 texel size (1/1920,1/1080) was measured in the wrong
-// UV space (1/2048,1/2048 in quad-UV space) -> edge taps off by 1.9x
-// vertically. Camera-sized scene copy + UV 0..1 quad makes every tap exact.
-static RwRaster *g_smaaSceneRaster = NULL;
-static int g_smaaRtWidth = 0, g_smaaRtHeight = 0;
-static RwTexture *g_smaaBlendTexRW = NULL;
-static RwTexture *g_smaaPrevFrameTexRW = NULL;
-static bool s_smaaRastersInitialized = false;
-static bool s_smaaPendingInit = false;  // set by DrawSMAA, consumed by SMAATryInitRasters
-static bool s_smaaBroken = false;       // fail-open latch: set on init failure OR any
-                                        // guarded fault in DrawSMAA; skips until resolution change
-
-// Raw geometry-state snapshot for DrawSMAA (file-scope so smaaGuardBail can
-// restore from any early-exit without extra parameters). DrawSMAA raw-writes
-// D3DRS_ALPHATESTENABLE/CULLMODE/ZENABLE/ZWRITEENABLE — it was the ONLY
-// postfx pass without a SaveRawGeomStates/RestoreRawGeomStates wrap. Those
-// raw writes are device-side only, so ImmediateModeRenderStatesReStore()
-// (rw-cached) does not undo them: the values leaked past SMAA (last pass of
-// the frame) into the next frame's scene and showed up at every pipe entry as
-// "[BUILDING] ZWRITE off/desynced on entry (rw=1 dev=0)" and
-// "[PipeAlpha] ... test=0". RestoreRawGeomStates re-pushes both layers.
-static DWORD s_smaaRawGeom[9];
-static bool s_smaaRawGeomSaved = false;
-
-// fwd decl — defined with the other raw-geom helpers ~line 2400
-// (non-static: exported via skygfx.h for chars.cpp's SSS blur pass)
-void RestoreRawGeomStates(const DWORD *in);
-
-static void smaaRestoreRawGeom(void)
-{
-	if(s_smaaRawGeomSaved){
-		RestoreRawGeomStates(s_smaaRawGeom);
-		s_smaaRawGeomSaved = false;
-	}
-}
-
-// SMAA temporal history: set to true after the first frame's history is written.
-// On the first frame, the history raster is black (never rendered to), so the
-// temporal blend would produce a very dark image. We use blendStrength=1.0
-// (all current, no history) on the first frame to avoid this.
-static bool g_smaaHistoryValid = false;
-// Hard history TTL: count of valid-history frames since the last full refresh.
-// Every 8 frames the temporal resolve forces blendStrength=1.0 (all current) to
-// kill the accumulated ghost tail, then restarts the count. Reset to 0 whenever
-// history is invalidated (resource release / resolution change).
-static int s_smaaHistAge = 0;
-
-// Track initialized CAMERATEXTURE rasters for RasterEnsureSurfaceReady.
-// Max 8 tracked rasters — plenty for all our passes.
-#define MAX_TRACKED_RASTERS 8
-static RwRaster *s_trackedRasters[MAX_TRACKED_RASTERS] = {NULL};
-static int s_trackedRasterCount = 0;
-
-static void TrackRaster(RwRaster *ras) {
-	if(!ras || s_trackedRasterCount >= MAX_TRACKED_RASTERS) return;
-	for(int i = 0; i < s_trackedRasterCount; i++)
-		if(s_trackedRasters[i] == ras) return;
-	s_trackedRasters[s_trackedRasterCount++] = ras;
-}
-
-static void UntrackRaster(RwRaster *ras) {
-	if(!ras) return;
-	for(int i = 0; i < s_trackedRasterCount; i++) {
-		if(s_trackedRasters[i] == ras) {
-			s_trackedRasters[i] = s_trackedRasters[--s_trackedRasterCount];
-			s_trackedRasters[s_trackedRasterCount] = NULL;
-			return;
-		}
-	}
-}
-
-// ============================================================
-// RasterEnsureSurfaceReady — check if a CAMERATEXTURE raster
-// has a valid D3D9 surface before binding as RT or texture.
-// Returns true if the raster is safe to use.
-// CAMERATEXTURE rasters created via RwRasterCreate do NOT have
-// a D3D9 surface until RwCameraBeginUpdate runs on them.
-// Binding one without surface = crash at RwD3D9SetRenderTarget.
-// Non-CAMERATEXTURE rasters are always safe.
-// ============================================================
-static bool RasterEnsureSurfaceReady(RwRaster *ras, const char *tag) {
-	if(!ras) {
-		dbglog("[RasterInit] %s: raster is NULL, skipping", tag);
-		return false;
-	}
-	// Only CAMERATEXTURE rasters need the surface check
-	if((ras->cType & rwRASTERTYPEMASK) != rwRASTERTYPECAMERATEXTURE)
-		return true;
-	// Check if tracked (initialized via camera path)
-	for(int i = 0; i < s_trackedRasterCount; i++) {
-		if(s_trackedRasters[i] == ras)
-			return true;
-	}
-	// Not tracked — surface may not exist
-	if(dbglog_throttle("ras_unsafe"))
-		dbglog("[RasterInit] %s: CAMERATEXTURE raster %p not initialized yet, skipping", tag, ras);
-	return false;
-}
-
-// Scratch camera + Z raster used to force-init SMAA CAMERATEXTURE rasters.
-// Created once, persists for the session (mirrors envmap.cpp pattern).
-// Cleaned up on device reset and shutdown via ReleaseSMAAStaticResources.
-// NOTE: The force-init must happen OUTSIDE the main camera's BeginUpdate
-// (i.e., from RenderScene_before), not inline in DrawSMAA (which runs
-// mid-frame from ColourFilter_switch/DrawFinalEffects). Even with a
-// scratch camera, RW 3.6's D3D9 driver crashes creating render-target
-// textures while the device is in an active render state.
-static RwCamera *s_smaaInitCam = NULL;
-static RwRaster *s_smaaInitZRas = NULL;
-
-void ReleaseSMAAStaticResources(void)
-{
-	dbglog("ReleaseSMAAStaticResources: releasing...");
-
-	// Release scratch camera created by SMAATryInitRasters()
-	if(s_smaaInitZRas){ RwRasterDestroy(s_smaaInitZRas); s_smaaInitZRas = NULL; }
-	if(s_smaaInitCam){
-		RwFrame *f = RwCameraGetFrame(s_smaaInitCam);
-		if(f){ RwFrameDestroy(f); }
-		RwCameraDestroy(s_smaaInitCam);
-		s_smaaInitCam = NULL;
-	}
-	if(g_smaaBlendTexRW){ RwTextureDestroy(g_smaaBlendTexRW); g_smaaBlendTexRW = NULL; }
-	if(g_smaaPrevFrameTexRW){ RwTextureDestroy(g_smaaPrevFrameTexRW); g_smaaPrevFrameTexRW = NULL; }
-	if(g_smaaEdgeRaster){ UntrackRaster(g_smaaEdgeRaster); RwRasterDestroy(g_smaaEdgeRaster); g_smaaEdgeRaster = NULL; }
-	if(g_smaaBlendRaster){ UntrackRaster(g_smaaBlendRaster); RwRasterDestroy(g_smaaBlendRaster); g_smaaBlendRaster = NULL; }
-	if(g_smaaPrevFrameRaster){ UntrackRaster(g_smaaPrevFrameRaster); RwRasterDestroy(g_smaaPrevFrameRaster); g_smaaPrevFrameRaster = NULL; }
-	if(g_smaaSceneRaster){ UntrackRaster(g_smaaSceneRaster); RwRasterDestroy(g_smaaSceneRaster); g_smaaSceneRaster = NULL; }
-	g_smaaRtWidth = 0; g_smaaRtHeight = 0;
-	s_smaaRastersInitialized = false;
-	s_smaaPendingInit = false;
-	s_smaaBroken = false;
-	g_smaaHistoryValid = false;
-	s_smaaHistAge = 0;
-	dbglog("ReleaseSMAAStaticResources: done");
-}
-
-// Velocity buffer resources
-static IDirect3DTexture9 *g_velocityTex = NULL;
-static IDirect3DSurface9 *g_velocitySurf = NULL;
-static int s_velocityW = 0, s_velocityH = 0;  // cached dims for res-aware recreate
-static D3DMATRIX g_prevVPMatrix;
-static bool g_prevVPValid = false;
-
-static void ReleaseVelocityBufferResources(void)
-{
-	if(g_velocityTex){ g_velocityTex->Release(); g_velocityTex = NULL; }
-	if(g_velocitySurf){ g_velocitySurf->Release(); g_velocitySurf = NULL; }
-	s_velocityW = 0; s_velocityH = 0;
-	g_prevVPValid = false;
-}
-
-// SSAO overhaul forward declaration
-static void DrawSSAO_Overhaul(void);
 
 // Atmospheric PostFX forward declarations
-static void DrawVelocityBuffer(void);
 static void DrawHeightFog(void);
 static void DrawGodRays(void);
 
-// Raw geom-state save/restore helper (defined ~line 2326, used earlier by
-// Radiosity_VCS/Blur_VCS; also exported to chars.cpp's SSS blur — see skygfx.h)
-bool SaveRawGeomStates(DWORD *out);
-void RestoreRawGeomStates(const DWORD *in);
-
-/////
-///// Authoritative screen-size cache.
-/////
-///// RwCameraGetRaster(Scene.camera) is NOT a stable screen-size source
-///// outside the postfx entry points: other passes (envmap/reflection and
-///// friends) temporarily point the main camera at a NON-screen raster, and
-///// every geometry-phase reader observes that transient. Measured in
-///// skygfx_dbg.log (PBR pipeline + COLORFILTER_MODERN session, m0169):
-/////
-/////   [PipeChain] classify RT created 2048x1024   <- transient camRas read
-/////   [PipeChain] classify RT created 1920x1080   <- same frame, restored
-/////   GetIBLTexture: OK 512x256                   <- camRas/4 == 2048x1024/4
-/////
-///// i.e. the live read reported 2048x1024 while the actual screen is
-///// 1920x1080, TWICE per frame for the whole PBR + Modern-filter window.
-///// Anything SIZED during that window inherits the wrong dimensions: the
-///// pipe-chain classify pack RT was destroyed+recreated twice per frame
-///// (every recreate CLEARS the pack PipeChain pass 3 consumes), the IBL
-///// capture was allocated 2:1 instead of 16:9 (its per-frame viewport never
-///// matched the texture), and any UV remap derived from the read composites
-///// at the wrong scale/coords.
-/////
-///// Contract: capture ONLY from on-screen postfx entry points
-///// (ColourFilter_switch / DrawPipeChain — both verified 1920x1080 every
-///// frame in the same log); geometry-phase and mid-frame readers use the
-///// cache instead of the live read. The cache self-corrects on resolution
-///// changes at the next postfx entry (worst case one frame of stale size —
-///// the same failure mode as today, but bounded to one frame instead of
-///// every frame).
-/////
-static int g_screenSizeW = 0;
-static int g_screenSizeH = 0;
-
-static void CaptureScreenSize(RwRaster *camRas)
-{
-	if(camRas && camRas->width > 0 && camRas->height > 0){
-		g_screenSizeW = camRas->width;
-		g_screenSizeH = camRas->height;
-	}
-}
-
-// Returns true when a trusted screen size has been captured at least once.
-bool GetScreenSize(int *w, int *h)
-{
-	if(g_screenSizeW > 0 && g_screenSizeH > 0){
-		*w = g_screenSizeW;
-		*h = g_screenSizeH;
-		return true;
-	}
-	return false;
-}
 
 
-// View/proj matrices (defined in pipelinecommon.cpp, no header extern)
-extern D3DMATRIX &_RwD3D9D3D9ViewTransform;
-extern D3DMATRIX &_RwD3D9D3D9ProjTransform;
 
 
-/////
-///// Menu state guard — skip expensive PostFX during menus/loading/pause
-/////
-static inline bool IsGameInMenuOrPaused() {
-	return CMenuManager__m_bMenuActive || CCutsceneMgr__ms_running || CPostEffects::m_bDisableAllPostEffect;
-}
-
-/////
-///// Im2D overrides
-/////
-
-
-int overrideColorMod = -1;
-int overrideAlphaMod = -1;
-void *overrideIm2dPixelShader;
-void InitSSAOResources(void);
 
 void Im2DColorModulationHook(RwUInt32 stage, RwUInt32 type, RwUInt32 value)
 {
@@ -477,6 +447,65 @@ void Im2DAlphaModulationHook(RwUInt32 stage, RwUInt32 type, RwUInt32 value)
 void
 Im2dSetPixelShader_hook(void*)
 {
+	// ---- corona_blend diagnostic (§4.7) ------------------------------------
+	// This hook sits on the RW Im2D pixel-shader set site (0x7FB824) that EVERY
+	// RwIm2DRenderIndexedPrimitive dispatch passes through — including the
+	// buffered-sprite flush draws (0x70CF20 -> 0x734EA0) that rasterise the
+	// corona/pointlight/cloud glow quads. Postfx passes always arrive with
+	// overrideIm2dPixelShader != nil (guardedIm2DRender / manual overrides),
+	// so the nil-override population below is exactly the GAME-owned Im2D
+	// draws: coronas, point lights, particles, markers, HUD. Logs the
+	// blend/alpha-test state + bound raster at rasterisation time: first draw
+	// one-shot (full detail incl. the raw device s0 texture), then a 2 s
+	// throttled sample. spriteBatch > 0 marks a buffered-sprite flush draw
+	// (the corona carrier; count at 0xC6A158, same dword the flush guards on).
+	// Black-quad signature to watch for: blend=0 (REPLACE) or dst=ZERO with
+	// the glow texture's black RGB surround.
+	//
+	// RETIRED behind g_diagLevel (perf audit fix, 2026-11-01): diagnosis is
+	// complete (349 samples/run) and the corona shield landed, so at the
+	// default diagLevel=0 this block is a pure per-draw cost (7 raw device
+	// Gets + RwRenderStateGet + GetTexture AddRef/Release on every game Im2D
+	// draw that passes the throttle window). Opt back in with diagLevel>=1;
+	// code kept intact for future diagnosis. NOTE: this inverts the
+	// debug_handl.h "0 = full diagnostics" default for THIS receipt only —
+	// deliberate opt-in, not an accident.
+	if(!overrideIm2dPixelShader && d3d9device && g_diagLevel >= 1){
+		bool cbFirst = dbglog_once("corona_blend_first");
+		if(cbFirst || dbglog_throttle("corona_blend")){
+			DWORD blendEn = 0, srcB = 0, dstB = 0, aFunc = 0, aRef = 0, aTest = 0, bop = 0;
+			d3d9device->GetRenderState(D3DRS_ALPHABLENDENABLE, &blendEn);
+			d3d9device->GetRenderState(D3DRS_SRCBLEND, &srcB);
+			d3d9device->GetRenderState(D3DRS_DESTBLEND, &dstB);
+			d3d9device->GetRenderState(D3DRS_ALPHAFUNC, &aFunc);
+			d3d9device->GetRenderState(D3DRS_ALPHAREF, &aRef);
+			d3d9device->GetRenderState(D3DRS_ALPHATESTENABLE, &aTest);
+			d3d9device->GetRenderState(D3DRS_BLENDOP, &bop);
+			RwUInt32 cbRas = 0;
+			RwRenderStateGet(rwRENDERSTATETEXTURERASTER, (void*)&cbRas);
+			// L2 driver pending cache — the values _rwD3D9RenderStateFlushCache
+			// will push to the device pre-draw; a d3d!=dev pair here IS the
+			// cache<->device split that draws the batch REPLACE.
+			DWORD cbDrvBlend = 0, cbDrvSrc = 0, cbDrvDst = 0;
+			RwD3D9GetRenderState(D3DRS_ALPHABLENDENABLE, &cbDrvBlend);
+			RwD3D9GetRenderState(D3DRS_SRCBLEND, &cbDrvSrc);
+			RwD3D9GetRenderState(D3DRS_DESTBLEND, &cbDrvDst);
+			int cbBatch = *(int*)0xC6A158;	// buffered-sprite count (corona carrier)
+			IDirect3DBaseTexture9 *cbTex0 = NULL;
+			d3d9device->GetTexture(0, &cbTex0);	// AddRef'd — released below
+			dbglog("[corona_blend] %s game Im2D draw: dev blend=%d src=%d dst=%d op=%d "
+			       "atest=%d func=%d ref=%d | drv blend=%d src=%d dst=%d | "
+			       "rw raster=%p dev s0=%p | spriteBatch=%d "
+			       "(blend 0 = REPLACE -> black quads; D3DBLEND 2=ONE 5=SRCALPHA 6=INVSRCALPHA)",
+			       cbFirst ? "FIRST" : "2s",
+			       (int)blendEn, (int)srcB, (int)dstB, (int)bop,
+			       (int)aTest, (int)aFunc, (int)aRef,
+			       (int)cbDrvBlend, (int)cbDrvSrc, (int)cbDrvDst,
+			       (void*)cbRas, (void*)cbTex0, cbBatch);
+			if(cbTex0)
+				cbTex0->Release();
+		}
+	}
 	RwD3D9SetPixelShader(overrideIm2dPixelShader);
 }
 
@@ -492,13 +521,18 @@ static void postfxReportSummary()
 	int pfbH = CPostEffects::pRasterFrontBuffer ? RwRasterGetHeight(CPostEffects::pRasterFrontBuffer) : 0;
 	int camW = camRas ? RwRasterGetWidth(camRas) : 0;
 	int camH = camRas ? RwRasterGetHeight(camRas) : 0;
-	dbglog("[PostFX-REPORT] frame=%u filter=%d pipeline=%d pRasFB=%p(%dx%d) camRas=%p(%dx%d) gradingPS=%p overridePS=%p SSAO=%d smaa=%d normalBuf=%d pipeChain=%d bPBRVS=%p bPBRPS=%p vPBRVS=%p vPBRMod=%p",
-		postfxReportFrame, config->colorFilter, config->pipeline,
-		CPostEffects::pRasterFrontBuffer, pfbW, pfbH,
-		camRas, camW, camH,
-		gradingPS, overrideIm2dPixelShader,
-		config->ssaoEnable, config->smaaEnable, config->normalBufferEnable, config->pipeChainEnable,
-		buildingPBRVS, buildingPBRPS, vehiclePBRVS, VehiclePBR_Modern);
+	// Throttled (was unconditional per-frame): at ~90 fps this was one log
+	// write every ~11ms — pure file-I/O cost that drowned real diagnostics.
+	// One sample per 2s keeps the report visible in every log; message
+	// content unchanged (binary tag verification depends on it).
+	if(dbglog_throttle("postfx_report"))
+		dbglog("[PostFX-REPORT] frame=%u filter=%d pipeline=%d pRasFB=%p(%dx%d) camRas=%p(%dx%d) gradingPS=%p overridePS=%p SSAO=%d smaa=%d normalBuf=%d pipeChain=%d bPBRVS=%p bPBRPS=%p vPBRVS=%p vPBRMod=%p",
+			postfxReportFrame, config->colorFilter, config->pipeline,
+			CPostEffects::pRasterFrontBuffer, pfbW, pfbH,
+			camRas, camW, camH,
+			gradingPS, overrideIm2dPixelShader,
+			config->ssaoEnable, config->smaaEnable, config->normalBufferEnable, config->pipeChainEnable,
+			buildingPBRVS, buildingPBRPS, vehiclePBRVS, VehiclePBR_Modern);
 }
 
 
@@ -510,287 +544,76 @@ static void postfxReportSummary()
 // there's not a lot of that left now
 
 void *iiiTrailsPS, *vcTrailsPS, *modernColorFilterPS;
-RwRaster *grainRaster;
 
 
 // Mobile stuff
-struct Grade
+// (struct Grade now lives in postfx.h — shared with postfx_colourfilter.cpp)
+
+
+// ---- front-buffer sync status (black-frame guard) ------------------------
+// UpdateFrontBuffer is a void API shared with other translation units, so it
+// cannot report failure to its callers. Track the last sync result here and
+// check it at every pRasterFrontBuffer consumer that lives in this file: a
+// failed copy (transient non-screen camera raster, lost device, NULL camera)
+// then SKIPS that consumer instead of letting it composite a stale/black
+// buffer over the frame. A later successful sync repairs the latch.
+static bool s_pfFbValid = true;
+
+static bool PfFrontBufferValid(void)
 {
-	float r, g, b, a;
-};
-void *gradingPS, *contrastPS, *tonemapPassPS;
-void *luminanceReducePS, *luminanceAdaptPS;
-
-// colourFilterEnable=0 bypass ownership (single owner: ColourFilter_Modern's
-// tonemap pass). The bypass must skip the COLOUR FILTER, never the sRGB gamma
-// encode: the pipes emit linear HDR and TonemapPass is the ONLY LinearToSRGB
-// in the chain. Returning before it put the raw linear frame on screen —
-// mid-tones land ~2x under their display value, so daylight exteriors render
-// near-black while the HUD (already display-referred) stays bright.
-// Set for exactly one ColourFilter_Modern call from the bypass path.
-static bool s_tonemapIdentityGrade = false;
-
-// --- Unified tonemap: frame-adaptive exposure resources ---
-// 8x8 luminance measure target + two 1x1 temporal eye-adaptation targets.
-// Allocated lazily, released in ReleaseDefaultPoolResources().
-static IDirect3DTexture9 *g_lumaMeasTex = NULL;
-static IDirect3DSurface9 *g_lumaMeasSurf = NULL;
-static IDirect3DTexture9 *g_lumaAdaptTexA = NULL;
-static IDirect3DSurface9 *g_lumaAdaptSurfA = NULL;
-static IDirect3DTexture9 *g_lumaAdaptTexB = NULL;
-static IDirect3DSurface9 *g_lumaAdaptSurfB = NULL;
-static int g_lumaAdaptFlip = 0;   // 0 = current A (prev B), 1 = current B (prev A)
-
-// Lazily allocate the luminance measure/adapt targets. Returns true if ready.
-static bool EnsureLuminanceTargets(void)
-{
-	if(g_lumaMeasTex && g_lumaAdaptTexA && g_lumaAdaptTexB)
-		return true;
-	IDirect3DDevice9 *dev = d3d9device;
-	if(!dev || !luminanceReducePS || !luminanceAdaptPS)
-		return false;
-
-	// A16B16G16R16F is a linear floating-point target (no sRGB decode).
-	if(!g_lumaMeasTex){
-		if(FAILED(dev->CreateTexture(8, 8, 1, D3DUSAGE_RENDERTARGET, D3DFMT_A16B16G16R16F, D3DPOOL_DEFAULT, &g_lumaMeasTex, NULL))){
-			dbglog("[Tonemap] luma measure RT create FAILED");
-			return false;
-		}
-		g_lumaMeasTex->GetSurfaceLevel(0, &g_lumaMeasSurf);
-	}
-	// Dark-frame fix: a freshly created FP16 RT has UNDEFINED content. The
-	// adapt pass reads the OTHER 1x1 target as `prev` on its first run —
-	// undefined FP16 can be NaN or a huge value. NaN propagates through
-	// `prev + s*(measured-prev)` into the adapted luminance, and TonemapPass's
-	// `key/lum` then yields NaN exposure -> saturate(NaN) = 0 -> BLACK frame
-	// that persists via the ping-pong. A huge prev decays only slowly
-	// (adaptSpeed 0.12/frame) -> long dark window. Clear both adapt targets
-	// to a sane mid-grey luminance (~0.18) at creation so adaptation always
-	// starts from a valid state (LuminanceAdapt's prev<=0 first-frame branch
-	// then never sees garbage either).
-	if(!g_lumaAdaptTexA){
-		if(FAILED(dev->CreateTexture(1, 1, 1, D3DUSAGE_RENDERTARGET, D3DFMT_A16B16G16R16F, D3DPOOL_DEFAULT, &g_lumaAdaptTexA, NULL))){
-			dbglog("[Tonemap] luma adapt RT A create FAILED");
-			return false;
-		}
-		g_lumaAdaptTexA->GetSurfaceLevel(0, &g_lumaAdaptSurfA);
-		if(g_lumaAdaptSurfA){
-			IDirect3DSurface9 *oldRT = NULL, *oldDS = NULL;
-			D3DVIEWPORT9 oldVP;
-			dev->GetRenderTarget(0, &oldRT);
-			dev->GetDepthStencilSurface(&oldDS);
-			dev->GetViewport(&oldVP);
-			dev->SetRenderTarget(0, g_lumaAdaptSurfA);
-			dev->SetDepthStencilSurface(NULL);
-			D3DVIEWPORT9 vp = { 0, 0, 1, 1, 0.0f, 1.0f };
-			dev->SetViewport(&vp);
-			// 46/255 ~= 0.18 linear luminance — plausible indoor scene key
-			dev->Clear(0, NULL, D3DCLEAR_TARGET, D3DCOLOR_ARGB(0, 46, 46, 46), 0.0f, 0);
-			dev->SetViewport(&oldVP);
-			dev->SetRenderTarget(0, oldRT);
-			dev->SetDepthStencilSurface(oldDS);
-			if(oldRT) oldRT->Release();
-			if(oldDS) oldDS->Release();
-		}
-	}
-	if(!g_lumaAdaptTexB){
-		if(FAILED(dev->CreateTexture(1, 1, 1, D3DUSAGE_RENDERTARGET, D3DFMT_A16B16G16R16F, D3DPOOL_DEFAULT, &g_lumaAdaptTexB, NULL))){
-			dbglog("[Tonemap] luma adapt RT B create FAILED");
-			return false;
-		}
-		g_lumaAdaptTexB->GetSurfaceLevel(0, &g_lumaAdaptSurfB);
-		if(g_lumaAdaptSurfB){
-			IDirect3DSurface9 *oldRT = NULL, *oldDS = NULL;
-			D3DVIEWPORT9 oldVP;
-			dev->GetRenderTarget(0, &oldRT);
-			dev->GetDepthStencilSurface(&oldDS);
-			dev->GetViewport(&oldVP);
-			dev->SetRenderTarget(0, g_lumaAdaptSurfB);
-			dev->SetDepthStencilSurface(NULL);
-			D3DVIEWPORT9 vp = { 0, 0, 1, 1, 0.0f, 1.0f };
-			dev->SetViewport(&vp);
-			dev->Clear(0, NULL, D3DCLEAR_TARGET, D3DCOLOR_ARGB(0, 46, 46, 46), 0.0f, 0);
-			dev->SetViewport(&oldVP);
-			dev->SetRenderTarget(0, oldRT);
-			dev->SetDepthStencilSurface(oldDS);
-			if(oldRT) oldRT->Release();
-			if(oldDS) oldDS->Release();
-		}
-	}
-	return true;
+	return s_pfFbValid;
 }
 
-// Render one fullscreen pass into a raw D3D9 target using a scene raster or an
-// explicit stage-0 texture. Mirrors the proven DrawNormalBuffer idiom.
-// `verts` selects the quad: colorfilterVerts (2048² quad, correct when
-// sampling the padded front buffer across its full UV range) or a caller
-// built quad (e.g. the valid-sub-rect luma measure quad).
-static void RenderLumaPass(IDirect3DSurface9 *dst, int w, int h,
-                           void *ps, RwRaster *sceneRaster, IDirect3DTexture9 *tex0,
-                           RwIm2DVertex *verts)
+static void PfFrontBufferFailed(HRESULT hr)
 {
-	IDirect3DDevice9 *dev = d3d9device;
-	if(!dev || !dst || !ps)
-		return;
-
-	IDirect3DSurface9 *oldRT = NULL;
-	IDirect3DSurface9 *oldDS = NULL;
-	D3DVIEWPORT9 oldVP;
-	dev->GetRenderTarget(0, &oldRT);
-	dev->GetDepthStencilSurface(&oldDS);
-	dev->GetViewport(&oldVP);
-
-	dev->SetRenderTarget(0, dst);
-	dev->SetDepthStencilSurface(NULL);
-	D3DVIEWPORT9 vp = { 0, 0, (DWORD)w, (DWORD)h, 0.0f, 1.0f };
-	dev->SetViewport(&vp);
-
-	if(sceneRaster){
-		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)sceneRaster);
-		dev->SetTexture(0, NULL);
-	} else if(tex0){
-		dev->SetTexture(0, tex0);
-		dev->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
-		dev->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
-		dev->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
-		dev->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
-	}
-
-	CPostEffects::ImmediateModeRenderStatesStore();
-	CPostEffects::ImmediateModeRenderStatesSet();
-	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
-	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
-
-	overrideIm2dPixelShader = ps;
-	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, verts, 4, colorfilterIndices, 6);
-	overrideIm2dPixelShader = nil;
-
-	CPostEffects::ImmediateModeRenderStatesReStore();
-
-	// Raw SetTexture bypasses RW's render-state cache; explicitly clear the cached
-	// texture-raster too so the next pass reliably rebinds stage 0 (otherwise the
-	// tonemap pass samples a NULL stage 0 and the whole frame goes black).
-	dev->SetTexture(0, NULL);
-	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)NULL);
-
-	dev->SetViewport(&oldVP);
-	dev->SetRenderTarget(0, oldRT);
-	dev->SetDepthStencilSurface(oldDS);
-	if(oldRT) oldRT->Release();
-	if(oldDS) oldDS->Release();
+	s_pfFbValid = false;
+	if(dbglog_once("pf_fb_fail"))
+		dbglog("[PF] UpdateFrontBuffer FAILED hr=0x%08X", (unsigned)hr);
 }
 
-// Measure the current graded frame, run temporal eye adaptation, and return the
-// adapt texture to bind on the tonemap pass (or NULL on failure).
-static IDirect3DTexture9 *RunFrameExposure(float adaptSpeed)
+// HRESULT for a failed RwRasterRenderFast copy. Rw does not surface the
+// device error, so prefer TestCooperativeLevel when the device is lost;
+// otherwise the copy itself failed (E_FAIL).
+static HRESULT PfFrontBufferCopyHr(void)
 {
-	if(!EnsureLuminanceTargets())
-		return NULL;
-
-	// 1) Full-res graded frame -> 8x8 luminance measure.
-	// The measure quad must cover ONLY the front buffer's valid sub-rect:
-	// colorfilterVerts map UV 0..1 across the whole padded 2048x2048 FB, so
-	// ~56% of the taps land in the never-written pad region — the measured
-	// luminance (and therefore the auto-exposure key) is diluted/offset by
-	// garbage. Build an 8x8-position quad whose UVs span exactly
-	// (screenW/fbW, screenH/fbH) — the valid 1920x1080 content region.
-	RwIm2DVertex lumaQuad[4];
-	RwIm2DVertex *measureVerts = colorfilterVerts;
-	int lumaScrW = 0, lumaScrH = 0;
-	RwRaster *lumaFB = CPostEffects::pRasterFrontBuffer;
-	if(GetScreenSize(&lumaScrW, &lumaScrH) && lumaFB &&
-	   lumaFB->width > 0 && lumaFB->height > 0){
-		float uMax = min(1.0f, (float)lumaScrW / max((float)lumaFB->width, 1.0f));
-		float vMax = min(1.0f, (float)lumaScrH / max((float)lumaFB->height, 1.0f));
-		static const float lpx[4] = { 0.0f, 0.0f, 8.0f, 8.0f };
-		static const float lpy[4] = { 0.0f, 8.0f, 8.0f, 0.0f };
-		static const float luu[4] = { 0.0f, 0.0f, 1.0f, 1.0f };
-		static const float lvv[4] = { 0.0f, 1.0f, 1.0f, 0.0f };
-		for(int i = 0; i < 4; i++){
-			RwIm2DVertex *v = &lumaQuad[i];
-			v->x = lpx[i];
-			v->y = lpy[i];
-			v->z = 0.0f;
-			v->rhw = 1.0f;
-			v->u = luu[i] * uMax;
-			v->v = lvv[i] * vMax;
-			RwIm2DVertexSetIntRGBA(v, 255, 255, 255, 255);
-		}
-		measureVerts = lumaQuad;
-	}
-	RenderLumaPass(g_lumaMeasSurf, 8, 8, luminanceReducePS,
-	               CPostEffects::pRasterFrontBuffer, NULL, measureVerts);
-
-	// 2) 8x8 measure + previous 1x1 -> current 1x1 eye adaptation
-	IDirect3DTexture9 *curTex  = g_lumaAdaptFlip ? g_lumaAdaptTexB : g_lumaAdaptTexA;
-	IDirect3DSurface9 *curSurf = g_lumaAdaptFlip ? g_lumaAdaptSurfB : g_lumaAdaptSurfA;
-	IDirect3DTexture9 *prevTex = g_lumaAdaptFlip ? g_lumaAdaptTexA : g_lumaAdaptTexB;
-
 	IDirect3DDevice9 *dev = d3d9device;
 	if(dev){
-		dev->SetTexture(0, g_lumaMeasTex);
-		dev->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
-		dev->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
-		dev->SetTexture(1, prevTex);
-		dev->SetSamplerState(1, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
-		dev->SetSamplerState(1, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+		HRESULT coop = dev->TestCooperativeLevel();
+		if(FAILED(coop))
+			return coop;
 	}
-	float adaptP[4] = { adaptSpeed, 0.0f, 0.0f, 0.0f };
-	RwD3D9SetPixelShaderConstant(0, adaptP, 1);
-
-	RenderLumaPass(curSurf, 1, 1, luminanceAdaptPS, NULL, g_lumaMeasTex, colorfilterVerts);
-	if(dev) dev->SetTexture(1, NULL);
-
-	g_lumaAdaptFlip ^= 1;
-	return curTex;
+	return E_FAIL;
 }
-#define NUMHOURS 8
-#define NUMWEATHERS 23
-#define EXTRASTART 21
 
-struct GradeColorset
+// Throttled breadcrumb for the SKIP side. The one-shot failure line itself is
+// emitted by PfFrontBufferFailed under the pf_fb_fail tag.
+static bool PfFrontBufferReady(const char *consumer)
 {
-	Grade red;
-	Grade green;
-	Grade blue;
-
-	GradeColorset(void) {}
-	GradeColorset(int h, int w);
-	void Interpolate(GradeColorset *a, GradeColorset *b, float fa, float fb);
-};
-
-
-struct Colorcycle
-{
-	static bool initialised;
-	static Grade redGrade[24][NUMWEATHERS];
-	static Grade greenGrade[24][NUMWEATHERS];
-	static Grade blueGrade[24][NUMWEATHERS];
-
-	static void Initialise(void);
-	static void Update(GradeColorset *colorset);
-};
-
-
-
+	if(s_pfFbValid)
+		return true;
+	if(dbglog_throttle("pf_fb_skip"))
+		dbglog("[PF] skip %s: front buffer sync failed this frame (stale buffer not consumed)",
+			consumer ? consumer : "front-buffer consumer");
+	return false;
+}
 
 void
 CPostEffects::UpdateFrontBuffer(void)
 {
 	if(!CPostEffects::pRasterFrontBuffer){
 		dbglog("[PostFX] WARNING: UpdateFrontBuffer pRasterFrontBuffer is NULL!");
+		PfFrontBufferFailed(E_POINTER);
 		return;
 	}
 	if(!Scene.camera){
 		dbglog("[PostFX] WARNING: UpdateFrontBuffer Scene.camera is NULL!");
+		PfFrontBufferFailed(E_POINTER);
 		return;
 	}
 	RwRaster *camRas = RwCameraGetRaster(Scene.camera);
 	if(!camRas){
 		dbglog("[PostFX] WARNING: UpdateFrontBuffer camera raster is NULL!");
+		PfFrontBufferFailed(E_POINTER);
 		return;
 	}
 	// Screen-size doctrine: the camera raster is NOT a stable screen-size
@@ -804,6 +627,10 @@ CPostEffects::UpdateFrontBuffer(void)
 		if(dbglog_throttle("ufb_mismatch"))
 			dbglog("[PostFX] UpdateFrontBuffer SKIP: camRas %dx%d != screen %dx%d (transient raster)",
 				camRas->width, camRas->height, ufbScrW, ufbScrH);
+		// The copied region would be garbage and the FB is left stale; tell
+		// the consumers in this frame to stay off it (D3DERR_INVALIDCALL is
+		// the closest stock code for "source is not the screen surface").
+		PfFrontBufferFailed((HRESULT)0x8876086CL);
 		return;
 	}
 	if(dbglog_throttle("ufb_copy"))
@@ -817,8 +644,20 @@ CPostEffects::UpdateFrontBuffer(void)
 	RwRasterPopContext();
 	RwCameraBeginUpdate(Scene.camera);
 
+	// Failure handling: RwRasterRenderFast returns NULL when the copy did not
+	// happen. Latch the failure so this frame's FB consumers skip instead of
+	// compositing whatever the stale front buffer still holds (the reported
+	// whole-screen black at random interior angles). A lost device makes even
+	// a non-NULL blit untrustworthy, so TestCooperativeLevel gates that too.
+	HRESULT ufbCoop = d3d9device ? d3d9device->TestCooperativeLevel() : S_OK;
+	if(!copyResult || FAILED(ufbCoop)){
+		PfFrontBufferFailed(FAILED(ufbCoop) ? ufbCoop : PfFrontBufferCopyHr());
+	}else{
+		s_pfFbValid = true;
+	}
+
 	// Debug dump: verify the camera→FB copy actually happened
-	if(config && config->postfxDumpDebug && g_postfxDumpFrame < 5){
+	if(config && config->postfxDumpDebug && PostFX_DumpActive()){
 		if(!copyResult)
 			dbglog("[Dump] UpdateFrontBuffer: RwRasterRenderFast returned NULL (copy failed)");
 		DumpCurrentRT("fb_after_copy");
@@ -827,7 +666,7 @@ CPostEffects::UpdateFrontBuffer(void)
 
 RwRaster *vcs_radiosity_target1, *vcs_radiosity_target2;
 static int s_vcsRadLastWidth = 0, s_vcsRadLastHeight = 0, s_vcsRadLastConfigRes = 0;
-static bool s_vcsRadPendingInit = false;
+bool s_vcsRadPendingInit = false;
 
 void ReleaseVCSRadiosityResources(void)
 {
@@ -980,12 +819,23 @@ CPostEffects::Radiosity_VCS_init(void)
 void
 CPostEffects::Radiosity_VCS(int limit, int intensity)
 {
+	PF_SCOPE("Radiosity_VCS");
+	if(dbglog_throttle("pf_radvcs"))
+		dbglog("[PF] Radiosity_VCS: radEnable=%d limit=%d intensity=%d ps=%p resMult=%d",
+			config->radiosityEnable, limit, intensity, radiosityPS, config->trailsResolution);
 	int i;
 	int resMult = config->trailsResolution;
 	RwRaster *fb;
 	RwRaster *fb1, *fb2, *tmp;
 
+	// Null guards: RwCameraGetRaster(NULL) faults inside RW, and a NULL
+	// camera raster / VCS target faults at the PushContext/SetRaster sites
+	// below (raster creates in Radiosity_VCS_init are unchecked).
+	if(!Scene.camera)
+		return;
 	fb = RwCameraGetRaster(Scene.camera);
+	if(!fb)
+		return;
 	if(s_vcsRadLastWidth != fb->width || s_vcsRadLastHeight != fb->height || s_vcsRadLastConfigRes != resMult){
 		Radiosity_VCS_init();
 		s_vcsRadLastWidth = fb->width;
@@ -1008,6 +858,11 @@ CPostEffects::Radiosity_VCS(int limit, int intensity)
 			dbglog("[Radiosity_VCS] SKIP: rasters still pending init");
 		return;
 	}
+
+	// Radiosity_VCS_init does not check its RwRasterCreate results; a failed
+	// create leaves a NULL target that would fault at PushContext/SetRaster.
+	if(!vcs_radiosity_target1 || !vcs_radiosity_target2)
+		return;
 
 	RwRect r;
 	r.x = 0;
@@ -1106,6 +961,10 @@ RwRGBA rgbTweak;
 void
 CPostEffects::Blur_VCS(void)
 {
+	PF_SCOPE("Blur_VCS");
+	if(dbglog_throttle("pf_blurvcs"))
+		dbglog("[PF] Blur_VCS: in=pRasterFrontBuffer out=lastFrameBuffer ps=%p",
+			blurPS);
 	if(!CPostEffects::pRasterFrontBuffer){
 		dbglog("Blur_VCS: pRasterFrontBuffer is NULL, skipping");
 		return;
@@ -1130,9 +989,19 @@ CPostEffects::Blur_VCS(void)
 		s_blurVCS_lastWidth = bufw;
 		s_blurVCS_lastHeight = bufh;
 	}
+	// Create failed (OOM/lost device): the RwRasterPushContext(lastFrameBuffer)
+	// below would fault. Bail before any state is mutated.
+	if(!lastFrameBuffer)
+		return;
 
-	screenw = RwCameraGetRaster(Scene.camera)->width;
-	screenh = RwCameraGetRaster(Scene.camera)->height;
+	// Null guards: RwCameraGetRaster(NULL) faults inside RW.
+	if(!Scene.camera)
+		return;
+	RwRaster *blurCamRas = RwCameraGetRaster(Scene.camera);
+	if(!blurCamRas)
+		return;
+	screenw = blurCamRas->width;
+	screenh = blurCamRas->height;
 
 	makequad(blur_vcs_vertices, screenw, screenh, bufw, bufh);
 	for(i = 0; i < 4; i++)
@@ -1160,12 +1029,17 @@ CPostEffects::Blur_VCS(void)
 	RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
 	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
 
-	// get current frame
-	RwCameraEndUpdate(Scene.camera);
-	RwRasterPushContext(CPostEffects::pRasterFrontBuffer);
-	RwRasterRenderFast(RwCameraGetRaster(Scene.camera), 0, 0);
-	RwRasterPopContext();
-	RwCameraBeginUpdate(Scene.camera);
+	// get current frame (guarded copy: never sample a stale/black FB)
+	UpdateFrontBuffer();
+	if(!PfFrontBufferReady("Blur_VCS")){
+		RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
+		CPostEffects::ImmediateModeRenderStatesReStore();
+		if(rawGeomSaved){
+			RestoreRawGeomStates(rawGeom);
+			rawGeomSaved = false;
+		}
+		return;
+	}
 
 	// blur frame
 	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, CPostEffects::pRasterFrontBuffer);
@@ -1273,6 +1147,23 @@ static RwRaster *s_radiosityWorkBuffer = nil;
 void
 CPostEffects::Radiosity_shader(int intensityLimit, int filterPasses, int renderPasses, int intensity)
 {
+	PF_SCOPE("Radiosity_Shader");
+	if(dbglog_once("pf_rad_first") || dbglog_throttle("pf_rad_sh")){
+		int fbW = pRasterFrontBuffer ? (int)pRasterFrontBuffer->width  : 0;
+		int fbH = pRasterFrontBuffer ? (int)pRasterFrontBuffer->height : 0;
+		int camW = 0, camH = 0;
+		RwRaster *camRasLog = Scene.camera ? RwCameraGetRaster(Scene.camera) : NULL;
+		if(camRasLog){ camW = (int)camRasLog->width; camH = (int)camRasLog->height; }
+		int scrW = 0, scrH = 0;
+		int scrOk = GetScreenSize(&scrW, &scrH) ? 1 : 0;
+		int mismatch = (scrW != fbW || scrH != fbH) ? 1 : 0;
+		int camMismatch = (scrW != camW || scrH != camH) ? 1 : 0;
+		dbglog("[PF] Radiosity_shader: limit=%d filtP=%d rendP=%d int=%d ps=%p blend=ONE/ONE "
+		       "rad=%d radDbg=%d fb=%dx%d cam=%dx%d screen=%dx%d gsOK=%d mismatch=%d camMismatch=%d",
+			intensityLimit, filterPasses, renderPasses, intensity, radiosityPS,
+			(int)m_bRadiosity, (int)m_bRadiosityDebug, fbW, fbH, camW, camH,
+			scrW, scrH, scrOk, mismatch, camMismatch);
+	}
 	if(!pRasterFrontBuffer){
 		dbglog("Radiosity_shader: pRasterFrontBuffer is NULL, skipping");
 		return;
@@ -1288,6 +1179,12 @@ CPostEffects::Radiosity_shader(int intensityLimit, int filterPasses, int renderP
 	if(workBuffer == nil)
 		workBuffer = RwRasterCreate(pRasterFrontBuffer->width, pRasterFrontBuffer->height, pRasterFrontBuffer->depth, rwRASTERTYPECAMERATEXTURE);
 	s_radiosityShaderWorkBuffer = workBuffer;
+	// Create failed: RwCameraSetRaster(Scene.camera, NULL) below would fault
+	// inside RW. Nothing has been mutated yet — clean bail (retries next frame).
+	if(!workBuffer){
+		dbglog("Radiosity_shader: work buffer create failed, skipping");
+		return;
+	}
 
 	RwRaster *drawBuffer = RwCameraGetRaster(Scene.camera);
 	if(!drawBuffer){
@@ -1310,6 +1207,19 @@ CPostEffects::Radiosity_shader(int intensityLimit, int filterPasses, int renderP
 	// the world draw (BLENDOP/SRCBLEND/DESTBLEND/BLENDFACTOR family).
 	DWORD rawGeom[9];
 	bool rawGeomSaved = SaveRawGeomStates(rawGeom);
+	bool radFbOk = true;
+
+	// Sample only a frame we know copied this frame (the pass reads FB as its
+	// blur source); skip the whole pass rather than blurring stale/black.
+	UpdateFrontBuffer();
+	radFbOk = PfFrontBufferValid();
+	if(!radFbOk){
+		if(rawGeomSaved){
+			RestoreRawGeomStates(rawGeom);
+			rawGeomSaved = false;
+		}
+		return;
+	}
 
 	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
 	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
@@ -1326,20 +1236,29 @@ CPostEffects::Radiosity_shader(int intensityLimit, int filterPasses, int renderP
 	params[2] = 1<<filterPasses;
 	params[2] *= drawW/640.0f;
 
-	overrideIm2dPixelShader = blurPS;
-	// Blur vertically
+	// Blur vertically — SEH-guarded (guardedIm2DRender) so a fault can't
+	// leave the blurPS override bound: Im2dSetPixelShader_hook would
+	// re-apply it to every later Im2D dispatch, including coronas.
 	params[0] = 0;
 	params[1] = 1.0f/max(RwRasterGetHeight(pRasterFrontBuffer), 1);
 	RwD3D9SetPixelShaderConstant(0, params, 1);
-	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
+	guardedIm2DRender(blurPS, rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6, "blur_v");
+	// Never leave FB bound on s0 while UpdateFrontBuffer makes it the RT:
+	// D3D9 would be sampling the same surface it is rendering to.
+	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)NULL);
 	UpdateFrontBuffer();
-	// Blur horizontally
-	params[0] = 1.0f/max(RwRasterGetWidth(pRasterFrontBuffer), 1);
-	params[1] = 0;
-	RwD3D9SetPixelShaderConstant(0, params, 1);
-	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
-	UpdateFrontBuffer();
-	overrideIm2dPixelShader = nil;
+	radFbOk = PfFrontBufferValid();
+	if(radFbOk){
+		// Blur horizontally
+		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)pRasterFrontBuffer);
+		params[0] = 1.0f/max(RwRasterGetWidth(pRasterFrontBuffer), 1);
+		params[1] = 0;
+		RwD3D9SetPixelShaderConstant(0, params, 1);
+		guardedIm2DRender(blurPS, rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6, "blur_h");
+		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)NULL);
+		UpdateFrontBuffer();
+		radFbOk = PfFrontBufferValid();
+	}
 
 
 	/* Restore original FB */
@@ -1349,6 +1268,7 @@ CPostEffects::Radiosity_shader(int intensityLimit, int filterPasses, int renderP
 	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)pRasterFrontBuffer);
 
 	/* Add to framebuffer */
+	if(radFbOk){
 	params[0] = intensityLimit/255.0f;
 	params[1] = intensity/255.0f;
 	params[2] = renderPasses;
@@ -1381,8 +1301,17 @@ CPostEffects::Radiosity_shader(int intensityLimit, int filterPasses, int renderP
 	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDONE);
 	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDONE);
 	overrideIm2dPixelShader = radiosityPS;
+	if(dbglog_once("pf_rad_composite"))
+		dbglog("[PF] Radiosity_composite: limit=%d int=%d rendP=%d draw=%dx%d "
+		       "params=(%.6f,%.6f,%.6f,%.6f) fb=%dx%d",
+			intensityLimit, intensity, renderPasses, drawW, drawH,
+			params[0], params[1], params[2], params[3],
+			(int)pRasterFrontBuffer->width, (int)pRasterFrontBuffer->height);
 	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
 	overrideIm2dPixelShader = nil;
+	}else if(dbglog_throttle("pf_rad_fbskip")){
+		dbglog("[PF] Radiosity_shader: composite skipped (front-buffer sync failed this frame)");
+	}
 
 	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
 	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
@@ -1399,6 +1328,11 @@ CPostEffects::Radiosity_shader(int intensityLimit, int filterPasses, int renderP
 void
 CPostEffects::Radiosity(int intensityLimit, int filterPasses, int renderPasses, int intensity)
 {
+	PF_SCOPE("Radiosity");
+	if(dbglog_throttle("pf_rad"))
+		dbglog("[PF] Radiosity: radEnable=%d radShaderPS=%p blurPS=%p tributary=%d/%d/%d",
+			config->radiosityEnable, radiosityPS, blurPS,
+			intensityLimit, filterPasses, renderPasses);
 	if(!config->radiosityEnable)
 		return;
 	if(!pRasterFrontBuffer){
@@ -1455,6 +1389,9 @@ CPostEffects::Radiosity(int intensityLimit, int filterPasses, int renderPasses, 
 		return;
 	}
 
+	if(!PfFrontBufferReady("radiosity (classic)"))
+		return;
+
 	RwRaster *workBuffer = s_radiosityWorkBuffer;
 	if(workBuffer)
 		if(workBuffer->width != pRasterFrontBuffer->width ||
@@ -1466,10 +1403,24 @@ CPostEffects::Radiosity(int intensityLimit, int filterPasses, int renderPasses, 
 	if(workBuffer == nil)
 		workBuffer = RwRasterCreate(pRasterFrontBuffer->width, pRasterFrontBuffer->height, pRasterFrontBuffer->depth, rwRASTERTYPECAMERATEXTURE);
 	s_radiosityWorkBuffer = workBuffer;
+	// Create failed: renderBuffer (= workBuffer) would be NULL at the
+	// RwCameraSetRaster/RwD3D9SetRenderTarget sites below. Nothing has been
+	// mutated yet — clean bail (retries next frame).
+	if(!workBuffer){
+		dbglog("Radiosity: work buffer create failed, skipping");
+		return;
+	}
 
 	RwRaster *renderBuffer, *textureBuffer;
 
+	// Null guards: RwCameraGetRaster(NULL) faults inside RW.
+	if(!Scene.camera)
+		return;
 	RwRaster *drawBuffer = RwCameraGetRaster(Scene.camera);
+	if(!drawBuffer){
+		dbglog("Radiosity: camera raster NULL, skipping");
+		return;
+	}
 
 	RwInt32 w = RwRasterGetWidth(drawBuffer);
 	RwInt32 h = RwRasterGetHeight(drawBuffer);
@@ -1589,1320 +1540,241 @@ CPostEffects::Radiosity(int intensityLimit, int filterPasses, int renderPasses, 
 	UpdateFrontBuffer();
 }
 
-void
-CPostEffects::DarknessFilter_fix(uint8 alpha)
-{
-	DarknessFilter(alpha);
-	UpdateFrontBuffer();
-}
-
-void
-CPostEffects::ColourFilter_Generic(RwRGBA rgb1, RwRGBA rgb2, void *ps)
-{
-	if(dbglog_throttle( "cf_generic"))
-		dbglog("[PostFX] ColourFilter_Generic ps=%p pRasterFrontBuffer=%p rgb1=(%d,%d,%d,%d) rgb2=(%d,%d,%d,%d)",
-			ps, CPostEffects::pRasterFrontBuffer, rgb1.red, rgb1.green, rgb1.blue, rgb1.alpha,
-			rgb2.red, rgb2.green, rgb2.blue, rgb2.alpha);
-//	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERNEAREST);
-	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
-	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)CPostEffects::pRasterFrontBuffer);
-	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
-
-	RwRGBAReal color, color2;
-	RwRGBARealFromRwRGBA(&color, &rgb1);
-	RwRGBARealFromRwRGBA(&color2, &rgb2);
-	RwD3D9SetPixelShaderConstant(0, &color, 1);
-	RwD3D9SetPixelShaderConstant(1, &color2, 1);
-
-	// SEH-guarded choke-point: resets overrideIm2dPixelShader on every exit
-	// (incl. fault) so a faulting dispatch can't leave the override bound.
-	guardedIm2DRender(ps, rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6, "cf_generic");
-
-	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
-	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
-	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
-	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)NULL);
-	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
-	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)TRUE);
-}
-
-void
-CPostEffects::ColourFilter_Modern(RwRGBA rgba1, RwRGBA rgba2)
-{
-	if(dbglog_throttle("cfmodern_enter"))
-		dbglog("[PostFX] ColourFilter_Modern ENTER rgba1=(%d,%d,%d,%d) rgba2=(%d,%d,%d,%d) pRFB=%p gradingPS=%p camRas=%p",
-			rgba1.red, rgba1.green, rgba1.blue, rgba1.alpha,
-			rgba2.red, rgba2.green, rgba2.blue, rgba2.alpha,
-			CPostEffects::pRasterFrontBuffer, gradingPS,
-			Scene.camera ? RwCameraGetRaster(Scene.camera) : NULL);
-
-	if(!CPostEffects::pRasterFrontBuffer){
-		dbglog("[PostFX] WARNING: pRasterFrontBuffer is NULL in ColourFilter_Modern!");
-		return;
-	}
-
-	// Log render state before postfx
-	if(dbglog_throttle("cf_modern_state"))
-		dbglog("[PostFX] cf_modern PRE-RENDER pRasFB=%p camRas=%p overridePS=%p gradingPS=%p zTest=%d zWrite=%d",
-			CPostEffects::pRasterFrontBuffer,
-			Scene.camera ? RwCameraGetRaster(Scene.camera) : 0,
-			overrideIm2dPixelShader, gradingPS, -1, -1);
-
-	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
-	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)CPostEffects::pRasterFrontBuffer);
-	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
-
-	if(!Colorcycle::initialised)
-		Colorcycle::Initialise();
-
-	GradeColorset cset;
-	Colorcycle::Update(&cset);
-	Grade red, green, blue;
-	red = cset.red;
-	green = cset.green;
-	blue = cset.blue;
-
-	// Modern grading for PBR: timecycle provides color tint, not brightness multiplier.
-	// Vanilla two-pass pipeline (MODULATE2X + ADD) is calibrated for gamma-encoded [0,1] values.
-	// PBR outputs linear HDR where values can be 5-20+ (sky, reflections).
-	// So we extract the timecycle's COLOR HUE and apply it as a gentle tint around neutral (1.0).
-	float a1 = rgba1.alpha/128.0f;
-	float a2 = rgba2.alpha/128.0f;
-	float raw_r = a1*rgba1.red/255.0f + a2*rgba2.red/255.0f;
-	float raw_g = a1*rgba1.green/255.0f + a2*rgba2.green/255.0f;
-	float raw_b = a1*rgba1.blue/255.0f + a2*rgba2.blue/255.0f;
-	// Luminance of the raw tint — encodes overall brightness level (night=dark, day=bright)
-	float luma = 0.299f*raw_r + 0.587f*raw_g + 0.114f*raw_b;
-	float inv = (luma > 0.001f) ? 1.0f/luma : 1.0f;
-	// Extract color hue from raw, blend toward neutral with TINT_STRENGTH
-	// 0.0 = no tint (neutral 1,1,1), 1.0 = full vanilla timecycle color shift
-	float TINT_STRENGTH = 0.35f;
-	red.r   = 1.0f + (raw_r*inv - 1.0f) * TINT_STRENGTH;
-	green.g = 1.0f + (raw_g*inv - 1.0f) * TINT_STRENGTH;
-	blue.b  = 1.0f + (raw_b*inv - 1.0f) * TINT_STRENGTH;
-	// Subtle brightness from timecycle level (preserves day/night atmosphere)
-	float brightness = max(0.75f, min(1.25f, 0.85f + luma * 0.1f));
-	red.r   *= brightness;
-	green.g *= brightness;
-	blue.b  *= brightness;
-	// Clamp to prevent extremes
-	red.r   = max(0.5f, min(2.0f, red.r));
-	green.g = max(0.5f, min(2.0f, green.g));
-	blue.b  = max(0.5f, min(2.0f, blue.b));
-	red.g = red.b = red.a = 0.0f;
-	green.r = green.b = green.a = 0.0f;
-	blue.r = blue.g = blue.a = 0.0f;
-
-	if(dbglog_throttle("cf_modern_grading"))
-		dbglog("[PostFX] ColourFilter_Modern grading: r=%.3f g=%.3f b=%.3f luma=%.3f bright=%.3f tint=%.1f",
-			red.r, green.g, blue.b, luma, brightness, TINT_STRENGTH);
-
-	RwD3D9SetPixelShaderConstant(0, &red, 1);
-	RwD3D9SetPixelShaderConstant(1, &green, 1);
-	RwD3D9SetPixelShaderConstant(2, &blue, 1);
-
-	if(!gradingPS){
-		dbglog("[PostFX] WARNING: gradingPS is NULL! ColourFilter_Modern will render with no shader");
-	}
-
-	// Filter-quad blend doctrine: the grading/tonemap quads must REPLACE the
-	// frame, never blend with it. The rw cache can carry a stale blend block
-	// from an earlier pass (e.g. BLENDFACTOR additive from VCS trails, or
-	// HUD SRCALPHA with a quad whose vertex alpha is 0 — colorfilterVerts
-	// carry emissiveColor=0) which darkens or no-ops the graded output.
-	// Force ONE/ZERO (replace) on both layers for the filter draws; the
-	// cleanup below restores SRCALPHA/INVSRCALPHA.
-	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDONE);
-	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDZERO);
-
-	// Pass 1: Color grading (diagonal matrix multiply). SEH-guarded so the
-	// override is cleared on fault as well as success. SKIPPED on the
-	// colorFilterEnable=0 bypass (s_tonemapIdentityGrade): that path only
-	// wants the tonemap's gamma encode, not the timecycle tint.
-	if(!s_tonemapIdentityGrade)
-		guardedIm2DRender(gradingPS, rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6, "cf_modern_p1");
-
-	// Copy graded linear output to pRasterFrontBuffer for tonemap input
-	UpdateFrontBuffer();
-
-	// --- Unified tonemap: measure the graded frame for adaptive exposure ---
-	// timecyc supplies COLOUR (pass 1 above); the rendered frame supplies
-	// BRIGHTNESS here, so exposure is frame-consistent across all pipes.
-	// Only runs when the feature is enabled; otherwise the legacy timecyc-only
-	// exposure path below is used unchanged. The identity-grade bypass forces
-	// it OFF: TonemapPass re-derives sceneLuma (and therefore PostGrade's
-	// adaptive intensity) from the measured frame whenever c5.w >= 0.5, which
-	// would re-introduce grading the bypass asked us to skip.
-	bool autoExposureOn = !s_tonemapIdentityGrade &&
-		(config && config->tonemapAutoExposure && luminanceReducePS && luminanceAdaptPS);
-	float adaptSpeed = config ? config->tonemapAdaptSpeed : 0.12f;
-	IDirect3DTexture9 *frameLumaTex = autoExposureOn ? RunFrameExposure(adaptSpeed) : NULL;
-	if(autoExposureOn && !frameLumaTex)
-		autoExposureOn = false;
-
-	// Pass 2: Hable/Uncharted 2 filmic tonemap + sRGB gamma encode
-	if(tonemapPassPS){
-		// Re-setup render states for tonemap pass (reads pRasterFrontBuffer).
-		// Re-assert replace blending — UpdateFrontBuffer's blit ran in between.
-		RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
-		RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
-		RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
-		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
-		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)CPostEffects::pRasterFrontBuffer);
-		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
-		RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDONE);
-		RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDZERO);
-
-		// Map GTA SA brightness slider (0-384, default 256) to tonemap exposure
-		float brightness = (float)CMenuManager__m_PrefsBrightness;
-		float baseExposure = max(0.3f, brightness / 256.0f);  // 256 → 1.0 (neutral)
-
-		// === Timecycle-driven adaptive tonemap ===
-		// The timecycle is the authority over tonemapping mood.
-		// Every parameter derives from CColourSet fields that timecyc.dat authors control.
-		CColourSet &tc = CTimeCycle__m_CurrentColours;
-		bool isInterior = (*CGame__currArea != 0);
-		bool isCutscene = CCutsceneMgr__ms_running;
-
-		// --- Timecycle signals (normalized 0-1 where applicable) ---
-		// NOTE: SA CColourSet stores ambient/directional as floats ALREADY in 0-1
-		// range (game divides timecyc.dat values by 255; weather.cpp blends them
-		// with altR/255.0f and clamps to [0,1] — same convention). Do NOT divide
-		// by 255 here: doing so collapsed sceneLuma to ~0.003, which clamped
-		// exposure to 1.5 + toe to 0.33 → the permanent gray veil, day and night.
-		float tcAmbientLuma  = 0.299f*tc.ambientR + 0.587f*tc.ambientG + 0.114f*tc.ambientB;
-		float tcDirLuma      = 0.299f*tc.directionalR + 0.587f*tc.directionalG + 0.114f*tc.directionalB;
-		float sceneLuma      = tcAmbientLuma + tcDirLuma * 0.5f;
-		float shadowNorm     = max(0.0f, min(1.0f, (float)tc.shadowStrength / 255.0f));
-		float fogFactor      = max(0.0f, min(1.0f, tc.fogStart / 500.0f));       // less fog = 1, heavy fog = 0
-		float clouds         = max(0.0f, min(1.0f, tc.cloudAlpha));
-		float sunBright      = max(0.0f, min(2.0f, tc.spriteBrightness));
-		float streetLights   = max(0.0f, min(1.0f, tc.lightsOnGroundBrightness));
-		float envMult        = CCustomCarEnvMapPipeline__m_EnvMapLightingMult;
-		// Dark-frame guard: envMult feeds the exposure product directly. A
-		// garbage/negative value (pipe not initialised this frame, cutscene
-		// reset, etc.) would scale exposure to <= 0 -> black frame. Clamp to
-		// the plausible physical range before use.
-		envMult = max(0.0f, min(2.0f, envMult));
-
-		float exposure, toeStrength;
-		float gradeContrast, gradeBrightness, gradeLift, gradeCurve;
-
-		// === Unified timecycle-driven adaptive tonemap (outdoor + cutscene + interior) ===
-		// The timecycle is the authority — cutscene/interior timecyc.dat entries already
-		// encode the correct mood. We use the same adaptive path for everything.
-		// Cutscene/interior gets a gentle dampening factor where the sun is pointing at camera.
-
-		// --- Garage/sheltered area detection ---
-		// Garages are NOT interiors (currArea==0) but have partial occlusion.
-		// CCullZones detect sheltered areas (no rain zones). In garages, there's
-		// only skylight from the front opening — reduce exposure to match.
-		extern bool CCullZones__PlayerNoRain(void);
-		bool isSheltered = CCullZones__PlayerNoRain() && !isInterior;
-		float garageDampen = isSheltered ? 0.65f : 1.0f;  // 35% darker in garages
-
-		// --- Exposure: reciprocal of scene brightness + timecycle dampening ---
-		// sceneLuma is now normalized 0-1 from timecycle ambient+directional
-		// Night (sceneLuma≈0.05): exposure≈1.3 (brighter, lifts shadows)
-		// Midday (sceneLuma≈0.35): exposure≈0.7 (darker, prevents blowout)
-		float sceneExposure = 1.0f / max(0.50f + sceneLuma * 2.5f, 1e-7f);
-		sceneExposure = max(0.50f, min(1.50f, sceneExposure));
-		// Carcols env mult nudges ±5%
-		float carcolsAdapt = 0.95f + envMult * 0.05f;
-		// Bright sun → slightly less exposure (prevent highlight blowout)
-		float sunDampen = 1.0f - max(0.0f, min(0.08f, sunBright * 0.05f));
-		// Mood exposure (prefs brightness + carcols + sun + garage). When
-		// auto-exposure is on, the frame-derived term inside TonemapPass supplies
-		// brightness, so the timecyc reciprocal is dropped here (no double-apply).
-		exposure = baseExposure * carcolsAdapt * sunDampen * garageDampen;
-		if(!autoExposureOn)
-			exposure *= sceneExposure;
-
-		// Interior: timecycle encodes the correct mood, no extra dampening
-
-		// --- Toe: shadow lift driven by sceneLuma + timecycle shadow depth ---
-		// sceneLuma is normalized 0-1, so toe responds properly to time-of-day.
-		// NOTE: In the Hable/Uncharted2 filmic tonemap, LOWER D (toeStrength) values
-		// produce MORE shadow lift, not less — the denominator term D*F dominates.
-		// The minimum of 0.05 was causing a permanent "gray veil" shadow lift even
-		// in bright scenes. Raised to 0.15 for midday to keep blacks solid.
-		// Night scenes still get up to 0.35 for gentle shadow detail.
-		// D RISES with daylight: in the Hable/Uncharted2 curve, HIGHER D = tighter toe =
-		// solid blacks; LOWER D = more shadow lift. The old form drove D down to its
-		// 0.15 floor at midday (max gray veil) and up to ~0.26 at night — inverted, so
-		// daylight washed out and shadows vanished. Now night keeps the proven gentle
-		// lift (~0.27) and midday clamps high (tight toe, blacks stay black).
-		float toeStrengthVal = 0.22f + sceneLuma * 1.0f + shadowNorm * 0.08f;
-		toeStrength = max(0.18f, min(0.55f, toeStrengthVal));
-
-		// --- Grade params: fully timecycle-driven ---
-		// Contrast: shadow strength × fog clearance (deep shadows + clear sky = max contrast)
-		gradeContrast = 1.10f + shadowNorm * 0.30f * fogFactor;
-
-		// Brightness: street lights provide fill in dark scenes
-		gradeBrightness = 0.02f + streetLights * 0.05f;
-
-		// Lift: overcast/cloudy raises blacks slightly; heavy fog also lifts
-		gradeLift = clouds * 0.020f + (1.0f - fogFactor) * 0.015f;
-
-		// Curve blend: brighter scenes get more S-curve for depth
-		gradeCurve = 0.20f + sceneLuma * 0.30f;
-
-		// Throttled diagnostic
-		static unsigned int tonemapLogCounter = 0;
-		float blackLift = config ? config->tonemapBlackLift : 0.015f;
-
-		// --- colorFilterEnable=0 bypass: IDENTITY grade -----------------------
-		// The bypass path routes through this tonemap so the frame still gets
-		// its sRGB gamma encode; everything downstream must be a no-op:
-		//   sceneLuma 0        -> PostGrade adaptive scale 0 => brightness/
-		//                         contrast/lift/curve all neutral
-		//   blackLift 0        -> no black-level lift
-		//   curveP x/y 0       -> PivotCurve bit-exact early-out (see below)
-		// Exposure/toe stay on the normal timecycle path so overall brightness
-		// matches the graded path — only the timecycle TINT (pass 1) is skipped.
-		if(s_tonemapIdentityGrade){
-			sceneLuma = 0.0f;
-			gradeBrightness = 0.0f;
-			gradeContrast = 1.0f;
-			gradeLift = 0.0f;
-			gradeCurve = 0.0f;
-			blackLift = 0.0f;
-		}
-
-		if(tonemapLogCounter++ % 3600 == 0){
-			extern int16 &CWeather__OldWeatherType;
-			extern int16 &CWeather__NewWeatherType;
-			extern float &CWeather__InterpolationValue;
-			extern uint8 &CClock__ms_nGameClockHours;
-			dbglog("[Tonemap] TC sceneLuma=%.3f amb=(%.3f,%.3f,%.3f) dir=(%.3f,%.3f,%.3f) shadow=%d fog=%.0f cloud=%.2f sun=%.2f street=%.2f hour=%d wOld=%d wNew=%d wInterp=%.2f cutscene=%d interior=%d",
-				sceneLuma, tc.ambientR, tc.ambientG, tc.ambientB, tc.directionalR, tc.directionalG, tc.directionalB,
-				tc.shadowStrength, tc.fogStart, clouds, sunBright, streetLights,
-				CClock__ms_nGameClockHours, CWeather__OldWeatherType, CWeather__NewWeatherType, CWeather__InterpolationValue,
-				isCutscene, isInterior);
-			dbglog("[Tonemap] VAL exp=%.3f toe=%.3f bl=%.4f ct=%.2f br=%.3f lift=%.3f curve=%.2f",
-				exposure, toeStrength, blackLift, gradeContrast, gradeBrightness, gradeLift, gradeCurve);
-		}
-
-		// Pack into c5: {exposure, toeStrength, sceneLuma, autoExposureFlag}
-		// c5.w is the frame-adaptive exposure flag read by TonemapPass.
-		float tonemapP[4] = { exposure, toeStrength, sceneLuma, autoExposureOn ? 1.0f : 0.0f };
-		RwD3D9SetPixelShaderConstant(5, tonemapP, 1);
-
-		// Pack into c6: {brightness, contrast, lift, curveBlend} — all timecycle-driven
-		float gradeP[4] = { gradeBrightness, gradeContrast, gradeLift, gradeCurve };
-		RwD3D9SetPixelShaderConstant(6, gradeP, 1);
-
-		// Pack into c7: {blackLift, minExposure, maxExposure, keyStrength}
-		// The auto-exposure clamp + key blend are only read when c5.w >= 0.5.
-		// Dark-frame guard: enforce a sane exposure FLOOR — the TonemapPass
-		// computes autoExp = key/lum and clamps to [c7.y, c7.z]; a config
-		// minExposure of 0 (or negative) lets a bogus huge measured luminance
-		// drive the exposure to ~0 -> black frame. Floor at 0.15 and keep
-		// maxExposure >= minExposure.
-		float minExpCfg = config ? config->tonemapMinExposure : 0.5f;
-		float maxExpCfg = config ? config->tonemapMaxExposure : 2.0f;
-		minExpCfg = max(0.15f, minExpCfg);
-		maxExpCfg = max(maxExpCfg, minExpCfg);
-		float blackP[4] = {
-			blackLift,
-			autoExposureOn ? minExpCfg : 0.0f,
-			autoExposureOn ? maxExpCfg : 0.0f,
-			autoExposureOn ? (config ? config->tonemapKeyStrength : 1.0f) : 0.0f
-		};
-		RwD3D9SetPixelShaderConstant(7, blackP, 1);
-
-		// Pack into c8: {curveLows, curveHighs, curveMid, 0} — user pivot
-		// curve applied at the TonemapPass OUTPUT (per-channel gain ramp
-		// around the mid pivot; bit-exact identity when both intensities
-		// are 0). Uploaded here for THIS draw only — other passes (DynamicSky
-		// weatherP, screenParams) re-upload their own c8 before theirs.
-		// Identity-grade bypass forces both intensities to exact 0.0 so
-		// PivotCurve's early-out returns the pixel untouched.
-		float curveP[4] = {
-			s_tonemapIdentityGrade ? 0.0f : (config ? config->tonemapCurveLows : 0.0f),
-			s_tonemapIdentityGrade ? 0.0f : (config ? config->tonemapCurveHighs : 0.0f),
-			config ? config->tonemapCurveMid : 0.5f,
-			0.0f
-		};
-		RwD3D9SetPixelShaderConstant(8, curveP, 1);
-
-		// Bind the frame luminance (s1) for frame-adaptive exposure.
-		IDirect3DDevice9 *cfDev = d3d9device;
-		if(autoExposureOn && frameLumaTex && cfDev){
-			cfDev->SetTexture(1, frameLumaTex);
-			cfDev->SetSamplerState(1, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
-			cfDev->SetSamplerState(1, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
-			cfDev->SetSamplerState(1, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
-			cfDev->SetSamplerState(1, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
-		}
-
-		overrideIm2dPixelShader = tonemapPassPS;
-		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
-		overrideIm2dPixelShader = nil;
-		if(cfDev) cfDev->SetTexture(1, NULL);
-	}
-
-	// Restore all render states (match ColourFilter_PC pattern + FOG=TRUE)
-	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
-	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)TRUE);
-	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
-	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
-	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)NULL);
-	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
-	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
-	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
-
-	// Full D3D9 pipeline cleanup after tonemap pass
-	IDirect3DDevice9 *dev = d3d9device;
-	if(dev){
-		dev->SetTexture(0, NULL);
-		dev->SetTexture(1, NULL);
-		dev->SetTexture(2, NULL);
-		RwD3D9SetPixelShader(NULL);
-		RwD3D9SetVertexShader(NULL);
-	}
-}
-
-void
-CPostEffects::ColourFilter_Mobile(RwRGBA rgba1, RwRGBA rgba2)
-{
-//	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERNEAREST);
-	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
-	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)CPostEffects::pRasterFrontBuffer);
-	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
-
-	if(!Colorcycle::initialised)
-		Colorcycle::Initialise();
-
-	GradeColorset cset;
-	Colorcycle::Update(&cset);
-	Grade red, green, blue;
-	red = cset.red;
-	green = cset.green;
-	blue = cset.blue;
-
-	// Mobile colors
-	float r = rgba1.red + rgba2.red;
-	float g = rgba1.green + rgba2.green;
-	float b = rgba1.blue + rgba2.blue;
-	float invsqrt = 1.0f/max(sqrt(r*r + g*g + b*b), 1e-7f);
-	r *= invsqrt;
-	g *= invsqrt;
-	b *= invsqrt;
-	red.r = (1.5f + r*1.732f)*0.4f*red.r;
-	green.g = (1.5f + g*1.732f)*0.4f*green.g;
-	blue.b = (1.5f + b*1.732f)*0.4f*blue.b;
-
-/*	// Fun trick: PS2 colour filter:
-	float a = rgba2.alpha/128.0f;
-	red.r = rgba1.red/128.0f + a*rgba2.red/128.0f;
-	green.g = rgba1.green/128.0f + a*rgba2.green/128.0f;
-	blue.b = rgba1.blue/128.0f + a*rgba2.blue/128.0f;
-	red.g = red.b = red.a = 0.0f;
-	green.r = green.b = green.a = 0.0f;
-	blue.r = blue.g = blue.a = 0.0f;
-*/
-/*	// Also fun: PC colour filter:
-	float a1 = rgba1.alpha/128.0f;
-	float a2 = rgba2.alpha/128.0f;
-	red.r = 1.0f + a1*rgba1.red/255.0f + a2*rgba2.red/255.0f;
-	green.g = 1.0f + a1*rgba1.green/255.0f + a2*rgba2.green/255.0f;
-	blue.b = 1.0f + a1*rgba1.blue/255.0f + a2*rgba2.blue/255.0f;
-	red.g = red.b = red.a = 0.0f;
-	green.r = green.b = green.a = 0.0f;
-	blue.r = blue.g = blue.a = 0.0f;
-*/
-
-
-	RwD3D9SetPixelShaderConstant(0, &red, 1);
-	RwD3D9SetPixelShaderConstant(1, &green, 1);
-	RwD3D9SetPixelShaderConstant(2, &blue, 1);
-
-	// contrast
-	float mult[4];
-	float add[4];
-	mult[0] = red.r + red.g + red.b;
-	mult[1] = green.r + green.g + green.b;
-	mult[2] = blue.r + blue.g + blue.b;
-	mult[3] = 1.0f;
-	add[0] = red.a;
-	add[1] = green.a;
-	add[2] = blue.a;
-	add[3] = 0.0f;
-
-	RwD3D9SetPixelShaderConstant(3, mult, 1);
-	RwD3D9SetPixelShaderConstant(4, add, 1);
-
-	if(!(GetAsyncKeyState(VK_F5) & 0x8000))
-		overrideIm2dPixelShader = gradingPS;
-	else
-		overrideIm2dPixelShader = contrastPS;
-	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
-	overrideIm2dPixelShader = nil;
-
-	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
-	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
-	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
-	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)NULL);
-	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
-	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)TRUE);
-}
-
-void
-CPostEffects::ColourFilter_PS2(RwRGBA rgba1, RwRGBA rgba2)
-{
-	if(dbglog_throttle( "cf_ps2"))
-		dbglog("[PostFX] ColourFilter_PS2 ENTER rgba1=(%d,%d,%d,%d) rgba2=(%d,%d,%d,%d) pRasterFrontBuffer=%p",
-			rgba1.red, rgba1.green, rgba1.blue, rgba1.alpha,
-			rgba2.red, rgba2.green, rgba2.blue, rgba2.alpha,
-			CPostEffects::pRasterFrontBuffer);
-
-	RwIm2DVertex *verts;
-
-	verts = colorfilterVerts;
-	// Setup state
-	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
-	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)CPostEffects::pRasterFrontBuffer);
-
-	// Colors are already converted to PC space in ColourFilter_switch
-	// Just use them directly with MODULATE2X
-	overrideColorMod = D3DTOP_MODULATE2X;
-	overrideAlphaMod = D3DTOP_MODULATE2X;
-
-	// First color - replace
-	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
-	RwIm2DVertexSetIntRGBA(&verts[0], rgba1.red, rgba1.green, rgba1.blue, 255);
-	RwIm2DVertexSetIntRGBA(&verts[1], rgba1.red, rgba1.green, rgba1.blue, 255);
-	RwIm2DVertexSetIntRGBA(&verts[2], rgba1.red, rgba1.green, rgba1.blue, 255);
-	RwIm2DVertexSetIntRGBA(&verts[3], rgba1.red, rgba1.green, rgba1.blue, 255);
-	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, verts, 4, colorfilterIndices, 6);
-
-	if(m_bBlurColourFilter){
-		static RwIm2DVertex blurVerts[4];
-		float rasterWidth = RwRasterGetWidth(CPostEffects::pRasterFrontBuffer);
-		float rasterHeight = RwRasterGetHeight(CPostEffects::pRasterFrontBuffer);
-		float scale = RwRasterGetWidth(RwCameraGetRaster(Scene.camera))/640.0f;
-		float leftOff   = m_colourLeftUOffset*scale   / 16.0f / rasterWidth;
-		float rightOff  = m_colourRightUOffset*scale  / 16.0f / rasterWidth;
-		float topOff    = m_colourTopVOffset*scale    / 16.0f / rasterHeight;
-		float bottomOff = m_colourBottomVOffset*scale / 16.0f / rasterHeight;
-		memcpy(blurVerts, verts, sizeof(blurVerts));
-		RwIm2DVertexSetU(&blurVerts[0], RwIm2DVertexGetU(&blurVerts[0]) + leftOff, 1.0f);
-		RwIm2DVertexSetU(&blurVerts[1], RwIm2DVertexGetU(&blurVerts[1]) + leftOff, 1.0f);
-		RwIm2DVertexSetU(&blurVerts[2], RwIm2DVertexGetU(&blurVerts[2]) + rightOff, 1.0f);
-		RwIm2DVertexSetU(&blurVerts[3], RwIm2DVertexGetU(&blurVerts[3]) + rightOff, 1.0f);
-		RwIm2DVertexSetV(&blurVerts[0], RwIm2DVertexGetV(&blurVerts[0]) + topOff, 1.0f);
-		RwIm2DVertexSetV(&blurVerts[3], RwIm2DVertexGetV(&blurVerts[3]) + topOff, 1.0f);
-		RwIm2DVertexSetV(&blurVerts[1], RwIm2DVertexGetV(&blurVerts[1]) + bottomOff, 1.0f);
-		RwIm2DVertexSetV(&blurVerts[2], RwIm2DVertexGetV(&blurVerts[2]) + bottomOff, 1.0f);
-		verts = blurVerts;
-	}
-
-	// Second color - add
-	// Colors are already converted to PC space in ColourFilter_switch
-	uint8 r2 = rgba2.red;
-	uint8 g2 = rgba2.green;
-	uint8 b2 = rgba2.blue;
-	uint8 a2 = rgba2.alpha;
-
-	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
-	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
-	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDONE);
-	RwIm2DVertexSetIntRGBA(&verts[0], r2, g2, b2, a2);
-	RwIm2DVertexSetIntRGBA(&verts[1], r2, g2, b2, a2);
-	RwIm2DVertexSetIntRGBA(&verts[2], r2, g2, b2, a2);
-	RwIm2DVertexSetIntRGBA(&verts[3], r2, g2, b2, a2);
-	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
- 	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDONE);
-	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, verts, 4, colorfilterIndices, 6);
-
-	// Restore state
-	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
-	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
-	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
-	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)NULL);
-	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
-	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
-	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)TRUE);
-
-	overrideColorMod = -1;
-	overrideAlphaMod = -1;
-}
-
-/* For reference only */
-#if 0
-void
-CPostEffects::ColourFilter_PC(RwRGBA rgba1, RwRGBA rgba2)
-{
-	RwIm2DVertex *verts;
-
-	verts = colorfilterVerts;
-	// Setup state
-	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERNEAREST);
-	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)CPostEffects::pRasterFrontBuffer);
-	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
-	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
-	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDONE);
-
-	// First color
-	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
-	RwIm2DVertexSetIntRGBA(&verts[0], rgba1.red, rgba1.green, rgba1.blue, rgba1.alpha);
-	RwIm2DVertexSetIntRGBA(&verts[1], rgba1.red, rgba1.green, rgba1.blue, rgba1.alpha);
-	RwIm2DVertexSetIntRGBA(&verts[2], rgba1.red, rgba1.green, rgba1.blue, rgba1.alpha);
-	RwIm2DVertexSetIntRGBA(&verts[3], rgba1.red, rgba1.green, rgba1.blue, rgba1.alpha);
-	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, verts, 4, colorfilterIndices, 6);
-
-	// Second color
-	RwIm2DVertexSetIntRGBA(&verts[0], rgba2.red, rgba2.green, rgba2.blue, rgba2.alpha);
-	RwIm2DVertexSetIntRGBA(&verts[1], rgba2.red, rgba2.green, rgba2.blue, rgba2.alpha);
-	RwIm2DVertexSetIntRGBA(&verts[2], rgba2.red, rgba2.green, rgba2.blue, rgba2.alpha);
-	RwIm2DVertexSetIntRGBA(&verts[3], rgba2.red, rgba2.green, rgba2.blue, rgba2.alpha);
-	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, verts, 4, colorfilterIndices, 6);
-
-	// Restore state
-	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
-	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
-	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
-	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)NULL);
-	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
-	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
-}
-#endif
-
-void
-CPostEffects::SetFilterMainColour_PS2(RwRaster *raster, RwRGBA color)
-{
-//	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERNEAREST);
-	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
-	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, pRasterFrontBuffer);
-	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
-	RwIm2DVertexSetIntRGBA(&colorfilterVerts[0], color.red, color.green, color.blue, color.alpha);
-	RwIm2DVertexSetIntRGBA(&colorfilterVerts[1], color.red, color.green, color.blue, color.alpha);
-	RwIm2DVertexSetIntRGBA(&colorfilterVerts[2], color.red, color.green, color.blue, color.alpha);
-	RwIm2DVertexSetIntRGBA(&colorfilterVerts[3], color.red, color.green, color.blue, color.alpha);
-	overrideColorMod = D3DTOP_MODULATE2X;
-	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
-	overrideColorMod = -1;
-
-	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
-	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
-	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, nil);
-}
-
-void
-CPostEffects::InfraredVision_PS2(RwRGBA c1, RwRGBA c2)
-{
-	if(config->infraredVision != 0){
-		InfraredVision(c1, c2);
-		return;
-	}
-
-	CPostEffects::ImmediateModeRenderStatesStore();
-	ImmediateModeRenderStatesSet();
-
-	float r = m_fInfraredVisionFilterRadius;
-	// not sure this scales correctly, but it looks ok (need better brain)
-	float ru = r * RsGlobal->MaximumWidth  / RwRasterGetWidth(ms_imf.frontBuffer)  * 1024.0f / 640.0f;
-	float rv = r * RsGlobal->MaximumHeight / RwRasterGetHeight(ms_imf.frontBuffer) * 512.0f  / 448.0f;
-	float uoff[4] = { -ru, ru, ru, -ru };
-	float voff[4] = { -rv, -rv, rv, rv };
-
-	// PS2 draws the filter triangle triangle...we draw the quad
-	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDONE);
-	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDONE);
-	for(int i = 0; i < 4; i++){
-		DrawQuadSetUVs(ms_imf.tri_umin + uoff[i], ms_imf.tri_vmin + voff[i],
-		               ms_imf.tri_umax + uoff[i], ms_imf.tri_vmin + voff[i],
-		               ms_imf.tri_umax + uoff[i], ms_imf.tri_vmax + voff[i],
-		               ms_imf.tri_umin + uoff[i], ms_imf.tri_vmax + voff[i]);
-		DrawQuad(0, 0, RwRasterGetWidth(ms_imf.frontBuffer)*2, RwRasterGetHeight(ms_imf.frontBuffer)*2,
-		                       c1.red, c1.green, c1.blue, 0xFFu, ms_imf.frontBuffer);
-
-		UpdateFrontBuffer();
-	}
-	DrawQuadSetDefaultUVs();
-	ImmediateModeRenderStatesReStore();
-
-	SetFilterMainColour_PS2(ms_imf.frontBuffer, c2);
-	UpdateFrontBuffer();
-}
-
-void
-CPostEffects::NightVision_PS2(RwRGBA color)
-{
-	if(config->nightVision != 0){
-		CPostEffects::NightVision(color);
-		return;
-	}
-
-	if(CPostEffects::m_fNightVisionSwitchOnFXCount > 0.0f){
-		CPostEffects::m_fNightVisionSwitchOnFXCount -= CTimer__ms_fTimeStep;
-		if(CPostEffects::m_fNightVisionSwitchOnFXCount <= 0.0f)
-			CPostEffects::m_fNightVisionSwitchOnFXCount = 0.0f;
-		CPostEffects::ImmediateModeRenderStatesStore();
-		CPostEffects::ImmediateModeRenderStatesSet();
-		RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDONE);
-		RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDONE);
-		int n = CPostEffects::m_fNightVisionSwitchOnFXCount;
-		while(n--)
-		        CPostEffects::DrawQuad(0.0f, 0.0f,
-				RwRasterGetWidth(ms_imf.frontBuffer), RwRasterGetHeight(ms_imf.frontBuffer),
-				8, 8, 8, 255, ms_imf.frontBuffer);
-		CPostEffects::ImmediateModeRenderStatesReStore();
-	}
-
-	UpdateFrontBuffer();
-	CPostEffects::SetFilterMainColour_PS2(ms_imf.frontBuffer, color);
-	UpdateFrontBuffer();
-}
-
-
-// VU style random number generator -- taken from pcsx2
-uint R;
-void vrinit(uint x){ R = 0x3F800000 | x & 0x007FFFFF; }
-void vradvance(void){
-	int x = (R >> 4) & 1;
-	int y = (R >> 22) & 1;
-	R <<= 1;
-	R ^= x ^ y;
-	R = (R&0x7fffff)|0x3f800000;
-}
-inline uint vrget(void){ return R; }
-inline uint vrnext(void){ vradvance(); return R; }
-
-void
-CPostEffects::Grain_PS2(int strength, bool generate)
-{
-	if(!config->grainEnable)
-		return;
-	if(config->grainFilter != 0){
-		CPostEffects::Grain(strength, generate);
-		return;
-	}
-
-	if(generate){
-		RwUInt8 *pixels = RwRasterLock(grainRaster, 0, 1);
-		vrinit(rand());
-		int x = vrget();
-		for(int i = 0; i < 64*64; i++){
-			*pixels++ = x;
-			*pixels++ = x;
-			*pixels++ = x;
-			*pixels++ = x & strength;
-			x = vrnext();
-		}
-		RwRasterUnlock(grainRaster);
-	}
-
-	ImmediateModeRenderStatesStore();
-	ImmediateModeRenderStatesSet();
-	RwRenderStateSet(rwRENDERSTATETEXTUREADDRESS, (void*)rwTEXTUREADDRESSWRAP);
-	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
-
-	float umin = 0.0f;
-	float vmin = 0.0f;
-	float umax = 5.0f * RsGlobal->MaximumWidth/640.0f;
-	float vmax = 7.0f * RsGlobal->MaximumHeight/448.0f;
-
-	DrawQuadSetUVs(umin, vmin,
-		umax, vmin,
-		umax, vmax,
-		umin, vmax);
-
-	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)D3DBLEND_DESTCOLOR);
-	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)D3DBLEND_SRCALPHA);
-
-	overrideColorMod = D3DTOP_SELECTARG2;	// ignore texture color
-	overrideAlphaMod = D3DTOP_MODULATE2X;
-	CPostEffects::DrawQuad(0.0, 0.0, RsGlobal->MaximumWidth, RsGlobal->MaximumHeight,
-	                       0xFFu, 0xFFu, 0xFFu, 0xFF, grainRaster);
-	overrideColorMod = -1;
-	overrideAlphaMod = -1;
-
-	DrawQuadSetDefaultUVs();
-	CPostEffects::ImmediateModeRenderStatesReStore();
-}
-
 void DrawNormalBufferToTexture(void);
 void DrawPipeChain(void);
-static void CopyDepthToPrev(void);
-
-/////
-///// Local fullscreen quad — SSAO composites and the IV grade draw with this
-///// instead of the game's colorfilterVerts. colorfilterVerts carry
-///// emissiveColor=0x00000000 (they are only coloured by the game's own
-///// colour-filter paths, which COLORFILTER_MODERN never runs), so any
-///// fixed-function draw using them modulates texture x 0 = black; they are
-///// also a hardcoded 2048x2048 quad whose UVs misalign on smaller camera
-///// rasters. White + RT-sized = correct multiply/replace and UV 0..1.
-/////
-static RwIm2DVertex s_ffQuad[4];
-static RwImVertexIndex s_ffQuadIdx[6] = { 0, 1, 2, 0, 2, 3 };
-
-static void
-SetupFullscreenQuad(float w, float h)
-{
-	// Corner order matches colorfilterVerts: TL, BL, BR, TR
-	static const float px[4] = { 0.0f, 0.0f, 1.0f, 1.0f };
-	static const float py[4] = { 0.0f, 1.0f, 1.0f, 0.0f };
-	static const float uu[4] = { 0.0f, 0.0f, 1.0f, 1.0f };
-	static const float vv[4] = { 0.0f, 1.0f, 1.0f, 0.0f };
-	for(int i = 0; i < 4; i++){
-		RwIm2DVertex *v = &s_ffQuad[i];
-		v->x = px[i] * w;
-		v->y = py[i] * h;
-		v->z = 0.0f;
-		v->rhw = 1.0f;
-		v->u = uu[i];
-		v->v = vv[i];
-		RwIm2DVertexSetIntRGBA(v, 255, 255, 255, 255);
-	}
-}
-
-/////
-///// IV mode grade — first real consumer of config->ivMode + iv* sliders
-///// (previously dead config fields: read from INI, shown in the debug menu,
-///// never read by any pass). Grade runs after the colour-filter switch on
-///// the freshly graded/tonemapped frame; every slider maps to a live pixel
-///// shader constant uploaded each frame.
-/////
-
-// ps_3_0 bytecode of IVGrade.hlsl (compiled with the project's FXC:
-//   fxc /T ps_3_0 /E main IVGrade.hlsl)
-// Registers:
-//   c0 = {exposure, desaturation, gamma, 0}
-//   c1 = {vignetteIntensity, vignetteRadius, vignetteContrast, bloomIntensity}
-//   c2 = {1/screenW, 1/screenH, 0, 0}
-//   s0 = scene (front buffer)
-alignas(4) static const BYTE g_ivGradePSBytes[] =
-{
-      0,   3, 255, 255, 254, 255, 
-     58,   0,  67,  84,  65,  66, 
-     28,   0,   0,   0, 179,   0, 
-      0,   0,   0,   3, 255, 255, 
-      4,   0,   0,   0,  28,   0, 
-      0,   0,   0,   1,   0,   0, 
-    172,   0,   0,   0, 108,   0, 
-      0,   0,   2,   0,   0,   0, 
-      1,   0,   2,   0, 116,   0, 
-      0,   0,   0,   0,   0,   0, 
-    132,   0,   0,   0,   2,   0, 
-      1,   0,   1,   0,   6,   0, 
-    116,   0,   0,   0,   0,   0, 
-      0,   0, 139,   0,   0,   0, 
-      2,   0,   2,   0,   1,   0, 
-     10,   0, 116,   0,   0,   0, 
-      0,   0,   0,   0, 146,   0, 
-      0,   0,   3,   0,   0,   0, 
-      1,   0,   2,   0, 156,   0, 
-      0,   0,   0,   0,   0,   0, 
-    103, 114,  97, 100, 101,  48, 
-      0, 171,   1,   0,   3,   0, 
-      1,   0,   4,   0,   1,   0, 
-      0,   0,   0,   0,   0,   0, 
-    103, 114,  97, 100, 101,  49, 
-      0, 103, 114,  97, 100, 101, 
-     50,   0, 115,  99, 101, 110, 
-    101,  84, 101, 120,   0, 171, 
-      4,   0,  12,   0,   1,   0, 
-      1,   0,   1,   0,   0,   0, 
-      0,   0,   0,   0, 112, 115, 
-     95,  51,  95,  48,   0,  77, 
-    105,  99, 114, 111, 115, 111, 
-    102, 116,  32,  40,  82,  41, 
-     32,  72,  76,  83,  76,  32, 
-     83, 104,  97, 100, 101, 114, 
-     32,  67, 111, 109, 112, 105, 
-    108, 101, 114,  32,  57,  46, 
-     50,  57,  46,  57,  53,  50, 
-     46,  51,  49,  49,  49,   0, 
-     81,   0,   0,   5,   3,   0, 
-     15, 160,  10, 215,  35,  60, 
-      0,   0, 128,  63,   0,   0, 
-      0,  63, 205, 204,  76,  61, 
-     81,   0,   0,   5,   4,   0, 
-     15, 160, 135,  22, 153,  62, 
-    162,  69,  22,  63, 213, 120, 
-    233,  61, 111,  18, 131,  58, 
-     81,   0,   0,   5,   5,   0, 
-     15, 160,   0,   0,   0,   0, 
-      0,   0, 128,  64,   0,   0, 
-      0, 128,   0,   0, 200,  66, 
-     81,   0,   0,   5,   6,   0, 
-     15, 160,   0,   0, 128,  62, 
-      0,   0,  64, 191,   0,   0, 
-      0, 192,   0,   0,  64,  64, 
-     31,   0,   0,   2,   5,   0, 
-      0, 128,   0,   0,   3, 144, 
-     31,   0,   0,   2,   0,   0, 
-      0, 144,   0,   8,  15, 160, 
-      2,   0,   0,   3,   0,   0, 
-      3, 128,   3,   0, 170, 161, 
-      0,   0, 228, 144,  90,   0, 
-      0,   4,   0,   0,   1, 128, 
-      0,   0, 228, 128,   0,   0, 
-    228, 128,   5,   0,   0, 160, 
-      7,   0,   0,   2,   0,   0, 
-      1, 128,   0,   0,   0, 128, 
-      6,   0,   0,   2,   0,   0, 
-      1, 128,   0,   0,   0, 128, 
-      1,   0,   0,   2,   1,   0, 
-     15, 128,   3,   0, 228, 160, 
-      2,   0,   0,   3,   0,   0, 
-      2, 128,   1,   0,   0, 129, 
-      1,   0,  85, 160,   6,   0, 
-      0,   2,   0,   0,   4, 128, 
-      1,   0,  85, 160,  88,   0, 
-      0,   4,   0,   0,   2, 128, 
-      0,   0,  85, 128,   0,   0, 
-    170, 128,   5,   0, 255, 160, 
-      5,   0,   0,   3,   0,   0, 
-     17, 128,   0,   0,  85, 128, 
-      0,   0,   0, 128,   4,   0, 
-      0,   4,   0,   0,   2, 128, 
-      0,   0,   0, 128,   6,   0, 
-    170, 160,   6,   0, 255, 160, 
-      5,   0,   0,   3,   0,   0, 
-      1, 128,   0,   0,   0, 128, 
-      0,   0,   0, 128,   4,   0, 
-      0,   4,   0,   0,   1, 128, 
-      0,   0,  85, 128,   0,   0, 
-      0, 129,   3,   0,  85, 160, 
-     11,   0,   0,   3,   2,   0, 
-      1, 128,   0,   0,   0, 128, 
-      5,   0,   0, 160,  11,   0, 
-      0,   3,   0,   0,   1, 128, 
-      1,   0, 170, 160,   1,   0, 
-      0, 128,  32,   0,   0,   3, 
-      3,   0,   1, 128,   2,   0, 
-      0, 128,   0,   0,   0, 128, 
-      2,   0,   0,   3,   0,   0, 
-      1, 128,   3,   0,   0, 128, 
-      3,   0,  85, 161,   4,   0, 
-      0,   4,   0,   0,   1, 128, 
-      1,   0,   0, 160,   0,   0, 
-      0, 128,   1,   0,  85, 128, 
-     11,   0,   0,   3,   2,   0, 
-      1, 128,   0,   0,   0, 128, 
-      5,   0,   0, 160,   1,   0, 
-      0,   2,   0,   0,   2, 128, 
-      5,   0,  85, 160,   5,   0, 
-      0,   3,   0,   0,   5, 128, 
-      0,   0,  85, 128,   2,   0, 
-    212, 160,   1,   0,   0,   2, 
-      3,   0,   9, 128,   0,   0, 
-    164, 129,   1,   0,   0,   2, 
-      3,   0,   6, 128,   5,   0, 
-    170, 160,   2,   0,   0,   3, 
-      3,   0,  15, 128,   3,   0, 
-    228, 128,   0,   0,  68, 144, 
-     66,   0,   0,   3,   4,   0, 
-     15, 128,   3,   0, 228, 128, 
-      0,   8, 228, 160,  66,   0, 
-      0,   3,   3,   0,  15, 128, 
-      3,   0, 238, 128,   0,   8, 
-    228, 160,   4,   0,   0,   4, 
-      0,   0,   9, 128,   2,   0, 
-    100, 160,   0,   0,  85, 128, 
-      0,   0, 100, 144,   1,   0, 
-      0,   2,   0,   0,   6, 128, 
-      0,   0, 196, 144,  66,   0, 
-      0,   3,   5,   0,  15, 128, 
-      0,   0, 228, 128,   0,   8, 
-    228, 160,  66,   0,   0,   3, 
-      0,   0,  15, 128,   0,   0, 
-    238, 128,   0,   8, 228, 160, 
-      2,   0,   0,   3,   2,   0, 
-     14, 128,   4,   0, 144, 128, 
-      5,   0, 144, 128,   2,   0, 
-      0,   3,   0,   0,   7, 128, 
-      0,   0, 228, 128,   2,   0, 
-    249, 128,   2,   0,   0,   3, 
-      0,   0,   7, 128,   3,   0, 
-    228, 128,   0,   0, 228, 128, 
-      4,   0,   0,   4,   0,   0, 
-      7, 128,   0,   0, 228, 128, 
-      6,   0,   0, 160,   6,   0, 
-     85, 160,   5,   0,   0,   3, 
-      2,   0,  14, 128,   0,   0, 
-    144, 128,   1,   0, 255, 160, 
-     88,   0,   0,   4,   0,   0, 
-      7, 128,   0,   0, 228, 128, 
-      2,   0, 249, 128,   5,   0, 
-      0, 160,   2,   0,   0,   3, 
-      0,   0,   8, 128,   1,   0, 
-      0, 128,   0,   0,   0, 161, 
-     88,   0,   0,   4,   0,   0, 
-      8, 128,   0,   0, 255, 128, 
-      1,   0,  85, 128,   0,   0, 
-      0, 160,  66,   0,   0,   3, 
-      3,   0,  15, 128,   0,   0, 
-    228, 144,   0,   8, 228, 160, 
-      5,   0,   0,   3,   2,   0, 
-     14, 128,   0,   0, 255, 128, 
-      3,   0, 144, 128,   8,   0, 
-      0,   3,   1,   0,   1, 128, 
-      2,   0, 249, 128,   4,   0, 
-    228, 160,   4,   0,   0,   4, 
-      3,   0,   7, 128,   3,   0, 
-    228, 128,   0,   0, 255, 129, 
-      1,   0,   0, 128,   5,   0, 
-      0,   3,   0,   0,  24, 128, 
-      1,   0, 170, 128,   0,   0, 
-     85, 160,   4,   0,   0,   4, 
-      1,   0,   7, 128,   0,   0, 
-    255, 128,   3,   0, 228, 128, 
-      2,   0, 249, 128,  88,   0, 
-      0,   4,   1,   0,   7, 128, 
-      0,   0, 255, 129,   2,   0, 
-    249, 128,   1,   0, 228, 128, 
-     11,   0,   0,   3,   2,   0, 
-     14, 128,   1,   0, 144, 128, 
-      5,   0,   0, 160,  15,   0, 
-      0,   2,   3,   0,   1, 128, 
-      2,   0,  85, 128,  15,   0, 
-      0,   2,   3,   0,   2, 128, 
-      2,   0, 170, 128,  15,   0, 
-      0,   2,   3,   0,   4, 128, 
-      2,   0, 255, 128,  11,   0, 
-      0,   3,   0,   0,   8, 128, 
-      0,   0, 170, 160,   1,   0, 
-    255, 128,   6,   0,   0,   2, 
-      1,   0,   8, 128,   0,   0, 
-    255, 128,   2,   0,   0,   3, 
-      0,   0,   8, 128,   0,   0, 
-    255, 128,   3,   0,  85, 161, 
-      2,   0,   0,   3,   0,   0, 
-      8, 128,   0,   0, 255, 140, 
-      4,   0, 255, 160,   5,   0, 
-      0,   3,   2,   0,  14, 128, 
-      3,   0, 144, 128,   1,   0, 
-    255, 128,  14,   0,   0,   2, 
-      3,   0,   1, 128,   2,   0, 
-     85, 128,  14,   0,   0,   2, 
-      3,   0,   2, 128,   2,   0, 
-    170, 128,  14,   0,   0,   2, 
-      3,   0,   4, 128,   2,   0, 
-    255, 128,  88,   0,   0,   4, 
-      1,   0,   7, 128,   0,   0, 
-    255, 128,   1,   0, 228, 128, 
-      3,   0, 228, 128,   2,   0, 
-      0,   3,   0,   0,   7, 128, 
-      0,   0, 228, 128,   1,   0, 
-    228, 128,   1,   0,   0,   2, 
-      3,   0,   9, 128,   1,   0, 
-    228, 160,   2,   0,   0,   3, 
-      2,   0,   6, 128,   3,   0, 
-    204, 129,   4,   0, 255, 160, 
-     88,   0,   0,   4,   0,   0, 
-      7, 128,   2,   0,  85, 128, 
-      1,   0, 228, 128,   0,   0, 
-    228, 128,   5,   0,   0,   3, 
-      1,   0,   7, 128,   2,   0, 
-      0, 128,   0,   0, 228, 128, 
-     88,   0,   0,   4,   0,   8, 
-      7, 128,   2,   0, 170, 128, 
-      0,   0, 228, 128,   1,   0, 
-    228, 128,   1,   0,   0,   2, 
-      0,   8,   8, 128,   3,   0, 
-     85, 160, 255, 255,   0,   0
-};
-
-
-static void *s_ivGradePS = NULL;
-static bool s_ivGradePSFailed = false;
-
-// Camera-sized frame copy that feeds the IV grade (see DrawIVGrade): the
-// grade's tex-space math (vignette centred at 0.5, c2 bloom taps =
-// 1/screenW) assumes UV 0..1 spans a FULL frame of content, but
-// pRasterFrontBuffer is a padded (e.g. 2048x2048) raster with the frame only
-// in its top-left — sampling it with a UV 0..1 quad read black below
-// y = h*h/fbH (the IV-mode black band). Private w x h copy = content fills
-// UV 0..1. Managed like Blur_VCS's lastFrameBuffer (PushContext + RenderFast).
-static RwRaster *s_ivGradeRas = NULL;
-static int s_ivGradeW = 0, s_ivGradeH = 0;
-
-// ============================================================
-// Raw geometry render-state guard.
-// ImmediateModeRenderStates{Store,Set,ReStore} only round-trip the 10 RW-
-// cached state IDs; every postfx pass ALSO writes raw D3D9 states
-// (ALPHATEST/CULL/Z*/blend factors) that bypass that cache. A pass that
-// exits without re-asserting them — or faults mid-way — leaks the values
-// into the NEXT frame's geometry (evidenced: vegetation drawing over
-// buildings after the SSAO multiply left ALPHABLEND/SRCBLEND/DESTBLEND
-// wrong). Save/restore the raw states around every pass that writes them.
-// Save BEFORE DepthHook_Suspend (it writes raw ZENABLE itself); restore
-// AFTER ReStore so these values win on any overlap.
-// ============================================================
-static const D3DRENDERSTATETYPE s_rawGeomStateIds[9] = {
-	D3DRS_ALPHATESTENABLE,
-	D3DRS_CULLMODE,
-	D3DRS_ZENABLE,
-	D3DRS_ZWRITEENABLE,
-	D3DRS_ALPHABLENDENABLE,
-	D3DRS_SRCBLEND,
-	D3DRS_DESTBLEND,
-	D3DRS_BLENDOP,      // raw-written by Radiosity_VCS/Blur_VCS — NOT in the
-	D3DRS_BLENDFACTOR   // game ReStore's 10-state list, leaks past ReStore
-};
-
-bool
-SaveRawGeomStates(DWORD *out)
-{
-	IDirect3DDevice9 *dev = d3d9device;
-	if(!dev)
-		return false;
-	for(int i = 0; i < RAW_GEOM_STATE_COUNT; i++)
-		dev->GetRenderState(s_rawGeomStateIds[i], &out[i]);
-	return true;
-}
-
-void
-RestoreRawGeomStates(const DWORD *in)
-{
-	IDirect3DDevice9 *dev = d3d9device;
-	if(!dev)
-		return;
-	// Layer (2) driver cache first (pending[]+dirty, flushed before every
-	// draw): a raw layer-(3)-only restore leaves pending==applied at the
-	// leaked value, so the next RwD3D9SetRenderState to THAT value would
-	// no-op against an already-matching pending and could never push it
-	// down — and worse, a pending!=applied pair left behind by the pass
-	// would flush OVER our raw restore and put the leak straight back.
-	// D3D9 domain, no rw conversion needed.
-	for(int i = 0; i < RAW_GEOM_STATE_COUNT; i++)
-		RwD3D9SetRenderState(s_rawGeomStateIds[i], in[i]);
-	// Layer (3) raw — authoritative device write, wins over any pending
-	// bookkeeping disagreement.
-	for(int i = 0; i < RAW_GEOM_STATE_COUNT; i++)
-		dev->SetRenderState(s_rawGeomStateIds[i], in[i]);
-	// Canonical on-state LAST, forced on ALL THREE layers. These passes
-	// dirty the rw cache to FALSE with rw-only restores that no-op when
-	// the cache never changed back, and a stale saved FALSE would otherwise
-	// re-create the every-frame "[BUILDING] ZWRITE off/desynced (rw=1
-	// dev=0)" the pipe entries log: the rw sets re-sync the cache
-	// (FALSE->TRUE transition re-pushes to the device too), the RwD3D9
-	// sets re-sync pending[] (otherwise a pending TRUE!=applied FALSE
-	// flush would undo the raw TRUE below on the NEXT draw), and the raw
-	// writes guarantee the device value. Vertex alpha is forced the same
-	// way: SSS/postfx rw-set it FALSE, and a cache stuck FALSE would turn
-	// every later alpha-blended draw opaque.
-	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
-	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
-	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)TRUE);
-	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
-	RwD3D9SetRenderState(D3DRS_ZENABLE, TRUE);
-	RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
-	RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
-	RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-	dev->SetRenderState(D3DRS_ZENABLE, TRUE);
-	dev->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
-	dev->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
-	dev->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-}
-
-static void*
-EnsureIVGradePS(void)
-{
-	if(s_ivGradePS || s_ivGradePSFailed)
-		return s_ivGradePS;
-	IDirect3DDevice9 *dev = d3d9device;
-	if(!dev){
-		s_ivGradePSFailed = true;
-		return NULL;
-	}
-	HRESULT hr = dev->CreatePixelShader((const DWORD*)g_ivGradePSBytes,
-		(IDirect3DPixelShader9**)&s_ivGradePS);
-	if(FAILED(hr) || !s_ivGradePS){
-		dbglog("[PostFX] IVGrade CreatePixelShader FAILED hr=0x%08X", (unsigned)hr);
-		s_ivGradePS = NULL;
-		s_ivGradePSFailed = true;
-		return NULL;
-	}
-	dbglog("[PostFX] IVGrade pixel shader created sh=%p", s_ivGradePS);
-	return s_ivGradePS;
-}
-
-static void
-DrawIVGrade(void)
-{
-	// Gate decision breadcrumb (lane-A, build-2 outdoor-occluder hunt):
-	// the log line "[IVGrade] 0.00 ms" is PerfTimer's UNCONDITIONAL scope
-	// exit line (skygfx.h:79 `~PerfTimer(){ dbglog(...) }`) — it fires even
-	// when this function returns instantly at the gate below, so it is NOT
-	// evidence the grade ran. This throttle logs the ACTUAL gate input
-	// every ~2s so the next test proves either way: ivMode=0 + no
-	// "DrawIVGrade:" lines => grade never ran, occluder is elsewhere.
-	// ivMode writers to watch: derivePipelineFromPipes (main.cpp:597-607,
-	// flips it on pipe-change into/out-of the GTAIV family), menu_inject
-	// "GTA IV Mode" toggle (menu_inject.cpp:123), presets.cpp:130,
-	// debug-menu checkbox.
-	if(dbglog_throttle("ivgrade_gate"))
-		dbglog("[PostFX] IVGrade GATE: ivMode=%d pipeline=%d buildingPipe=%d vehiclePipe=%d cfEnable=%d -> %s",
-			config ? (int)config->ivMode : -1,
-			config ? config->pipeline : -1,
-			config ? config->buildingPipe : -1,
-			config ? config->vehiclePipe : -1,
-			config ? (int)config->colorFilterEnable : -1,
-			(config && config->ivMode) ? "RUN" : "SKIP");
-	if(!config || !config->ivMode)
-		return;
-	void *ps = EnsureIVGradePS();
-	if(!ps)
-		return;
-	IDirect3DDevice9 *dev = d3d9device;
-	if(!dev || !Scene.camera)
-		return;
-	RwRaster *camRas = RwCameraGetRaster(Scene.camera);
-	if(!camRas)
-		return;
-	// Screen-size doctrine: size the private grade copy from the trusted
-	// cache (live camRas only as the pre-capture fallback). If the camera
-	// raster is temporarily pointed at a non-screen raster (envmap/
-	// reflection), skip — copying it would composite at the wrong scale.
-	int w = 0, h = 0;
-	if(!GetScreenSize(&w, &h)){
-		w = camRas->width;
-		h = camRas->height;
-	}
-	if(w < 1 || h < 1)
-		return;
-	if(camRas->width != w || camRas->height != h){
-		if(dbglog_throttle("ivgrade_skip"))
-			dbglog("[PostFX] DrawIVGrade SKIP: camRas %dx%d != screen %dx%d (transient raster)",
-				camRas->width, camRas->height, w, h);
-		return;
-	}
-	if(!CPostEffects::pRasterFrontBuffer)
-		return;
-	if(IsGameInMenuOrPaused())
-		return;
-
-	if(dbglog_throttle("ivgrade"))
-		dbglog("[PostFX] DrawIVGrade: desat=%.2f gamma=%.2f exposure=%.2f vig=(%.2f,%.2f,%.2f) bloom=%.2f",
-			config->ivDesaturation, config->ivGamma, config->ivExposure,
-			config->ivVignetteIntensity, config->ivVignetteRadius,
-			config->ivVignetteContrast, config->ivBloomIntensity);
-
-	// Feed the grade a CAMERA-SIZED frame copy instead of pRasterFrontBuffer.
-	// Root cause of the IV-mode black band: the front buffer is a padded
-	// (2048x2048) raster holding the 1920x1080 frame 1:1 at its TOP-LEFT
-	// (UpdateFrontBuffer = RwRasterRenderFast at 0,0), while s_ffQuad maps
-	// UV 0..1 across the screen — screen rows below y = h*h/fbH (~570 on
-	// 1080/2048) sampled past the content into black. A private w x h copy
-	// has content filling UV 0..1, so the grade's authored tex-space math
-	// (vignette centred at 0.5, c2 bloom taps = 1/screenW) stays exact.
-	// The game's own colorfilterVerts avoid the band with 0..2048 positions
-	// + UV 0..1 (visible window = content region) — same idea, different
-	// mechanism (we can't move positions without breaking tex 0..1 math).
-	// Mirrors Blur_VCS's lastFrameBuffer copy (PushContext + RenderFast).
-	if(!s_ivGradeRas || s_ivGradeW != w || s_ivGradeH != h){
-		if(s_ivGradeRas){ RwRasterDestroy(s_ivGradeRas); s_ivGradeRas = NULL; }
-		s_ivGradeRas = RwRasterCreate(w, h, camRas->depth, rwRASTERTYPECAMERATEXTURE);
-		s_ivGradeW = w;
-		s_ivGradeH = h;
-		if(!s_ivGradeRas){
-			dbglog("[PostFX] DrawIVGrade: frame-copy raster create failed %dx%d", w, h);
-			return;
-		}
-	}
-	{
-		// Copy the CURRENT post-colour-filter camera frame into the private
-		// raster (same EndUpdate/PushContext/RenderFast/BeginUpdate dance as
-		// UpdateFrontBuffer). Fail-open: if the copy fails, skip the grade
-		// this frame rather than grading garbage.
-		RwCameraEndUpdate(Scene.camera);
-		RwRasterPushContext(s_ivGradeRas);
-		RwRaster *copyResult = RwRasterRenderFast(camRas, 0, 0);
-		RwRasterPopContext();
-		RwCameraBeginUpdate(Scene.camera);
-		if(!copyResult){
-			dbglog("[PostFX] DrawIVGrade: frame copy failed (RenderFast NULL), skipping grade");
-			return;
-		}
-	}
-
-	SetupFullscreenQuad((float)w, (float)h);
-
-	DWORD rawGeom[9];
-	bool rawGeomSaved = SaveRawGeomStates(rawGeom); // no depth hook in this pass
-	CPostEffects::ImmediateModeRenderStatesStore();
-	CPostEffects::ImmediateModeRenderStatesSet();
-	RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
-	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
-	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)s_ivGradeRas);
-
-	// c0: {exposure, desaturation, gamma, 0} — live from the debug-menu sliders
-	float ex = (config->ivExposure > 0.01f) ? config->ivExposure : 1.0f;
-	float gm = (config->ivGamma > 0.05f) ? config->ivGamma : 1.0f;
-	float c0[4] = { ex, config->ivDesaturation, gm, 0.0f };
-	RwD3D9SetPixelShaderConstant(0, c0, 1);
-	// c1: {vignetteIntensity, vignetteRadius, vignetteContrast, bloomIntensity}
-	float c1[4] = {
-		config->ivVignetteIntensity,
-		config->ivVignetteRadius,
-		config->ivVignetteContrast,
-		config->ivBloomIntensity
-	};
-	RwD3D9SetPixelShaderConstant(1, c1, 1);
-	// c2: {1/screenW, 1/screenH, 0, 0} — bloom tap offsets
-	float c2[4] = { 1.0f/max((float)w, 1e-7f), 1.0f/max((float)h, 1e-7f), 0.0f, 0.0f };
-	RwD3D9SetPixelShaderConstant(2, c2, 1);
-
-	overrideIm2dPixelShader = ps;
-	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, s_ffQuad, 4, s_ffQuadIdx, 6);
-	overrideIm2dPixelShader = nil;
-
-	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
-	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)TRUE);
-	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
-	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
-	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)NULL);
-	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
-	RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
-
-	CPostEffects::ImmediateModeRenderStatesReStore();
-	if(rawGeomSaved){
-		RestoreRawGeomStates(rawGeom);
-		rawGeomSaved = false;
-	}
-
-	// Leave the front buffer in sync so motion blur / height fog / god rays
-	// sample the IV-graded frame even if they skip their own start-sync.
-	CPostEffects::UpdateFrontBuffer();
-}
 
 // Defined in main.cpp (pipe-conjunction fix #4) — re-derives
 // config->pipeline/colorFilter/ivMode from the actual building/vehicle pipes.
 extern void derivePipelineFromPipes(Config *c);
 
+// Defined in postfx_colourfilter.cpp (fix-30): clears s_cfTonemapRanFrame so a
+// DrawIVGrade early-return in the PREVIOUS frame can't leave the exposure-stack
+// handshake stale-true into this frame. Declared locally: postfx.h is outside
+// this fix's edit set.
+extern void PostfxResetTonemapHandshake(void);
+
+// ---- pf_gate: per-frame pass-gate bookkeeping (perf lane) -----------------
+// One bit per pass that did no work this frame because it cannot contribute
+// (config gate off, or its input latch is empty). Bits are set where the
+// decision is made, then emitted ONCE per frame by PostfxGateSummary under
+// the existing global throttle. POD-only (unsigned + int args): safe on the
+// ColourFilter_switch path, and no formatting/string work happens unless
+// the throttle window is open.
+enum PostfxGateBits {
+	PFG_NORMALBUF  = 1u << 0,   // normalBufferEnable=0 (caller block skipped)
+	PFG_VELOCITY   = 1u << 1,   // velocityBufferEnable=0 or shader NULL
+	PFG_SSAO       = 1u << 2,   // ssaoEnable=0 (dispatch skipped)
+	PFG_DEPTHHIST  = 1u << 3,   // no prev-depth consumer this frame
+	PFG_PIPECHAIN  = 1u << 4,   // pipeChainEnable=0 / normalBufferEnable=0
+	PFG_SUNSHAFTS  = 1u << 5,
+	PFG_DOF        = 1u << 6,
+	PFG_BLOOM      = 1u << 7,
+	PFG_CA         = 1u << 8,
+	PFG_GRAIN      = 1u << 9,   // grainEnable=0 (call-site gate)
+	PFG_VIGNETTE   = 1u << 10,
+	PFG_IVGRADE    = 1u << 11,  // ivMode=0 (call-site gate)
+	PFG_MOTIONBLUR = 1u << 12,
+	PFG_HEIGHTFOG  = 1u << 13,
+	PFG_GODRAYS    = 1u << 14,
+	PFG_SMAA       = 1u << 15,
+	PFG_FXAA       = 1u << 16,
+};
+
+static void PostfxGateSummary(unsigned skipped)
+{
+	if(!dbglog_throttle("pf_gate"))
+		return;
+	dbglog("[PF] pf_gate: mask=0x%05X normalBuf=%d vel=%d ssao=%d depthHist=%d pipeChain=%d sunShafts=%d dof=%d bloom=%d ca=%d grain=%d vignette=%d ivGrade=%d motionBlur=%d heightFog=%d godRays=%d smaa=%d fxaa=%d",
+		skipped,
+		(skipped & PFG_NORMALBUF) ? 1 : 0,
+		(skipped & PFG_VELOCITY) ? 1 : 0,
+		(skipped & PFG_SSAO) ? 1 : 0,
+		(skipped & PFG_DEPTHHIST) ? 1 : 0,
+		(skipped & PFG_PIPECHAIN) ? 1 : 0,
+		(skipped & PFG_SUNSHAFTS) ? 1 : 0,
+		(skipped & PFG_DOF) ? 1 : 0,
+		(skipped & PFG_BLOOM) ? 1 : 0,
+		(skipped & PFG_CA) ? 1 : 0,
+		(skipped & PFG_GRAIN) ? 1 : 0,
+		(skipped & PFG_VIGNETTE) ? 1 : 0,
+		(skipped & PFG_IVGRADE) ? 1 : 0,
+		(skipped & PFG_MOTIONBLUR) ? 1 : 0,
+		(skipped & PFG_HEIGHTFOG) ? 1 : 0,
+		(skipped & PFG_GODRAYS) ? 1 : 0,
+		(skipped & PFG_SMAA) ? 1 : 0,
+		(skipped & PFG_FXAA) ? 1 : 0);
+}
+
+// ---- test-4 Symptom B: L2/L3 render-state divergence detector -------------
+// The corona_blend receipts (79/79 samples) show a persistent split: device
+// ALPHABLENDENABLE=TRUE while the RW driver cache (L2, the RwD3D9SetRenderState
+// shadow) holds FALSE. A cache-hit skip at L2 then leaves the device untouched
+// — the same pipeEnterAlphaMode raw-write desync class the classify park
+// (PipeChain_ClassifyBegin/End) already defends against. Audit of every
+// blend/ZWRITE raw writer in THIS file found them all paired (SaveRawGeomStates
+// /RestoreRawGeomStates brackets or explicit L2+L3 twins: Radiosity_VCS :846,
+// Blur_VCS :988, classify :3492-:3638, pipe-chain pass-3 fade :3904-:3944,
+// MotionBlur :4268, HeightFog :4494, DynamicSky :2922, NormalBuf :3216), so the
+// creator lives outside postfx.cpp. This check detects the divergence at the
+// postfx frame boundary and HEALS it by re-seeding L2 from the device truth
+// (L3): visually a no-op (the device already holds the value), but it ends the
+// persistent split so the next L1/L2 blend transition real-transitions instead
+// of no-op'ing against a cache that no longer matches the device.
+static void PostfxStateSyncCheck(const char *at)
+{
+	IDirect3DDevice9 *dev = d3d9device;
+	if(!dev) return;
+
+	// test-7 WIDENED COVERAGE (2026-11-01): BOTH call sites (cf_enter :1672
+	// and cf_end :2670) now run EVERY frame — the once-per-frame latch from
+	// the perf audit is REMOVED. Evidence: the cf_enter "blend L2=1 L3=0
+	// diverged — healed" receipts recur every ~1s, i.e. a persistent creator
+	// outside postfx.cpp re-splits the layers every frame, and the latch left
+	// mid-frame divergence windows unhealed for up to a full frame — black
+	// light quads rasterise during those windows. With both sites active the
+	// unhealed window halves: game-phase divergence is healed at cf_enter,
+	// postfx-phase divergence at cf_end of the SAME frame (previously it
+	// waited for the next frame's cf_enter).
+	// Trade-off: 2 full sweeps/frame = 20 device Gets/frame (~30µs) —
+	// acceptable now that diagnosis matters more than the microsecond cost.
+	// POD statics only, no destructors near any __try — SEH-safe.
+
+	static const struct { DWORD state; const char *name; } stChk[] = {
+		{ D3DRS_ALPHABLENDENABLE, "blend"  },
+		{ D3DRS_SRCBLEND,         "src"    },
+		{ D3DRS_DESTBLEND,        "dst"    },
+		{ D3DRS_BLENDOP,          "op"     },
+		{ D3DRS_ZWRITEENABLE,     "zwrite" },
+	};
+	for(int i = 0; i < (int)(sizeof(stChk)/sizeof(stChk[0])); i++){
+		DWORD l2 = 0, l3 = 0;
+		RwD3D9GetRenderState(stChk[i].state, &l2);
+		if(FAILED(dev->GetRenderState((D3DRENDERSTATETYPE)stChk[i].state, &l3)))
+			continue;
+		if(l2 == l3)
+			continue;
+		// Heal: L2 := L3. RwD3D9SetRenderState sees cache != target, writes
+		// the device (the value it already holds) and re-seeds the cache —
+		// all three layers agree again.
+		RwD3D9SetRenderState(stChk[i].state, l3);
+		// Log-hygiene: the heal above is functional and unconditional; only
+		// the receipt is gated — first hit always logs (one-shot, never
+		// starved), then diagLevel>=1 throttled (2s, ×5 at diagLevel 1,
+		// silent at >=2).
+		if(dbglog_once("statesync_first") || (g_diagLevel >= 1 && dbglog_throttle("statesync")))
+			dbglog("[statesync] %s: %s L2=%u L3=%u diverged — healed (cache re-seeded to device truth)",
+				at, stChk[i].name, (unsigned)l2, (unsigned)l3);
+	}
+}
+
+// ---- test-4 Symptom A: auto-exposure luminance-chain watchdog -------------
+// Dark-at-noon (F284810, game time 12:15): one frame renders dusk-dark while
+// neighbours at 12:09-12:12 are bright. Gen-6 finding: a dead luminance chain
+// makes RunFrameExposure (postfx_luminance.cpp) return NULL; the CF_Modern
+// bind site (postfx_colourfilter.cpp ~:639 `if(autoExposureOn && frameLumaTex
+// && cfDev)`) then skips the s1 bind WITHOUT any neutral-exposure fallback —
+// TonemapPass samples whatever s1 still holds (a stale adapt texel from an
+// earlier bright/HDR frame, or an unresolved RT) and key/lum clamps to the
+// exposure-window edge -> sudden darkening. This watchdog detects the dead-
+// chain precondition from the postfx side and emits the `[tonemap] lum
+// fallback` receipt; the actual neutral fallback (force c5.w=0 so TonemapPass
+// ignores s1 when frameLumaTex==NULL) must land at the bind site — hunk
+// reported to the orchestrator (file outside this fix's edit set).
+static void PostfxLuminanceChainWatch(int cfGate)
+{
+	if(!config->tonemapAutoExposure)
+		return;
+	if(cfGate != COLORFILTER_MODERN || !tonemapPassPS)
+		return;
+	if(luminanceReducePS && luminanceAdaptPS)
+		return; // chain armed — RunFrameExposure can produce a luma tex
+	// Log-hygiene: this watchdog is log-only; receipt gated — first hit
+	// always logs (one-shot), then diagLevel>=1 throttled.
+	if(dbglog_once("tonemap_lumfb_first") || (g_diagLevel >= 1 && dbglog_throttle("tonemap_lumfb")))
+		dbglog("[tonemap] lum fallback: autoExposure=1 cfGate=MODERN but luminance chain DEAD "
+			"(reducePS=%p adaptPS=%p tonemapPS=%p) — RunFrameExposure will return NULL, "
+			"s1 stays unbound, tonemap samples stale/unresolved lum; neutral-exposure "
+			"fallback required at the CF_Modern bind site",
+			luminanceReducePS, luminanceAdaptPS, tonemapPassPS);
+}
+
+// ---- test-7: night-crush vs blend-blackout discriminator --------------------
+// Extreme-darkness shots (game time 01:38-01:46, tonemapAutoExposure=1,
+// min 0.5 / max 2.0): need to discriminate tonemap night-crush from the
+// blend-blackout the statesync receipts track.
+// HONEST REACHABILITY REPORT: the ADAPTED exposure value (the 1x1 adapt
+// texel RunFrameExposure produces) is NOT reachable from postfx.cpp — it
+// lives in file-static g_lumaAdaptTexA/B (postfx_luminance.cpp :13-16), a
+// D3DPOOL_DEFAULT FP16 render target that cannot be locked without a
+// staging-copy pipeline stall, and postfx_luminance.cpp is outside this
+// edit set. The GPU-measured luminance is CPU-invisible by design
+// (postfx_colourfilter.cpp :584-586 documents the same limitation).
+// What IS reachable from here: the DEVICE-SIDE constant state CF_Modern
+// uploaded earlier in this same call — read back via GetPixelShaderConstantF
+// (same idiom as postfx.cpp:3633, mirrorPass.cpp:405; driver constant
+// shadow, no stall) IMMEDIATELY after ColourFilter_Modern returns, before
+// any later pass or the next frame's scene-phase PBR uploads clobber c5/c7:
+//   c5 = {exposure, toeStrength, sceneLuma, autoExpFlag}   (colourfilter :542)
+//   c7 = {blackLift, minExposure, maxExposure, keyStrength} (colourfilter :549)
+// c5.w is the frameLumaTex-bound discriminator: the bind site re-uploads
+// c5 with w=0 when RunFrameExposure returned NULL (colourfilter :639-643
+// "lum fallback"), so w==1 means the adapt texture WAS bound this draw.
+// Interpretation against the black-frame evidence:
+//   c5.x pinned at/near kCFExposureFloor + dark sceneLuma -> tonemap
+//        night-crush candidate (exposure collapsed);
+//   c5.x sane + c5.w==1 + frame still black -> blend-blackout candidate
+//        (cross-check the [statesync] heal receipts from the same log).
+// Cross-check the upload-time [CF] cf_exp receipt (colourfilter :588, ~2s
+// throttle) — if cf_exp and this readback disagree, a later pass clobbered
+// the constants mid-chain (new diagnostic lead).
+// Throttled ~2s via the global dbglog_throttle interval.
+// (test-8 compile fix: takes the effective filter as a parameter — `colorFilter`
+// is a LOCAL of ColourFilter_switch (postfx.cpp:1913), not a global; the call
+// site inside the MODERN case passes it while it is in scope.)
+static void PostfxExposureReceipt(int cfGate)
+{
+	if(!config->tonemapAutoExposure)
+		return;
+	if(cfGate != COLORFILTER_MODERN || !tonemapPassPS)
+		return;
+	IDirect3DDevice9 *dev = d3d9device;
+	if(!dev)
+		return;
+	float c5[4] = { 0, 0, 0, 0 }, c7[4] = { 0, 0, 0, 0 };
+	if(FAILED(dev->GetPixelShaderConstantF(5, c5, 1)) ||
+	   FAILED(dev->GetPixelShaderConstantF(7, c7, 1)))
+		return;
+	if(dbglog_throttle("cf_expchk"))
+		dbglog("[CF] expchk: c5={exp=%.4f toe=%.3f sceneLuma=%.4f frameLumaBound=%d} "
+			"c7={blackLift=%.3f minExp=%.3f maxExp=%.3f key=%.3f} "
+			"(adapt texel GPU-only — see postfx_luminance.cpp; frameLumaBound is a "
+			"decoding key, not live state: 1 = adapt tex WAS bound this draw, "
+			"0 = colourfilter's lum-fallback path re-uploaded c5 with w=0)",
+			c5[0], c5[1], c5[2], c5[3] >= 0.5f ? 1 : 0,
+			c7[0], c7[1], c7[2], c7[3]);
+}
+
 void
 CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 {
 	DBGLOG_ENTER("ColourFilter_switch");
+	PF_SCOPE("ColourFilter_switch");
+
+	// pf_gate mask for this frame (see PostfxGateBits) — plain POD, reset
+	// here so every path that returns below emits only this frame's gates.
+	unsigned pfSkip = 0;
+
+	// fix-30: start each frame's exposure handshake clean — BEFORE any gate/bail
+	// below (pRasterFrontBuffer NULL bail included) and before CF_Modern's
+	// tonemap sets it later in this same call.
+	PostfxResetTonemapHandshake();
+
+	// test-4 Symptom B: frame-entry L2/L3 divergence check. Coronas/particles
+	// draw in the scene phase BEFORE this entry, so a divergence created out
+	// there (the corona_blend dev=1/drv=0 signature) is still live here —
+	// detect + heal it before any postfx pass (and before Radiosity, which
+	// runs right behind this hook) consumes it with cache-skipped L2 writes.
+	PostfxStateSyncCheck("cf_enter");
 
 	// Pipe-conjunction #4 — EVERY-FRAME re-derivation, before any gate below
 	// reads config->pipeline (SSAO dispatch region above runs first in this
@@ -2944,6 +1816,14 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 		return;
 	}
 
+	// WHITE-INIT (call site 1 of 2 — the main path). Must run before ANY
+	// colorfilterVerts consumer below (SSAO/pipe-chain composites, the bypass,
+	// the colour-filter switch, IVGrade, GodRays, FXAA3, YCbCr). The bypass
+	// branch further down has its own call because it can be reached from a
+	// path where this one has already bailed on the pRasterFrontBuffer NULL
+	// early-return.
+	EnsureColorfilterVertsVisible();
+
 	// Trusted screen-size capture point (postfx entry — main camera is on the
 	// screen here, see GetScreenSize above). Geometry-phase readers
 	// (pipe-chain classify, IBL capture) size themselves from this cache
@@ -2957,41 +1837,101 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 	// Generate normal buffer from stereo disparity (before SSAO)
 	if(config->normalBufferEnable){
 		PERF_SCOPE("NormalBuf");
+		PF_SCOPE("NormalBuffer");
+		if(dbglog_throttle("pf_normbuf"))
+			dbglog("[PF] NormalBuffer: normEnable=%d out=g_normalBufferTex(%p) depth=g_ssaoDepthTex(%p)",
+				config->normalBufferEnable, (void*)g_normalBufferTex, (void*)g_ssaoDepthTex);
 		DrawNormalBufferToTexture();
+		if(dbglog_throttle("pf_normbuf2"))
+			dbglog("[PF] NormalBuffer done: RT restored, s0 unbound, states restored");
+	}else{
+		pfSkip |= PFG_NORMALBUF;
 	}
 
 	// Velocity buffer: per-pixel motion vectors via depth reconstruction
 	// Must run before SSAO so the velocity texture is available for temporal reprojection
-	DrawVelocityBuffer();
+	// NOTE: call-site gate mirrors DrawVelocityBuffer's own first gate (it
+	// allocates/recreates the velocity RT only AFTER that check) — skipping
+	// the call here can never change output, it just avoids the entry work.
+	if(config->velocityBufferEnable && VelocityReconstruct){
+		PF_SCOPE("VelocityBuffer");
+		if(dbglog_throttle("pf_vel"))
+			dbglog("[PF] VelocityBuffer: velEnable=%d dvShader=%p velTex=%p depth=%p",
+				config->velocityBufferEnable, VelocityReconstruct, g_velocityTex, g_ssaoDepthTex);
+		DrawVelocityBuffer();
+		if(dbglog_throttle("pf_vel2"))
+			dbglog("[PF] VelocityBuffer done: RT back, s0/s1 unbound, states restored");
+	}else{
+		pfSkip |= PFG_VELOCITY;
+	}
 
 	// SSAO must run before color filter to read original scene
-	{
+	// Gate BEFORE entering either callee: both DrawSSAO_Overhaul and
+	// DrawSSAO bail on !ssaoEnable only after function entry, and the
+	// overhaul path is the one that lazily creates the quarter/blur/output
+	// rasters. ssaoEnable=0 => neither can contribute => whole dispatch off.
+	if(config->ssaoEnable){
 		PERF_SCOPE("SSAO");
-		// Overhaul path runs when Temporal is ON, OR when Blur Passes > 0 —
-		// the bilateral blur loop lives ONLY inside DrawSSAO_Overhaul
-		// (:3836), so requiring ssaoTemporalEnable here made blur dead on
-		// the old path (old DrawSSAO has no blur at all). Verified safe
-		// without temporal: entry guard :3698 does not test ssaoTemporalEnable,
-		// ping-pong history RTs are always allocated + NULL-checked (:3725),
-		// and the history weight is validity-gated (and now also gated on
-		// ssaoTemporalEnable at :3810) so no temporal accumulation happens
-		// when Temporal is off. SSAO_Temporal still required (shader load).
-		if(config->ssaoEnable && SSAO_Temporal &&
+		PF_SCOPE("SSAO_Dispatch");
+		if(dbglog_throttle("pf_ssao"))
+			dbglog("[PF] SSAO_Dispatch: ssaoEnable=%d SSAO_Temporal=%p temporal=%d blurPasses=%d -> %s",
+				config->ssaoEnable, SSAO_Temporal, config->ssaoTemporalEnable,
+				config->ssaoBlurPasses,
+				(SSAO_Temporal &&
+				 (config->ssaoTemporalEnable || config->ssaoBlurPasses > 0))
+					? "DrawSSAO_Overhaul(qr+temporal+blur)" : "DrawSSAO(fullres)");
+		if(SSAO_Temporal &&
 		   (config->ssaoTemporalEnable || config->ssaoBlurPasses > 0)){
 			DrawSSAO_Overhaul();    // Quarter-res SSAO (+temporal, +bilateral blur)
 		}else{
 			DrawSSAO();             // Fallback: old full-res SSAO (no blur)
 		}
+		if(dbglog_throttle("pf_ssao2"))
+			dbglog("[PF] SSAO_Dispatch done: pass returned, depth hook state final");
+	}else{
+		pfSkip |= PFG_SSAO;
 	}
+	// Fine-grained bisect: covers BOTH the overhaul composite and the
+	// full-res fallback. If this dump is the first black one, the AO
+	// multiply composite is the culprit (noted in postfx_ssao.cpp:1038 —
+	// the AO buffer can go near-black and the composite is a MULTIPLY).
+	// Kept OUTSIDE the enable gate: an armed dump capture keeps the same
+	// checkpoint sequence even when SSAO is disabled for the frame.
+	DumpCurrentRT("cf_after_ssao");
 
 	// Copy current depth to prev-depth history AFTER SSAO has consumed
 	// the previous frame's depth, so temporal reprojection (T5) works correctly.
-	CopyDepthToPrev();
+	// Perf gate (pf_gate): the history is only read by the SSAO temporal
+	// resolve (c0.w historyBlend > 0 requires ssaoTemporalEnable — see
+	// postfx_ssao.cpp:836 and SSAO_Temporal.hlsl:270) and by velocity
+	// reconstruction (s1 prev-depth, c9.x). With neither consumer live the
+	// full-res R32F create + full-screen depth copy is dead work: skip it and
+	// invalidate the latch so a later toggle can never read stale history.
+	bool prevDepthWanted = (config->velocityBufferEnable && VelocityReconstruct) ||
+		(config->ssaoEnable && SSAO_Temporal && config->ssaoTemporalEnable);
+	if(prevDepthWanted){
+		CopyDepthToPrev();
+	}else{
+		g_prevDepthValid = false;
+		pfSkip |= PFG_DEPTHHIST;
+	}
 
 	// 4-Pipe chain (after SSAO, uses normal buffer)
 	if(config->pipeChainEnable && config->normalBufferEnable){
 		PERF_SCOPE("PipeChain");
+		PF_SCOPE("PipeChain");
+		if(dbglog_throttle("pf_pchain"))
+			dbglog("[PF] PipeChain: pcEnable=%d normEnable=%d normalTex=%p",
+				config->pipeChainEnable, config->normalBufferEnable, (void*)g_normalBufferTex);
 		DrawPipeChain();
+		if(dbglog_throttle("pf_pchain2"))
+			dbglog("[PF] PipeChain done: camera raster repainted from pRasterFrontBuffer");
+		// Fine-grained bisect: after the pass-3 composite (the pass that
+		// repaints the camera raster from pRasterFrontBuffer through the
+		// colourfilterVerts quad — a black vertex colour lands exactly here).
+		DumpCurrentRT("cf_after_pipechain");
+	}else{
+		pfSkip |= PFG_PIPECHAIN;
 	}
 
 	{
@@ -3022,6 +1962,37 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 
 	RwRGBA rgb1pc = rgb1;
 	RwRGBA rgb2pc = rgb2;
+
+	// ---- Resolve the FINAL colour-filter consumer up front (Fix R1) ----
+	// The PS2 conversion below is consumer-gated, so the PBR force +
+	// vcsTrails remap (previously applied below the conversion) are hoisted
+	// here. Behaviour is identical: the PBR force is idempotent and the
+	// vcsTrails remap never yields MODERN, so every later test (the bypass
+	// cfGate, the switch, the cf logs) sees the same value as before.
+	int colorFilter = config->colorFilter;
+	// PBR pipeline always uses Modern colour filter (Hable filmic tonemap in PostFX)
+	if(config->pipeline == PIPELINE_PBR)
+		colorFilter = COLORFILTER_MODERN;
+	// VCS trails isn't compatible with PC/PS2 color filter, falls off to VCS color filter
+	if (config->vcsTrails) {
+		if (colorFilter == COLORFILTER_PC || colorFilter == COLORFILTER_PS2) {
+			colorFilter = COLORFILTER_VCS;
+		}
+	}
+
+	// Fix R1: the PS2 SoftCompress (x0.68) + MODULATE2X compensation (x0.5)
+	// pre-scale exists for MOD2X-STYLE consumers only — consumers that double
+	// the colour again at the draw: ColourFilter_PS2's fixed-function
+	// D3DTOP_MODULATE2X (:2113) or vcTrailsPS's in-shader x2 (doublec +
+	// twin-add). Vanilla consumers (None(0)/PC -> CPostEffects::ColourFilter
+	// @0x703650) expect raw PC-space colours — the blanket x0.34 (including
+	// the "Also fix PC variants" copy) made them ~3x too dark (worst
+	// indoors). iiiTrailsPS (no doubling), Mobile (direction-only math) and
+	// Modern (hue extract + luma clamp; its alpha/128 wants raw PS2 alpha)
+	// are not MOD2X-style either and now receive the raw values as well.
+	bool mod2xConsumer = colorFilter == COLORFILTER_PS2 ||
+	                     colorFilter == COLORFILTER_VC  ||
+	                     colorFilter == COLORFILTER_VCS;
 
 	// PS2 to PC color space conversion
 	// PS2 gamma ~1.5, PC gamma 2.2
@@ -3057,8 +2028,9 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 		// PC timecycle - values already in PC space
 		rgb1.alpha /= 2;
 		rgb2.alpha /= 2;
-	}else{
-		// PS2 timecycle - convert to PC space
+	}else if(mod2xConsumer){
+		// PS2 timecycle - convert to PC space (Fix R1: only for MOD2X-style
+		// consumers; vanilla/None/PC consumers keep raw/PC-space values)
 		// Use soft compression for color filter values
 		rgb1.red = SoftCompress(rgb1.red);
 		rgb1.green = SoftCompress(rgb1.green);
@@ -3135,13 +2107,90 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 
 	vcsblurrgb = rgb2;
 
-	int colorFilter = config->colorFilter;
+	{
+		// Front-buffer sync is the group's input contract: SunShafts/DOF/Bloom
+		// all read pRasterFrontBuffer. Establish/verify it once here so a
+		// failed copy skips the whole group instead of letting each pass
+		// consume the stale buffer. The group exit below still re-syncs (the
+		// passes write the camera raster).
+		bool fxGroupAny = config->sunShaftsEnable || config->dofEnable || config->bloomEnable;
+		if(fxGroupAny){
+			UpdateFrontBuffer();
+		}
+		if(fxGroupAny && !PfFrontBufferReady("pre-tonemap group")){
+			pfSkip |= PFG_SUNSHAFTS | PFG_DOF | PFG_BLOOM;
+		}else{
+			{
+				PERF_SCOPE("SunShafts");
+				PF_SCOPE("SunShafts");
+				if(dbglog_throttle("pf_fxgroup"))
+					dbglog("[PF] FX pre-tonemap group: SunShafts->DOF->Bloom (gates: %d/%d/%d) in=cameraRT out=cameraRT",
+						config->sunShaftsEnable, config->dofEnable, config->bloomEnable);
+				DrawSunShafts();
+			}
+			{
+				PERF_SCOPE("DOF");
+				PF_SCOPE("DOF");
+				DrawDOF();
+			}
+			{
+				PERF_SCOPE("Bloom");
+				PF_SCOPE("Bloom");
+				DrawBloom();
+			}
+		}
+	}
+	UpdateFrontBuffer();
+
+	// pf_gate: the pre-tonemap group self-gates on its enable key before its
+	// first RT alloc (FxEnsureDofRTs / FxEnsureBloomRTs live below the gate),
+	// so record the skips here — shared by the main and bypass paths.
+	if(!config->sunShaftsEnable) pfSkip |= PFG_SUNSHAFTS;
+	if(!config->dofEnable)       pfSkip |= PFG_DOF;
+	if(!config->bloomEnable)     pfSkip |= PFG_BLOOM;
+
+	// W7-D: underwater volume fog + SSS (pre-tonemap; self-gated, default-off)
+	PostFX_UnderwaterTick();
+
+	// Everything below (colour filter, lens group, IV grade, motion blur,
+	// height fog, god rays, SSS blur) samples pRasterFrontBuffer. If the last
+	// sync failed, the camera raster still holds the scene, so returning here
+	// preserves a valid (if ungraded) frame instead of compositing stale black.
+	if(!PfFrontBufferReady("colour filter chain")){
+		pfSkip |= PFG_CA | PFG_GRAIN | PFG_VIGNETTE | PFG_IVGRADE |
+		          PFG_MOTIONBLUR | PFG_HEIGHTFOG | PFG_GODRAYS;
+		postfxReportFrame++;
+		postfxReportSummary();
+		PostfxGateSummary(pfSkip);
+		return;
+	}
+
+	// test-4 Symptom A: luminance-chain watchdog. `colorFilter` already
+	// carries the PBR->MODERN force (above), so this covers both the main
+	// dispatch and the colorFilterEnable=0 bypass (which routes through the
+	// same MODERN tonemap via cfGate).
+	PostfxLuminanceChainWatch(colorFilter);
 
 	// Debug toggle: bypass colour filter entirely
 	if(!config->colorFilterEnable){
 		if(dbglog_throttle("cf_switch"))
-			dbglog("[PostFX] ColourFilter_switch BYPASSED (colorFilterEnable=0)");
+			dbglog("[PostFX] ColourFilter_switch BYPASSED (colorFilterEnable=0) rgb1=(%d,%d,%d,%d) rgb2=(%d,%d,%d,%d)",
+				rgb1.red, rgb1.green, rgb1.blue, rgb1.alpha,
+				rgb2.red, rgb2.green, rgb2.blue, rgb2.alpha);
+		// WHITE-INIT (call site 2 of 2 — the bypass path). This branch is the
+		// one that NEVER reaches CPostEffects::ColourFilter, i.e. the exact
+		// case where the vanilla writer does not run and the verts would stay
+		// black. Deliberately placed before the first UpdateFrontBuffer() so
+		// the re-seed is in place before any consumer reads the verts.
+		EnsureColorfilterVertsVisible();
 		UpdateFrontBuffer();
+		if(!PfFrontBufferReady("bypass identity tonemap")){
+			pfSkip |= PFG_CA | PFG_GRAIN | PFG_VIGNETTE | PFG_IVGRADE;
+			postfxReportFrame++;
+			postfxReportSummary();
+			PostfxGateSummary(pfSkip);
+			return;
+		}
 
 		// Gamma ownership — the bypass skips the COLOUR FILTER, not the sRGB
 		// encode (see s_tonemapIdentityGrade). Only routes through the Modern
@@ -3161,10 +2210,87 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 			// Without this, chars_drawSSSBlur and any later FB consumer would
 			// read the un-gamma-encoded frame again.
 			UpdateFrontBuffer();
+			if(!PfFrontBufferReady("bypass lens group")){
+				pfSkip |= PFG_CA | PFG_GRAIN | PFG_VIGNETTE | PFG_IVGRADE;
+				postfxReportFrame++;
+				postfxReportSummary();
+				PostfxGateSummary(pfSkip);
+				return;
+			}
 		}
 
+		// New post-tonemap lens passes (W6 lane) — the bypass skips the
+		// COLOUR FILTER only, so CA/grain/vignette still run here, in the
+		// same order as the main path's post-switch group (and after the
+		// identity tonemap above).
+		{
+			PERF_SCOPE("CA");
+			PF_SCOPE("CA");
+			if(config->caIntensity > 0.0f && PfFrontBufferValid()){
+				DrawChromaticAberration();
+			}else{
+				pfSkip |= PFG_CA;   // DrawCA's own first gate; mirrors it
+			}
+		}
+		{
+			PERF_SCOPE("Grain");
+			PF_SCOPE("Grain");
+			// grainEnable is the MASTER (skygfx.h: "0=disable film grain";
+			// the legacy Grain_PS2 lane gates on it too, postfx_colourfilter
+			// .cpp:1019). DrawFilmGrain (postfx_newfx.cpp:737) only checks
+			// grainIntensity, so without this call-site gate grainEnable=0
+			// still ran the full pass. grainIntensity stays the strength.
+			if(config->grainEnable && PfFrontBufferValid()){
+				DrawFilmGrain();
+			}else{
+				pfSkip |= PFG_GRAIN;
+			}
+		}
+		{
+			PERF_SCOPE("Vignette");
+			PF_SCOPE("Vignette");
+			if(config->vignetteIntensity > 0.0f && PfFrontBufferValid()){
+				DrawVignette();
+			}else{
+				pfSkip |= PFG_VIGNETTE; // DrawVignette's own first gate; mirrors it
+			}
+		}
+		UpdateFrontBuffer();
+		if(dbglog_throttle("pf_lens3"))
+			dbglog("[PF] Lens group (bypass path) done: FB resynced");
+		if(!PfFrontBufferReady("bypass IV grade / SSS")){
+			pfSkip |= PFG_IVGRADE;
+			postfxReportFrame++;
+			postfxReportSummary();
+			PostfxGateSummary(pfSkip);
+			return;
+		}
+
+		// IV grade must still run when the colour filter is bypassed: this
+		// path early-returns below, so it used to skip the only DrawIVGrade()
+		// call (normal path, post-switch) and the iv* grade never applied.
+		// Placement matches the normal path's ordering (IVGrade before SSS
+		// blur). DrawIVGrade's own gate (config->ivMode) keeps it a no-op when
+		// the grade is disabled, and it ends with its own UpdateFrontBuffer so
+		// chars_drawSSSBlur reads the IV-graded frame.
+		{
+			PERF_SCOPE("IVGrade");
+			if(config->ivMode && PfFrontBufferValid()){
+				DrawIVGrade();
+			}else{
+				if(config->ivMode)
+					PfFrontBufferReady("bypass IV grade");
+				pfSkip |= PFG_IVGRADE; // DrawIVGrade's own first gate; mirrors it
+			}
+		}
+		DumpCurrentRT("cf_b_ivgrade");
+
 		// SSS still runs even when colour filter is bypassed - it's independent
-		chars_drawSSSBlur();
+		if(PfFrontBufferValid())
+			chars_drawSSSBlur();
+		else if(dbglog_throttle("pf_sss_skip"))
+			dbglog("[PF] skip chars_drawSSSBlur: front buffer sync failed this frame");
+		DumpCurrentRT("cf_b_sss");
 		// Keep the per-frame report alive during bypass windows: this early
 		// return used to skip postfxReportSummary (below), so the report went
 		// silent exactly when the filter was bypassed — the "PostFX-REPORT
@@ -3173,19 +2299,12 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 		// alternate it) — reported to orchestrator, NOT fixed here.
 		postfxReportFrame++;
 		postfxReportSummary();
+		PostfxGateSummary(pfSkip); // bypass path: CA/grain/vignette/IV + FX group gates
 		return;
 	}
 
-	// PBR pipeline always uses Modern colour filter (Hable filmic tonemap in PostFX)
-	if(config->pipeline == PIPELINE_PBR)
-		colorFilter = COLORFILTER_MODERN;
-
-	// VCS trails isn't compatible with PC/PS2 color filter, falls off to VCS color filter
-	if (config->vcsTrails) {
-		if (colorFilter == COLORFILTER_PC || colorFilter == COLORFILTER_PS2) {
-			colorFilter = COLORFILTER_VCS;
-		}
-	}
+	// (PBR force + vcsTrails remap hoisted above the PS2 conversion — Fix R1
+	// resolves the final consumer before the conversion is gated on it.)
 
 	if(dbglog_throttle( "cf_switch"))
 		dbglog("[PostFX] ColourFilter_switch filter=%d pipeline=%d rgb1=(%d,%d,%d,%d) rgb2=(%d,%d,%d,%d) pRasterFrontBuffer=%p",
@@ -3196,7 +2315,32 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 
 	switch(colorFilter){
 	case COLORFILTER_NONE:
-		// Fall back to PC filter (same as COLORFILTER_PC)
+		// Fix R2 regression revert: None(0) with colorFilterEnable=1 must
+		// still perform the vanilla full-screen composite.
+		//
+		// Vanilla CPostEffects::ColourFilter (0x703650, disassembled from the
+		// exe) is the game's always-on final present-path draw:
+		//   RwRenderStateSet(rwRENDERSTATETEXTURERASTER, pRasterFrontBuffer);
+		//   colorfilterVerts[0..3].emissiveColor = rgb2; RwIm2DRenderPrimitive(...)
+		//   colorfilterVerts[0..3].emissiveColor = rgb1; RwIm2DRenderIndexedPrimitive(...)
+		// CPostEffects::Render (0x7046E0) already copied camRas -> FB in its
+		// prologue (EndUpdate/PushContext/0x7faf50 RenderFast/Pop/BeginUpdate,
+		// i.e. our UpdateFrontBuffer idiom) before reaching the 0x704D1E call
+		// we replace, so this blit is the ONLY code in a vanilla frame that
+		// re-presents the front buffer onto the camera raster. Making NONE a
+		// true no-op removed the last unconditional full-screen draw of the
+		// chain, so any earlier frame damage survives to the screen
+		// un-repaired and nothing re-composites camRas.
+		//
+		// rgb1pc/rgb2pc stay RAW PC-space for NONE (Fix R1: None is not a
+		// MOD2X-style consumer, so neither the SoftCompress nor the x0.5
+		// compensation runs on it) — identical to what COLORFILTER_PC passes.
+		// PBR never reaches here: the pipeline==PIPELINE_PBR force above
+		// (line ~1271) switches the case to COLORFILTER_MODERN first.
+		if(dbglog_throttle("cf_none"))
+			dbglog("[PostFX] ColourFilter_switch NONE: vanilla composite (CPostEffects::ColourFilter) rgb1pc=(%d,%d,%d,%d) rgb2pc=(%d,%d,%d,%d)",
+				rgb1pc.red, rgb1pc.green, rgb1pc.blue, rgb1pc.alpha,
+				rgb2pc.red, rgb2pc.green, rgb2pc.blue, rgb2pc.alpha);
 		CPostEffects::ColourFilter(rgb1pc, rgb2pc);
 		break;
 	case COLORFILTER_PS2:
@@ -3221,8 +2365,21 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 	case COLORFILTER_MODERN:
 		// CRITICAL: Copy camera raster to pRasterFrontBuffer BEFORE grading.
 		UpdateFrontBuffer();
+		if(!PfFrontBufferReady("ColourFilter_Modern")){
+			// The grading/tonemap passes sample FB; the camera raster still
+			// has the scene. Skip this branch and the tail below.
+			break;
+		}
 
 		ColourFilter_Modern(rgb1, rgb2);
+		// test-7: read back c5/c7 NOW — ColourFilter_Modern just uploaded
+		// them (colourfilter :542/:574) and nothing has clobbered them yet.
+		// Later in the frame the scene-phase PBR uploads and the postfx
+		// passes reuse c0-c7, so a cf_end readback would be garbage; this
+		// is the only postfx.cpp vantage where the readback is authoritative.
+		// Bypass path (:2100, colorFilterEnable=0) intentionally not
+		// instrumented — debug-only toggle, main dispatch is the evidence path.
+		PostfxExposureReceipt(colorFilter);
 		break;
 	case COLORFILTER_GTAIV:
 		// Bypass mode - no color filter applied.
@@ -3237,6 +2394,92 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 		return;
 	}
 
+	if(dbglog_throttle("pf_cf_branch"))
+		dbglog("[PF] CF switch branch executed: colorFilter=%d (0=NONE 1=PS2 2=PC 3=MOBILE 6=III 7=VC 8=VCS 9=MODERN)",
+			colorFilter);
+
+	// ColourFilter_Modern performs its own mid-pass UpdateFrontBuffer (pass 1
+	// grade -> FB, then tonemap reads FB). If that copy failed, every pass
+	// below would sample the stale intermediate. Bail with the scene still on
+	// the camera raster rather than compositing black.
+	if(!PfFrontBufferReady("post-colour-filter lens group")){
+		pfSkip |= PFG_CA | PFG_GRAIN | PFG_VIGNETTE | PFG_IVGRADE |
+		          PFG_MOTIONBLUR | PFG_HEIGHTFOG | PFG_GODRAYS;
+		postfxReportFrame++;
+		postfxReportSummary();
+		PostfxGateSummary(pfSkip);
+		return;
+	}
+
+	// === New post-tonemap lens passes (W6 lane), in effect order:
+	// CA -> grain -> vignette. Runs on the graded/tonemapped frame straight
+	// out of the switch above (ColourFilter_Modern's tonemap is pass 4 of the
+	// new chain; these are 5/6/7), before the IV grade / motion blur /
+	// atmosphere tail. The legacy grainFilter path (CPostEffects::Grain /
+	// Grain_PS2) is untouched. Self-gated per pass; group exit re-syncs FB.
+	//
+	// Entry sync: ColourFilter_Modern leaves FB holding the PRE-tonemap
+	// graded frame. Verify the camera->FB copy here so a failed sync skips the
+	// lens group instead of letting the first pass sample that stale frame.
+	{
+		bool lensAny = (config->caIntensity > 0.0f) || config->grainEnable ||
+		               (config->vignetteIntensity > 0.0f);
+		if(lensAny)
+			UpdateFrontBuffer();
+		if(lensAny && !PfFrontBufferReady("lens group")){
+			pfSkip |= PFG_CA | PFG_GRAIN | PFG_VIGNETTE | PFG_IVGRADE |
+			          PFG_MOTIONBLUR | PFG_HEIGHTFOG | PFG_GODRAYS;
+			postfxReportFrame++;
+			postfxReportSummary();
+			PostfxGateSummary(pfSkip);
+			return;
+		}
+	}
+	{
+		PERF_SCOPE("CA");
+		PF_SCOPE("CA");
+		if(dbglog_throttle("pf_lens"))
+			dbglog("[PF] Lens group in: CA(int=%.3f) Grain(int=%.3f) Vignette(int=%.3f) in=cameraRT out=cameraRT",
+				config->caIntensity, config->grainIntensity, config->vignetteIntensity);
+		if(config->caIntensity > 0.0f && PfFrontBufferValid()){
+			DrawChromaticAberration();
+		}else{
+			pfSkip |= PFG_CA;   // DrawCA's own first gate; mirrors it
+		}
+	}
+	{
+		PERF_SCOPE("Grain");
+		PF_SCOPE("Grain");
+		// grainEnable is the MASTER (skygfx.h: "0=disable film grain"; the
+		// legacy Grain_PS2 lane gates on it too, postfx_colourfilter.cpp:1019).
+		// DrawFilmGrain (postfx_newfx.cpp:737) only checks grainIntensity, so
+		// without this call-site gate grainEnable=0 still ran the full pass.
+		if(config->grainEnable && PfFrontBufferValid()){
+			DrawFilmGrain();
+		}else{
+			pfSkip |= PFG_GRAIN;
+		}
+	}
+	{
+		PERF_SCOPE("Vignette");
+		PF_SCOPE("Vignette");
+		if(config->vignetteIntensity > 0.0f && PfFrontBufferValid()){
+			DrawVignette();
+		}else{
+			pfSkip |= PFG_VIGNETTE; // DrawVignette's own first gate; mirrors it
+		}
+	}
+	UpdateFrontBuffer();
+	if(dbglog_throttle("pf_lens2"))
+		dbglog("[PF] Lens group done: FB resynced (cameraRT -> pRasterFrontBuffer)");
+	if(!PfFrontBufferReady("IV grade / motion blur tail")){
+		pfSkip |= PFG_IVGRADE | PFG_MOTIONBLUR | PFG_HEIGHTFOG | PFG_GODRAYS;
+		postfxReportFrame++;
+		postfxReportSummary();
+		PostfxGateSummary(pfSkip);
+		return;
+	}
+
 	// Per-frame summary report (one compact line per frame)
 	postfxReportFrame++;
 	postfxReportSummary();
@@ -3247,32 +2490,95 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 	// shader constants — previously all dead config fields.
 	{
 		PERF_SCOPE("IVGrade");
-		DrawIVGrade();
+		PF_SCOPE("IVGrade");
+		if(dbglog_throttle("pf_iv"))
+			dbglog("[PF] IVGrade: ivMode=%d pipeline=%d cfEnable=%d identGrade=%d",
+				config->ivMode, config->pipeline, (int)config->colorFilterEnable,
+				(int)s_tonemapIdentityGrade);
+		if(config->ivMode && PfFrontBufferValid()){
+			DrawIVGrade();
+		}else{
+			if(config->ivMode)
+				PfFrontBufferReady("IV grade");
+			pfSkip |= PFG_IVGRADE; // DrawIVGrade's own first gate; mirrors it
+		}
+		if(dbglog_throttle("pf_iv2"))
+			dbglog("[PF] IVGrade done: states restored (tex/z/fog/blend)");
+		// Fine-grained bisect: the grade repaints the camera raster from the
+		// IV frame copy through the colourfilterVerts quad.
+		DumpCurrentRT("cf_m_ivgrade");
 	}
 
 	// Motion blur: after colour filter + SMAA, before final front buffer sync
 	{
 		PERF_SCOPE("MotionBlur");
-		DrawMotionBlur();
+		PF_SCOPE("MotionBlur");
+		if(dbglog_throttle("pf_mb"))
+			dbglog("[PF] MotionBlur: mbEnable=%d shader=%p velOn=%d strength=%.3f",
+				config->motionBlurEnable, MotionBlur_Burnout, config->velocityBufferEnable,
+				config->motionBlurStrength);
+		if(PfFrontBufferValid())
+			DrawMotionBlur();
+		else
+			pfSkip |= PFG_MOTIONBLUR;
+		if(dbglog_throttle("pf_mb2"))
+			dbglog("[PF] MotionBlur done: states restored");
 	}
 
 	// Atmospheric effects: after colour filter + motion blur, before front buffer sync
 	{
 		PERF_SCOPE("HeightFog");
-		DrawHeightFog();
+		PF_SCOPE("HeightFog");
+		if(dbglog_throttle("pf_hf"))
+			dbglog("[PF] HeightFog: hfEnable=%d density=%.5f shader=%p depthTex=%p",
+				config->heightFogEnable, config->heightFogDensity, HeightFog, g_ssaoDepthTex);
+		if(PfFrontBufferValid())
+			DrawHeightFog();
+		else
+			pfSkip |= PFG_HEIGHTFOG;
+		if(dbglog_throttle("pf_hf2"))
+			dbglog("[PF] HeightFog done: DepthHook_Restore + states restored");
 	}
 	{
 		PERF_SCOPE("GodRays");
-		DrawGodRays();
+		PF_SCOPE("GodRays");
+		// H1 fix: no caller-side blend claims. The old pre-call log printed
+		// "blend=ONE/ONE(rw+raw)" unconditionally — even when godRaysEnable=0
+		// gated the pass off before a single SetRenderState — and the paired
+		// "done" line ran under an independent throttle tag, so set/restore
+		// counts drifted apart (log-proven 5x vs 4x, session 05:55). The pass
+		// itself now logs the blend SET only after all of its gates pass, and
+		// gates the RESTORE log on that same set-log bool, so they cannot
+		// unpair. When godRaysEnable=0 the only output is the throttled,
+		// honest gate line inside DrawGodRays ("-> SKIP"); no state writes.
+		if(PfFrontBufferValid())
+			DrawGodRays();
+		else
+			pfSkip |= PFG_GODRAYS;
 	}
 
 	UpdateFrontBuffer();
 	// SSS post-process blur: runs after colour filter
 	// Reads from pRasterFrontBuffer (colour-filtered scene), writes to camera raster.
-	chars_drawSSSBlur();
+	if(PfFrontBufferValid())
+		chars_drawSSSBlur();
+	else if(dbglog_throttle("pf_sss_skip"))
+		dbglog("[PF] skip chars_drawSSSBlur: front buffer sync failed this frame");
+	DumpCurrentRT("cf_m_sss");
 
 	if(dbglog_throttle("cf_done"))
 		dbglog("ColourFilter_switch: done (filter=%d)", colorFilter);
+
+	// pf_gate: passes below have no call-site gate of their own (their entry
+	// gates already precede any RT/state setup — see DrawMotionBlur/
+	// DrawHeightFog/DrawGodRays/DrawSMAA), so record the skips for the
+	// per-frame summary. Pure reads; no behaviour change.
+	if(!(config->motionBlurEnable && MotionBlur_Burnout))        pfSkip |= PFG_MOTIONBLUR;
+	if(!(config->heightFogEnable && config->heightFogDensity > 0.0f && HeightFog && g_ssaoDepthTex)) pfSkip |= PFG_HEIGHTFOG;
+	if(!(config->godRaysEnable && GodRays))                      pfSkip |= PFG_GODRAYS;
+	if(!(config->smaaEnable && SMAA_Edge))                       pfSkip |= PFG_SMAA;
+	if(!config->fxaaEnable || (config->smaaEnable && SMAA_Edge)) pfSkip |= PFG_FXAA;
+	PostfxGateSummary(pfSkip);
 
 	// Debug dump: final image after all post-processing
 	DumpCurrentRT("after_filter");
@@ -3309,6 +2615,34 @@ static RwMatrix YUV2RGB = {
 void
 CPostEffects::DrawFinalEffects(void)
 {
+	PF_SCOPE("DrawFinalEffects");
+	if(dbglog_throttle("pf_dfe"))
+		dbglog("[PF] DrawFinalEffects: smaaEnable=%d SMAA_Edge=%p fxaaEnable=%d",
+			config->smaaEnable, SMAA_Edge, config->fxaaEnable);
+
+	// --- On-demand dump arming (F10) -------------------------------------
+	// Edge-detected: g_postfxDumpKeyPrevDown latches while the key is held, so a
+	// single press arms exactly once (holding F10 must not re-arm every
+	// frame). Polled here rather than in ColourFilter_switch because
+	// DrawFinalEffects is the last per-frame call — arming here covers the
+	// FULL next frame for every earlier checkpoint (scene_cam, fb_after_copy,
+	// cf_after_ssao, cf_after_pipechain, ...) plus the rest of this one.
+	// The plain dbglog (NOT dbglog_throttle) is deliberate: the user needs
+	// one unambiguous "the key registered" line, and throttling would swallow
+	// repeats.
+	{
+		const bool down = (GetAsyncKeyState(POSTFX_DUMP_HOTKEY) & 0x8000) != 0;
+		const bool edge = down && !g_postfxDumpKeyPrevDown;
+		g_postfxDumpKeyPrevDown = down;
+		if(edge)
+			PostFX_ArmDump(POSTFX_DUMP_ARM_FRAMES, "F10 hotkey");
+		// Spend one armed frame for the frame we are currently in, so an arm
+		// at frame N covers N (partial), N+1 and N+2.
+		if(g_postfxDumpArmCount > 0)
+			g_postfxDumpArmCount--;
+	}
+	DumpCurrentRT("dfe_enter");
+
 	// SMAA: pure D3D9 RT switching — safe regardless of camera Begin/EndUpdate state.
 	// Runs before ImGui so the debug menu stays on top (test requires menu open).
 	// Sync front buffer first so HUD (already drawn into camera raster) survives
@@ -3317,7 +2651,23 @@ CPostEffects::DrawFinalEffects(void)
 		if(dbglog_throttle("smaa_entry"))
 			dbglog("[SMAA] DrawFinalEffects: entering SMAA (Edge=%p Temporal=%p)", SMAA_Edge, SMAA_Temporal);
 		UpdateFrontBuffer();
-		DrawSMAA();
+		if(PfFrontBufferReady("SMAA"))
+			DrawSMAA();
+	}
+
+	// FXAA3 (W6 lane, new-chain pass 8): same late AA slot as SMAA. Never
+	// together with SMAA — DrawFXAA3 self-gates and, when both are enabled,
+	// SMAA (above) wins and DrawFXAA3 logs the suppression exactly once.
+	{
+		PERF_SCOPE("FXAA3");
+		PF_SCOPE("FXAA3_Slot");
+		if(dbglog_throttle("pf_fxaa"))
+			dbglog("[PF] FXAA3 slot: fxaaEnable=%d smaaWins=%d (DrawFXAA3 self-gates)",
+				config->fxaaEnable, (int)(config->smaaEnable && SMAA_Edge ? 1 : 0));
+		if(PfFrontBufferValid())
+			DrawFXAA3();
+		if(dbglog_throttle("pf_fxaa2"))
+			dbglog("[PF] FXAA3 slot done: camera raster = final displayed surface");
 	}
 
 	// ImGui debug menu: always render last (on top of everything)
@@ -3327,10 +2677,17 @@ CPostEffects::DrawFinalEffects(void)
 			DrawUnifiedDebugMenu(dev);
 	}
 
+	// Forward+ cluster/tile debug overlay (INI forwardPlusDebug; no-op at 0)
+	ForwardPlus_DrawClusterDebug();
+
 	// YCbCr filter (only when enabled)
 	if(m_bYCbCrFilter){
+		PF_SCOPE("YCbCrFilter");
+		if(dbglog_throttle("pf_ycbcr"))
+			dbglog("[PF] YCbCrFilter: ON ps=%p in=pRasterFrontBuffer out=cameraRaster", gradingPS);
 		UpdateFrontBuffer();
 
+		if(PfFrontBufferReady("YCbCr filter")){
 		RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERNEAREST);
 		RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
 		RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
@@ -3380,6 +2737,7 @@ CPostEffects::DrawFinalEffects(void)
 		RwD3D9SetPixelShaderConstant(5, tonemapP, 1);
 
 		overrideIm2dPixelShader = gradingPS;
+		PfBindPS(gradingPS, "IDR_GRADINGPS(160) YCbCr");
 		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
 		overrideIm2dPixelShader = nil;
 
@@ -3391,38 +2749,43 @@ CPostEffects::DrawFinalEffects(void)
 		RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)TRUE);
 
 		UpdateFrontBuffer();
+		}
 	}
+
+	// NOTE: PfFrame() (profiler frame boundary) lives in the DrawFinalEffects_pf
+	// wrapper at the 0x53EBE9 hook (main.cpp) — exactly one snap per frame.
+	// It used to live here too (fix-6 + fix-9 both landed it) => double timing.
+
+	// End-of-frame raster checkpoint (black-screen bisect). Paired with
+	// scene_cam (postfx.cpp PostFX_DumpSceneCamera, called from
+	// RenderScene_after) and the fine-grained dfe_enter / cf_* probes, this
+	// localises the black to exactly one stage:
+	//   scene_cam black   -> the WORLD render produced black
+	//   scene_cam fine +
+	//   final_frame black -> something in the post chain painted it over
+	//   cf_after_ssao / cf_after_pipechain / cf_m_ivgrade / cf_m_sss black
+	//                       -> that specific pass is the one blackening it
+	// lastFrame here is the surface the game presents next, i.e. the screen
+	// the user actually sees.
+	// Both are INI-gated on postfxDumpDebug; the first-N-frames cap is now
+	// PostFX_DumpActive() so the F10 arming window bypasses it.
+	DumpCurrentRT("final_frame");
+
+	// One-line summary of everything captured this frame (only fires when at
+	// least one BMP was actually written).
+	PostFX_DumpFlushTags();
+
+	// test-4 Symptom B: frame_end L2/L3 divergence check — catches a desync a
+	// postfx pass created THIS frame (the cf_enter check catches game-phase
+	// divergence). Runs after the dump probes, before the frame is presented.
+	// Early-return paths above skip this check; a persistent divergence is
+	// still caught by the next frame's cf_enter check.
+	PostfxStateSyncCheck("cf_end");
 
 	// SMAA runs at top of DrawFinalEffects (before ImGui) via D3D9 SetRenderTarget.
 }
 
-IDirect3DTexture9 *g_ssaoDepthTex = NULL;
-static IDirect3DSurface9 *g_ssaoDepthSurf = NULL;
-static IDirect3DTexture9 *g_ssaoNoiseTex = NULL;
-static RwRaster *g_ssaoOutputRaster = NULL;
 
-// Wave-2 temporal history: previous-frame depth (own R32F render target, never aliased)
-IDirect3DTexture9 *g_prevDepthTex = NULL;
-static IDirect3DSurface9 *g_prevDepthSurf = NULL;
-bool g_prevDepthValid = false;
-static int s_prevDepthW = 0, s_prevDepthH = 0;  // cached dims for res-aware recreate
-static bool s_prevDepthLogDone = false;         // one-shot failure log
-
-// Wave-2 helper defined below InitSSAOResources; forward-declared for its two call sites.
-static void CreatePrevDepthTexture(IDirect3DDevice9 *dev, int w, int h);
-
-// SSAO overhaul — quarter-res temporal pipeline
-static RwRaster *g_ssaoQuarterRaster[2] = {NULL, NULL};
-static RwTexture *g_ssaoQuarterTexRW[2] = {NULL, NULL};
-static RwRaster *g_ssaoBlurTempRaster = NULL;
-static RwTexture *g_ssaoBlurTempTexRW = NULL;
-static int g_ssaoFrameIndex = 0;
-static bool g_ssaoHistoryValid = false;
-static int g_ssaoQuarterW = 0, g_ssaoQuarterH = 0;
-
-// SMAA D3D textures (D3DPOOL_DEFAULT - must be released on device reset)
-static IDirect3DTexture9 *g_smaaAreaTex = NULL;
-static IDirect3DTexture9 *g_smaaSearchTex = NULL;
 
 // IBL buffer (quarter-res sky/cloud ambient)
 IDirect3DTexture9 *g_iblTex = NULL;
@@ -3431,20 +2794,6 @@ static IDirect3DSurface9 *g_iblSurf = NULL;
 extern void *DynamicSky;
 
 // Normal buffer (half-res stereo-derived normals)
-IDirect3DTexture9 *g_normalBufferTex = NULL;
-static IDirect3DSurface9 *g_normalBufferSurf = NULL;
-static int s_normalBufW = 0, s_normalBufH = 0;  // cached dims for res-aware recreate
-// True only after DrawNormalBufferToTexture completed at least one full write.
-// A freshly created D3DPOOL_DEFAULT RT is driver garbage (cleared to the
-// invalid-normal marker in GetNormalBufferTexture, but the marker must also
-// never be blended into geometry normals), so consumers gate binding on this
-// flag — see the s4 bind gate in buildingPipe.cpp PBR callback.
-bool g_normalBufferHasContent = false;
-
-// Wave-2 temporal history: previous-frame normals (half-res, same dims as g_normalBufferTex)
-IDirect3DTexture9 *g_prevNormalTex = NULL;
-static IDirect3DSurface9 *g_prevNormalSurf = NULL;
-bool g_normalHistoryValid = false;
 
 extern void *NormalBufferShader;
 
@@ -3541,6 +2890,10 @@ ReleaseLuminanceTargets();
 	// SSAO overhaul (D3DPOOL_DEFAULT)
 	ReleaseSSAOOverhaulResources();
 
+	// New postfx scratch chains: DOF half-res pair + bloom mip pyramid
+	// (D3DPOOL_DEFAULT, recreated lazily on the next pass)
+	ReleaseFxScratchResources();
+
 	// Forward+ cluster index textures (D3DPOOL_DEFAULT)
 	ForwardPlus_ReleaseResources();
 
@@ -3556,27 +2909,22 @@ ReleaseLuminanceTargets();
 	dbglog("ReleaseDefaultPoolResources: done");
 }
 
-// Release luminance target resources (g_lumaMeas*, g_lumaAdapt*)
-void ReleaseLuminanceTargets(void)
-{
-	// g_lumaMeasTex (and related) – released here to free memory
-	if(g_lumaMeasTex){ g_lumaMeasTex->Release(); g_lumaMeasTex = nil; }
-	if(g_lumaMeasSurf){ g_lumaMeasSurf->Release(); g_lumaMeasSurf = nil; }
-	if(g_lumaAdaptTexA){ g_lumaAdaptTexA->Release(); g_lumaAdaptTexA = nil; }
-	if(g_lumaAdaptSurfA){ g_lumaAdaptSurfA->Release(); g_lumaAdaptSurfA = nil; }
-	if(g_lumaAdaptTexB){ g_lumaAdaptTexB->Release(); g_lumaAdaptTexB = nil; }
-	if(g_lumaAdaptSurfB){ g_lumaAdaptSurfB->Release(); g_lumaAdaptSurfB = nil; }
-	g_lumaAdaptFlip = 0;
-}
-
 // Central cleanup on device reset (called from depthhook::hook_Reset)
 extern void ReleaseEnvMapResources(void);
 extern void ReleaseVehiclePipeCaches(void);
 extern void ReleaseBuildingPipeCaches(void);
 extern void ReleaseNeoCarPipeResources(void);
+extern void InvalidateCameraRasterCache(void);	// main.cpp
 
 void OnDeviceReset(void)
 {
+	// Water pipe RTs (scene colour / R32F depth / reflection) are
+	// D3DPOOL_DEFAULT and created lazily at tier>=2 — a live one fails the
+	// Reset with D3DERR_INVALIDCALL (the 0x7F9A3C NULL-deref crash class).
+	// Release them FIRST so no later step can observe them alive; they
+	// recreate lazily on the next tier>=2 flush (skygfx.h declaration).
+	waterPipe_OnDeviceReset();
+
 	// Release all D3DPOOL_DEFAULT resources (including luminance targets)
 	ReleaseDefaultPoolResources();
 
@@ -3586,6 +2934,29 @@ void OnDeviceReset(void)
 	ReleaseBuildingPipeCaches();
 	ReleaseNeoCarPipeResources();
 
+	// chars module: release the raw D3DPOOL_DEFAULT classify texture (NOT an
+	// RW raster — RW's video-memory restore list never sees it). If it is
+	// alive during the game's Reset, Reset fails D3DERR_INVALIDCALL and the
+	// vanilla RW restore path does an unchecked Release(NULL) on
+	// _RwD3D9RenderSurface (0xC97C30) → 0xC0000005 at 0x7F9A3C.
+	chars_OnDeviceReset();
+
+	// Peds pipe latch invalidation (chars_OnDeviceReset precedent, chars.h:49):
+	// Phase 1 owns no device objects — bumps the generation counter, logs once
+	// (dbglog_once "peds_reset"). Phase 2+ sub-modules invalidate cached device
+	// pointers here and rebuild lazily (EnsureSSSRasters pattern).
+	PedsPipe_OnDeviceReset();
+
+	// Scene-entry camera-raster repair cache (main.cpp s_camRasGame): RW
+	// destroys + recreates the game's camera raster across Reset, so the
+	// cached pointer dangles — and the repair branch only runs when a
+	// NON-screen raster is live, i.e. exactly when the screen-sized
+	// re-adoption branch cannot refresh it. Drop it here (hook_Reset calls
+	// OnDeviceReset BEFORE orig_Reset, so this lands before the teardown);
+	// the next screen-sized sighting re-adopts and re-arms. No-op when the
+	// cache is already empty.
+	InvalidateCameraRasterCache();
+
 	// Reset guard state: never leave the VEH in silent pass-through mode or
 	// with a stale phase tag across a device Reset (gap: previously the
 	// hoisted DrawSMAA guard flag survived reset).
@@ -3593,1094 +2964,7 @@ void OnDeviceReset(void)
 	g_renderPhase = "";
 	g_guardDepth = 0;
 }
-static inline bool CheckDeviceState(void)
-{
-	// Fail fast while the device is lost — TestCooperativeLevel is cheap and
-	// every RT bind / Im2D draw downstream would fault or fail anyway.
-	if (!d3d9device || d3d9device->TestCooperativeLevel() == D3DERR_DEVICELOST)
-		return false;
-	// RW camera BeginUpdate handles device state internally
-	// Just check if we have a valid camera and raster
-	if (!Scene.camera) return false;
-	RwRaster *camRas = RwCameraGetRaster(Scene.camera);
-	return camRas != NULL;
-}
 
-void InitSSAOResources(void)
-{
-	// If noise exists but depth texture is NULL (e.g. after device Reset),
-	// re-alias from depthhook's INTZ which was recreated by hook_SetDS.
-	if(g_ssaoNoiseTex) {
-		if(!g_ssaoDepthTex && g_intzTex) {
-			g_ssaoDepthTex = g_intzTex;
-			g_ssaoDepthSurf = g_intzSurf;
-			dbglog("InitSSAOResources: re-aliased depthTex from depthhook after Reset");
-		}
-		return;
-	}
-
-	__try {
-		dbglog("InitSSAOResources: start");
-		IDirect3DDevice9 *dev = d3d9device;
-		if(dev == NULL){ dbglog("InitSSAOResources: no dev"); return; }
-		if(Scene.camera == NULL){ dbglog("InitSSAOResources: no camera"); return; }
-		RwRaster *camRas = RwCameraGetRaster(Scene.camera);
-		if(camRas == NULL){ dbglog("InitSSAOResources: no camRas"); return; }
-		int w = camRas->width;
-		int h = camRas->height;
-		dbglog("InitSSAOResources: camRas %dx%d", w, h);
-
-		if(FAILED(dev->CreateTexture(4, 4, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &g_ssaoNoiseTex, NULL))){
-			dbglog("InitSSAOResources: CreateTexture noise 4x4 MANAGED failed");
-			return;
-		}
-		dbglog("InitSSAOResources: noise texture created (pool=MANAGED)");
-		D3DLOCKED_RECT lr;
-		if(FAILED(g_ssaoNoiseTex->LockRect(0, &lr, NULL, 0))){
-			dbglog("InitSSAOResources: LockRect noise failed");
-			return;
-		}
-		for(int y = 0; y < 4; y++){
-			for(int x = 0; x < 4; x++){
-				float rx = (rand()/(float)RAND_MAX)*2.0f - 1.0f;
-				float ry = (rand()/(float)RAND_MAX)*2.0f - 1.0f;
-				float len = sqrtf(rx*rx + ry*ry);
-				if(len > 1.0f){ rx /= len; ry /= len; }
-				((DWORD*)((BYTE*)lr.pBits + y*lr.Pitch))[x] =
-					D3DCOLOR_ARGB(0, (int)((rx+1)*127.5f), (int)((ry+1)*127.5f), 0);
-			}
-		}
-		g_ssaoNoiseTex->UnlockRect(0);
-		dbglog("InitSSAOResources: noise texture filled");
-
-		// Use depthhook's INTZ texture if available (it's bound as DS by the vtable hook)
-		// This is the primary path — depthhook's INTZ has real depth data written by the game.
-		if(g_intzTex) {
-			g_ssaoDepthTex = g_intzTex;
-			g_ssaoDepthSurf = g_intzSurf;
-			dbglog("InitSSAOResources: using depthhook INTZ depth texture %dx%d", w, h);
-			CreatePrevDepthTexture(dev, w, h);
-			dbglog("InitSSAOResources: done");
-			return;
-		}
-
-		// Fallback: depthhook not available — try creating our own INTZ.
-		// NOTE: This texture is NEVER bound as DS, so depth consumers will read garbage.
-		// This path exists only for the case where depthhook is disabled by INI.
-		IDirect3D9 *d3d = NULL;
-		if(SUCCEEDED(dev->GetDirect3D(&d3d)) && d3d){
-			dbglog("InitSSAOResources: checking INTZ support (fallback, no depthhook)");
-			HRESULT hr = d3d->CheckDeviceFormat(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL,
-				D3DFMT_X8R8G8B8, D3DUSAGE_DEPTHSTENCIL, D3DRTYPE_TEXTURE,
-				(D3DFORMAT)MAKEFOURCC('I','N','T','Z'));
-			if(SUCCEEDED(hr)){
-				dbglog("InitSSAOResources: INTZ supported, creating depth texture (fallback)");
-				hr = dev->CreateTexture(w, h, 1, D3DUSAGE_DEPTHSTENCIL,
-					(D3DFORMAT)MAKEFOURCC('I','N','T','Z'),
-					D3DPOOL_DEFAULT, &g_ssaoDepthTex, NULL);
-				if(SUCCEEDED(hr)){
-					g_ssaoDepthTex->GetSurfaceLevel(0, &g_ssaoDepthSurf);
-					dbglog("InitSSAOResources: INTZ depth texture created OK (fallback)");
-					CreatePrevDepthTexture(dev, w, h);
-					d3d->Release();
-					dbglog("InitSSAOResources: done");
-					return;
-				}else{
-					dbglog("InitSSAOResources: CreateTexture INTZ failed hr=0x%08X", hr);
-				}
-			}else{
-				dbglog("InitSSAOResources: INTZ format not supported, SSAO disabled");
-			}
-			d3d->Release();
-		}
-		if(!g_ssaoDepthTex){
-			dbglog("InitSSAOResources: SSAO disabled - depth texture not available");
-			return;
-		}
-		dbglog("InitSSAOResources: done");
-	} __except(EXCEPTION_EXECUTE_HANDLER){
-		dbglog("InitSSAOResources crashed! exception=0x%08X", GetExceptionCode());
-	}
-}
-
-// Wave-2: create the previous-frame depth history texture (own R32F render target).
-// A plain R32F render target is used instead of INTZ/DEPTHSTENCIL because INTZ is a
-// texture format that can neither be read back via GetRenderTargetData (requires
-// POOL_SYSTEMMEM) nor copied via StretchRect (requires a plain depth-stencil surface).
-// The history is instead populated by rendering a fullscreen quad that samples the
-// current scene depth (see CopyDepthToPrev).
-// Res-aware: mirrors the velocity/normal buffer idiom — recreate when dims change.
-static void CreatePrevDepthTexture(IDirect3DDevice9 *dev, int w, int h)
-{
-	if(!dev || w < 1 || h < 1) return;
-	if(g_prevDepthTex && s_prevDepthW == w && s_prevDepthH == h) return;
-
-	// Release on dim change (or re-init)
-	if(g_prevDepthTex){ g_prevDepthTex->Release(); g_prevDepthTex = NULL; }
-	if(g_prevDepthSurf){ g_prevDepthSurf->Release(); g_prevDepthSurf = NULL; }
-	g_prevDepthValid = false;
-
-	HRESULT hr = dev->CreateTexture(w, h, 1, D3DUSAGE_RENDERTARGET,
-		D3DFMT_R32F, D3DPOOL_DEFAULT, &g_prevDepthTex, NULL);
-	if(SUCCEEDED(hr)){
-		g_prevDepthTex->GetSurfaceLevel(0, &g_prevDepthSurf);
-		s_prevDepthW = w;
-		s_prevDepthH = h;
-		dbglog("InitSSAOResources: prevDepth R32F texture created OK %dx%d", w, h);
-	}else{
-		dbglog("InitSSAOResources: CreateTexture prevDepth R32F failed hr=0x%08X", hr);
-		g_prevDepthTex = NULL;
-		g_prevDepthSurf = NULL;
-		s_prevDepthW = 0;
-		s_prevDepthH = 0;
-		g_prevDepthValid = false;
-	}
-}
-
-// Wave-2: copy current depth (g_ssaoDepthTex) into the previous-frame history texture
-// by rendering a fullscreen quad whose pixel shader samples the scene depth and writes
-// it to the R32F render target. History is only marked valid when the draw succeeds.
-static void CopyDepthToPrev(void)
-{
-	if(!g_ssaoDepthTex){
-		g_prevDepthValid = false;
-		return;
-	}
-	IDirect3DDevice9 *dev = d3d9device;
-	if(!dev){ g_prevDepthValid = false; return; }
-	if(!ClampShader){ g_prevDepthValid = false; return; }
-
-	// Res-aware lazy (re)create of the history texture (full camera resolution).
-	RwRaster *camRas = Scene.camera ? RwCameraGetRaster(Scene.camera) : NULL;
-	if(!camRas){ g_prevDepthValid = false; return; }
-	CreatePrevDepthTexture(dev, camRas->width, camRas->height);
-
-	if(!g_prevDepthTex || !g_prevDepthSurf){ g_prevDepthValid = false; return; }
-
-	// Save current RT, DS, viewport
-	IDirect3DSurface9 *oldRT = NULL;
-	IDirect3DSurface9 *oldDS = NULL;
-	D3DVIEWPORT9 oldVP;
-	dev->GetRenderTarget(0, &oldRT);
-	dev->GetDepthStencilSurface(&oldDS);
-	dev->GetViewport(&oldVP);
-
-	bool ok = false;
-
-	DWORD rawGeom[9];
-	bool rawGeomSaved = SaveRawGeomStates(rawGeom); // before Store (raw Set below)
-	CPostEffects::ImmediateModeRenderStatesStore();
-	CPostEffects::ImmediateModeRenderStatesSet();
-	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
-	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
-
-	dev->SetRenderTarget(0, g_prevDepthSurf);
-	dev->SetDepthStencilSurface(NULL);
-	D3DVIEWPORT9 pdVP = { 0, 0, (DWORD)s_prevDepthW, (DWORD)s_prevDepthH, 0.0f, 1.0f };
-	dev->SetViewport(&pdVP);
-
-	__try {
-		// Suspend depth hook so g_ssaoDepthTex (INTZ) can be sampled while not bound as DS
-		DepthHook_Suspend();
-
-		dev->SetTexture(0, g_ssaoDepthTex);
-		dev->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
-		dev->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
-		dev->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
-		dev->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_POINT);
-
-		// ClampShader is the generic s0→RT copy shader; c0={min,max,tonemap,0} with
-		// [0,1] clamp is a no-op for depth (already in [0,1]).
-		float c0[4] = { 0.0f, 1.0f, 0.0f, 0.0f };
-		RwD3D9SetPixelShaderConstant(0, c0, 1);
-
-		overrideIm2dPixelShader = ClampShader;
-		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
-		overrideIm2dPixelShader = nil;
-
-		// Unbind INTZ from s0 BEFORE the hook re-binds it as DS (feedback-lock
-		// guard, mirrors DrawSSAO/DrawHeightFog); the cleanup below stays as-is.
-		dev->SetTexture(0, NULL);
-		DepthHook_Restore();
-		ok = true;
-	} __except(EXCEPTION_EXECUTE_HANDLER){
-		overrideIm2dPixelShader = nil;	// SEH: the `= nil` reset in the __try above is skipped on fault
-
-		dev->SetTexture(0, NULL); // same unbind before the bail-out Restore
-		DepthHook_Restore(); // keep Suspend/Restore balanced on fault
-	}
-
-	dev->SetTexture(0, NULL);
-	dev->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
-	dev->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
-
-	CPostEffects::ImmediateModeRenderStatesReStore();
-	if(rawGeomSaved){
-		RestoreRawGeomStates(rawGeom);
-		rawGeomSaved = false;
-	}
-
-	dev->SetViewport(&oldVP);
-	dev->SetRenderTarget(0, oldRT);
-	dev->SetDepthStencilSurface(oldDS);
-	if(oldRT) oldRT->Release();
-	if(oldDS) oldDS->Release();
-
-	g_prevDepthValid = ok;
-	if(!ok && !s_prevDepthLogDone){
-		s_prevDepthLogDone = true;
-		dbglog("[PostFX] CopyDepthToPrev: depth copy failed, prev-depth history disabled (one-shot)");
-	}
-}
-
-// ============================================================
-// PostFX_CopyDepthToTexture — copy the live scene depth (INTZ depth-stencil,
-// currently bound as the device DS) into dstTex (an R32F render target) as
-// raw window-space z. Used by the water pipe at water-draw time for
-// depth-based shore blending / translucency / shallow->deep colour.
-//
-// Unlike CopyDepthToPrev (postfx tail, Z irrelevant) this runs MID-SCENE,
-// so the exact incoming depth-stencil surface is re-bound at the end instead
-// of DepthHook_Restore's cached game DS — the water draw that follows must
-// keep Z-testing against the live INTZ contents.
-//
-// Returns false (and touches nothing) when the copy cannot run: no INTZ,
-// INTZ not the active DS (its contents would be stale), or a draw fault —
-// callers fall back to depth-less shading.
-// ============================================================
-bool PostFX_CopyDepthToTexture(IDirect3DTexture9 *dstTex, int dstW, int dstH)
-{
-	if(!dstTex || dstW < 1 || dstH < 1) return false;
-	if(!g_intzTex || !g_intzSurf) return false;
-	if(!ClampShader) return false;
-	IDirect3DDevice9 *dev = d3d9device;
-	if(!dev) return false;
-
-	IDirect3DSurface9 *oldRT = NULL;
-	IDirect3DSurface9 *oldDS = NULL;
-	D3DVIEWPORT9 oldVP;
-	dev->GetRenderTarget(0, &oldRT);
-	dev->GetDepthStencilSurface(&oldDS);
-	dev->GetViewport(&oldVP);
-
-	// Only trust INTZ contents when INTZ is the surface receiving depth writes.
-	if(oldDS != g_intzSurf){
-		if(oldRT) oldRT->Release();
-		if(oldDS) oldDS->Release();
-		return false;
-	}
-
-	IDirect3DSurface9 *dstSurf = NULL;
-	if(FAILED(dstTex->GetSurfaceLevel(0, &dstSurf)) || !dstSurf){
-		if(oldRT) oldRT->Release();
-		if(oldDS) oldDS->Release();
-		return false;
-	}
-
-	bool ok = false;
-
-	DWORD rawGeom[9];
-	bool rawGeomSaved = SaveRawGeomStates(rawGeom); // before Store (raw Set below)
-	CPostEffects::ImmediateModeRenderStatesStore();
-	CPostEffects::ImmediateModeRenderStatesSet();
-	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
-	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)rwCULLMODECULLNONE);
-
-	dev->SetRenderTarget(0, dstSurf);
-	// Unbind the DS so INTZ can be sampled (hook_SetDS passes NULL straight
-	// through to the original — no substitution on the unbind path).
-	dev->SetDepthStencilSurface(NULL);
-	D3DVIEWPORT9 vp = { 0, 0, (DWORD)dstW, (DWORD)dstH, 0.0f, 1.0f };
-	dev->SetViewport(&vp);
-
-	__try {
-		dev->SetTexture(0, g_intzTex);
-		dev->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
-		dev->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
-		dev->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
-		dev->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_POINT);
-
-		// Fullscreen quad in the dst RT's own pixel grid (colourfilterVerts
-		// would only be valid once the colourfilter has run this frame).
-		RwIm2DVertex quad[4];
-		for(int i = 0; i < 4; i++){
-			quad[i].z = 0.0f;
-			quad[i].rhw = 1.0f;
-			quad[i].emissiveColor = 0xFFFFFFFF;
-		}
-		quad[0].x = 0.0f;         quad[0].y = 0.0f;         quad[0].u = 0.0f; quad[0].v = 0.0f;
-		quad[1].x = (float)dstW;  quad[1].y = 0.0f;         quad[1].u = 1.0f; quad[1].v = 0.0f;
-		quad[2].x = 0.0f;         quad[2].y = (float)dstH;  quad[2].u = 0.0f; quad[2].v = 1.0f;
-		quad[3].x = (float)dstW;  quad[3].y = (float)dstH;  quad[3].u = 1.0f; quad[3].v = 1.0f;
-		RwImVertexIndex quadIdx[6] = { 0, 1, 2, 2, 1, 3 };
-
-		// ClampShader is the generic s0→RT copy shader; c0={min,max,tonemap,0}
-		// with a [0,1] clamp is a no-op for raw depth (already in [0,1]).
-		float c0[4] = { 0.0f, 1.0f, 0.0f, 0.0f };
-		RwD3D9SetPixelShaderConstant(0, c0, 1);
-
-		overrideIm2dPixelShader = ClampShader;
-		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, quad, 4, quadIdx, 6);
-		overrideIm2dPixelShader = nil;
-
-		ok = true;
-	} __except(EXCEPTION_EXECUTE_HANDLER){
-		overrideIm2dPixelShader = nil;	// SEH: the `= nil` reset in the __try above is skipped on fault
-
-		dbglog("[PostFX] CopyDepthToTexture fault code=0x%08X", GetExceptionCode());
-		ok = false;
-	}
-
-	dev->SetTexture(0, NULL);
-	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)NULL);
-	dev->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
-	dev->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
-
-	CPostEffects::ImmediateModeRenderStatesReStore();
-	if(rawGeomSaved){
-		RestoreRawGeomStates(rawGeom);
-		rawGeomSaved = false;
-	}
-
-	dev->SetViewport(&oldVP);
-	dev->SetRenderTarget(0, oldRT);
-	// Re-bind the EXACT incoming DS (== g_intzSurf -> hook_SetDS passthrough)
-	// so the following water draw Z-tests against live scene depth.
-	dev->SetDepthStencilSurface(oldDS);
-	dstSurf->Release();
-	if(oldRT) oldRT->Release();
-	if(oldDS) oldDS->Release();
-	return ok;
-}
-
-void ReleaseSSAOOverhaulResources(void){
-	for(int i = 0; i < 2; i++){
-		if(g_ssaoQuarterTexRW[i]){ RwTextureDestroy(g_ssaoQuarterTexRW[i]); g_ssaoQuarterTexRW[i] = NULL; }
-		if(g_ssaoQuarterRaster[i]){ RwRasterDestroy(g_ssaoQuarterRaster[i]); g_ssaoQuarterRaster[i] = NULL; }
-	}
-	if(g_ssaoBlurTempTexRW){ RwTextureDestroy(g_ssaoBlurTempTexRW); g_ssaoBlurTempTexRW = NULL; }
-	if(g_ssaoBlurTempRaster){ RwRasterDestroy(g_ssaoBlurTempRaster); g_ssaoBlurTempRaster = NULL; }
-	g_ssaoHistoryValid = false;
-	g_ssaoQuarterW = g_ssaoQuarterH = 0;
-}
-
-static void InitSSAOOverhaulResources(void){
-	if(g_ssaoQuarterRaster[0] && g_ssaoQuarterRaster[1] && g_ssaoBlurTempRaster)
-		return;
-
-	RwRaster *camRas = RwCameraGetRaster(Scene.camera);
-	if(!camRas) return;
-
-	int qw = (camRas->width + 3) / 4;
-	int qh = (camRas->height + 3) / 4;
-
-	if(g_ssaoQuarterW == qw && g_ssaoQuarterH == qh) return;
-
-	ReleaseSSAOOverhaulResources();
-
-	for(int i = 0; i < 2; i++){
-		g_ssaoQuarterRaster[i] = RwRasterCreate(qw, qh, camRas->depth, rwRASTERTYPECAMERATEXTURE);
-		if(!g_ssaoQuarterRaster[i]){
-			dbglog("[SSAO] Failed to create quarter raster %d", i);
-			return;
-		}
-		g_ssaoQuarterTexRW[i] = RwTextureCreate(g_ssaoQuarterRaster[i]);
-		if(g_ssaoQuarterTexRW[i]){
-			RwTextureSetFilterMode(g_ssaoQuarterTexRW[i], rwFILTERLINEAR);
-			RwTextureSetAddressingU(g_ssaoQuarterTexRW[i], rwTEXTUREADDRESSCLAMP);
-			RwTextureSetAddressingV(g_ssaoQuarterTexRW[i], rwTEXTUREADDRESSCLAMP);
-		}
-	}
-
-	g_ssaoBlurTempRaster = RwRasterCreate(qw, qh, camRas->depth, rwRASTERTYPECAMERATEXTURE);
-	if(!g_ssaoBlurTempRaster){
-		dbglog("[SSAO] Failed to create blur temp raster");
-		return;
-	}
-	g_ssaoBlurTempTexRW = RwTextureCreate(g_ssaoBlurTempRaster);
-	if(g_ssaoBlurTempTexRW){
-		RwTextureSetFilterMode(g_ssaoBlurTempTexRW, rwFILTERLINEAR);
-		RwTextureSetAddressingU(g_ssaoBlurTempTexRW, rwTEXTUREADDRESSCLAMP);
-		RwTextureSetAddressingV(g_ssaoBlurTempTexRW, rwTEXTUREADDRESSCLAMP);
-	}
-
-	g_ssaoQuarterW = qw;
-	g_ssaoQuarterH = qh;
-	g_ssaoHistoryValid = false;
-}
-
-// Throttled AO-output validation: read back a sparse grid from the occlusion
-// RT and fail-open (skip the multiply composite) if it is near-black — under
-// SRCBLEND=ZERO/DESTBLEND=SRCCOLOR a black AO texture *replaces* the whole
-// scene with black. Reuses the DumpRasterToBMP GetRenderTargetData pattern,
-// but runs regardless of postfxDumpDebug because it is a safety gate, not a
-// debug dump. First 3 frames always validate (catch immediate failures),
-// then once every 60 frames (~2s) to bound the GetRenderTargetData stall.
-// Returns true = composite may proceed.
-static bool ValidateSSAOOutput(IDirect3DSurface9 *aoRT)
-{
-	static int s_validateCount = 0;
-	s_validateCount++;
-	if(s_validateCount > 3 && (s_validateCount % 60) != 0)
-		return true;
-	if(!aoRT)
-		return true; // no surface captured — can't verify, don't block
-	IDirect3DDevice9 *dev = d3d9device;
-	if(!dev)
-		return true;
-
-	D3DSURFACE_DESC desc;
-	if(FAILED(aoRT->GetDesc(&desc)) || desc.Width < 1 || desc.Height < 1)
-		return true;
-	IDirect3DSurface9 *sysSurf = NULL;
-	if(FAILED(dev->CreateOffscreenPlainSurface(desc.Width, desc.Height,
-			D3DFMT_A8R8G8B8, D3DPOOL_SYSTEMMEM, &sysSurf, NULL)) || !sysSurf)
-		return true;
-	if(FAILED(dev->GetRenderTargetData(aoRT, sysSurf))){
-		sysSurf->Release();
-		return true; // readback failed — don't skip the composite on a glitch
-	}
-	D3DLOCKED_RECT lr;
-	if(FAILED(sysSurf->LockRect(&lr, NULL, D3DLOCK_READONLY))){
-		sysSurf->Release();
-		return true;
-	}
-	// Sparse 16x16 grid of the red channel (AO output is greyscale)
-	float amin = 1.0f, amax = 0.0f, asum = 0.0f;
-	int count = 0;
-	for(int gy = 0; gy < 16; gy++){
-		int y = (int)((size_t)gy * (desc.Height - 1) / 15);
-		const BYTE *row = (const BYTE*)lr.pBits + (size_t)y * lr.Pitch;
-		for(int gx = 0; gx < 16; gx++){
-			int x = (int)((size_t)gx * (desc.Width - 1) / 15);
-			float a = row[x * 4 + 2] / 255.0f; // A8R8G8B8 -> R
-			if(a < amin) amin = a;
-			if(a > amax) amax = a;
-			asum += a;
-			count++;
-		}
-	}
-	sysSurf->UnlockRect();
-	sysSurf->Release();
-
-	// Healthy AO: mostly white (avg ~0.7+). avg < 0.02 = effectively all
-	// black -> the multiply would black out the frame -> fail open.
-	float aavg = asum / (float)count;
-	bool ok = (aavg >= 0.02f);
-	if(dbglog_throttle("ssao_aoval"))
-		dbglog("[PostFX] SSAO ao validate: min=%.3f max=%.3f avg=%.3f -> %s",
-			amin, amax, aavg, ok ? "composite" : "SKIP (near-black, fail-open)");
-	return ok;
-}
-
-void
-CPostEffects::DrawSSAO(void)
-{
-	if(IsGameInMenuOrPaused()) return;
-	if(dbglog_throttle( "ssao_enter"))
-		dbglog("[PostFX] DrawSSAO ENTER ssaoEnable=%d SSAO=%p", config->ssaoEnable, SSAO);
-	if(!config->ssaoEnable || !SSAO){
-		if(dbglog_throttle( "ssao_bail"))
-			dbglog("[PostFX] DrawSSAO bailing: ssaoEnable=%d SSAO=%p", config->ssaoEnable, SSAO);
-		return;
-	}
-
-	// Declared before __try so the __except path can restore them too
-	DWORD rawGeom[9];
-	bool rawGeomSaved = false;
-	bool imStored = false; // set after ImmediateModeRenderStatesStore
-
-	__try {
-		IDirect3DDevice9 *dev = d3d9device;
-		if(dev == NULL){ dbglog("[PostFX] DrawSSAO bailing: dev is NULL"); return; }
-		if(Scene.camera == NULL){ dbglog("[PostFX] DrawSSAO bailing: Scene.camera is NULL"); return; }
-		RwRaster *camRas = RwCameraGetRaster(Scene.camera);
-		if(camRas == NULL){ dbglog("[PostFX] DrawSSAO bailing: camRas is NULL"); return; }
-		int w = camRas->width;
-		int h = camRas->height;
-
-		InitSSAOResources();
-
-		if(!g_ssaoNoiseTex || !g_ssaoDepthTex){
-			dbglog("[PostFX] DrawSSAO bailing: noiseTex=%p depthTex=%p", g_ssaoNoiseTex, g_ssaoDepthTex);
-			return;
-		}
-
-		if(!g_ssaoOutputRaster || g_ssaoOutputRaster->width != w || g_ssaoOutputRaster->height != h){
-			if(g_ssaoOutputRaster) RwRasterDestroy(g_ssaoOutputRaster);
-			g_ssaoOutputRaster = RwRasterCreate(w, h, camRas->depth, rwRASTERTYPECAMERATEXTURE);
-			if(!g_ssaoOutputRaster){ dbglog("[PostFX] DrawSSAO bailing: output raster creation failed"); return; }
-		}
-
-		// Save raw geometry states BEFORE Suspend (it writes raw ZENABLE)
-		rawGeomSaved = SaveRawGeomStates(rawGeom);
-
-		// Suspend depth hook so g_ssaoDepthTex can be sampled while not bound as DS
-		DepthHook_Suspend();
-
-		ImmediateModeRenderStatesStore();
-		imStored = true;
-		ImmediateModeRenderStatesSet();
-
-		// Render SSAO occlusion to output raster
-		RwRaster *origRaster = camRas;
-		RwCameraEndUpdate(Scene.camera);
-		RwCameraSetRaster(Scene.camera, g_ssaoOutputRaster);
-		RwCameraBeginUpdate(Scene.camera);
-
-		// White-clear the occlusion target: if the pass is skipped or fails
-		// mid-frame the composite multiplies by 1.0 (graceful no-op) instead
-		// of stale/garbage data — SSAO must degrade to "off", never black.
-		dev->Clear(0, NULL, D3DCLEAR_TARGET, 0xFFFFFFFF, 1.0f, 0);
-
-		// Capture the AO output surface while bound for the post-pass readback
-		// validation (fail-open gate on the multiply composite below).
-		IDirect3DSurface9 *aoRT = NULL;
-		dev->GetRenderTarget(0, &aoRT);
-
-		RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
-		RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
-		RwD3D9SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
-		RwD3D9SetRenderState(D3DRS_ZENABLE, FALSE);
-		RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
-		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
-
-		dev->SetTexture(0, g_ssaoDepthTex);
-		dev->SetTexture(1, g_ssaoNoiseTex);
-		dev->SetTexture(2, g_normalBufferTex);
-		dev->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
-		dev->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
-		dev->SetSamplerState(1, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP);
-		dev->SetSamplerState(1, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
-		dev->SetSamplerState(2, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
-		dev->SetSamplerState(2, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
-
-		float radius = config->ssaoRadius > 0.0f ? config->ssaoRadius : 1.0f;
-		float power = config->ssaoPower > 0.0f ? config->ssaoPower : 2.0f;
-		float noiseScale = 4.0f / w;
-		float params[4] = { radius, power, noiseScale, 0.0f };
-		RwD3D9SetPixelShaderConstant(0, params, 1);
-
-		float screenSize[4] = { (float)w, (float)h, 1.0f/max((float)w, 1e-7f), 1.0f/max((float)h, 1e-7f) };
-		RwD3D9SetPixelShaderConstant(1, screenSize, 1);
-
-		RwCamera *cam = Scene.camera;
-		float n = cam->nearPlane;
-		float f = cam->farPlane;
-		float projInfo[4] = {
-			cam->recipViewWindow.x,
-			cam->recipViewWindow.y,
-			-n * f / (f - n),
-			f / (f - n)
-		};
-		RwD3D9SetPixelShaderConstant(2, projInfo, 1);
-
-		// RT-sized white quad: correct UV 0..1 on this raster, white vertex
-		// colour so the fixed-function composite can't modulate to black.
-		SetupFullscreenQuad((float)w, (float)h);
-
-		overrideIm2dPixelShader = SSAO;
-		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, s_ffQuad, 4, s_ffQuadIdx, 6);
-		overrideIm2dPixelShader = nil;
-
-		// Restore original camera raster
-		RwCameraEndUpdate(Scene.camera);
-		RwCameraSetRaster(Scene.camera, origRaster);
-		RwCameraBeginUpdate(Scene.camera);
-
-		// Unbind SSAO samplers (s0-s2) so g_ssaoDepthTex doesn't leak past
-		// DepthHook_Restore and stay bound while INTZ is re-bound as DS
-		// (feedback lock risk), mirroring DrawSSAO_Overhaul/DrawHeightFog.
-		dev->SetTexture(0, NULL);
-		dev->SetTexture(1, NULL);
-		dev->SetTexture(2, NULL);
-
-		// Restore depth hook (re-binds INTZ as DS, re-enables Z)
-		DepthHook_Restore();
-
-		// Photoshop-multiply contract: final = scene x aoTexture, white =
-		// no occlusion. Fail-open: skip the composite entirely if the readback
-		// says the AO buffer is near-black (a black texture under
-		// ZERO/SRCCOLOR *replaces* the scene with black).
-		bool aoOk = ValidateSSAOOutput(aoRT);
-		if(dbglog_throttle("ssao_comp"))
-			dbglog("[PostFX] DrawSSAO composite: raster=%p aoOk=%d",
-				g_ssaoOutputRaster, (int)aoOk);
-		if(aoRT){ aoRT->Release(); aoRT = NULL; }
-
-		if(aoOk){
-			// Set blend through the RW cache FIRST (VERTEXALPHAENABLE /
-			// SRCBLEND / DESTBLEND): RwIm2D re-emits cached states at draw
-			// time and would clobber raw-only D3D9 factors set before the
-			// draw — the old raw-only sequence is how the multiply could
-			// silently degrade to a plain replace (showing the AO texture
-			// alone / black). Mirror the factors with raw calls immediately
-			// before the draw as a second layer.
-			RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
-			RwRenderStateSet(rwRENDERSTATETEXTURERASTER, g_ssaoOutputRaster);
-			RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
-			RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDZERO);        // src factor dropped
-			RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDSRCCOLOR);   // dest x src = multiply
-			RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
-			RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-			RwD3D9SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ZERO);
-			RwD3D9SetRenderState(D3DRS_DESTBLEND, D3DBLEND_SRCCOLOR);
-
-			// White RT-sized quad — NOT colorfilterVerts (emissiveColor=0 would
-			// modulate the SSAO texture to black and zero the whole scene).
-			RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, s_ffQuad, 4, s_ffQuadIdx, 6);
-
-			// Restore blend defaults through the RW cache too (keep it coherent
-			// with the D3D9 state before ImmediateModeRenderStatesReStore)
-			RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
-			RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
-			RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
-			RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
-		}else if(dbglog_throttle("ssao_skipped"))
-			dbglog("[PostFX] DrawSSAO: multiply composite SKIPPED (AO buffer near-black — fail-open)");
-
-		ImmediateModeRenderStatesReStore();
-		if(rawGeomSaved){
-			RestoreRawGeomStates(rawGeom);
-			rawGeomSaved = false;
-		}
-		dbglog("[PostFX] DrawSSAO completed successfully");
-	} __except(EXCEPTION_EXECUTE_HANDLER){
-		overrideIm2dPixelShader = nil;	// SEH: the `= nil` reset in the __try above is skipped on fault
-
-		dbglog("[PostFX] DrawSSAO CRASHED exception=0x%08X", GetExceptionCode());
-		DepthHook_Restore(); // Restore depth hook on bail to keep Suspend/Restore balanced
-		// ReStore BEFORE the raw restore (same order as the normal exit): a fault
-		// between the composite's rw SRCBLEND=ZERO/DESTBLEND=SRCCOLOR sets and
-		// their restore left the rw cache holding the multiply factors — the raw
-		// restore alone cannot fix layer (1), and the next RwIm2D draw re-emits
-		// the cached ZERO/SRCCOLOR over the world pass.
-		if(imStored)
-			ImmediateModeRenderStatesReStore();
-		if(rawGeomSaved)
-			RestoreRawGeomStates(rawGeom);
-	}
-}
-
-static void DrawSSAO_Overhaul(void)
-{
-	DBGLOG_ENTER("DrawSSAO_Overhaul");
-	if(IsGameInMenuOrPaused()) return;
-	if(dbglog_throttle("ssao_ov_enter"))
-		dbglog("[PostFX] DrawSSAO_Overhaul ENTER");
-	if(!config->ssaoEnable || !SSAO_Temporal || !SSAO_BilateralBlur || !SSAO_Upsample){
-		// Fallback to old SSAO if new shaders not loaded
-		CPostEffects::DrawSSAO();
-		return;
-	}
-
-	// Declared before __try so the __except path can restore them too
-	DWORD rawGeom[9];
-	bool rawGeomSaved = false;
-	bool imStored = false; // set after ImmediateModeRenderStatesStore
-
-	__try {
-		IDirect3DDevice9 *dev = d3d9device;
-		if(dev == NULL){ dbglog("[PostFX] DrawSSAO_Overhaul bailing: dev is NULL"); return; }
-		if(Scene.camera == NULL){ dbglog("[PostFX] DrawSSAO_Overhaul bailing: camera is NULL"); return; }
-		RwRaster *camRas = RwCameraGetRaster(Scene.camera);
-		if(camRas == NULL){ dbglog("[PostFX] DrawSSAO_Overhaul bailing: camRas is NULL"); return; }
-		int w = camRas->width;
-		int h = camRas->height;
-
-		InitSSAOResources();
-		InitSSAOOverhaulResources();
-
-		if(!g_ssaoNoiseTex || !g_ssaoDepthTex){
-			dbglog("[PostFX] DrawSSAO_Overhaul bailing: noiseTex=%p depthTex=%p", g_ssaoNoiseTex, g_ssaoDepthTex);
-			return;
-		}
-
-		if(!g_ssaoQuarterRaster[0] || !g_ssaoQuarterRaster[1]){
-			dbglog("[PostFX] DrawSSAO_Overhaul bailing: quarter rasters not ready");
-			return;
-		}
-
-		if(!g_ssaoOutputRaster || g_ssaoOutputRaster->width != w || g_ssaoOutputRaster->height != h){
-			if(g_ssaoOutputRaster) RwRasterDestroy(g_ssaoOutputRaster);
-			g_ssaoOutputRaster = RwRasterCreate(w, h, camRas->depth, rwRASTERTYPECAMERATEXTURE);
-			if(!g_ssaoOutputRaster){ dbglog("[PostFX] DrawSSAO_Overhaul bailing: output raster creation failed"); return; }
-		}
-
-		// Save raw geometry states BEFORE Suspend (it writes raw ZENABLE)
-		rawGeomSaved = SaveRawGeomStates(rawGeom);
-
-		// Suspend depth hook so g_ssaoDepthTex can be sampled (INTZ not bound as DS)
-		DepthHook_Suspend();
-
-		CPostEffects::ImmediateModeRenderStatesStore();
-		imStored = true;
-		CPostEffects::ImmediateModeRenderStatesSet();
-
-		RwRaster *origRaster = camRas;
-		float radius = config->ssaoRadius > 0.0f ? config->ssaoRadius : 1.0f;
-		float power = config->ssaoPower > 0.0f ? config->ssaoPower : 2.0f;
-		float noiseScale = 4.0f / w;
-		int otherIdx = 1 - g_ssaoFrameIndex;
-
-		// Camera projection info (shared by all passes)
-		RwCamera *cam = Scene.camera;
-		float n = cam->nearPlane;
-		float f = cam->farPlane;
-		float projInfo[4] = {
-			cam->recipViewWindow.x,
-			cam->recipViewWindow.y,
-			-n * f / (f - n),
-			f / (f - n)
-		};
-
-		// =====================================================================
-		// Pass 1: SSAO_Temporal — quarter-res temporal SSAO
-		// =====================================================================
-		RwCameraEndUpdate(Scene.camera);
-		RwCameraSetRaster(Scene.camera, g_ssaoQuarterRaster[g_ssaoFrameIndex]);
-		RwCameraBeginUpdate(Scene.camera);
-
-		RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
-		RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
-		RwD3D9SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
-		RwD3D9SetRenderState(D3DRS_ZENABLE, FALSE);
-		RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
-		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
-
-		// Textures: s0=depth, s1=noise, s2=normals, s3=velocity, s4=history
-		dev->SetTexture(0, g_ssaoDepthTex);
-		dev->SetTexture(1, g_ssaoNoiseTex);
-		dev->SetTexture(2, g_normalBufferTex); // NULL-safe: D3D9 ignores NULL SetTexture
-		dev->SetTexture(3, g_velocityTex);     // NULL-safe: D3D9 ignores NULL SetTexture
-		RwD3D9SetTexture(g_ssaoQuarterTexRW[otherIdx], 4);
-		// Wave-2: s5=prev-depth, s6=prev-normals (NULL-safe: D3D9 ignores NULL SetTexture)
-		dev->SetTexture(5, g_prevDepthValid ? g_prevDepthTex : NULL);
-		dev->SetTexture(6, g_normalHistoryValid ? g_prevNormalTex : NULL);
-
-		dev->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
-		dev->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
-		dev->SetSamplerState(1, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP);
-		dev->SetSamplerState(1, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
-		dev->SetSamplerState(2, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
-		dev->SetSamplerState(2, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
-		dev->SetSamplerState(3, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
-		dev->SetSamplerState(3, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
-		dev->SetSamplerState(4, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
-		dev->SetSamplerState(4, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
-		// Wave-2: history samplers POINT/CLAMP (matching s0's CLAMP addressing, point filter for depth)
-		dev->SetSamplerState(5, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
-		dev->SetSamplerState(5, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
-		dev->SetSamplerState(5, D3DSAMP_MINFILTER, D3DTEXF_POINT);
-		dev->SetSamplerState(5, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
-		dev->SetSamplerState(6, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
-		dev->SetSamplerState(6, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
-		dev->SetSamplerState(6, D3DSAMP_MINFILTER, D3DTEXF_POINT);
-		dev->SetSamplerState(6, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
-
-		// c0: {radius, power, noiseScale, temporalBlend}
-		// temporalBlend is the HISTORY weight (SSAO_Temporal.hlsl lerps toward
-		// historyOcclusion by this value), so it only applies when Temporal is
-		// ON AND both SSAO history and prev-depth history are valid; otherwise
-		// 0.0 = no history. This is the ONLY in-function temporal-accumulation
-		// switch (the function never reads ssaoTemporalEnable elsewhere), and
-		// the dispatch now routes blurPasses>0 here even with Temporal OFF —
-		// gating on the flag keeps OFF = pure current-frame AO, no ghosting.
-		float c0Temporal[4] = { radius, power, noiseScale,
-			(config->ssaoTemporalEnable && g_ssaoHistoryValid && g_prevDepthValid) ? config->ssaoTemporalBlend : 0.0f };
-		RwD3D9SetPixelShaderConstant(0, c0Temporal, 1);
-		// c1: {quarterW, quarterH, 1/quarterW, 1/quarterH}
-		float c1Temporal[4] = { (float)g_ssaoQuarterW, (float)g_ssaoQuarterH, 1.0f/max((float)g_ssaoQuarterW, 1e-7f), 1.0f/max((float)g_ssaoQuarterH, 1e-7f) };
-		RwD3D9SetPixelShaderConstant(1, c1Temporal, 1);
-		// c2: projInfo
-		RwD3D9SetPixelShaderConstant(2, projInfo, 1);
-		// c4: Wave-2 history flags {prevDepthValid, depthBlend, prevNormalValid, 0}
-		float c4History[4] = { (float)g_prevDepthValid, 0.05f, (float)g_normalHistoryValid, 0.0f };
-		RwD3D9SetPixelShaderConstant(4, c4History, 1);
-
-		// Quarter-res RT needs quarter-sized white quad (colorfilterVerts are a
-		// 2048x2048 quad whose UVs would sample only a corner of the depth map).
-		SetupFullscreenQuad((float)g_ssaoQuarterW, (float)g_ssaoQuarterH);
-
-		overrideIm2dPixelShader = SSAO_Temporal;
-		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, s_ffQuad, 4, s_ffQuadIdx, 6);
-		overrideIm2dPixelShader = nil;
-
-		RwCameraEndUpdate(Scene.camera);
-		RwCameraSetRaster(Scene.camera, origRaster);
-		RwCameraBeginUpdate(Scene.camera);
-
-		// =====================================================================
-		// Pass 2: SSAO_BilateralBlur — horizontal + vertical blur passes
-		// =====================================================================
-		for(int pass = 0; pass < config->ssaoBlurPasses; pass++){
-			// Horizontal blur: render to blur temp, read from current quarter
-			RwCameraEndUpdate(Scene.camera);
-			RwCameraSetRaster(Scene.camera, g_ssaoBlurTempRaster);
-			RwCameraBeginUpdate(Scene.camera);
-
-			RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
-			RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
-			RwD3D9SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
-			RwD3D9SetRenderState(D3DRS_ZENABLE, FALSE);
-			RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
-			RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
-
-			// s0: source, s1: depth
-			RwD3D9SetTexture(g_ssaoQuarterTexRW[g_ssaoFrameIndex], 0);
-			dev->SetTexture(1, g_ssaoDepthTex);
-			dev->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
-			dev->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
-			dev->SetSamplerState(1, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
-			dev->SetSamplerState(1, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
-
-			// c0: {blurRadius, depthThreshold, 0, 0}  (0 = horizontal pass)
-			float c0BlurH[4] = { config->ssaoBlurRadius, config->ssaoDepthThreshold, 0.0f, 0.0f };
-			RwD3D9SetPixelShaderConstant(0, c0BlurH, 1);
-			// c1: {quarterW, quarterH, 1/quarterW, 1/quarterH}
-			float c1BlurH[4] = { (float)g_ssaoQuarterW, (float)g_ssaoQuarterH, 1.0f/max((float)g_ssaoQuarterW, 1e-7f), 1.0f/max((float)g_ssaoQuarterH, 1e-7f) };
-			RwD3D9SetPixelShaderConstant(1, c1BlurH, 1);
-			// c2: projInfo
-			RwD3D9SetPixelShaderConstant(2, projInfo, 1);
-
-			SetupFullscreenQuad((float)g_ssaoQuarterW, (float)g_ssaoQuarterH);
-			overrideIm2dPixelShader = SSAO_BilateralBlur;
-			RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, s_ffQuad, 4, s_ffQuadIdx, 6);
-			overrideIm2dPixelShader = nil;
-
-			RwCameraEndUpdate(Scene.camera);
-			RwCameraSetRaster(Scene.camera, origRaster);
-			RwCameraBeginUpdate(Scene.camera);
-
-			// Vertical blur: render to quarter frame, read from blur temp
-			RwCameraEndUpdate(Scene.camera);
-			RwCameraSetRaster(Scene.camera, g_ssaoQuarterRaster[g_ssaoFrameIndex]);
-			RwCameraBeginUpdate(Scene.camera);
-
-			RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
-			RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
-			RwD3D9SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
-			RwD3D9SetRenderState(D3DRS_ZENABLE, FALSE);
-			RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
-			RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
-
-			// s0: source (blur temp), s1: depth
-			RwD3D9SetTexture(g_ssaoBlurTempTexRW, 0);
-			dev->SetTexture(1, g_ssaoDepthTex);
-			dev->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
-			dev->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
-			dev->SetSamplerState(1, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
-			dev->SetSamplerState(1, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
-
-			// c0: {blurRadius, depthThreshold, 1, 0}  (1 = vertical pass flag)
-			float c0BlurV[4] = { config->ssaoBlurRadius, config->ssaoDepthThreshold, 1.0f, 0.0f };
-			RwD3D9SetPixelShaderConstant(0, c0BlurV, 1);
-			// c1: {quarterW, quarterH, 1/quarterW, 1/quarterH}
-			float c1BlurV[4] = { (float)g_ssaoQuarterW, (float)g_ssaoQuarterH, 1.0f/max((float)g_ssaoQuarterW, 1e-7f), 1.0f/max((float)g_ssaoQuarterH, 1e-7f) };
-			RwD3D9SetPixelShaderConstant(1, c1BlurV, 1);
-			// c2: projInfo
-			RwD3D9SetPixelShaderConstant(2, projInfo, 1);
-
-			SetupFullscreenQuad((float)g_ssaoQuarterW, (float)g_ssaoQuarterH);
-			overrideIm2dPixelShader = SSAO_BilateralBlur;
-			RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, s_ffQuad, 4, s_ffQuadIdx, 6);
-			overrideIm2dPixelShader = nil;
-
-			RwCameraEndUpdate(Scene.camera);
-			RwCameraSetRaster(Scene.camera, origRaster);
-			RwCameraBeginUpdate(Scene.camera);
-		}
-
-		// =====================================================================
-		// Pass 3: SSAO_Upsample — quarter-res → full-res
-		// =====================================================================
-		RwCameraEndUpdate(Scene.camera);
-		RwCameraSetRaster(Scene.camera, g_ssaoOutputRaster);
-		RwCameraBeginUpdate(Scene.camera);
-
-		// White-clear output so a failed upsample degrades to "no AO", never
-		// black garbage through the multiply composite.
-		dev->Clear(0, NULL, D3DCLEAR_TARGET, 0xFFFFFFFF, 1.0f, 0);
-
-		// Capture the AO output surface while bound for the post-pass readback
-		// validation (fail-open gate on the multiply composite below).
-		IDirect3DSurface9 *aoRT = NULL;
-		dev->GetRenderTarget(0, &aoRT);
-
-		RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
-		RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
-		RwD3D9SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
-		RwD3D9SetRenderState(D3DRS_ZENABLE, FALSE);
-		RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
-		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
-
-		// s0: final V-pass result (quarter frame), s1: depth
-		RwD3D9SetTexture(g_ssaoQuarterTexRW[g_ssaoFrameIndex], 0);
-		dev->SetTexture(1, g_ssaoDepthTex);
-		dev->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
-		dev->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
-		dev->SetSamplerState(1, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
-		dev->SetSamplerState(1, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
-
-		// c0: {depthThreshold, 0, 0, 0}
-		float c0Up[4] = { config->ssaoDepthThreshold, 0.0f, 0.0f, 0.0f };
-		RwD3D9SetPixelShaderConstant(0, c0Up, 1);
-		// c1: {fullW, fullH, 1/fullW, 1/fullH}
-		float c1Up[4] = { (float)w, (float)h, 1.0f/max((float)w, 1e-7f), 1.0f/max((float)h, 1e-7f) };
-		RwD3D9SetPixelShaderConstant(1, c1Up, 1);
-		// c2: {quarterW, quarterH, 1/quarterW, 1/quarterH}
-		float c2Up[4] = { (float)g_ssaoQuarterW, (float)g_ssaoQuarterH, 1.0f/max((float)g_ssaoQuarterW, 1e-7f), 1.0f/max((float)g_ssaoQuarterH, 1e-7f) };
-		RwD3D9SetPixelShaderConstant(2, c2Up, 1);
-
-		// Full-res RT: white quad sized to the camera raster (same UV fix as
-		// the temporal pass; composite below reuses it).
-		SetupFullscreenQuad((float)w, (float)h);
-
-		overrideIm2dPixelShader = SSAO_Upsample;
-		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, s_ffQuad, 4, s_ffQuadIdx, 6);
-		overrideIm2dPixelShader = nil;
-
-		RwCameraEndUpdate(Scene.camera);
-		RwCameraSetRaster(Scene.camera, origRaster);
-		RwCameraBeginUpdate(Scene.camera);
-
-		// Wave-2: unbind all Pass 1 samplers (s0-s6) so the depth texture and
-		// history textures don't leak past DepthHook_Restore (feedback lock risk).
-		dev->SetTexture(0, NULL);
-		dev->SetTexture(1, NULL);
-		dev->SetTexture(2, NULL);
-		dev->SetTexture(3, NULL);
-		dev->SetTexture(4, NULL);
-		dev->SetTexture(5, NULL);
-		dev->SetTexture(6, NULL);
-
-		// Restore depth hook (re-binds INTZ as DS, re-enables Z)
-		DepthHook_Restore();
-
-		// =====================================================================
-		// Composite: multiply blend SSAO onto scene (Photoshop multiply:
-		// final = scene x ao, white = no occlusion). Fail-open on a
-		// near-black AO readback — see ValidateSSAOOutput.
-		// =====================================================================
-		bool aoOk = ValidateSSAOOutput(aoRT);
-		if(dbglog_throttle("ssao_ov_comp"))
-			dbglog("[PostFX] DrawSSAO_Overhaul composite: raster=%p aoOk=%d",
-				g_ssaoOutputRaster, (int)aoOk);
-		if(aoRT){ aoRT->Release(); aoRT = NULL; }
-
-		if(aoOk){
-			// Blend factors through the RW cache FIRST (RwIm2D re-emits cached
-			// states at draw time and would clobber raw-only D3D9 factors),
-			// then mirror them raw immediately before the draw — same contract
-			// as DrawSSAO's composite.
-			RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
-			RwRenderStateSet(rwRENDERSTATETEXTURERASTER, g_ssaoOutputRaster);
-			RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
-			RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDZERO);        // src factor dropped
-			RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDSRCCOLOR);   // dest x src = multiply
-			RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
-			RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-			RwD3D9SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ZERO);
-			RwD3D9SetRenderState(D3DRS_DESTBLEND, D3DBLEND_SRCCOLOR);
-
-			// White RT-sized quad — NOT colorfilterVerts (their emissiveColor is 0
-			// under COLORFILTER_MODERN, which modulates SSAO to black).
-			RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, s_ffQuad, 4, s_ffQuadIdx, 6);
-
-			// Restore blend defaults through the RW cache (keep it coherent
-			// with the D3D9 state before ImmediateModeRenderStatesReStore)
-			RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
-			RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
-			RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
-			RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
-		}else if(dbglog_throttle("ssao_ov_skip"))
-			dbglog("[PostFX] DrawSSAO_Overhaul: multiply composite SKIPPED (AO buffer near-black — fail-open)");
-
-		CPostEffects::ImmediateModeRenderStatesReStore();
-		if(rawGeomSaved){
-			RestoreRawGeomStates(rawGeom);
-			rawGeomSaved = false;
-		}
-
-		// Swap frame index and mark history valid
-		g_ssaoFrameIndex = otherIdx;
-		g_ssaoHistoryValid = true;
-
-		if(dbglog_throttle("ssao_ov_done"))
-			dbglog("[PostFX] DrawSSAO_Overhaul completed successfully");
-		// Debug dump: after SSAO composite
-		DumpCurrentRT("after_ssao");
-	} __except(EXCEPTION_EXECUTE_HANDLER){
-		overrideIm2dPixelShader = nil;	// SEH: the `= nil` reset in the __try above is skipped on fault
-
-		dbglog("[PostFX] DrawSSAO_Overhaul CRASHED exception=0x%08X", GetExceptionCode());
-		DepthHook_Restore(); // Restore depth hook on bail to keep Suspend/Restore balanced
-		// Same three-layer contract gap as DrawSSAO: the rw cache can be left
-		// holding the multiply-composite factors (SRCBLEND=ZERO/DESTBLEND=
-		// SRCCOLOR) if the fault lands between the composite and its restore —
-		// ReStore layer (1) first, then the raw snapshot.
-		if(imStored)
-			CPostEffects::ImmediateModeRenderStatesReStore();
-		if(rawGeomSaved)
-			RestoreRawGeomStates(rawGeom);
-	}
-}
-
-#include "AreaTex.h"
-#include "SearchTex.h"
-
-void GenerateSMAAAreaTex(IDirect3DDevice9 *dev, IDirect3DTexture9 **outTex)
-{
-	if(*outTex) return;
-	if(FAILED(dev->CreateTexture(AREATEX_WIDTH, AREATEX_HEIGHT, 1, D3DUSAGE_DYNAMIC, D3DFMT_A8L8, D3DPOOL_DEFAULT, outTex, NULL))){
-		dbglog("GenerateSMAAAreaTex: CreateTexture failed");
-		return;
-	}
-	D3DLOCKED_RECT rect;
-	if(FAILED((*outTex)->LockRect(0, &rect, NULL, D3DLOCK_DISCARD))){
-		dbglog("GenerateSMAAAreaTex: LockRect failed");
-		(*outTex)->Release();
-		*outTex = NULL;
-		return;
-	}
-	for(int y = 0; y < AREATEX_HEIGHT; y++){
-		memcpy((char*)rect.pBits + y * rect.Pitch,
-		       areaTexBytes + y * AREATEX_PITCH,
-		       AREATEX_PITCH);
-	}
-	(*outTex)->UnlockRect(0);
-	dbglog("GenerateSMAAAreaTex: OK %dx%d", AREATEX_WIDTH, AREATEX_HEIGHT);
-}
-
-void GenerateSMAASearchTex(IDirect3DDevice9 *dev, IDirect3DTexture9 **outTex)
-{
-	if(*outTex) return;
-	if(FAILED(dev->CreateTexture(SEARCHTEX_WIDTH, SEARCHTEX_HEIGHT, 1, D3DUSAGE_DYNAMIC, D3DFMT_L8, D3DPOOL_DEFAULT, outTex, NULL))){
-		dbglog("GenerateSMAASearchTex: CreateTexture failed");
-		return;
-	}
-	D3DLOCKED_RECT rect;
-	if(FAILED((*outTex)->LockRect(0, &rect, NULL, D3DLOCK_DISCARD))){
-		dbglog("GenerateSMAASearchTex: LockRect failed");
-		(*outTex)->Release();
-		*outTex = NULL;
-		return;
-	}
-	for(int y = 0; y < SEARCHTEX_HEIGHT; y++){
-		memcpy((char*)rect.pBits + y * rect.Pitch,
-		       searchTexBytes + y * SEARCHTEX_PITCH,
-		       SEARCHTEX_PITCH);
-	}
-	(*outTex)->UnlockRect(0);
-	dbglog("GenerateSMAASearchTex: OK %dx%d", SEARCHTEX_WIDTH, SEARCHTEX_HEIGHT);
-}
 
 // =====================================================
 // IBL Buffer - quarter-res sky/cloud ambient
@@ -4737,7 +3021,11 @@ static IDirect3DTexture9 *GetIBLTexture(void)
 
 void RenderIBLBuffer(void)
 {
+	PF_SCOPE("IBLBuffer");
 	static int iblLogged = 0;
+	if(dbglog_throttle("pf_ibl"))
+		dbglog("[PF] IBLBuffer: DynamicSky=%p out=g_iblTex(%p) qres quarter-screen",
+			DynamicSky, (void*)g_iblTex);
 	if(!DynamicSky){ if(!iblLogged){ dbglog("RenderIBL: DynamicSky=NULL"); iblLogged=1; } return; }
 
 	// Defense-in-depth: skip if camera isn't ready (frame 1 before BeginUpdate).
@@ -4882,9 +3170,12 @@ void RenderIBLBuffer(void)
 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
 	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)NULL);
 
-	overrideIm2dPixelShader = DynamicSky;
-	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6);
-	overrideIm2dPixelShader = nil;
+	// SEH-guarded (guardedIm2DRender) so a fault can't leave the DynamicSky
+	// override bound: Im2dSetPixelShader_hook would re-apply it to every
+	// later Im2D dispatch, including coronas.
+	PfBindPS(DynamicSky, "IDR_DYNAMICSKY(209)");
+	PfDraw(4, 2);
+	guardedIm2DRender(DynamicSky, rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6, "dynamicsky");
 
 	CPostEffects::ImmediateModeRenderStatesReStore();
 	if(rawGeomSaved){
@@ -5021,8 +3312,72 @@ GetPipeChainNoPackTex(void)
 	return noPackTex;
 }
 
+// ============================================================
+// BUG 1a — CPU-side screen-edge fade for the PipeChain reflection weight.
+// pass_output's reflBlend is proportional to pack.y*pack.z (gloss*spec), so
+// multiplying the classify pack by this CPU-built mask fades the reflection
+// contribution to 0 as the reflection UVs approach the screen edges — smooth
+// smoothstep fade, margin 0.075 — WITHOUT touching PipeChain.hlsl (the true
+// per-pixel envUV clamp/reflect + edge fade belongs in the shader's
+// pass_output; shaders are off-limits, see report). Fading the weights also
+// kills the black pools: near-edge rays used to fetch the 2048² front-buffer
+// pad (unwritten = black) or wrap across the raster border (ghost double
+// image) — those samples now carry weight 0. 128² A8R8G8B8, filled CPU-side
+// once: rgb = w(u)*w(v), alpha = 1 (pack.a/metal survives the multiply).
+// Applied by the fixed-function multiply draw in DrawPipeChain pass 3
+// (Grain_PS2's D3DBLEND_DESTCOLOR pattern in postfx_colourfilter.cpp).
+// ============================================================
+static const float kPipeChainReflFadeMargin = 0.075f; // edge fade width (0.05-0.1 spec)
+static RwRaster *s_pipeChainFadeRas = nil;
+
+static float
+PipeChainEdgeFade1D(float t)
+{
+	// w(t) = smoothstep(0,m,t) * smoothstep(0,m,1-t): 0 at both screen
+	// edges, 1 across the interior [m, 1-m].
+	float m = kPipeChainReflFadeMargin;
+	float a = t / m;          if(a < 0.0f) a = 0.0f; else if(a > 1.0f) a = 1.0f;
+	float b = (1.0f - t) / m; if(b < 0.0f) b = 0.0f; else if(b > 1.0f) b = 1.0f;
+	a = a * a * (3.0f - 2.0f * a);
+	b = b * b * (3.0f - 2.0f * b);
+	return a * b;
+}
+
+static RwRaster*
+GetPipeChainEdgeFadeRaster(void)
+{
+	if(!s_pipeChainFadeRas){
+		s_pipeChainFadeRas = RwRasterCreate(128, 128, 32, rwRASTERTYPETEXTURE | rwRASTERFORMAT8888);
+		if(!s_pipeChainFadeRas)
+			return nil;
+		RwUInt8 *px = RwRasterLock(s_pipeChainFadeRas, 0, 1);
+		if(px){
+			RwInt32 stride = s_pipeChainFadeRas->stride;
+			for(int j = 0; j < 128; j++){
+				float wv = PipeChainEdgeFade1D(((float)j + 0.5f) / 128.0f);
+				RwUInt8 *row = px + (RwInt32)j * stride;
+				for(int i = 0; i < 128; i++){
+					float f = PipeChainEdgeFade1D(((float)i + 0.5f) / 128.0f) * wv;
+					RwUInt8 b = (RwUInt8)(f * 255.0f + 0.5f);
+					row[i*4 + 0] = b;
+					row[i*4 + 1] = b;
+					row[i*4 + 2] = b;
+					row[i*4 + 3] = 0xFF; // alpha 1: pack.a survives the multiply
+				}
+			}
+			RwRasterUnlock(s_pipeChainFadeRas);
+		}
+		dbglog("[PipeChain] edge-fade mask created %p margin=%.3f",
+			s_pipeChainFadeRas, kPipeChainReflFadeMargin);
+	}
+	return s_pipeChainFadeRas;
+}
+
 void DrawNormalBufferToTexture(void)
 {
+	// No PF_SCOPE here: this function contains __try, and MSVC /EHsc forbids
+	// destructible locals (C2712). Instrumentation lives in the throttled
+	// dbglog lines below + the caller's NormalBuffer scope.
 	// Invalidate first: any early-out below means this frame did NOT refresh
 	// the buffer, so consumers must stop binding it (stale/garbage normals ->
 	// GGX blowout). Re-set to true only after a completed write.
@@ -5041,6 +3396,18 @@ void DrawNormalBufferToTexture(void)
 	IDirect3DDevice9 *dev = d3d9device;
 	if(!dev) return;
 
+	// SEV2: this pass raw-binds/raw-unbinds stage 0 (dev->SetTexture), which
+	// bypasses the value-compare L1 rw cache. Capture BOTH layers of the entry
+	// stage-0 texture here: the rw raster (L1) and the raw device texture (L3,
+	// GetTexture AddRefs -> released on every exit path below). Without the L1
+	// re-sync at the exit the cache keeps the pre-pass raster while the device
+	// samples NULL, so a later RwRenderStateSet(<same raster>) is a double
+	// no-op and the surface loses its texture (black / normal-less).
+	void *saved0 = NULL;
+	RwRenderStateGet(rwRENDERSTATETEXTURERASTER, &saved0);
+	IDirect3DBaseTexture9 *saved0Dev = NULL;
+	dev->GetTexture(0, &saved0Dev);
+
 	// Save current RT and viewport
 	IDirect3DSurface9 *oldRT = NULL;
 	IDirect3DSurface9 *oldDS = NULL;
@@ -5054,7 +3421,7 @@ void DrawNormalBufferToTexture(void)
 	dev->SetDepthStencilSurface(NULL);
 	// Get camera raster for normal buffer dimensions (half-res)
 	RwRaster *camRas = RwCameraGetRaster(Scene.camera);
-	if(!camRas){ dev->SetRenderTarget(0, oldRT); dev->SetDepthStencilSurface(oldDS); if(oldRT) oldRT->Release(); if(oldDS) oldDS->Release(); return; }
+	if(!camRas){ dev->SetRenderTarget(0, oldRT); dev->SetDepthStencilSurface(oldDS); if(oldRT) oldRT->Release(); if(oldDS) oldDS->Release(); if(saved0Dev){ saved0Dev->Release(); saved0Dev = NULL; } return; }
 	int nbW = camRas->width / 2, nbH = camRas->height / 2;
 	if(nbW < 1) nbW = 1;
 	if(nbH < 1) nbH = 1;
@@ -5118,6 +3485,10 @@ void DrawNormalBufferToTexture(void)
 		// UV 0..1 maps depth 1:1 onto the half-res buffer.
 		SetupFullscreenQuad((float)nbW, (float)nbH);
 		overrideIm2dPixelShader = NormalBufferShader;
+		if(dbglog_throttle("pf_normbuf_bind"))
+			dbglog("[PF] NormalBuffer bind: ps=%p(IDR_NORMALBUFFERPS 143) s0=g_ssaoDepthTex out=%dx%d",
+				NormalBufferShader, nbW, nbH);
+		PfBindPS(NormalBufferShader, "IDR_NORMALBUFFERPS(143)");
 		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, s_ffQuad, 4, s_ffQuadIdx, 6);
 		overrideIm2dPixelShader = nil;
 
@@ -5139,8 +3510,37 @@ void DrawNormalBufferToTexture(void)
 		rawGeomSaved = false;
 	}
 
-	// Cleanup
+	// Cleanup. SEV2: the raw NULL below used to desync L1 from the device —
+	// the cache still held the pre-pass raster, so a later
+	// RwRenderStateSet(TEXTURERASTER, <same raster>) was a value-compare no-op
+	// while stage 0 sampled NULL. Sync L1 to the raw NULL through a
+	// park-and-set (park != cached value, so each Set is a real transition),
+	// then re-establish the entry raster through L1 (park != entry) and
+	// raw-pin the entry device texture so L1/L3 end on the same surface.
 	dev->SetTexture(0, NULL);
+	{
+		RwRaster *whiteRas = gpWhiteTexture ? gpWhiteTexture->raster : NULL;
+		RwRaster *park = ((RwRaster*)saved0 == whiteRas) ? NULL : whiteRas;
+		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)park);
+		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)NULL);
+		park = ((RwRaster*)saved0 == whiteRas) ? NULL : whiteRas;
+		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)park);
+		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, saved0);
+	}
+	{
+		IDirect3DBaseTexture9 *resolved0 = NULL;
+		dev->GetTexture(0, &resolved0);	// AddRef
+		if((void*)resolved0 != (void*)saved0Dev
+		|| (saved0 != NULL && resolved0 == NULL)){
+			if(dbglog_throttle("pf_normbuf_s0_restore"))
+				dbglog("[PF] NormalBuffer s0 restore: raster=%p entryDevTex=%p resolvedDevTex=%p (mismatch, raw-pinning entry)",
+					saved0, (void*)saved0Dev, (void*)resolved0);
+		}
+		if(saved0Dev)
+			dev->SetTexture(0, saved0Dev);	// raw-pin L3 to the entry texture
+		if(resolved0) resolved0->Release();
+		if(saved0Dev){ saved0Dev->Release(); saved0Dev = NULL; }
+	}
 
 	// Restore old RT and viewport
 	dev->SetViewport(&oldVP);
@@ -5185,7 +3585,21 @@ static IDirect3DSurface9 *s_classifyOldRT = NULL;
 static void *s_classifyVtxAlpha = NULL;
 static void *s_classifyFog = NULL;
 static void *s_classifyZWrite = NULL;
+// BUG-2: exact pre-bracket RAW device values (L3 restore targets in End —
+// the vtxAlpha-derived guess could not reproduce a desynced device state).
+static DWORD s_classifyBlendDev = 0;
+static DWORD s_classifyFogDev = 0;
+static DWORD s_classifyZWriteDev = 0;
 static int s_classifyBegins = 0; // PipeChain_ClassifyBegin successes this frame (grab+reset at DrawPipeChain entry)
+// Pre-bracket PS constants c0/c1: ClassifyBegin uploads flagP/packP (raw +
+// RW); without a save/restore the device keeps c0=flagP/c1=packP after the
+// bracket — the next RW consumer only re-synced by coincidence of encoding.
+// Saved raw in Begin, raw-restored in End (the raw restore must defeat the
+// RW PS-constant cache; the next RW consumer re-syncs the cache via its own
+// uploads). POD-only: touched inside the SEH fence.
+static float s_savedC0[4];
+static float s_savedC1[4];
+static bool s_savedC01Valid = false;
 
 // CRITICAL-1: Reset release for the classify RT — called from
 // ReleaseDefaultPoolResources (~:3130), which appears BEFORE these statics
@@ -5197,6 +3611,9 @@ static void ReleasePipeChainClassifyResources(void)
 {
 	if(g_pipeChainClassifySurf){ g_pipeChainClassifySurf->Release(); g_pipeChainClassifySurf = NULL; }
 	if(g_pipeChainClassifyTex){ g_pipeChainClassifyTex->Release(); g_pipeChainClassifyTex = NULL; }
+	// Edge-fade mask (BUG 1a) rides the same Reset lifecycle — lazily
+	// recreated by GetPipeChainEdgeFadeRaster on next use.
+	if(s_pipeChainFadeRas){ RwRasterDestroy(s_pipeChainFadeRas); s_pipeChainFadeRas = nil; }
 	s_classifyW = 0;
 	s_classifyH = 0;
 }
@@ -5215,15 +3632,17 @@ GetPipeChainClassifySurf(void)
 	// DrawPipeChain, the consumer of this pack (PipeChain pass 3 samples it
 	// with screen UVs), refreshes the cache at postfx time where the main
 	// camera is verified on-screen, so pack size always matches the screen
-	// the consumer draws with. Live read only as pre-capture fallback.
+	// the consumer draws with.
+	// pf_gate: if no trusted size has been captured yet, DEFER creation.
+	// The old live-read fallback is exactly what created this RT at
+	// 2048x1024 in the geometry phase, only for DrawPipeChain to destroy,
+	// recreate and clear it at 1920x1080 later the SAME frame. Returning
+	// NULL here makes that frame's classify draws no-op (reflection off for
+	// one frame); DrawPipeChain captures the size first and re-enters this
+	// function with a valid cache, so steady-state is unchanged.
 	int w = 0, h = 0;
-	if(!GetScreenSize(&w, &h)){
-		RwRaster *camRas = RwCameraGetRaster(Scene.camera);
-		if(!camRas)
-			return NULL;
-		w = camRas->width;
-		h = camRas->height;
-	}
+	if(!GetScreenSize(&w, &h))
+		return NULL;
 	if(w < 1 || h < 1)
 		return NULL;
 	// Res-aware: recreate on camera resolution change
@@ -5261,49 +3680,153 @@ GetPipeChainClassifySurf(void)
 // stencil stays bound, so ZTEST against the just-written depth resolves
 // occlusion (classify runs AFTER the main draw); ZWRITE stays off so the
 // main depth buffer is untouched. Fail-open: any inactive gate = no-op.
+void PipeChain_ClassifyEnd(void); // Begin's fault path closes its own bracket
+
 bool PipeChain_ClassifyBegin(float surfaceType, float gloss, float spec, float metal)
 {
 	// HIGH-4: match the consumer dispatch gate (postfx ~:2624 pipeChainEnable
 	// && normalBufferEnable) — without normalBufferEnable the classify pack
 	// was written but DrawPipeChain never consumed it (wasted RT + second
 	// draw per mesh).
-	if(!config || !config->pipeChainEnable || !config->normalBufferEnable || !PipeChainShader)
+	// pf_gate: additionally require pipeChainReflEnable. DrawPipeChain pass 3
+	// binds the 1x1 pack0 dummy (never this pack) when reflection is off, so
+	// the whole second draw per mesh + classify RT write would be dead work.
+	if(!config || !config->pipeChainEnable || !config->normalBufferEnable ||
+	   !config->pipeChainReflEnable || !PipeChainShader)
 		return false;
-	if(gRenderingSpheremap || IsGameInMenuOrPaused())
+	// Cutscene≠menu: the classify producer must match its consumer dispatch —
+	// DrawPipeChain runs un-gated from ColourFilter_switch, so skipping only
+	// the pack during cutscenes left the consumer reading a stale RT.
+	if(gRenderingSpheremap || PostfxMenuPauseOnly())
 		return false;
+	// BUG-1b validity gate (cheap, CPU-side): pass 3's weight is
+	// brdfW = saturate(pack.z*1.6)*pack.y — NaN/garbage gloss/spec sailed
+	// through the clamps below (NaN compares false both ways, so the old
+	// ternaries passed it straight into c1) and burnt ink-blot reflections
+	// into glossy-classified surfaces. Anything outside (0, 1e4) — NaN
+	// included — DISCARDS the reflection: no pack write, pack stays 0.
+	if(!(gloss > 0.0f && gloss < 1e4f) || !(spec > 0.0f && spec < 1e4f)){
+		if(dbglog_throttle("pc_badpack"))
+			dbglog("[PipeChain] classify rejected (NaN/garbage gate): gloss=%.6g spec=%.6g",
+				gloss, spec);
+		return false;
+	}
+	// BUG-2 belt: a swallowed SEH fault in a previous classify draw can skip
+	// End entirely — close that leaked bracket (full 3-layer blend/RT
+	// restore) before opening a new one instead of overwriting its saves.
+	if(s_classifyOldRT)
+		PipeChain_ClassifyEnd();
+	static bool s_csFired_classify = false;
+	if(CCutsceneMgr__ms_running)
+		CutscenePostfxEnabledLog("PipeChainClassify", &s_csFired_classify);
 	IDirect3DSurface9 *classifySurf = GetPipeChainClassifySurf();
 	if(!classifySurf || !d3d9device)
 		return false;
 
+	// SAVE EVERYTHING before mutating (so the fault path restores the exact
+	// pre-bracket state): RT + RW cache (L1) + the RAW device values (L3 —
+	// the restore in End must reproduce these, not a vtxAlpha-derived guess)
+	// + PS constants c0/c1 (the bracket uploads flagP/packP; without the
+	// save the device would keep them after End — the next RW consumer only
+	// re-synced by coincidence of encoding).
 	s_classifyOldRT = NULL;
 	d3d9device->GetRenderTarget(0, &s_classifyOldRT);
 	if(!s_classifyOldRT)
 		return false;
-	d3d9device->SetRenderTarget(0, classifySurf);
-
-	// Pack must arrive unblended, unfogged, no depth write. RW cache + raw
-	// mirrors (pipeEnterAlphaMode raw writes can desync the two layers).
 	RwRenderStateGet(rwRENDERSTATEVERTEXALPHAENABLE, &s_classifyVtxAlpha);
 	RwRenderStateGet(rwRENDERSTATEFOGENABLE, &s_classifyFog);
 	RwRenderStateGet(rwRENDERSTATEZWRITEENABLE, &s_classifyZWrite);
-	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
-	RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
-	RwD3D9SetRenderState(D3DRS_FOGENABLE, FALSE);
-	RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+	s_classifyBlendDev = 0;
+	s_classifyFogDev = 0;
+	s_classifyZWriteDev = 0;
+	d3d9device->GetRenderState(D3DRS_ALPHABLENDENABLE, &s_classifyBlendDev);
+	d3d9device->GetRenderState(D3DRS_FOGENABLE, &s_classifyFogDev);
+	d3d9device->GetRenderState(D3DRS_ZWRITEENABLE, &s_classifyZWriteDev);
+	s_savedC01Valid =
+		SUCCEEDED(d3d9device->GetPixelShaderConstantF(0, s_savedC0, 1)) &&
+		SUCCEEDED(d3d9device->GetPixelShaderConstantF(1, s_savedC1, 1));
 
+	// SEH fence (POD locals only — C2712): any fault inside the mutation
+	// window below closes the bracket via End (3-layer restore + RT) and
+	// fails closed = no pack this mesh.
 	// c0.x = 9 selects pack mode in PipeChain.hlsl; c1 = pack floats.
+	// NaN-safe clamps (`x != x` is the NaN test — the old `< 0`/`> 1`
+	// ternaries let NaN through into the pack).
+	// Hoisted ABOVE the SEH fence: pure float math, no device state, and the
+	// post-fence pc_c1chk diagnostic must be able to read packP (names inside
+	// the __try block go out of scope at its end).
 	float flagP[4] = { 9.0f, 0.0f, 0.0f, 0.0f };
-	float cl = surfaceType < 0.0f ? 0.0f : (surfaceType > 255.0f ? 255.0f : surfaceType) / 255.0f;
-	float gl = gloss < 0.0f ? 0.0f : (gloss > 1.0f ? 1.0f : gloss);
-	float sp = spec  < 0.0f ? 0.0f : (spec  > 1.0f ? 1.0f : spec);
-	float mt = metal < 0.0f ? 0.0f : (metal > 1.0f ? 1.0f : metal);
+	float cl = (surfaceType != surfaceType) ? 0.0f : (surfaceType < 0.0f ? 0.0f : (surfaceType > 255.0f ? 255.0f : surfaceType) / 255.0f);
+	float gl = (gloss != gloss) ? 0.0f : (gloss < 0.0f ? 0.0f : (gloss > 1.0f ? 1.0f : gloss));
+	float sp = (spec  != spec)  ? 0.0f : (spec  < 0.0f ? 0.0f : (spec  > 1.0f ? 1.0f : spec));
+	float mt = (metal != metal) ? 0.0f : (metal < 0.0f ? 0.0f : (metal > 1.0f ? 1.0f : metal));
 	float packP[4] = { cl, gl, sp, mt };
-	RwD3D9SetPixelShaderConstant(0, flagP, 1);
-	RwD3D9SetPixelShaderConstant(1, packP, 1);
-	RwD3D9SetPixelShader(PipeChainShader);
+	__try{
+		d3d9device->SetRenderTarget(0, classifySurf);
+
+		// Pack must arrive unblended, unfogged, no depth write — forced
+		// through ALL THREE layers: L1 RwRenderStateSet, L2 RwD3D9SetRenderState,
+		// L3 raw device (pipeEnterAlphaMode raw writes can desync the caches,
+		// and a cache-hit skip at L2 leaves the pack draw blended).
+		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
+		RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
+		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
+		RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+		RwD3D9SetRenderState(D3DRS_FOGENABLE, FALSE);
+		RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+		d3d9device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+		d3d9device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+		d3d9device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+
+		// RAW FIRST, then RW: HeightFog/GodRays/underwater/mirror restore
+		// c0-c7 via the RAW device (postfx.cpp:3957/:4002,
+		// postfx_underwater.cpp:502/:528, mirrorPass.cpp:232), which desyncs
+		// RW's PS-constant cache exactly like the documented render-state
+		// cache skip. A classify c0/c1 upload equal to RW's stale cached
+		// value is then SKIPPED and the pack draw runs on the raw-restored
+		// garbage c1 (often vehicle fxParams — chrome-like gloss/spec) ->
+		// full-strength ink-blot reflection pools on repeated-material
+		// meshes (whole road segments share one BRDF). The raw write always
+		// reaches the device; the following RW write re-syncs the cache so
+		// later RW consumers of c0/c1 can't inherit the desync.
+		d3d9device->SetPixelShaderConstantF(0, flagP, 1);
+		d3d9device->SetPixelShaderConstantF(1, packP, 1);
+		RwD3D9SetPixelShaderConstant(0, flagP, 1);
+		RwD3D9SetPixelShaderConstant(1, packP, 1);
+		RwD3D9SetPixelShader(PipeChainShader);
+	} __except(EXCEPTION_EXECUTE_HANDLER){
+		if(dbglog_throttle("pc_classifybegin"))
+			dbglog("[PipeChain] ClassifyBegin fault 0x%08X — closing bracket", GetExceptionCode());
+		PipeChain_ClassifyEnd(); // full 3-layer restore + RT on the fault path
+		return false;
+	}
 	s_classifyBegins++; // diagnostic: proves classify landed this frame
+	// pc_c1chk: read the device constants BACK and compare with what we
+	// intended to upload — now ALL FOUR c1 components (c1[0]=surfaceType,
+	// c1[3]=metallic included; a partial compare could miss a raw writer
+	// that only clobbers those). A mismatch proves the RW PS-constant
+	// cache desync (raw SetPixelShaderConstantF restores) was eating classify
+	// uploads — the ink-blot pool root cause. After the raw+RW double-upload
+	// above this must always report "ok"; a mismatch line means a NEW raw
+	// writer appeared between our upload and the draw. The check runs every
+	// draw; only the OK line is throttled — an error signal must not be.
+	float chkC0[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	float chkC1[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	bool chkOK =
+		SUCCEEDED(d3d9device->GetPixelShaderConstantF(0, chkC0, 1)) &&
+		SUCCEEDED(d3d9device->GetPixelShaderConstantF(1, chkC1, 1)) &&
+		chkC0[0] == 9.0f &&
+		chkC1[0] == packP[0] && chkC1[1] == packP[1] &&
+		chkC1[2] == packP[2] && chkC1[3] == packP[3];
+	if(chkOK){
+		if(dbglog_throttle("pc_c1chk"))
+			dbglog("[PipeChain] c1chk ok: c0.x=9 c1=(%.4f,%.4f,%.4f,%.4f) device matches upload",
+				chkC1[0], chkC1[1], chkC1[2], chkC1[3]);
+	}else
+		dbglog("[PipeChain] c1chk MISMATCH: intended c1=(%.4f,%.4f,%.4f,%.4f) got c0=(%.4f,%.4f,%.4f,%.4f) c1=(%.4f,%.4f,%.4f,%.4f)",
+			packP[0], packP[1], packP[2], packP[3],
+			chkC0[0], chkC0[1], chkC0[2], chkC0[3],
+			chkC1[0], chkC1[1], chkC1[2], chkC1[3]);
 	return true;
 }
 
@@ -5311,28 +3834,80 @@ void PipeChain_ClassifyEnd(void)
 {
 	if(!s_classifyOldRT)
 		return;
-	// Restore RW cache first, then raw mirrors to match (covers the case
-	// where the cache value didn't change but we forced the device).
-	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, s_classifyVtxAlpha);
-	RwRenderStateSet(rwRENDERSTATEFOGENABLE, s_classifyFog);
-	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, s_classifyZWrite);
-	RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, s_classifyVtxAlpha == (void*)FALSE ? FALSE : TRUE);
-	RwD3D9SetRenderState(D3DRS_FOGENABLE, s_classifyFog == (void*)FALSE ? FALSE : TRUE);
-	RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, s_classifyZWrite == (void*)FALSE ? FALSE : TRUE);
+	// BUG-2: complete the blend restore across ALL THREE layers. L1 cache +
+	// L2 wrapped run fault-guarded so a swallowed SEH inside the RW
+	// wrappers cannot skip the L3 raw completion below — the L3 raw write
+	// is the missing piece: RwD3D9SetRenderState is cache-skipped when the
+	// RW cache already holds the target value, and pipeEnterAlphaMode-style
+	// raw writes desync that cache — the device then stayed blend-off for
+	// the next consumer (vanilla coronas drew opaque quads).
+	__try{
+		// Restore RW cache first, then the wrapped/raw mirrors to the EXACT
+		// pre-bracket device values saved by Begin (not a vtxAlpha-derived
+		// guess — the two can legitimately disagree).
+		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, s_classifyVtxAlpha);
+		RwRenderStateSet(rwRENDERSTATEFOGENABLE, s_classifyFog);
+		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, s_classifyZWrite);
+		RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, s_classifyBlendDev);
+		RwD3D9SetRenderState(D3DRS_FOGENABLE, s_classifyFogDev);
+		RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, s_classifyZWriteDev);
+	} __except(EXCEPTION_EXECUTE_HANDLER){
+		if(dbglog_throttle("pc_classifyend"))
+			dbglog("[PipeChain] ClassifyEnd L1/L2 fault 0x%08X — L3 raw still restores",
+				GetExceptionCode());
+	}
+	// L3 RAW completion (unconditional — outside the SEH scope above):
+	// bypasses every cache layer, so the blend state lands on the device no
+	// matter what the caches believe.
+	d3d9device->SetRenderState(D3DRS_ALPHABLENDENABLE, s_classifyBlendDev);
+	d3d9device->SetRenderState(D3DRS_FOGENABLE, s_classifyFogDev);
+	d3d9device->SetRenderState(D3DRS_ZWRITEENABLE, s_classifyZWriteDev);
+	// L3 RAW PS-constant restore (c0/c1 saved in Begin): must go through the
+	// raw device — a RW cache-hit skip would leave the bracket's flagP/packP
+	// live on the device. The next RW consumer of c0/c1 re-syncs the cache
+	// via its own uploads.
+	if(s_savedC01Valid){
+		d3d9device->SetPixelShaderConstantF(0, s_savedC0, 1);
+		d3d9device->SetPixelShaderConstantF(1, s_savedC1, 1);
+		s_savedC01Valid = false;
+	}
 	d3d9device->SetRenderTarget(0, s_classifyOldRT);
 	s_classifyOldRT->Release();
 	s_classifyOldRT = NULL;
 	// NOTE: caller re-sets its own pixel shader (Begin forced PipeChainShader).
 }
 
+// Frame handshake for the colour filter's soft-knee composite-gain gate
+// (postfx_colourfilter.cpp): TRUE only on frames where DrawPipeChain pass 3
+// bound the REAL classify pack (g_pipeChainClassifyTex — not the pack0
+// NoPackTex dummy) on s4, i.e. the chain actually composited real reflection
+// energy this frame. Reset at DrawPipeChain entry, set at the s4 bind site.
+static bool s_cfPipeChainReflRan = false;
+
+bool PostfxPipeChainReflRanFrame(void)
+{
+	return s_cfPipeChainReflRan;
+}
+
 void DrawPipeChain(void)
 {
+	// No PF_SCOPE here (__try in function -> C2712); see DrawNormalBufferToTexture.
+	// Instrumentation: throttled dbglog lines below + caller's PipeChain scope.
 	// Grab-and-reset BEFORE any gate: geometry classify runs earlier in the
 	// frame than this postfx entry, so this snapshot is "begins this frame".
 	// (Resetting inside the throttled pc_ok log accumulated across many
 	// frames — the 43503 vs 635 mismatch.)
+	// Reflection handshake reset (before any bind decision): the colour
+	// filter's gain knee reads this via PostfxPipeChainReflRanFrame().
+	s_cfPipeChainReflRan = false;
 	int classifyBegins = s_classifyBegins;
 	s_classifyBegins = 0;
+	// BUG-2 belt: close any classify bracket a swallowed geometry-phase fault
+	// left open (skipped End) before this chain touches device state — the
+	// leak would otherwise reach every later consumer (coronas) and the
+	// next frame's geometry.
+	if(s_classifyOldRT)
+		PipeChain_ClassifyEnd();
 
 	if(!config->pipeChainEnable || !PipeChainShader){
 		if(dbglog_throttle("pc_g1"))
@@ -5346,32 +3921,52 @@ void DrawPipeChain(void)
 				config ? config->normalBufferEnable : -1, g_normalBufferTex);
 		return;
 	}
+	// Normal-buffer CONTENT gate (POD int — DrawPipeChain has __try at :3191,
+	// so no non-POD locals allowed). g_normalBufferHasContent (postfx.h:148)
+	// is set only when DrawNormalBufferToTexture actually filled the buffer
+	// this frame (:2819). A present-but-empty / stale / half-res normal buffer
+	// still passes the shader's nlen gate and scatters reflection UVs into
+	// dark regions -> black ink-blot pools. Do NOT return here: the
+	// blur/contrast chain must keep running. Just mark the reflection HALF
+	// dead so pass 3 binds the pack0 dummy on s4 (same kill as the
+	// pipeChainReflEnable switch at the s4 pack bind).
+	int normalBufDead = 0; // 1 = skip the pass-3 reflection term this frame
+	if(!g_normalBufferHasContent){
+		normalBufDead = 1;
+		if(dbglog_throttle("pc_nbdead"))
+			dbglog("[PipeChain] normal buffer has no content — reflection half off (blur/contrast on)");
+	}
 	if(!g_ssaoDepthTex){
 		if(dbglog_throttle("pc_g3")) dbglog("[PipeChain] skip: no depth texture");
 		return;
 	}
-
-	IDirect3DTexture9 *texA = GetPipeChainTexture(0);
-	IDirect3DTexture9 *texB = GetPipeChainTexture(1);
-	if(!texA || !texB || !g_pipeChainSurfA || !g_pipeChainSurfB){
-		if(dbglog_throttle("pc_g4")) dbglog("[PipeChain] skip: ping-pong RTs unavailable");
-		return;
-	}
+	// pf_gate: input/device gates are evaluated BEFORE the first ping-pong RT
+	// allocation below — a NULL scene source / camera raster used to allocate
+	// the two screen-size RTs and then bail, leaving those renders unused for
+	// the frame (allocation is lazy and stays for later frames, but the
+	// create/driver work was wasted on this one).
 	IDirect3DDevice9 *dev = d3d9device;
 	if(!dev) return;
-	RwRaster *camRas = RwCameraGetRaster(Scene.camera);
+	RwRaster *camRas = Scene.camera ? RwCameraGetRaster(Scene.camera) : NULL;
 	if(!camRas){
 		if(dbglog_throttle("pc_g5"))
 			dbglog("[PipeChain] skip: camRas NULL");
 		return;
 	}
-	// Second trusted capture point (postfx time, main camera on-screen) —
-	// refreshes the cache the geometry-phase classify RT sizes itself from.
-	CaptureScreenSize(camRas);
 	// Pass 0-3 read pRasterFrontBuffer as scene source — without it the whole
 	// chain (and env sampling) runs on a never-written padded raster.
 	if(!CPostEffects::pRasterFrontBuffer){
 		if(dbglog_throttle("pc_g6")) dbglog("[PipeChain] skip: pRasterFrontBuffer NULL");
+		return;
+	}
+	// Second trusted capture point (postfx time, main camera on-screen) —
+	// refreshes the cache the geometry-phase classify RT sizes itself from.
+	CaptureScreenSize(camRas);
+
+	IDirect3DTexture9 *texA = GetPipeChainTexture(0);
+	IDirect3DTexture9 *texB = GetPipeChainTexture(1);
+	if(!texA || !texB || !g_pipeChainSurfA || !g_pipeChainSurfB){
+		if(dbglog_throttle("pc_g4")) dbglog("[PipeChain] skip: ping-pong RTs unavailable");
 		return;
 	}
 
@@ -5381,11 +3976,18 @@ void DrawPipeChain(void)
 	// junk — the other front-buffer consumers (motion blur, height fog)
 	// already re-sync at their entry points.
 	CPostEffects::UpdateFrontBuffer();
+	if(!PfFrontBufferReady("pipe chain"))
+		return;
 
 	// Force-create the classify RT now (it was lazily created only inside
 	// PipeChain_ClassifyBegin, so frames with zero classify draws reached
 	// pass 3 with s4 unbound). Creation clears to pack 0 = no reflection.
-	GetPipeChainClassifySurf();
+	// pf_gate: only when the reflection half is ON. With pipeChainReflEnable=0
+	// pass 3 binds the 1x1 pack0 dummy on s4 and never samples this RT, so
+	// creating it (and the pass-3 edge-fade multiply that targets it) is
+	// dead work; the geometry producer gate below skips the classify draws too.
+	if(config->pipeChainReflEnable)
+		GetPipeChainClassifySurf();
 
 	// Screen-space quad sized to the camera raster (UV 0..1). The old
 	// colorfilterVerts are a hardcoded 2048² quad — their /2048 UVs misalign
@@ -5453,8 +4055,21 @@ void DrawPipeChain(void)
 			float pipeP[4] = { 0.0f, 0.0f, config->pipeChainIntensity, 0.0f };
 			RwD3D9SetPixelShaderConstant(0, pipeP, 1);
 
-			dev->SetTexture(0, NULL);
-			RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)CPostEffects::pRasterFrontBuffer);
+			// Stage-0 bind: park-and-set (same class as the MotionBlur park).
+			// The previous form raw-cleared the device (dev->SetTexture(0,NULL))
+			// and then re-bound the front buffer through the L1 cache — if the
+			// cache already named pRasterFrontBuffer (left by an earlier pass
+			// this frame), that Set value-compared as a no-op and pass 0 drew
+			// with s0 = NULL (black input to the whole chain). Parking on a
+			// guaranteed-different raster forces a real L1+L2+L3 transition.
+			{
+				RwRaster *pcWhite = (gpWhiteTexture && gpWhiteTexture->raster)
+					? gpWhiteTexture->raster : NULL;
+				RwRaster *pcFb = CPostEffects::pRasterFrontBuffer;
+				RwRaster *pcPark = (pcFb == pcWhite) ? NULL : pcWhite;
+				RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)pcPark);
+				RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)pcFb);
+			}
 
 			// Normal buffer on stage 1
 			dev->SetTexture(1, g_normalBufferTex);
@@ -5467,6 +4082,8 @@ void DrawPipeChain(void)
 			dev->SetSamplerState(2, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
 
 			overrideIm2dPixelShader = PipeChainShader;
+			PfBindPS(PipeChainShader, "IDR_PIPECHAINPS(144)");
+			PfDraw(4, 2);
 			RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, s_ffQuad, 4, s_ffQuadIdx, 6);
 			overrideIm2dPixelShader = nil;
 		}
@@ -5485,6 +4102,8 @@ void DrawPipeChain(void)
 			dev->SetTexture(3, NULL);
 
 			overrideIm2dPixelShader = PipeChainShader;
+			PfBindPS(PipeChainShader, "IDR_PIPECHAINPS(144)");
+			PfDraw(4, 2);
 			RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, s_ffQuad, 4, s_ffQuadIdx, 6);
 			overrideIm2dPixelShader = nil;
 		}
@@ -5507,12 +4126,77 @@ void DrawPipeChain(void)
 			dev->SetSamplerState(3, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
 
 			overrideIm2dPixelShader = PipeChainShader;
+			PfBindPS(PipeChainShader, "IDR_PIPECHAINPS(144)");
+			PfDraw(4, 2);
 			RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, s_ffQuad, 4, s_ffQuadIdx, 6);
 			overrideIm2dPixelShader = nil;
 		}
 
 		// ---- Pass 3: Output -> back buffer (BRDF reflection composite) ----
 		{
+			// BUG 1a (CPU-side, shaders off-limits): the reflection sample
+			// (front buffer at reflection-vector UVs) is where the black pools
+			// + ghost double-image came from — near-edge rays fetch the 2048²
+			// front-buffer pad (unwritten = BLACK) or wrap across the raster
+			// border into the opposite screen edge (s0 had NO address mode
+			// set — WRAP by default). Two CPU levers before the composite:
+			//   1) fade the pack's gloss/spec weights to 0 near the screen
+			//      edges (smooth 0.075 margin, CPU-built mask) — reflBlend is
+			//      proportional to pack.y*pack.z so the reflection
+			//      contribution itself fades to 0 at the edges;
+			//   2) D3DTADDRESS_CLAMP on every stage pass 3 samples (s0 most
+			//      importantly) = clamp sample UVs to [0,1] at the fetch.
+			// The per-pixel envUV clamp/reflect + smooth edge fade proper
+			// lives in PipeChain.hlsl pass_output (shaders/ps/) — NOT edited.
+			// pf_gate: with pipeChainReflEnable=0 pass 3 binds the pack0 dummy
+			// on s4 (below), so the pack this multiply edits is never sampled:
+			// skip the extra full-screen draw + RT bind entirely.
+			if(config->pipeChainReflEnable && g_pipeChainClassifySurf){
+				RwRaster *fadeRas = GetPipeChainEdgeFadeRaster();
+				if(fadeRas){
+					DWORD prevAB = 0, prevSB = 0, prevDB = 0;
+					void *prevAddr = NULL;
+					dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &prevAB);
+					dev->GetRenderState(D3DRS_SRCBLEND, &prevSB);
+					dev->GetRenderState(D3DRS_DESTBLEND, &prevDB);
+					RwRenderStateGet(rwRENDERSTATETEXTUREADDRESS, &prevAddr);
+					dev->SetRenderTarget(0, g_pipeChainClassifySurf);
+					dev->SetDepthStencilSurface(NULL);
+					// FF multiply: pack.rgb *= mask.rgb (mask alpha = 1 keeps
+					// pack.a). All three blend layers forced — the cache-hit
+					// skip is exactly the BUG-2 leak mechanism.
+					RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
+					RwRenderStateSet(rwRENDERSTATETEXTUREADDRESS, (void*)rwTEXTUREADDRESSCLAMP);
+					RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
+					RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)D3DBLEND_DESTCOLOR);
+					RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)D3DBLEND_ZERO);
+					RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+					RwD3D9SetRenderState(D3DRS_SRCBLEND, D3DBLEND_DESTCOLOR);
+					RwD3D9SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ZERO);
+					dev->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+					dev->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_DESTCOLOR);
+					dev->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ZERO);
+					overrideIm2dPixelShader = nil; // FF: the stage ops below apply
+					overrideColorMod = D3DTOP_SELECTARG1; // colour = mask texel
+					overrideAlphaMod = D3DTOP_SELECTARG1; // mask alpha = 1
+					CPostEffects::DrawQuadSetDefaultUVs();
+					CPostEffects::DrawQuad(0.0f, 0.0f, (float)camRas->width, (float)camRas->height,
+						0xFFu, 0xFFu, 0xFFu, 0xFF, fadeRas);
+					overrideColorMod = -1;
+					overrideAlphaMod = -1;
+					// hand pass 3 the pre-fade blend/address state back
+					dev->SetRenderState(D3DRS_ALPHABLENDENABLE, prevAB);
+					dev->SetRenderState(D3DRS_SRCBLEND, prevSB);
+					dev->SetRenderState(D3DRS_DESTBLEND, prevDB);
+					RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, prevAB);
+					RwD3D9SetRenderState(D3DRS_SRCBLEND, prevSB);
+					RwD3D9SetRenderState(D3DRS_DESTBLEND, prevDB);
+					RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)prevSB);
+					RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)prevDB);
+					RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
+					RwRenderStateSet(rwRENDERSTATETEXTUREADDRESS, prevAddr);
+				}
+			}
 			// DS intentionally NOT re-bound: the depth hook is still suspended
 			// and s2 samples INTZ (binding it as DS again would feedback-lock).
 			// Z-test is off, so no depth buffer is needed for this draw.
@@ -5521,6 +4205,15 @@ void DrawPipeChain(void)
 			float pipeP[4] = { 3.0f, 0.0f, config->pipeChainIntensity, 0.0f };
 			RwD3D9SetPixelShaderConstant(0, pipeP, 1);
 
+			// s0/s1/s2 CLAMP (default was WRAP): s0 is the front buffer fetched
+			// at reflection-vector UVs, s1/s2 at raw UVs — out-of-range fetches
+			// must clamp into [0,1], never wrap to the opposite screen edge.
+			dev->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+			dev->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+			dev->SetSamplerState(1, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+			dev->SetSamplerState(1, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+			dev->SetSamplerState(2, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+			dev->SetSamplerState(2, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
 			RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)CPostEffects::pRasterFrontBuffer);
 			dev->SetTexture(1, g_normalBufferTex);
 			dev->SetTexture(2, g_ssaoDepthTex);
@@ -5529,33 +4222,48 @@ void DrawPipeChain(void)
 			dev->SetSamplerState(3, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
 			dev->SetSamplerState(3, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
 			// Classify pack on stage 4 — POINT so gloss/spec don't bleed
-			// across silhouettes. Fall back to a 1x1 pack=0 dummy when the
-			// classify RT doesn't exist: an unbound s4 samples undefined
-			// values in SM3.0 and garbage gloss/spec passes the gate below
-			// as ink-blot reflections (pack 0 = no reflection, fail-open).
-			IDirect3DTexture9 *packTex = g_pipeChainClassifyTex;
-			if(!packTex){
+			// across silhouettes. Reflection kill-switch (INI: SkyGfx.pipeChainReflEnable)
+			// + normal-buffer content gate (normalBufDead, set at the entry
+			// gates): when the reflection term must die, bind the 1x1 pack0
+			// dummy (pack.y/z=0 => reflection skipped in-shader) instead of the
+			// classify RT — the blur/contrast chain keeps running. The
+			// pc_noclassify fallback is preserved separately for a genuinely-
+			// missing classify RT (reflection otherwise wanted): an unbound s4
+			// samples undefined values in SM3.0 and garbage gloss/spec passes
+			// the gate as ink-blot reflections (pack 0 = no reflection,
+			// fail-open). The producer side also rejects NaN/garbage gloss/spec
+			// before they reach the pack (ClassifyBegin validity gate, BUG 1b).
+			IDirect3DTexture9 *packTex;
+			if(!config->pipeChainReflEnable || normalBufDead){
+				// Reflection off (INI: SkyGfx.pipeChainReflEnable=0) or no
+				// usable normals this frame -> force the pack0 dummy.
 				packTex = GetPipeChainNoPackTex();
-				if(packTex){
-					if(dbglog_throttle("pc_noclassify"))
-						dbglog("[PipeChain] pass3: classify RT NULL, using pack0 dummy %p", packTex);
-					dev->SetTexture(4, packTex);
-					dev->SetSamplerState(4, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
-					dev->SetSamplerState(4, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
-					dev->SetSamplerState(4, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
-					dev->SetSamplerState(4, D3DSAMP_MINFILTER, D3DTEXF_POINT);
-				}else{
-					dev->SetTexture(4, NULL); // last resort (dummy creation failed)
-				}
+				if(packTex && dbglog_throttle("pc_refloff"))
+					dbglog("[PipeChain] pass3: reflection off (reflEnable=%d nbDead=%d) pack0 dummy %p",
+						config->pipeChainReflEnable, normalBufDead, packTex);
 			}else{
+				packTex = g_pipeChainClassifyTex;
+				if(packTex)
+					s_cfPipeChainReflRan = true; // REAL classify pack on s4 this frame
+				else{
+					packTex = GetPipeChainNoPackTex();
+					if(packTex && dbglog_throttle("pc_noclassify"))
+						dbglog("[PipeChain] pass3: classify RT NULL, using pack0 dummy %p", packTex);
+				}
+			}
+			if(packTex){
 				dev->SetTexture(4, packTex);
 				dev->SetSamplerState(4, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
 				dev->SetSamplerState(4, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
 				dev->SetSamplerState(4, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
 				dev->SetSamplerState(4, D3DSAMP_MINFILTER, D3DTEXF_POINT);
+			}else{
+				dev->SetTexture(4, NULL); // last resort (dummy creation failed)
 			}
 
 			overrideIm2dPixelShader = PipeChainShader;
+			PfBindPS(PipeChainShader, "IDR_PIPECHAINPS(144)");
+			PfDraw(4, 2);
 			RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, s_ffQuad, 4, s_ffQuadIdx, 6);
 			overrideIm2dPixelShader = nil;
 		}
@@ -5569,6 +4277,8 @@ void DrawPipeChain(void)
 		DepthHook_Restore();
 	} __except(EXCEPTION_EXECUTE_HANDLER){
 		overrideIm2dPixelShader = nil;	// SEH: the `= nil` reset in the __try above is skipped on fault
+		overrideColorMod = -1;		// same for the pass-3 fade draw's FF stage ops
+		overrideAlphaMod = -1;
 
 		if(dbglog_throttle("pc_crash"))
 			dbglog("[PipeChain] crashed exception=0x%08X", GetExceptionCode());
@@ -5615,1139 +4325,47 @@ void DrawPipeChain(void)
 	DumpCurrentRT("after_pipechain");
 }
 
-// ============================================================
-// SMAATryInitRasters — deferred force-init of CAMERATEXTURE
-// rasters. Called from RenderScene_before (main.cpp) so the init
-// runs OUTSIDE the main camera's BeginUpdate (RW 3.6 D3D9 driver
-// crashes creating render-target textures mid-frame).
-// Handles SMAA rasters + VCS radiosity rasters.
-// Harmless to call every frame; only executes once per resource.
-// After init, each raster is tracked via TrackRaster so
-// RasterEnsureSurfaceReady can verify it.
-// ============================================================
-void SMAATryInitRasters(void)
-{
-	if(!s_smaaPendingInit && !s_vcsRadPendingInit)
-		return;
-
-	// Diagnostic: confirm this function is reached
-	dbglog("[RasterInit] SMAATryInitRasters: s_smaaPendingInit=%d s_vcsRadPendingInit=%d",
-		s_smaaPendingInit, s_vcsRadPendingInit);
-
-	if(!s_smaaInitCam){
-		s_smaaInitCam = RwCameraCreate();
-		if(s_smaaInitCam){
-			// Attach a frame (required by BeginUpdate — crashes without it)
-			RwCameraSetFrame(s_smaaInitCam, RwFrameCreate());
-			// Attach a small Z raster (BeginUpdate may need one)
-			RwRaster *camRasForDepth = Scene.camera ? RwCameraGetRaster(Scene.camera) : NULL;
-			int depth = camRasForDepth ? camRasForDepth->depth : 32;
-			s_smaaInitZRas = RwRasterCreate(4, 4, depth, rwRASTERTYPECAMERATEXTURE);
-			if(s_smaaInitZRas)
-				RwCameraSetZRaster(s_smaaInitCam, s_smaaInitZRas);
-			dbglog("[RasterInit] Scratch camera created %p with frame + Z raster", s_smaaInitCam);
-		} else {
-			dbglog("[RasterInit] ERROR: RwCameraCreate failed, cannot init rasters");
-			s_smaaBroken = true;
-			s_smaaPendingInit = false;
-			s_vcsRadPendingInit = false;
-			return;
-		}
-	}
-
-	// Crash fix: save the exe's global camera pointer (0xC9BCC0) before we
-	// call RwCameraBeginUpdate on our scratch camera. Each EndUpdate clears it
-	// to NULL, and game code at 0x7F98DF dereferences [0xC9BCC0]+0x60 → crash.
-	// Restore it after all BeginUpdate/EndUpdate pairs are done.
-	void* savedCam = *(void**)0xC9BCC0;
-
-	// ---- SMAA rasters ----
-	if(s_smaaPendingInit && g_smaaEdgeRaster && g_smaaBlendRaster && g_smaaPrevFrameRaster && g_smaaSceneRaster){
-		RwRaster *initRas[] = { g_smaaEdgeRaster, g_smaaBlendRaster, g_smaaPrevFrameRaster, g_smaaSceneRaster };
-		bool allOk = true;
-		for(int i = 0; i < 4; i++){
-			RwCameraSetRaster(s_smaaInitCam, initRas[i]);
-			allOk &= (RwCameraBeginUpdate(s_smaaInitCam) != NULL);
-			RwCameraEndUpdate(s_smaaInitCam);
-			if(allOk)
-				TrackRaster(initRas[i]);
-		}
-		if(allOk){
-			dbglog("[RasterInit] SMAA rasters force-initialized as render targets");
-			s_smaaRastersInitialized = true;
-			s_smaaPendingInit = false;
-		} else {
-			dbglog("[RasterInit] ERROR: SMAA raster init failed, disabling SMAA");
-			s_smaaBroken = true;
-			s_smaaPendingInit = false;
-		}
-	}
-
-	// ---- VCS radiosity rasters ----
-	if(s_vcsRadPendingInit && vcs_radiosity_target1 && vcs_radiosity_target2){
-		RwRaster *vcsRas[] = { vcs_radiosity_target1, vcs_radiosity_target2 };
-		for(int i = 0; i < 2; i++){
-			RwCameraSetRaster(s_smaaInitCam, vcsRas[i]);
-			RwCameraBeginUpdate(s_smaaInitCam);
-			RwCameraEndUpdate(s_smaaInitCam);
-			TrackRaster(vcsRas[i]);
-		}
-		dbglog("[RasterInit] VCS radiosity rasters force-initialized as render targets");
-		s_vcsRadPendingInit = false;
-	}
-
-	// Restore the game's camera pointer so 0x7F98DF doesn't read NULL+0x60.
-	*(void**)0xC9BCC0 = savedCam;
-
-	// Crash fix (2026-09-14 #3): the scratch camera leaves the last init
-	// raster bound as the D3D9 render target, corrupting all downstream
-	// rendering (READ crash at 0x7FBD4A +0x60). Detach it and restore the
-	// backbuffer so the main frame renders to the correct target.
-	RwCameraSetRaster(s_smaaInitCam, NULL);
-	if(d3d9device){
-		IDirect3DSurface9 *bb = NULL;
-		if(SUCCEEDED(d3d9device->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &bb))){
-			d3d9device->SetRenderTarget(0, bb);
-			bb->Release();
-		}
-		dbglog("[RasterInit] scratch camera detached, backbuffer restored");
-	}
-}
-
-// SMAA edge-detect pass — extracted so the draw goes through the guardedIm2DRender
-// choke-point (DrawSMAA itself can't take __try: error C2712) and so depth-hook
-// suspend/restore brackets the draw.
-// Returns true on success, false if the pass faulted (caller skips remaining passes).
-static bool DrawSMAA_EdgeDetect(float smaaThreshold, float cameraMovement, const float screenParams[4],
-                                RwIm2DVertex *verts)
-{
-	extern IDirect3DTexture9 *g_ssaoDepthTex;
-	bool depthSuspended = false;
-
-	// Suspend depth hook so INTZ can be sampled on s2
-	if(g_ssaoDepthTex){
-		DepthHook_Suspend();
-		d3d9device->SetTexture(2, g_ssaoDepthTex);
-		depthSuspended = true;
-	}
-
-	// Bind velocity buffer on stage 3 for combined motion detection
-	if(g_velocityTex)
-		d3d9device->SetTexture(3, g_velocityTex);
-
-	// Temporal always on — lower motion threshold for better stabilization
-	float motionThresh = 0.5f;
-	float edgeP[4] = {smaaThreshold, motionThresh, 2.0f, cameraMovement};
-	RwD3D9SetPixelShaderConstant(0, edgeP, 1);
-	RwD3D9SetPixelShaderConstant(1, screenParams, 1);
-
-	// SEH containment + g_inGuardedIm2DPass save/restore now live in
-	// guardedIm2DRender (pipelinecommon.cpp) — POD-only body, C2712-safe,
-	// single guarded path (no double SEH).
-	bool ok = guardedIm2DRender(
-		SMAA_EdgeMotionDepth ? SMAA_EdgeMotionDepth : SMAA_Edge,
-		rwPRIMTYPETRILIST, verts, 4, colorfilterIndices, 6,
-		"smaa_edge");
-
-	// Restore depth hook after edge pass if it was suspended (blend weight doesn't sample depth)
-	if(depthSuspended){
-		d3d9device->SetTexture(2, NULL); // unbind INTZ before Restore (mirrors DrawHeightFog)
-		DepthHook_Restore();
-	}
-
-	return ok;
-}
-
-static bool SMAA_DrawPass(IDirect3DPixelShader9 *shader, RwIm2DVertex *verts)
-{
-	// SEH containment + g_inGuardedIm2DPass save/restore live in
-	// guardedIm2DRender (POD-only, C2712-safe) — one guarded path, no
-	// duplicate __try here.
-	return guardedIm2DRender(shader, rwPRIMTYPETRILIST,
-		verts, 4, colorfilterIndices, 6, "smaa_draw");
-}
-
-// Common fail-open bail for guarded DrawSMAA faults: put the frame back on
-// the camera draw buffer (a fault mid-pass can leave an SMAA raster bound as
-// RT0), restore viewport, clear the hoisted guard + phase tag, latch SMAA
-// broken (fail-open until resolution change resets it), restore the game's
-// immediate-mode render states.
-// POD-only, no SEH here — safe to call from DrawSMAA (no __try in it).
-static void smaaGuardBail(IDirect3DDevice9 *dev, RwRaster *drawBuffer, const D3DVIEWPORT9 *vp)
-{
-	// Restore the camera frame raster as RT0. Do NOT use RwD3D9SetRenderTarget
-	// here: the game's frame raster is rwRASTERTYPECAMERA, which that entry
-	// point dereferences as a CAMERATEXTURE (null parent -> 0xC0000005 at
-	// 0x7F9ECB). End/BeginUpdate re-binds it through the camera driver path,
-	// exactly like UpdateFrontBuffer.
-	if(Scene.camera){
-		if(drawBuffer && RwCameraGetRaster(Scene.camera) != drawBuffer)
-			dbglog("[GUARD] smaaGuardBail: camera raster changed during SMAA");
-		RwCameraEndUpdate(Scene.camera);
-		RwCameraBeginUpdate(Scene.camera);
-	}
-	if(dev && vp)
-		dev->SetViewport(vp);
-	g_inGuardedIm2DPass = 0;
-	g_renderPhase = "";
-	s_smaaBroken = true;
-	// Edge-detect raw-binds s2=g_ssaoDepthTex / s3=g_velocityTex and pass1
-	// binds s1/s2 (area/search) — mirror the success-path unbind so a fault
-	// mid-pass doesn't leave an INTZ/velocity texture on a stage while
-	// DepthHook still re-binds it as the depth-stencil (feedback lock).
-	if(dev){
-		dev->SetTexture(1, NULL);
-		dev->SetTexture(2, NULL);
-		dev->SetTexture(3, NULL);
-	}
-	CPostEffects::ImmediateModeRenderStatesReStore();
-	smaaRestoreRawGeom();
-}
-
-// SEH-guarded RwTextureCreate for SMAA RT-backed textures — wrapping a
-// CAMERATEXTURE raster without a live D3D9 surface can fault inside the
-// driver's texture-create path. POD-only body (C2712-safe).
-// *faulted distinguishes a caught SEH fault (caller must bail) from a plain
-// NULL return (caller just skips the bind, as before).
-static RwTexture *smaaTexCreate(RwRaster *ras, const char *phase, bool *faulted)
-{
-	*faulted = false;
-	if(!ras)
-		return NULL;
-	const char *ph = phase ? phase : "?";
-	RwTexture *tex = NULL;
-	LONG outerGuard = g_inGuardedIm2DPass;
-	InterlockedIncrement(&g_guardDepth);
-	g_inGuardedIm2DPass = 1;
-	__try {
-		tex = RwTextureCreate(ras);
-	} __except(EXCEPTION_EXECUTE_HANDLER){
-		dbglog("[GUARD] smaaTexCreate: FAULT phase=%s code=0x%08X raster=%p",
-			ph, GetExceptionCode(), ras);
-		tex = NULL;
-		*faulted = true;
-	}
-	g_inGuardedIm2DPass = outerGuard;
-	InterlockedDecrement(&g_guardDepth);
-	return tex;
-}
-
-void
-CPostEffects::DrawSMAA(void)
-{
-	IDirect3DDevice9 *dev = d3d9device;
-
-	// Guard: SMAA disabled or shaders not loaded
-	if(!config->smaaEnable || !SMAA_Edge || !SMAA_BlendWeight || !SMAA_BlendNeighbor){
-		// When SMAA is disabled, release resources so they're recreated cleanly on re-enable
-		if(g_smaaRtWidth != 0 || g_smaaRtHeight != 0){
-			ReleaseSMAAStaticResources();
-			dbglog("[SMAA] Disabled — released resources (Edge=%p BlendW=%p BlendN=%p)",
-				SMAA_Edge, SMAA_BlendWeight, SMAA_BlendNeighbor);
-		}
-		return;
-	}
-
-	// Guard: front buffer not ready
-	if(pRasterFrontBuffer == NULL){
-		if(dbglog_throttle("smaa_skip"))
-			dbglog("[SMAA] SKIP: pRasterFrontBuffer=NULL");
-		return;
-	}
-
-	// Guard: device state invalid
-	if(!CheckDeviceState()){
-		if(dbglog_throttle("smaa_skip"))
-			dbglog("[SMAA] SKIP: CheckDeviceState failed");
-		return;
-	}
-
-	// Guard: D3D9 device not available
-	if(!dev){
-		if(dbglog_throttle("smaa_skip"))
-			dbglog("[SMAA] SKIP: d3d9device=NULL");
-		return;
-	}
-
-	// All intermediates + metrics live on the camera raster's texel grid.
-	// Size SMAA rasters to the camera raster, not pRasterFrontBuffer (which
-	// is 2048x2048 while camera is 1920x1080). Using pRasterFrontBuffer size
-	// wastes memory+bandwidth and the extra pixels are never sampled (viewports
-	// are set to camera dimensions in the SMAA passes).
-	RwRaster *camRasForSize = RwCameraGetRaster(Scene.camera);
-	if(!camRasForSize){ if(dbglog_throttle("smaa_skip")) dbglog("[SMAA] SKIP: camRas=NULL"); return; }
-	int w = camRasForSize->width;
-	int h = camRasForSize->height;
-	if(w < 8 || h < 8){ if(dbglog_throttle("smaa_skip")) dbglog("[SMAA] SKIP: dims too small %dx%d", w, h); return; }
-
-	// Guard: skip first 2 frames to let the game's entity pool initialize.
-	// SMAA Pass2 calls RwIm2DRenderIndexedPrimitive which triggers the game's
-	// text/entity rendering pipeline. On frame 1-2, the entity pool at [0xB4E9E0]
-	// has slots with NULL data pointers, causing a crash at 0x7F9ECB.
-	static int smaaFrameCount = 0;
-	smaaFrameCount++;
-	if(smaaFrameCount <= 2){
-		dbglog("[SMAA] SKIP: frame %d, letting game init entity pool", smaaFrameCount);
-		return;
-	}
-
-	// --- First-frame / resolution-change detailed log ---
-	// NOTE: resolution-change check MUST come before the s_smaaBroken check
-	// because resolution change resets the broken flag, allowing retry after
-	// device reset (alt-tab).
-	static bool smaaFirstFrame = true;
-	bool resolutionChanged = (g_smaaRtWidth != w || g_smaaRtHeight != h);
-
-	if(smaaFirstFrame || resolutionChanged){
-		static const float thresholds[] = { 0.15f, 0.1f, 0.1f, 0.05f };
-		static const float maxSearchSteps[] = { 4.0f, 8.0f, 16.0f, 32.0f };
-		// SMAA internal constants: HIGH preset, temporal always on
-		static const int kSmaaPreset = 2; // HIGH
-		int preset = kSmaaPreset;
-		dbglog("[SMAA-DIAG] === INIT/FIRST-FRAME ===");
-		dbglog("[SMAA-DIAG] pRasterFrontBuffer=%p %dx%d depth=%d",
-			pRasterFrontBuffer, w, h, pRasterFrontBuffer->depth);
-		RwRaster *camRas = RwCameraGetRaster(Scene.camera);
-		dbglog("[SMAA-DIAG] camRaster=%p %dx%d", camRas,
-			camRas ? RwRasterGetWidth(camRas) : 0, camRas ? RwRasterGetHeight(camRas) : 0);
-		dbglog("[SMAA-DIAG] Edge=%p EdgeMotionDepth=%p BlendW=%p BlendN=%p Temporal=%p",
-			SMAA_Edge, SMAA_EdgeMotionDepth, SMAA_BlendWeight, SMAA_BlendNeighbor, SMAA_Temporal);
-		dbglog("[SMAA-DIAG] preset=%d thresh=%.3f searchSteps=%.0f temporal=1",
-			preset, thresholds[preset], maxSearchSteps[preset]);
-		dbglog("[SMAA-DIAG] velocityTex=%p prevFrame=%p",
-			g_velocityTex, g_smaaPrevFrameRaster);
-		smaaFirstFrame = false;
-	}
-
-	// Recreate rasters if resolution changed (must happen before broken check
-	// so resolution change can reset the broken flag and retry)
-	if(resolutionChanged){
-		dbglog("[SMAA-DIAG] RESOLUTION CHANGE %dx%d -> %dx%d (destroying all rasters)",
-			g_smaaRtWidth, g_smaaRtHeight, w, h);
-		if(g_smaaEdgeRaster){ UntrackRaster(g_smaaEdgeRaster); RwRasterDestroy(g_smaaEdgeRaster); g_smaaEdgeRaster = NULL; }
-		if(g_smaaBlendRaster){ UntrackRaster(g_smaaBlendRaster); RwRasterDestroy(g_smaaBlendRaster); g_smaaBlendRaster = NULL; }
-		if(g_smaaPrevFrameRaster){ UntrackRaster(g_smaaPrevFrameRaster); RwRasterDestroy(g_smaaPrevFrameRaster); g_smaaPrevFrameRaster = NULL; }
-		if(g_smaaSceneRaster){ UntrackRaster(g_smaaSceneRaster); RwRasterDestroy(g_smaaSceneRaster); g_smaaSceneRaster = NULL; }
-		g_smaaRtWidth = w; g_smaaRtHeight = h;
-		if(g_smaaBlendTexRW){ RwTextureDestroy(g_smaaBlendTexRW); g_smaaBlendTexRW = NULL; }
-		if(g_smaaPrevFrameTexRW){ RwTextureDestroy(g_smaaPrevFrameTexRW); g_smaaPrevFrameTexRW = NULL; }
-		s_smaaRastersInitialized = false;
-		s_smaaPendingInit = false;
-		s_smaaBroken = false;
-		g_smaaHistoryValid = false;
-		s_smaaHistAge = 0;
-	}
-
-	// Check for permanent broken state (init failed previously).
-	// Resolution-change reset above clears this, allowing retry on alt-tab.
-	if(s_smaaBroken){
-		if(dbglog_throttle("smaa_broken"))
-			dbglog("[SMAA] SKIP: permanently broken (init failed), will not retry until resolution change");
-		return;
-	}
-
-	// Create RW camera texture rasters at CAMERA size (w x h = camRas dims).
-	// SMAA sampling doctrine (see g_smaaSceneRaster comment): all SMAA
-	// rasters are camera-sized with content filling UV 0..1, drawn with
-	// s_ffQuad (UV 0..1, positions 0..w x 0..h). The scene input is a
-	// camera-sized copy of the front buffer's valid sub-rect (the FB itself
-	// is padded 2048x2048 and only correct under colorfilterVerts' 0..2048
-	// positions — under a UV 0..1 quad it would sample stretched).
-	RwRaster *camRasForDepth = RwCameraGetRaster(Scene.camera);
-	int camDepth = camRasForDepth ? camRasForDepth->depth : 32;
-	if(!g_smaaEdgeRaster){
-		g_smaaEdgeRaster = RwRasterCreate(w, h, camDepth, rwRASTERTYPECAMERATEXTURE);
-		if(!g_smaaEdgeRaster){ dbglog("[SMAA-DIAG] FATAL: edgeRaster create failed %dx%d", w, h); return; }
-		dbglog("[SMAA-DIAG] Created edgeRaster=%p %dx%d (cam size)", g_smaaEdgeRaster, w, h);
-	}
-	if(!g_smaaBlendRaster){
-		g_smaaBlendRaster = RwRasterCreate(w, h, camDepth, rwRASTERTYPECAMERATEXTURE);
-		if(!g_smaaBlendRaster){ dbglog("[SMAA-DIAG] FATAL: blendRaster create failed %dx%d", w, h); return; }
-		dbglog("[SMAA-DIAG] Created blendRaster=%p %dx%d (cam size)", g_smaaBlendRaster, w, h);
-	}
-	if(!g_smaaPrevFrameRaster){
-		g_smaaPrevFrameRaster = RwRasterCreate(w, h, camDepth, rwRASTERTYPECAMERATEXTURE);
-		if(!g_smaaPrevFrameRaster){ dbglog("[SMAA-DIAG] FATAL: prevFrameRaster create failed %dx%d", w, h); return; }
-		dbglog("[SMAA-DIAG] Created prevFrameRaster=%p %dx%d (cam size)", g_smaaPrevFrameRaster, w, h);
-	}
-	if(!g_smaaSceneRaster){
-		g_smaaSceneRaster = RwRasterCreate(w, h, camDepth, rwRASTERTYPECAMERATEXTURE);
-		if(!g_smaaSceneRaster){ dbglog("[SMAA-DIAG] FATAL: sceneRaster create failed %dx%d", w, h); return; }
-		dbglog("[SMAA-DIAG] Created sceneRaster=%p %dx%d (cam size)", g_smaaSceneRaster, w, h);
-	}
-
-	// Self-check (bug 5): every SMAA raster must be camera-sized. A stale
-	// raster — resolution change that destroyed/recreated only some of them,
-	// a device Reset that dropped one, or a partial recreate after alt-tab —
-	// makes UV 0..1 address the wrong texel grid: edge/blend/history then
-	// sample a sub-rect (or a stretched copy) and the artifact shows as
-	// residual edging/ghosting. Fail CLOSED: latch s_smaaBroken so SMAA
-	// self-skips until the next resolution change instead of drawing a
-	// wrong image.
-	{
-		struct { RwRaster *r; const char *n; } chk[4] = {
-			{ g_smaaEdgeRaster,    "edge"    },
-			{ g_smaaBlendRaster,   "blend"   },
-			{ g_smaaPrevFrameRaster,"prevFrame" },
-			{ g_smaaSceneRaster,   "scene"   },
-		};
-		for(int i = 0; i < 4; i++){
-			RwRaster *r = chk[i].r;
-			if(r && (r->width != w || r->height != h)){
-				dbglog("[SMAA] SELF-SKIP: %s raster %dx%d != camera %dx%d (stale, latching broken until resolution change)",
-					chk[i].n, r->width, r->height, w, h);
-				s_smaaBroken = true;
-				return;
-			}
-		}
-	}
-
-	// Deferred force-init: set the pending flag so SMAATryInitRasters() (called
-	// from RenderScene_before, outside the main camera's BeginUpdate) will
-	// create the D3D9 surfaces via the scratch camera. Cannot do it inline
-	// because RW 3.6's D3D9 driver crashes when creating render-target
-	// textures while the device is in an active render state (mid-frame).
-	// Bail out this frame — the SMAA pass will run next frame after init.
-	if(!s_smaaRastersInitialized && g_smaaEdgeRaster && g_smaaBlendRaster &&
-	   g_smaaPrevFrameRaster && g_smaaSceneRaster){
-		s_smaaPendingInit = true;
-		if(dbglog_throttle("smaa_pending"))
-			dbglog("[SMAA] SKIP: rasters pending init, will run next frame");
-		return;
-	} else if(!s_smaaRastersInitialized) {
-		// Rasters not created yet (shouldn't happen, but be safe)
-		if(dbglog_throttle("smaa_skip"))
-			dbglog("[SMAA] SKIP: rasters not created yet");
-		return;
-	}
-
-	// Verify all rasters have valid D3D9 surfaces before proceeding
-	if(!RasterEnsureSurfaceReady(g_smaaEdgeRaster, "SMAA") ||
-	   !RasterEnsureSurfaceReady(g_smaaBlendRaster, "SMAA") ||
-	   !RasterEnsureSurfaceReady(g_smaaPrevFrameRaster, "SMAA") ||
-	   !RasterEnsureSurfaceReady(g_smaaSceneRaster, "SMAA")){
-		if(dbglog_throttle("smaa_nosurf"))
-			dbglog("[SMAA] SKIP: rasters not surface-ready, will retry next frame");
-		return;
-	}
-
-	// Refresh the camera-sized scene copy from the front buffer's VALID
-	// sub-rect. UpdateFrontBuffer just synced camRas -> FB (DrawFinalEffects
-	// :3066), so the camera draw buffer holds the identical final graded
-	// frame at 1:1 — copy from it (same-size blit, no padded-region math).
-	// Same EndUpdate/PushContext/RenderFast/Pop/BeginUpdate idiom as
-	// DrawIVGrade's frame copy. Fail-open: skip SMAA this frame on failure.
-	{
-		RwRaster *sceneSrc = RwCameraGetRaster(Scene.camera);
-		if(!sceneSrc){
-			if(dbglog_throttle("smaa_skip")) dbglog("[SMAA] SKIP: scene copy src NULL");
-			return;
-		}
-		RwCameraEndUpdate(Scene.camera);
-		RwRasterPushContext(g_smaaSceneRaster);
-		RwRaster *copyResult = RwRasterRenderFast(sceneSrc, 0, 0);
-		RwRasterPopContext();
-		RwCameraBeginUpdate(Scene.camera);
-		if(!copyResult){
-			dbglog("[SMAA] scene copy failed (RenderFast NULL), skipping SMAA this frame");
-			return;
-		}
-	}
-
-	// UV 0..1 fullscreen quad on the camera texel grid — ALL SMAA draws use
-	// this instead of colorfilterVerts (hardcoded 2048x2048 quad whose
-	// visible window spans only UV 0..0.9375 x 0..0.5273, correct for the
-	// padded FB but wrong for every camera-sized SMAA raster).
-	SetupFullscreenQuad((float)w, (float)h);
-
-	// Save/restore D3D9 state around all SMAA passes + texture creation.
-	// Must be BEFORE area/search tex generation — those leave D3D9 state dirty,
-	// and we need Restore to capture the original game state, not the post-creation state.
-	// Raw geom states first: the rw-only Store/Set below cannot capture (or
-	// later undo) the raw D3DRS writes at the pass0 block (ALPHATEST/CULL/
-	// ZENABLE/ZWRITE off) — every other postfx pass pairs them like this.
-	s_smaaRawGeomSaved = SaveRawGeomStates(s_smaaRawGeom);
-	ImmediateModeRenderStatesStore();
-	ImmediateModeRenderStatesSet();
-
-	// Create D3D textures for area/search lookup
-	if(!g_smaaAreaTex){
-		if(dev){
-			extern void GenerateSMAAAreaTex(IDirect3DDevice9*, IDirect3DTexture9**);
-			extern void GenerateSMAASearchTex(IDirect3DDevice9*, IDirect3DTexture9**);
-			GenerateSMAAAreaTex(dev, &g_smaaAreaTex);
-			GenerateSMAASearchTex(dev, &g_smaaSearchTex);
-			dbglog("[SMAA-DIAG] Generated areaTex=%p searchTex=%p", g_smaaAreaTex, g_smaaSearchTex);
-		}
-	}
-
-	// Camera movement tracking for temporal stabilization
-	static CVector prevCamPos = {0, 0, 0};
-	static RwMatrix prevCamMatrix = {0};
-	static bool camInitialized = false;
-
-	RwMatrix *camMatrix = NULL;
-	RwFrame *camFrame = Scene.camera ? RwCameraGetFrame(Scene.camera) : NULL;
-	if(camFrame)
-		camMatrix = RwFrameGetLTM(camFrame);
-	
-	CVector camPos = {0, 0, 0};
-	if(camMatrix)
-		camPos = {camMatrix->pos.x, camMatrix->pos.y, camMatrix->pos.z};
-
-	float cameraVelocity = 0.0f;
-	float cameraRotation = 0.0f;
-
-	if(camInitialized && camMatrix){
-		float dx = camPos.x - prevCamPos.x;
-		float dy = camPos.y - prevCamPos.y;
-		float dz = camPos.z - prevCamPos.z;
-		cameraVelocity = sqrtf(dx*dx + dy*dy + dz*dz);
-
-		// Normalize both forward vectors so the dot is a true cosine (the
-		// rotation/acosf metric). Guard the reciprocal length against zero with the
-		// project pattern max(x, 1e-7f): a degenerate 'at' vector would divide to
-		// NaN, which SM3.0 renders as black. CPU-side math, keeps ps_3_0 legal.
-		float curLen = sqrtf(camMatrix->at.x * camMatrix->at.x +
-		                     camMatrix->at.y * camMatrix->at.y +
-		                     camMatrix->at.z * camMatrix->at.z);
-		float prvLen = sqrtf(prevCamMatrix.at.x * prevCamMatrix.at.x +
-		                     prevCamMatrix.at.y * prevCamMatrix.at.y +
-		                     prevCamMatrix.at.z * prevCamMatrix.at.z);
-		float invCur = 1.0f / max(curLen, 1e-7f);
-		float invPrv = 1.0f / max(prvLen, 1e-7f);
-		float dot = (camMatrix->at.x * invCur) * (prevCamMatrix.at.x * invPrv) +
-		            (camMatrix->at.y * invCur) * (prevCamMatrix.at.y * invPrv) +
-		            (camMatrix->at.z * invCur) * (prevCamMatrix.at.z * invPrv);
-		cameraRotation = 1.0f - max(-1.0f, min(1.0f, dot));
-	}
-
-	if(camMatrix){
-		prevCamPos = camPos;
-		prevCamMatrix = *camMatrix;
-		camInitialized = true;
-	}
-
-	float cameraMovement = min(1.0f, (cameraVelocity * 0.1f) + (cameraRotation * 2.0f));
-
-	// SMAA preset parameters — internal constants (HIGH preset)
-	static const float thresholds[] = { 0.15f, 0.1f, 0.1f, 0.05f };
-	static const float maxSearchSteps[] = { 4.0f, 8.0f, 16.0f, 32.0f };
-	static const int kSmaaPreset = 2; // HIGH
-	float smaaThreshold = thresholds[kSmaaPreset];
-	float smaaSearchSteps = maxSearchSteps[kSmaaPreset];
-	float screenParams[4] = { (float)w, (float)h, 1.0f/max((float)w, 1e-7f), 1.0f/max((float)h, 1e-7f) };
-
-	// Save original camera raster (the draw buffer — back buffer)
-	RwRaster *drawBuffer = RwCameraGetRaster(Scene.camera);
-	int camW = drawBuffer ? RwRasterGetWidth(drawBuffer) : w;
-	int camH = drawBuffer ? RwRasterGetHeight(drawBuffer) : h;
-
-	// Hoisted guard: cover the Pass0-3 setup windows (RwTextureCreate, RT
-	// switches) that run outside the SEH helpers. Helpers save/restore this
-	// flag so the hoist survives across passes. Every return below clears it.
-	g_inGuardedIm2DPass = 1;
-
-	// Log pre-pass D3D9 state
-	IDirect3DSurface9 *rt0 = NULL;
-	dev->GetRenderTarget(0, &rt0);
-	if(dbglog_throttle("smaaPre"))
-		dbglog("[SMAA-DIAG] PRE-PASS: drawBuf=%p(%dx%d) pRFB=%p(%dx%d) RT0=%p cam=%p",
-			drawBuffer, drawBuffer ? drawBuffer->width : 0, drawBuffer ? drawBuffer->height : 0,
-			pRasterFrontBuffer, w, h, rt0, Scene.camera);
-	if(rt0) rt0->Release();
-
-	// ---- Pass 0: Edge + Motion + Depth Detection ----
-	if(dbglog_throttle("smaaP0s"))
-		dbglog("[SMAA-DIAG] Pass0-START: cam=%p camFrame=%p drawBuf=%p",
-			Scene.camera,
-			Scene.camera ? RwCameraGetFrame(Scene.camera) : NULL,
-			drawBuffer);
-
-	// RW-native RT switching — no camera Begin/EndUpdate, no raw surface handles.
-	if(!g_smaaEdgeRaster || !g_smaaBlendRaster || !g_smaaPrevFrameRaster){
-		dbglog("[SMAA-DIAG] FATAL: intermediate rasters NULL (edge=%p blend=%p prev=%p)",
-			g_smaaEdgeRaster, g_smaaBlendRaster, g_smaaPrevFrameRaster);
-		g_inGuardedIm2DPass = 0;
-		g_renderPhase = "";
-		ImmediateModeRenderStatesReStore();
-		smaaRestoreRawGeom();
-		return;
-	}
-
-	// Intermediates are camera-sized; keep rasterization on the camera
-	// viewport so the quad writes the same texel region its UVs address
-	// (s_ffQuad: positions 0..w x 0..h = UV 0..1 on a w x h raster).
-	D3DVIEWPORT9 vpSaved;
-	dev->GetViewport(&vpSaved);
-	D3DVIEWPORT9 vpCam = { 0, 0, (DWORD)camW, (DWORD)camH, 0.0f, 1.0f };
-
-	g_renderPhase = "smaa_p0_rt";
-	if(!guardedSetRT(g_smaaEdgeRaster, "smaa_p0_rt")){
-		// Guarded fault (or NULL raster) — fail open this frame, latch broken.
-		smaaGuardBail(dev, drawBuffer, &vpSaved);
-		return;
-	}
-	dev->SetViewport(&vpCam);
-	dev->Clear(0, NULL, D3DCLEAR_TARGET, D3DCOLOR_ARGB(0,0,0,0), 0.0f, 0);
-
-	// Render states for fullscreen passes — matches SSAO/SSS pattern
-	RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
-	RwD3D9SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
-	RwD3D9SetRenderState(D3DRS_ZENABLE, FALSE);
-	RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
-	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
-	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
-
-	IDirect3DSurface9 *p0rt = NULL;
-	dev->GetRenderTarget(0, &p0rt);
-	if(dbglog_throttle("smaaP0"))
-		dbglog("[SMAA-DIAG] Pass0: edge=%p RT0=%p shader=%p (EdgeMotionDepth=%d)",
-			g_smaaEdgeRaster, p0rt, SMAA_EdgeMotionDepth ? SMAA_EdgeMotionDepth : SMAA_Edge,
-			SMAA_EdgeMotionDepth != NULL);
-	if(p0rt) p0rt->Release();
-
-	// Set camera-sized scene copy as input texture on stage 0 (UV 0..1 =
-	// full valid frame; the padded FB would sample stretched under s_ffQuad)
-	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)g_smaaSceneRaster);
-	RwRenderStateSet(rwRENDERSTATETEXTUREADDRESSU, (void*)rwTEXTUREADDRESSCLAMP);
-	RwRenderStateSet(rwRENDERSTATETEXTUREADDRESSV, (void*)rwTEXTUREADDRESSCLAMP);
-
-	// Bind previous frame for motion detection on stage 1
-	if(g_smaaPrevFrameRaster){
-		if(!g_smaaPrevFrameTexRW){
-			g_renderPhase = "smaa_texcreate";
-			bool texFaulted = false;
-			g_smaaPrevFrameTexRW = smaaTexCreate(g_smaaPrevFrameRaster, "smaa_texcreate", &texFaulted);
-			if(texFaulted){
-				smaaGuardBail(dev, drawBuffer, &vpSaved);
-				return;
-			}
-			if(g_smaaPrevFrameTexRW){
-				RwTextureSetFilterMode(g_smaaPrevFrameTexRW, rwFILTERLINEAR);
-				RwTextureSetAddressingU(g_smaaPrevFrameTexRW, rwTEXTUREADDRESSCLAMP);
-				RwTextureSetAddressingV(g_smaaPrevFrameTexRW, rwTEXTUREADDRESSCLAMP);
-			}
-		}
-		if(g_smaaPrevFrameTexRW)
-			RwD3D9SetTexture(g_smaaPrevFrameTexRW, 1);
-	}
-	// Edge-detect pass — draw goes through the guardedIm2DRender choke-point
-	// (C2712: DrawSMAA can't take __try). Suspend/Restore are inside the helper.
-	g_renderPhase = "smaa_edge";
-	if(!DrawSMAA_EdgeDetect(smaaThreshold, cameraMovement, screenParams, s_ffQuad)){
-		// Edge detect faulted — depth hook already restored inside helper.
-		// Skip remaining passes; fail open + latch broken.
-		smaaGuardBail(dev, drawBuffer, &vpSaved);
-		return;
-	}
-
-	// ---- Pass 1: Blend Weight Calculation ----
-	g_renderPhase = "smaa_p1_rt";
-	if(!guardedSetRT(g_smaaBlendRaster, "smaa_p1_rt")){
-		smaaGuardBail(dev, drawBuffer, &vpSaved);
-		return;
-	}
-	dev->SetViewport(&vpCam);
-	dev->Clear(0, NULL, D3DCLEAR_TARGET, D3DCOLOR_ARGB(0,0,0,0), 0.0f, 0);
-
-	IDirect3DSurface9 *p1rt = NULL;
-	dev->GetRenderTarget(0, &p1rt);
-	if(dbglog_throttle("smaaP1"))
-		dbglog("[SMAA-DIAG] Pass1: blend=%p RT0=%p shader=%p searchSteps=%.0f",
-			g_smaaBlendRaster, p1rt, SMAA_BlendWeight, smaaSearchSteps);
-	if(p1rt) p1rt->Release();
-
-	// Bind edge raster as input texture on stage 0
-	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)g_smaaEdgeRaster);
-	RwRenderStateSet(rwRENDERSTATETEXTUREADDRESSU, (void*)rwTEXTUREADDRESSCLAMP);
-	RwRenderStateSet(rwRENDERSTATETEXTUREADDRESSV, (void*)rwTEXTUREADDRESSCLAMP);
-
-	// Bind area/search textures on stages 1 and 2
-	if(dev){
-		if(g_smaaAreaTex){
-			dev->SetTexture(1, g_smaaAreaTex);
-			dev->SetSamplerState(1, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
-			dev->SetSamplerState(1, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
-			dev->SetSamplerState(1, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
-			dev->SetSamplerState(1, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
-		}
-		if(g_smaaSearchTex){
-			dev->SetTexture(2, g_smaaSearchTex);
-			dev->SetSamplerState(2, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
-			dev->SetSamplerState(2, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
-			dev->SetSamplerState(2, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
-			dev->SetSamplerState(2, D3DSAMP_MINFILTER, D3DTEXF_POINT);
-		}
-	}
-
-	// Set blend weight shader constants
-	float blendP[4] = {0.0f, smaaSearchSteps, 0.0f, 0.0f};
-	RwD3D9SetPixelShaderConstant(0, blendP, 1);
-	RwD3D9SetPixelShaderConstant(1, screenParams, 1);
-	g_renderPhase = "smaa_draw";
-	if(!SMAA_DrawPass((IDirect3DPixelShader9*)SMAA_BlendWeight, s_ffQuad)){
-		smaaGuardBail(dev, drawBuffer, &vpSaved);
-		return;
-	}
-
-	// Clean up texture stages after Pass 1
-	if(dev){
-		dev->SetTexture(1, NULL);
-		dev->SetTexture(2, NULL);
-	}
-
-	// Pass2-entry guard (lane-A hardening): g_smaaSceneRaster is pass2's ONLY
-	// colour input (bound at the "Bind camera-sized scene copy" line below).
-	// If it went NULL or stale-sized since the entry self-check, the
-	// neighbourhood blend renders NOTHING into edgeRaster and Pass3 (or the
-	// no-temporal fallback presenting edgeRaster) would show a stale
-	// breadcrumb frame. Fail CLOSED with the same latch as the entry
-	// self-check: smaaGuardBail rebinds the camera RT, restores state and
-	// sets s_smaaBroken — a stale edgeRaster can NEVER be presented; SMAA
-	// self-skips until the next resolution change.
-	if(!g_smaaSceneRaster ||
-	   g_smaaSceneRaster->width != w || g_smaaSceneRaster->height != h){
-		dbglog("[SMAA] PASS2 GUARD: scene=%p (%dx%d) != camera %dx%d — latching broken, edgeRaster NOT presented",
-			(void*)g_smaaSceneRaster,
-			g_smaaSceneRaster ? g_smaaSceneRaster->width : 0,
-			g_smaaSceneRaster ? g_smaaSceneRaster->height : 0, w, h);
-		smaaGuardBail(dev, drawBuffer, &vpSaved);
-		return;
-	}
-
-	// ---- Pass 2: Neighborhood Blending → edgeRaster (temp reuse) ----
-	// Render to edgeRaster instead of drawBuffer so Pass 3 temporal can read it
-	// while writing to drawBuffer — avoids D3D9 read-write conflict on same surface.
-	// edgeRaster is done being read after Pass 1, safe to reuse as temp.
-	g_renderPhase = "smaa_p2_rt";
-	if(!guardedSetRT(g_smaaEdgeRaster, "smaa_p2_rt")){
-		smaaGuardBail(dev, drawBuffer, &vpSaved);
-		return;
-	}
-	dev->SetViewport(&vpCam);
-
-	IDirect3DSurface9 *p2rt = NULL;
-	dev->GetRenderTarget(0, &p2rt);
-	if(dbglog_throttle("smaaP2"))
-		dbglog("[SMAA-DIAG] Pass2: edgeRaster=%p RT0=%p shader=%p", g_smaaEdgeRaster, p2rt, SMAA_BlendNeighbor);
-	if(p2rt) p2rt->Release();
-
-	// Bind camera-sized scene copy as color input on stage 0 (UV 0..1)
-	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)g_smaaSceneRaster);
-	RwRenderStateSet(rwRENDERSTATETEXTUREADDRESSU, (void*)rwTEXTUREADDRESSCLAMP);
-	RwRenderStateSet(rwRENDERSTATETEXTUREADDRESSV, (void*)rwTEXTUREADDRESSCLAMP);
-
-	// Bind blend raster on stage 1 via RwD3D9SetTexture
-	if(!g_smaaBlendTexRW && g_smaaBlendRaster){
-		g_renderPhase = "smaa_texcreate";
-		bool texFaulted = false;
-		g_smaaBlendTexRW = smaaTexCreate(g_smaaBlendRaster, "smaa_texcreate", &texFaulted);
-		if(texFaulted){
-			smaaGuardBail(dev, drawBuffer, &vpSaved);
-			return;
-		}
-		if(g_smaaBlendTexRW){
-			RwTextureSetFilterMode(g_smaaBlendTexRW, rwFILTERLINEAR);
-			RwTextureSetAddressingU(g_smaaBlendTexRW, rwTEXTUREADDRESSCLAMP);
-			RwTextureSetAddressingV(g_smaaBlendTexRW, rwTEXTUREADDRESSCLAMP);
-		}
-	}
-	if(g_smaaBlendTexRW)
-		RwD3D9SetTexture(g_smaaBlendTexRW, 1);
-
-	// Set neighborhood blend shader
-	RwD3D9SetPixelShaderConstant(1, screenParams, 1);
-	g_renderPhase = "smaa_draw";
-	if(!SMAA_DrawPass((IDirect3DPixelShader9*)SMAA_BlendNeighbor, s_ffQuad)){
-		smaaGuardBail(dev, drawBuffer, &vpSaved);
-		return;
-	}
-
-	// Cleanup texture stages after Pass 2
-	RwD3D9SetTexture(NULL, 1);
-	d3d9device->SetTexture(2, NULL);
-	d3d9device->SetTexture(3, NULL);
-
-	// ---- Pass 3: Temporal Resolve → drawBuffer (final output) ----
-	// Reads edgeRaster (current SMAA result) + prevFrameRaster (history),
-	// writes directly to drawBuffer. No extra copy-back blit needed.
-	// Pause gate: DrawVelocityBuffer skips paused/menu frames (~:6512) so the
-	// velocity buffer freezes, but reprojection against that stale velocity
-	// ghosts while paused. Gate the temporal pass off in menus/pause so it falls
-	// through to the spatial-only fallback below (unchanged).
-	if(SMAA_Temporal && g_smaaPrevFrameRaster && !IsGameInMenuOrPaused()){
-		g_renderPhase = "smaa_p3_rt";
-		// Re-bind the camera frame raster through the camera context (see
-		// smaaGuardBail): RwD3D9SetRenderTarget faults on rwRASTERTYPECAMERA.
-		if(Scene.camera){
-			RwCameraEndUpdate(Scene.camera);
-			RwCameraBeginUpdate(Scene.camera);
-		}
-		// BeginUpdate may have re-applied camera states — re-assert the
-		// fullscreen-pass state set from Pass0 before the final draw.
-		RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
-		RwD3D9SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
-		RwD3D9SetRenderState(D3DRS_ZENABLE, FALSE);
-		RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
-		dev->SetViewport(&vpSaved);
-
-		// Bind current SMAA result (edgeRaster) on s0
-		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)g_smaaEdgeRaster);
-		RwRenderStateSet(rwRENDERSTATETEXTUREADDRESSU, (void*)rwTEXTUREADDRESSCLAMP);
-		RwRenderStateSet(rwRENDERSTATETEXTUREADDRESSV, (void*)rwTEXTUREADDRESSCLAMP);
-
-		// Bind previous frame on s1
-		if(g_smaaPrevFrameTexRW)
-			RwD3D9SetTexture(g_smaaPrevFrameTexRW, 1);
-
-		// Bind velocity buffer on s2 for history reprojection (POINT/CLAMP)
-		if(g_velocityTex){
-			dev->SetTexture(2, g_velocityTex);
-			dev->SetSamplerState(2, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
-			dev->SetSamplerState(2, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
-			dev->SetSamplerState(2, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
-			dev->SetSamplerState(2, D3DSAMP_MINFILTER, D3DTEXF_POINT);
-		}
-
-		// Temporal constants: blendStrength = CURRENT-frame weight at rest
-		// (0.4 = 60% history at rest — audit: rest-state retention 85.4%->46%,
-		// ghost tail 34->7 frames), motionScale = how fast the
-		// motion signal saturates luma/velocity difference.
-		// On the first frame, the history raster contains undefined data (black).
-		// Use blendStrength=1.0 (all current, no history) to avoid a dark flash.
-		// Subsequent frames blend normally with accumulated history.
-		// motionScale 2.0 -> 3.0: moderate camera motion (walking pans) only
-		// produced lumaDiff ~0.1..0.3, which left blendFactor around 0.5..0.65
-		// = 35..45% of every pixel taken from the PREVIOUS frame — reads as a
-		// permanent smear/"motion blur that never turns off" plus trailing
-		// artifacts, entirely independent of the motionBlurEnable checkbox
-		// (DrawMotionBlur's own gate is correct — see :6494+).
-		float blendStrength = g_smaaHistoryValid ? 0.4f : 1.0f;
-		// Hard history TTL: every 8 valid-history frames force a full current-frame
-		// refresh (blendStrength=1.0) to kill the accumulated ghost tail, then reset.
-		if(g_smaaHistoryValid && ++s_smaaHistAge >= 8){
-			blendStrength = 1.0f;
-			s_smaaHistAge = 0;
-		}
-		float temporalP[4] = { blendStrength, 3.0f, 0.0f, 0.0f };
-		RwD3D9SetPixelShaderConstant(0, temporalP, 1);
-		RwD3D9SetPixelShaderConstant(1, screenParams, 1);
-
-		// c2 = (velocity, rotation, tanFovX, tanFovY) — velocity-driven temporal
-		// weight for the resolve shader. Velocity/rotation reuse the per-frame
-		// camera tracking above (same static-prev pattern as DrawMotionBlur) with
-		// the same gains so SMAA softens in sync with motion blur. FOV comes from
-		// the camera view window (tan half-FOV, same as vehiclePipe.cpp iblParams).
-		float tanX = 0.65f, tanY = 0.45f;
-		if(Scene.camera){
-			tanX = Scene.camera->viewWindow.x;
-			tanY = Scene.camera->viewWindow.y;
-		}
-		float velFactor = min(1.0f, cameraVelocity * 0.25f);
-		float rotFactor = min(1.0f, cameraRotation * 2.0f);
-		float motionP[4] = { velFactor, rotFactor, tanX, tanY };
-		RwD3D9SetPixelShaderConstant(2, motionP, 1);
-
-		// c3 = (near, far, maxHistClamp, velToPx) — history reprojection params.
-		// near/far mirror DrawNormalBufferToTexture's c0 source. velToPx is 1.0
-		// when the velocity buffer is bound (velocity is stored in UV units) and
-		// 0.0 otherwise, so the shader samples history unshifted when s2 is null.
-		// maxHistClamp 0.9 -> 1.0: 0.9 is the shader's CEILING on the
-		// current-frame weight, i.e. it forced >=10% of the previous frame into
-		// every pixel on EVERY frame ("never fully discards history"). That
-		// floor is the residual trailing/ghosting after lane3's scene-copy fix,
-		// and it is what reads as motion blur while the motionBlur checkbox is
-		// off. 1.0 lets the motion signal reach a full current frame at speed
-		// while minBlend (= blendStrength, 0.1) still keeps the slow static
-		// accumulation; it also makes the blendStrength=1.0 first frame a true
-		// 100% current (0.9 used to leak 10% undefined history on frame 1).
-		float smaaNear = Scene.camera ? RwCameraGetNearClipPlane(Scene.camera) : 0.1f;
-		float smaaFar = Scene.camera ? RwCameraGetFarClipPlane(Scene.camera) : 500.0f;
-		float histP[4] = { smaaNear, smaaFar, 1.0f, g_velocityTex ? 1.0f : 0.0f };
-		RwD3D9SetPixelShaderConstant(3, histP, 1);
-
-		if(dbglog_throttle("smaa_vel"))
-			dbglog("[SMAA] velocity: vel=%.3f rot=%.3f tanFov=(%.3f, %.3f)",
-				velFactor, rotFactor, tanX, tanY);
-
-		g_renderPhase = "smaa_draw";
-		if(!SMAA_DrawPass((IDirect3DPixelShader9*)SMAA_Temporal, s_ffQuad)){
-			RwD3D9SetTexture(NULL, 1);
-			dev->SetTexture(2, NULL);
-			smaaGuardBail(dev, drawBuffer, &vpSaved);
-			return;
-		}
-
-		// Cleanup
-		RwD3D9SetTexture(NULL, 1);
-		dev->SetTexture(2, NULL);
-
-		if(dbglog_throttle("smaaTemporal"))
-			dbglog("[SMAA-DIAG] Pass3 Temporal: edge=%p + prev=%p -> drawBuf=%p shader=%p",
-				g_smaaEdgeRaster, g_smaaPrevFrameRaster, drawBuffer, SMAA_Temporal);
-	} else {
-		// No temporal: Pass 2 result is in edgeRaster, copy it into the camera
-		// frame raster with the same EndUpdate/PushContext/RenderFast/Pop/
-		// BeginUpdate idiom as UpdateFrontBuffer. RwD3D9SetRenderTarget faults
-		// on rwRASTERTYPECAMERA, so never bind drawBuffer that way.
-		if(dbglog_throttle("smaa_p3_fallback"))
-			dbglog("[SMAA-DIAG] Pass3 skipped (Temporal=%p prev=%p): presenting edgeRaster (pass2 composite, NOT raw edge/blend)",
-				SMAA_Temporal, g_smaaPrevFrameRaster);
-		g_renderPhase = "smaa_p3_rt";
-		RwCameraEndUpdate(Scene.camera);
-		RwRasterPushContext(drawBuffer);
-		RwRasterRenderFast(g_smaaEdgeRaster, 0, 0);
-		RwRasterPopContext();
-		RwCameraBeginUpdate(Scene.camera);
-		dev->SetViewport(&vpSaved);
-	}
-
-	// Save current frame for next frame's temporal history
-	RwRasterPushContext(g_smaaPrevFrameRaster);
-	RwRasterRenderFast(drawBuffer, 0, 0);
-	RwRasterPopContext();
-	g_smaaHistoryValid = true;
-
-	// Clean up D3D9 state
-	if(dev){
-		dev->SetTexture(1, NULL);
-		dev->SetTexture(2, NULL);
-		dev->SetTexture(3, NULL);
-	}
-
-	// Restore RW render states
-	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
-	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)TRUE);
-	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
-	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
-	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
-
-	g_inGuardedIm2DPass = 0;
-	g_renderPhase = "";
-	ImmediateModeRenderStatesReStore();
-	smaaRestoreRawGeom(); // push the raw ZENABLE/ZWRITE/ALPHATEST/CULL values
-	                       // back on BOTH layers — the rw-only ReStore above
-	                       // cannot see them, and SMAA is the last pass of the
-	                       // frame (they would carry into the next scene).
-}
-
-static void DrawVelocityBuffer(void)
-{
-	if(!config->velocityBufferEnable || !VelocityReconstruct)
-		return;
-	if(!CPostEffects::pRasterFrontBuffer)
-		return;
-	if(IsGameInMenuOrPaused())
-		return;
-
-	IDirect3DDevice9 *dev = d3d9device;
-	if(!dev)
-		return;
-	if(!Scene.camera)
-		return;
-	RwRaster *camRas = RwCameraGetRaster(Scene.camera);
-	if(!camRas)
-		return;
-	int w = camRas->width;
-	int h = camRas->height;
-	if(w < 1 || h < 1)
-		return;
-
-	// Lazy-init velocity texture (res-aware: recreate if camera resolution changed)
-	if(!g_velocityTex || w != s_velocityW || h != s_velocityH){
-		if(g_velocityTex){
-			if(g_velocitySurf){ g_velocitySurf->Release(); g_velocitySurf = NULL; }
-			g_velocityTex->Release();
-			g_velocityTex = NULL;
-		}
-		if(FAILED(dev->CreateTexture(w, h, 1, D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &g_velocityTex, NULL))){
-			dbglog("[PostFX] DrawVelocityBuffer: CreateTexture velocity failed");
-			config->velocityBufferEnable = 0;
-			return;
-		}
-		g_velocityTex->GetSurfaceLevel(0, &g_velocitySurf);
-		s_velocityW = w;
-		s_velocityH = h;
-		dbglog("[PostFX] DrawVelocityBuffer: texture created %dx%d", w, h);
-	}
-
-	// Bail if depth texture is not available — velocity reconstruction needs depth
-	if(!g_ssaoDepthTex){
-		if(dbglog_throttle("vel_no_depth"))
-			dbglog("[PostFX] DrawVelocityBuffer: g_ssaoDepthTex NULL, skipping");
-		return;
-	}
-
-	// Store current VP matrix for next frame
-	D3DMATRIX curView, curProj;
-	dev->GetTransform(D3DTS_VIEW, &curView);
-	dev->GetTransform(D3DTS_PROJECTION, &curProj);
-
-	// Compute current VP = View * Proj (D3D9 convention)
-	D3DMATRIX curVP;
-	{
-		// Manual 4x4 matrix multiply (avoids D3DX dependency)
-		for(int r = 0; r < 4; r++)
-			for(int c = 0; c < 4; c++){
-				float sum = 0;
-				for(int k = 0; k < 4; k++)
-					sum += curView.m[r][k] * curProj.m[k][c];
-				curVP.m[r][c] = sum;
-			}
-	}
-
-	// Skip first frame (no previous VP yet)
-	if(!g_prevVPValid){
-		memcpy(&g_prevVPMatrix, &curVP, sizeof(D3DMATRIX));
-		g_prevVPValid = true;
-		return;
-	}
-
-	// Compute inverse of current VP (manual 4x4 inverse via cofactors)
-	D3DMATRIX invCurVP;
-	{
-		// Compute 2x2 subdeterminants of last two rows
-		float s0 = curVP.m[0][0] * curVP.m[1][1] - curVP.m[1][0] * curVP.m[0][1];
-		float s1 = curVP.m[0][0] * curVP.m[1][2] - curVP.m[1][0] * curVP.m[0][2];
-		float s2 = curVP.m[0][0] * curVP.m[1][3] - curVP.m[1][0] * curVP.m[0][3];
-		float s3 = curVP.m[0][1] * curVP.m[1][2] - curVP.m[1][1] * curVP.m[0][2];
-		float s4 = curVP.m[0][1] * curVP.m[1][3] - curVP.m[1][1] * curVP.m[0][3];
-		float s5 = curVP.m[0][2] * curVP.m[1][3] - curVP.m[1][2] * curVP.m[0][3];
-
-		float c5 = curVP.m[2][2] * curVP.m[3][3] - curVP.m[3][2] * curVP.m[2][3];
-		float c4 = curVP.m[2][1] * curVP.m[3][3] - curVP.m[3][1] * curVP.m[2][3];
-		float c3 = curVP.m[2][1] * curVP.m[3][2] - curVP.m[3][1] * curVP.m[2][2];
-		float c2 = curVP.m[2][0] * curVP.m[3][3] - curVP.m[3][0] * curVP.m[2][3];
-		float c1 = curVP.m[2][0] * curVP.m[3][2] - curVP.m[3][0] * curVP.m[2][2];
-		float c0 = curVP.m[2][0] * curVP.m[3][1] - curVP.m[3][0] * curVP.m[2][1];
-
-		float det = s0*c5 - s1*c4 + s2*c3 + s3*c2 - s4*c1 + s5*c0;
-		float invDet = 1.0f / max(fabs(det), 1e-7f);
-
-		invCurVP.m[0][0] = ( curVP.m[1][1]*c5 - curVP.m[1][2]*c4 + curVP.m[1][3]*c3) * invDet;
-		invCurVP.m[0][1] = (-curVP.m[0][1]*c5 + curVP.m[0][2]*c4 - curVP.m[0][3]*c3) * invDet;
-		invCurVP.m[0][2] = ( curVP.m[3][1]*s5 - curVP.m[3][2]*s4 + curVP.m[3][3]*s3) * invDet;
-		invCurVP.m[0][3] = (-curVP.m[2][1]*s5 + curVP.m[2][2]*s4 - curVP.m[2][3]*s3) * invDet;
-		invCurVP.m[1][0] = (-curVP.m[1][0]*c5 + curVP.m[1][2]*c2 - curVP.m[1][3]*c1) * invDet;
-		invCurVP.m[1][1] = ( curVP.m[0][0]*c5 - curVP.m[0][2]*c2 + curVP.m[0][3]*c1) * invDet;
-		invCurVP.m[1][2] = (-curVP.m[3][0]*s5 + curVP.m[3][2]*s2 - curVP.m[3][3]*s1) * invDet;
-		invCurVP.m[1][3] = ( curVP.m[2][0]*s5 - curVP.m[2][2]*s2 + curVP.m[2][3]*s1) * invDet;
-		invCurVP.m[2][0] = ( curVP.m[1][0]*c4 - curVP.m[1][1]*c2 + curVP.m[1][3]*c0) * invDet;
-		invCurVP.m[2][1] = (-curVP.m[0][0]*c4 + curVP.m[0][1]*c2 - curVP.m[0][3]*c0) * invDet;
-		invCurVP.m[2][2] = ( curVP.m[3][0]*s4 - curVP.m[3][1]*s2 + curVP.m[3][3]*s0) * invDet;
-		invCurVP.m[2][3] = (-curVP.m[2][0]*s4 + curVP.m[2][1]*s2 - curVP.m[2][3]*s0) * invDet;
-		invCurVP.m[3][0] = (-curVP.m[1][0]*c3 + curVP.m[1][1]*c1 - curVP.m[1][2]*c0) * invDet;
-		invCurVP.m[3][1] = ( curVP.m[0][0]*c3 - curVP.m[0][1]*c1 + curVP.m[0][2]*c0) * invDet;
-		invCurVP.m[3][2] = (-curVP.m[3][0]*s3 + curVP.m[3][1]*s1 - curVP.m[3][2]*s0) * invDet;
-		invCurVP.m[3][3] = ( curVP.m[2][0]*s3 - curVP.m[2][1]*s1 + curVP.m[2][2]*s0) * invDet;
-	}
-
-	// Render velocity buffer
-	DWORD rawGeom[9];
-	bool rawGeomSaved = SaveRawGeomStates(rawGeom); // BEFORE Store (DepthHook below writes raw ZENABLE)
-	CPostEffects::ImmediateModeRenderStatesStore();
-	CPostEffects::ImmediateModeRenderStatesSet();
-	RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
-	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERNEAREST);
-	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
-
-	// Set velocity render target
-	IDirect3DSurface9 *origRT = NULL;
-	dev->GetRenderTarget(0, &origRT);
-	dev->SetRenderTarget(0, g_velocitySurf);
-	dev->Clear(0, NULL, D3DCLEAR_TARGET, D3DCOLOR_ARGB(0, 128, 128, 0), 1.0f, 0);
-
-	// Suspend depth hook: unbind INTZ as DS so it can be sampled on s0
-	__try {
-		DepthHook_Suspend();
-
-		// Bind depth texture on s0
-		dev->SetTexture(0, g_ssaoDepthTex);
-		dev->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_POINT);
-		dev->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
-		// Wave-2: previous-frame depth on s1 (POINT/CLAMP, NULL-safe)
-		dev->SetTexture(1, g_prevDepthValid ? g_prevDepthTex : NULL);
-		dev->SetSamplerState(1, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
-		dev->SetSamplerState(1, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
-		dev->SetSamplerState(1, D3DSAMP_MINFILTER, D3DTEXF_POINT);
-		dev->SetSamplerState(1, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
-
-		// Upload constants
-		RwD3D9SetPixelShaderConstant(0, &invCurVP, 4); // c0-c3: inverse current VP
-		RwD3D9SetPixelShaderConstant(4, &g_prevVPMatrix, 4); // c4-c7: previous VP
-		float screenParams[4] = { (float)w, (float)h, 1.0f/max((float)w, 1e-7f), 1.0f/max((float)h, 1e-7f) };
-		RwD3D9SetPixelShaderConstant(8, screenParams, 1); // c8: screen params
-		// c9: Wave-2 prev-depth {prevDepthValid, farPlane, 0, 0}
-		float c9PrevDepth[4] = { (float)g_prevDepthValid, Scene.camera->farPlane, 0.0f, 0.0f };
-		RwD3D9SetPixelShaderConstant(9, c9PrevDepth, 1);
-
-		// Render fullscreen quad — camera-sized with UV 0..1, NOT
-		// colorfilterVerts (0..2048 positions): the velocity RT is w x h, so
-		// the game's quad clipped at the screen only wrote UV 0..0.9375 x
-		// 0..0.527 — the right edge and the WHOLE BOTTOM HALF of the velocity
-		// buffer kept the Clear() value (zero velocity) and every reprojection
-		// consumer (SMAA temporal history, SSAO temporal, motion blur) was
-		// unshifted there -> trailing/ghosting on the lower half of the screen.
-		SetupFullscreenQuad((float)w, (float)h);
-		overrideIm2dPixelShader = VelocityReconstruct;
-		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, s_ffQuad, 4, s_ffQuadIdx, 6);
-		overrideIm2dPixelShader = nil;
-
-		// Unbind INTZ from s0 before the hook re-binds it as DS (feedback-lock
-		// guard, mirrors DrawSSAO/DrawHeightFog); the cleanup below stays as-is.
-		dev->SetTexture(0, NULL);
-		// Restore depth hook (re-binds INTZ as DS)
-		DepthHook_Restore();
-	} __except(EXCEPTION_EXECUTE_HANDLER){
-		overrideIm2dPixelShader = nil;	// SEH: the `= nil` reset in the __try above is skipped on fault
-
-		dbglog("[PostFX] DrawVelocityBuffer CRASHED in depth pass exception=0x%08X", GetExceptionCode());
-		dev->SetTexture(0, NULL); // same unbind before the bail-out Restore
-		DepthHook_Restore(); // Restore on bail to keep Suspend/Restore balanced
-	}
-
-	// Restore render target
-	dev->SetRenderTarget(0, origRT);
-	if(origRT) origRT->Release();
-
-	// Cleanup
-	dev->SetTexture(0, NULL);
-	dev->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
-	dev->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
-	dev->SetTexture(1, NULL);
-	dev->SetSamplerState(1, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
-	dev->SetSamplerState(1, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
-
-	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)TRUE);
-	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
-	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
-RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
-
-	CPostEffects::ImmediateModeRenderStatesReStore();
-	if(rawGeomSaved){
-		RestoreRawGeomStates(rawGeom);
-		rawGeomSaved = false;
-	}
-	// Store VP for next frame
-	memcpy(&g_prevVPMatrix, &curVP, sizeof(D3DMATRIX));
-
-	// NOTE: CopyDepthToPrev() moved to ColourFilter_switch, after DrawSSAO_Overhaul,
-	// so SSAO temporal reprojection reads the actual previous-frame depth.
-}
-
 void
 CPostEffects::DrawMotionBlur(void)
 {
+	// No PF_SCOPE here (__try in function -> C2712); see DrawNormalBufferToTexture.
+	// Gate log honesty (cutscene≠menu fix): the old line printed the COMBINED
+	// IsGameInMenuOrPaused() bool under a "menu=" label, so cutscene frames
+	// logged "menu=1 -> SKIP" while IsGameInMenuOrPaused's own log said
+	// menu=0. Print the real menu/pause and cutscene flags separately, and
+	// make the RUN/SKIP ternary include the full gate decision.
+	// Tier 0 (Q5): camera-history continuity latch. ANY return below taken
+	// BEFORE the camera block runs (enable off, no FB, menu/pause, cutscene,
+	// FB not ready, no device/camera) leaves this false, so the first frame
+	// back sees mbCutReset and re-latches the prev camera pose instead of
+	// diffing against pre-skip state (the stale-velocity pop on re-entry).
+	static bool mbHistValid = false;
+	bool mbCutReset = !mbHistValid;
+	bool mbMenuSkip = PostfxMenuPauseOnly();
+	bool mbRun = config->motionBlurEnable && MotionBlur_Burnout && pRasterFrontBuffer &&
+		!mbMenuSkip && !CCutsceneMgr__ms_running;
+	if(dbglog_throttle("pf_mb_gate"))
+		dbglog("[PF] MotionBlur gate: enable=%d ps=%p fb=%p menu=%d cutscene=%d -> %s",
+			config->motionBlurEnable, MotionBlur_Burnout, (void*)pRasterFrontBuffer,
+			(int)mbMenuSkip, (int)CCutsceneMgr__ms_running,
+			mbRun ? "RUN" : "SKIP");
 	if(!config->motionBlurEnable || !MotionBlur_Burnout)
 		return;
 	if(!pRasterFrontBuffer)
 		return;
-	if(IsGameInMenuOrPaused())
+	// Menu/pause skip as before. CUTSCENE STILL SKIPS, deliberately: motion
+	// blur is not part of the core grading chain, and during cutscenes
+	// (a) camera cuts spike cameraVelocity -> one full-frame smear frame per
+	// cut, and (b) the velocity-buffer lane (postfx_motionblur.cpp, outside
+	// this fix's file set) still skips, so s1 would bind a stale pre-cutscene
+	// velocity texture. Revisit both together in a later round. TIER 0
+	// (2026-10-29): the stale-CPU-history half is fixed at the consumption
+	// point below (mbHistValid/camInitialized re-latch = one clean frame on
+	// re-entry); the stale s1 texture half for the OTHER velocity consumers
+	// (SMAA/SSAO) is still a later lane.
+	if(mbMenuSkip)
+		return;
+	if(CCutsceneMgr__ms_running)
 		return;
 
 	IDirect3DDevice9 *dev = d3d9device;
@@ -6768,11 +4386,22 @@ CPostEffects::DrawMotionBlur(void)
 	// from an intermediate frame and make motion blur look like it bypasses
 	// colour filtering/tonemapping. Reads the CURRENT post-grade frame.
 	CPostEffects::UpdateFrontBuffer();
+	if(!PfFrontBufferReady("motion blur"))
+		return;
 
 	// Track camera velocity for motion blur
 	static float prevCamX = 0, prevCamY = 0, prevCamZ = 0;
 	static float prevAtX = 0, prevAtY = 0, prevAtZ = 0;
 	static bool camInitialized = false;
+
+	// Q5 cut reset (Tier 0): first VALID frame after a skipped stretch —
+	// force a history re-latch so this frame contributes ZERO camera
+	// velocity/rotation instead of diffing the pose across the cut. The
+	// pass then exits through the existing cameraMovement < 0.002 gate:
+	// one clean frame, matching GTA V's "cut → reset prev matrix"
+	// (postfx.fx:7494-7497), not a stale-reprojection smear.
+	if(mbCutReset)
+		camInitialized = false;
 
 	float cameraVelocity = 0.0f;
 	float cameraRotation = 0.0f;
@@ -6801,7 +4430,42 @@ CPostEffects::DrawMotionBlur(void)
 			prevAtY = camLTM->at.y;
 			prevAtZ = camLTM->at.z;
 			camInitialized = true;
+			mbHistValid = true;	// pose re-latched: history continuous into the next frame
 		}
+	}
+
+	// Tier 0 (Q4) framerate normalisation: cameraVelocity/cameraRotation are
+	// PER-FRAME deltas but the thresholds below (gate 0.002, ramps
+	// 0.05/0.12/0.09/0.14, camera-aware 0.8) are absolute 60 FPS-per-frame
+	// values from telemetry — at 144 FPS the deltas are ~2.4x smaller and
+	// blur silently vanished. Rescale both deltas to their 60 FPS-equivalent
+	// with MotionBlurDtScale() (postfx_motionblur.cpp): dt = ms_fTimeStep/50
+	// seconds (the game-wide seconds*50 clock — same /50 the ragdoll update
+	// at main.cpp uses), scale = (1/60)/dt — exactly 1.0 at 60 FPS. The old
+	// inline 25/ms_fTimeStep assumed ms_fTimeStep=25 at 60 FPS (a /1500
+	// clock); the real clock reads ~0.833 there, so the old scale was ~30x
+	// and saturated cameraMovement on every moving frame.
+	// cameraRotation = 1-cos(dtheta) ~ dtheta^2/2 is a QUADRATIC per-frame
+	// delta, so it takes the scale squared.
+	float rawCamVelocity = cameraVelocity;	// pre-scale, for the teleport-cut test
+	float mbMs = CTimer__ms_fTimeStep;
+	float mbVelScale = MotionBlurDtScale();
+	cameraVelocity *= mbVelScale;
+	cameraRotation *= mbVelScale * mbVelScale;
+
+	// Q5 teleport cut: a raw per-frame position jump far beyond any real
+	// camera motion (warp/teleport spikes reach ~1000 units/frame, see the
+	// gain comment below) is a camera CUT, not motion — zero this frame's
+	// contribution and re-latch; same clean-frame result as mbCutReset.
+	bool mbTeleportCut = (rawCamVelocity > 100.0f);
+
+	// One throttled receipt: dt path + cut resets observable per run
+	if(dbglog_throttle("mb_tier0"))
+		dbglog("[PostFX] mb_tier0: dt=%.4f velScale=%.3f cutReset=%d",
+			mbMs * (1.0f/50.0f), mbVelScale, mbCutReset ? 1 : (mbTeleportCut ? 2 : 0));
+	if(mbTeleportCut){
+		camInitialized = false;	// re-latch next frame against the post-warp pose
+		return;			// one clean frame; no smear across the warp
 	}
 
 	// Combine camera movement into a single factor (0=still, 1=fast movement).
@@ -6853,6 +4517,27 @@ CPostEffects::DrawMotionBlur(void)
 	if(effectiveStrength < 1e-4f)
 		return;
 
+	// ---- Entry stage-0 capture (font-safety / test-9) ---------------------
+	// The park below overwrites the L1 raster cache (RwRenderStateSet) and the
+	// front-buffer bind overwrites the device stage-0 texture. The old exit
+	// hardcoded a NULL raster and never touched the device, so the pass ended
+	// with L1 = NULL while L3 still held pRasterFrontBuffer's texture: any
+	// text/font/HUD quad drawn afterwards could sample the frame buffer
+	// instead of its glyph atlas (reported "fonts completely broken").
+	// Capture BOTH observable layers BEFORE the park — L1 via RwRenderStateGet,
+	// L3 via GetTexture (AddRef -> released after the restore below). The
+	// restore at the exit re-asserts the entry raster through L1 (which drives
+	// L2) and raw-pins the captured L3 texture.
+	void *mbEntryS0 = NULL;
+	RwRenderStateGet(rwRENDERSTATETEXTURERASTER, &mbEntryS0);
+	if(mbEntryS0 == (void*)0xFFFFFFFF)
+		mbEntryS0 = NULL;	// failed-Get sentinel (see pedStage0Resync)
+	IDirect3DBaseTexture9 *mbEntryS0Dev = NULL;
+	dev->GetTexture(0, &mbEntryS0Dev);	// AddRef
+	// Entry PS is captured by the park block below (AddRef held there) and
+	// released at the exit after both PS layers are forced back to NULL.
+	IDirect3DPixelShader9 *mbEntryPS = NULL;
+
 	// Setup render states
 	DWORD rawGeom[9];
 	bool rawGeomSaved = SaveRawGeomStates(rawGeom); // before Store (raw Set below)
@@ -6865,14 +4550,28 @@ CPostEffects::DrawMotionBlur(void)
 	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
 
-	// Bind front buffer as current frame (s0)
+	// Bind front buffer as current frame (s0).
+	// test-8 PAIRED BIND (motion-vector-trails fix, 2026-11-01): park NULL
+	// through the RW cache first so the real bind below is always a cache
+	// miss -> real device write. The TEXTURERASTER cache persists across
+	// frames, and raw stage-0 writers in this same frame's earlier passes
+	// (SSAO s0=depth postfx_ssao.cpp:983, velocity pass s0=depth
+	// postfx_motionblur.cpp:321) leave the DEVICE holding a foreign texture
+	// while the cache still believes a stale value — a cache-hit elision
+	// here would draw this quad sampling whatever s0 really holds.
+	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)NULL);
 	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)pRasterFrontBuffer);
 
-	// Bind velocity buffer on s1 (RG=velocity XY packed to [0,1], B=magnitude)
+	// Bind velocity buffer on s1 (RG=velocity XY packed to [0,1], B=magnitude).
+	// Raw dev->SetTexture — no RW cache, always a real device write. velBound
+	// mirrors the bind for the cleanup below (sampler restore must gate on
+	// exactly what was written, not on a config read that can drift).
+	bool velBound = false;
 	if(config->velocityBufferEnable && g_velocityTex){
 		dev->SetTexture(1, g_velocityTex);
 		dev->SetSamplerState(1, D3DSAMP_MINFILTER, D3DTEXF_POINT);
 		dev->SetSamplerState(1, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
+		velBound = true;
 	}else{
 		dev->SetTexture(1, NULL);
 	}
@@ -6939,8 +4638,50 @@ CPostEffects::DrawMotionBlur(void)
 		// FB content region is remapped in-shader via c2.zw (fbScale).
 		SetupFullscreenQuad((float)w, (float)h);
 
-		// Render fullscreen quad with motion blur shader
+		// Render fullscreen quad with motion blur shader.
+		// test-8 PAIRED PS BIND (motion-vector-trails fix, 2026-11-01):
+		// RwD3D9SetPixelShader value-compares against the exe-side
+		// _rwD3D9LastPixelShaderUsed cache (normmap_stubs.cpp:82). That cache
+		// persists ACROSS FRAMES, so at this point it still holds
+		// MotionBlur_Burnout from the PREVIOUS frame's MB draw — while raw
+		// device-PS writers in the scene phase (waterPipe.cpp:2621
+		// g_d3dDevice->SetPixelShader, mirrorPass.cpp:184, forwardplus) can
+		// leave a FOREIGN shader on the device. The im2d hook's Set
+		// (Im2dSetPixelShader_hook, postfx.cpp:503) then ELIDES, and this
+		// quad rasterises with the foreign PS sampling s0=frame s1=velocity
+		// s2=depth under wrong semantics — velocity-buffer content painted
+		// to the screen = the reported "motion vector trails". Same L2/L3
+		// split disease PostfxStateSyncCheck heals for blend — but on the PS
+		// layer, which that check does not cover.
+		// Fix: park-and-set. Raw SetPixelShader(NULL) forces the device to a
+		// known state (always a real write); RwD3D9SetPixelShader(NULL)
+		// re-seeds the RW cache to NULL; the hook's Set(MotionBlur_Burnout)
+		// is then a guaranteed cache miss -> real device write. The entry PS
+		// capture here (AddRef) is DIAGNOSTIC-ONLY — mbEntryPS has no readers
+		// outside the exit Release (the entry PS is deliberately NOT
+		// restored) — so the per-frame device Get is opt-in via diagLevel
+		// (first hit still probes once); the exit still forces BOTH layers
+		// back to NULL — the game's FFP HUD/text must not inherit a postfx
+		// shader.
+		{
+			bool psFirst = dbglog_once("mb_pssplit_first");
+			if(psFirst || g_diagLevel >= 1){
+				IDirect3DPixelShader9 *mbCurPS = NULL;
+				if(SUCCEEDED(dev->GetPixelShader(&mbCurPS))){
+					mbEntryPS = mbCurPS;	// AddRef held; released at the exit
+					if(mbCurPS != (IDirect3DPixelShader9*)MotionBlur_Burnout &&
+					   (psFirst || (g_diagLevel >= 1 && dbglog_throttle("mb_pssplit"))))
+						dbglog("[mb_pssplit] DrawMotionBlur: device PS %p != MotionBlur_Burnout %p BEFORE bind "
+							"(raw scene-phase writer left a foreign shader; un-parked bind would have elided)",
+							(void*)mbCurPS, MotionBlur_Burnout);
+				}
+			}
+			dev->SetPixelShader(NULL);		// raw park: device = known NULL (functional, unconditional)
+			RwD3D9SetPixelShader(NULL);		// cache park: RW cache = NULL (functional, unconditional)
+		}
 		overrideIm2dPixelShader = MotionBlur_Burnout;
+		PfBindPS(MotionBlur_Burnout, "IDR_MOTIONBLUR_BURNOUT(140)");
+		PfDraw(4, 2);
 		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, s_ffQuad, 4, s_ffQuadIdx, 6);
 		overrideIm2dPixelShader = nil;
 
@@ -6958,12 +4699,82 @@ CPostEffects::DrawMotionBlur(void)
 		}
 	}
 
-	// Cleanup texture stages
+	// Cleanup texture stages — paired with the binds above: s1/s2 unbind runs
+	// on BOTH the normal and __except paths (it sits after the handler), and
+	// the s1 sampler restore gates on velBound (what was actually written)
+	// instead of a fresh config read, so the set/restore pair cannot drift.
 	dev->SetTexture(1, NULL);
 	dev->SetTexture(2, NULL);
-	if(config->velocityBufferEnable){
+	if(velBound){
 		dev->SetSamplerState(1, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
 		dev->SetSamplerState(1, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+	}
+
+	// PS exit (font-safety): the draw's Im2D hook set MotionBlur_Burnout through
+	// RwD3D9SetPixelShader, so BOTH the RW PS cache and the device hold it when
+	// this pass ends. The next consumer of the pipeline is the game's FFP
+	// HUD/text, which must run with NO pixel shader — and a raw NULL alone
+	// would leave the cache on MotionBlur_Burnout (a later cache-gated
+	// Set(NULL) could then elide). Force both layers to NULL. The captured
+	// entry PS is deliberately NOT restored (FFP text must not inherit a
+	// postfx shader); the capture itself is diagnostic-only (mbEntryPS has no
+	// readers outside this Release) and is skipped at diagLevel=0 after the
+	// first-hit probe — mb_pssplit logs it when it was foreign.
+	dev->SetPixelShader(NULL);		// L3 raw: always a real write
+	RwD3D9SetPixelShader(NULL);		// L2 cache re-seed (+ device transition)
+	if(mbEntryPS){
+		mbEntryPS->Release();
+		mbEntryPS = NULL;
+	}
+
+	// Restore stage 0 to the captured ENTRY raster through all three layers.
+	// The park + front-buffer bind above overwrote the L1 cache AND the device.
+	// L1: park-and-set — park is guaranteed != the entry raster, so the final
+	//     Set is a real transition even if the draw left the same raster; the
+	//     L1 Set drives L2 (RW's texture-apply cache) and L3.
+	// L3: raw-pin the captured entry device texture, so no cache hit can leave
+	//     the device on pRasterFrontBuffer (= the "font quad samples the frame
+	//     buffer" leak). GetTexture AddRef is released after the receipt below.
+	{
+		RwRaster *whiteRas = (gpWhiteTexture && gpWhiteTexture->raster)
+			? gpWhiteTexture->raster : NULL;
+		RwRaster *entryRas = (RwRaster*)mbEntryS0;
+		RwRaster *parkRas = (entryRas == whiteRas) ? NULL : whiteRas;
+		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)parkRas);
+		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)entryRas);
+	}
+	if(mbEntryS0Dev)
+		dev->SetTexture(0, mbEntryS0Dev);	// raw L3 pin: entry texture
+
+	// mb_s0leak: what this pass leaves on stage 0 must equal the entry capture.
+	// A mismatch proves an incomplete restore (or a raw writer moved the device
+	// mid-pass) — the state that makes the following FFP font/HUD quads sample
+	// a foreign texture. Purely diagnostic (RwRenderStateGet + GetTexture
+	// AddRef/Release — reads only, no state writes): the whole probe is
+	// opt-in via diagLevel — first hit still probes once (one-shot receipt),
+	// then diagLevel>=1; the L3 comparison is skipped when the entry device
+	// texture was NULL (nothing to restore on that layer).
+	{
+		bool s0First = dbglog_once("mb_s0leak_first");
+		if(s0First || g_diagLevel >= 1){
+			void *exitS0 = NULL;
+			RwRenderStateGet(rwRENDERSTATETEXTURERASTER, &exitS0);
+			IDirect3DBaseTexture9 *exitS0Dev = NULL;
+			dev->GetTexture(0, &exitS0Dev);	// AddRef
+			bool rasOk = (exitS0 == mbEntryS0);
+			bool devOk = (mbEntryS0Dev == NULL) || ((void*)exitS0Dev == (void*)mbEntryS0Dev);
+			if(!rasOk || !devOk){
+				if(s0First || (g_diagLevel >= 1 && dbglog_throttle("mb_s0leak")))
+					dbglog("[mb_s0leak] DrawMotionBlur left s0 raster=%p devTex=%p but entry was raster=%p devTex=%p "
+						"(incomplete restore -> following font/HUD quads may sample a foreign texture)",
+						exitS0, (void*)exitS0Dev, mbEntryS0, (void*)mbEntryS0Dev);
+			}
+			if(exitS0Dev) exitS0Dev->Release();
+		}
+	}
+	if(mbEntryS0Dev){
+		mbEntryS0Dev->Release();
+		mbEntryS0Dev = NULL;
 	}
 
 	// Restore render states
@@ -6971,7 +4782,6 @@ CPostEffects::DrawMotionBlur(void)
 	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)TRUE);
 	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
 	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
-	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)NULL);
 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
 	RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
 
@@ -6988,13 +4798,37 @@ CPostEffects::DrawMotionBlur(void)
 static void
 DrawHeightFog(void)
 {
+	// No PF_SCOPE here (__try in function -> C2712); see DrawNormalBufferToTexture.
 	DBGLOG_ENTER("DrawHeightFog");
-	if(!config->heightFogEnable || !HeightFog)
+	// Gate log honesty + cutscene≠menu (see helper block at top of file): the
+	// old line printed the combined skip bool as "menu=", so cutscene frames
+	// logged menu=1 while the real menu flag was 0. HeightFog is scene
+	// atmosphere — it now RUNS during cutscenes. Depth input stays current:
+	// the INTZ DS is bound persistently by the depthhook vtable hook (not
+	// per-SSAO-run), so g_ssaoDepthTex holds this frame's depth even though
+	// DrawSSAO still early-returns on cutscene frames.
+	bool hfMenuSkip = PostfxMenuPauseOnly();
+	// Family E fix (2026-11-02-test11): heightFogDensity=0 is now OFF — the pass
+	// is a bit-exact no-op (no substitute 0.0015 density, no skyBot colour bleed,
+	// no UpdateFrontBuffer, no state writes). Previously INI density=0 was
+	// "sanitized" to a forced 0.0015 + skyBot tint = the grey veil in 6/14 shots.
+	bool hfRun = config->heightFogEnable && config->heightFogDensity > 0.0f &&
+		HeightFog && CPostEffects::pRasterFrontBuffer &&
+		g_ssaoDepthTex && !hfMenuSkip;
+	if(dbglog_throttle("pf_hf_gate"))
+		dbglog("[PF] HeightFog gate: enable=%d density=%.5f ps=%p fb=%p depth=%p menu=%d cutscene=%d -> %s",
+			config->heightFogEnable, config->heightFogDensity, HeightFog, (void*)CPostEffects::pRasterFrontBuffer,
+			(void*)g_ssaoDepthTex, (int)hfMenuSkip, (int)CCutsceneMgr__ms_running,
+			hfRun ? "RUN" : "SKIP");
+	if(!config->heightFogEnable || config->heightFogDensity <= 0.0f || !HeightFog)
 		return;
 	if(!CPostEffects::pRasterFrontBuffer)
 		return;
-	if(IsGameInMenuOrPaused())
+	if(hfMenuSkip)
 		return;
+	static bool s_csFired_hf = false;
+	if(CCutsceneMgr__ms_running)
+		CutscenePostfxEnabledLog("HeightFog", &s_csFired_hf);
 
 	IDirect3DDevice9 *dev = d3d9device;
 	if(!dev)
@@ -7018,15 +4852,16 @@ DrawHeightFog(void)
 	// repaints the camera from that stale buffer, which made enabling height
 	// fog look like it was replacing the colour filter / tonemapper output.
 	CPostEffects::UpdateFrontBuffer();
+	if(!PfFrontBufferReady("height fog"))
+		return;
 
 	// Effective fog params — sanitize the values skygfx.h's comments promised
-	// but readIni never defaulted (INI ships heightFogEnable only, so falloff
-	// read as 0 => heightFactor == 1.0 at EVERY height, and menu-dragged
-	// density 0.042 => 98% fog at 100m: a full-screen blue wash stacked on top
-	// of the game's own distance fog).
+	// but readIni never defaulted. density<=0 never reaches here (gate returns
+	// above: density=0 is OFF, not a substitute default — Family E fix). Only
+	// the upper cap remains: menu-dragged density 0.042 => 98% fog at 100m was
+	// a full-screen blue wash stacked on the game's own distance fog.
 	CColourSet &tc = CTimeCycle__m_CurrentColours;
 	float fogDensity = config->heightFogDensity;
-	if(fogDensity <= 0.0f) fogDensity = 0.0015f;   // documented default
 	if(fogDensity > 0.004f) fogDensity = 0.004f;    // never a near-opaque wall
 	float fogFalloff = config->heightFogHeightFalloff;
 	if(fogFalloff <= 0.0f) fogFalloff = 0.1f;       // 0 = no height falloff anywhere
@@ -7147,6 +4982,11 @@ DrawHeightFog(void)
 		// hardcoded 2048² quad whose /2048 UVs misalign every screen-sized buffer)
 		SetupFullscreenQuad((float)w, (float)h);
 		overrideIm2dPixelShader = HeightFog;
+		if(dbglog_throttle("pf_hf_bind"))
+			dbglog("[PF] HeightFog bind: ps=%p(IDR_HEIGHTFOG 250) s0=cameraRT s1=g_ssaoDepthTex out=cameraRT %dx%d",
+				HeightFog, w, h);
+		PfBindPS(HeightFog, "IDR_HEIGHTFOG(250)");
+		PfDraw(4, 2);
 		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, s_ffQuad, 4, s_ffQuadIdx, 6);
 		overrideIm2dPixelShader = nil;
 
@@ -7174,14 +5014,42 @@ DrawHeightFog(void)
 		}
 	} __except(EXCEPTION_EXECUTE_HANDLER){
 		overrideIm2dPixelShader = nil;	// SEH: the `= nil` reset in the __try above is skipped on fault
+		DWORD ex = GetExceptionCode();	// captured before any nested __try (see below)
 
-		dbglog("[PostFX] DrawHeightFog CRASHED exception=0x%08X", GetExceptionCode());
-		if(savedPSConstsValid)
-			dev->SetPixelShaderConstantF(0, savedPSConsts, 8);
-		DepthHook_Restore(); // Restore on bail to keep Suspend/Restore balanced
-		CPostEffects::ImmediateModeRenderStatesReStore();
-		if(rawGeomSaved)
-			RestoreRawGeomStates(rawGeom);
+		// Nested guard: this handler re-enters D3D/RW (ImmediateMode ReStore,
+		// DepthHook_Restore, RwRenderStateSet), and a lost/device-faulted device
+		// can fault AGAIN inside __except -> unhandled crash outside any filter.
+		// POD-only locals inside (C2712); inner filter swallows + throttled-logs.
+		__try {
+			if(dbglog_throttle("hf_crash"))
+				dbglog("[PostFX] DrawHeightFog CRASHED exception=0x%08X", ex);
+
+			// RW-cache re-push (doctrine): the raw restores below are NOT enough —
+			// the game's Im2D re-emits the L2-cached states at draw time, so every
+			// state this pass changed via RwRenderStateSet (:3611-3618) must be
+			// re-pushed through the cache too. Mirrors the normal-path cleanup
+			// (:3701-3706) and the DrawGodRays __except (rw cache first, raw after).
+			RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
+			RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)TRUE);
+			RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
+			RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
+			RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)NULL);
+			RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
+
+			if(savedPSConstsValid)
+				dev->SetPixelShaderConstantF(0, savedPSConsts, 8);
+			// SEH: mirror the normal path's s1 cleanup (:3700) — unbind the INTZ
+			// depth tex BEFORE DepthHook_Restore re-binds it as DS (feedback-lock
+			// guard, same ordering as the normal path).
+			dev->SetTexture(1, NULL);
+			DepthHook_Restore(); // Restore on bail to keep Suspend/Restore balanced
+			CPostEffects::ImmediateModeRenderStatesReStore();
+			if(rawGeomSaved)
+				RestoreRawGeomStates(rawGeom);
+		} __except(EXCEPTION_EXECUTE_HANDLER){
+			if(dbglog_throttle("hf_crash2"))
+				dbglog("[PostFX] DrawHeightFog cleanup re-faulted exception=0x%08X", GetExceptionCode());
+		}
 	}
 
 	// Sync front buffer so god rays can read the fogged scene
@@ -7191,13 +5059,28 @@ DrawHeightFog(void)
 static void
 DrawGodRays(void)
 {
+	// No PF_SCOPE here (__try in function -> C2712); see DrawNormalBufferToTexture.
 	DBGLOG_ENTER("DrawGodRays");
+	// Gate log honesty + cutscene≠menu (see helper block at top of file):
+	// same mislabel as HeightFog — combined skip bool printed as "menu=".
+	// GodRays is scene lighting — it now RUNS during cutscenes.
+	bool grMenuSkip = PostfxMenuPauseOnly();
+	bool grRun = config->godRaysEnable && GodRays && CPostEffects::pRasterFrontBuffer &&
+		!grMenuSkip;
+	if(dbglog_throttle("pf_gr_gate"))
+		dbglog("[PF] GodRays gate: enable=%d ps=%p fb=%p menu=%d cutscene=%d -> %s",
+			config->godRaysEnable, GodRays, (void*)CPostEffects::pRasterFrontBuffer,
+			(int)grMenuSkip, (int)CCutsceneMgr__ms_running,
+			grRun ? "RUN" : "SKIP");
 	if(!config->godRaysEnable || !GodRays)
 		return;
 	if(!CPostEffects::pRasterFrontBuffer)
 		return;
-	if(IsGameInMenuOrPaused())
+	if(grMenuSkip)
 		return;
+	static bool s_csFired_gr = false;
+	if(CCutsceneMgr__ms_running)
+		CutscenePostfxEnabledLog("GodRays", &s_csFired_gr);
 
 	IDirect3DDevice9 *dev = d3d9device;
 	if(!dev)
@@ -7216,6 +5099,8 @@ DrawGodRays(void)
 	// (pRasterFrontBuffer may still hold the pre-tonemap intermediate if the
 	// earlier effects were disabled this frame).
 	CPostEffects::UpdateFrontBuffer();
+	if(!PfFrontBufferReady("god rays"))
+		return;
 
 	// Get sun direction
 	float sunD[3];
@@ -7255,83 +5140,197 @@ DrawGodRays(void)
 	// Pass breadcrumb: fires ONLY on frames where the sun gate above passed and
 	// the ray quad is about to be drawn — if a covered-frame forensics pass ever
 	// sees this line immediately before the symptom, this is the pass.
+	// (H1 fix: no blend claim here — the blend SET log below, emitted at the
+	// actual state writes, is the single source of truth for "blend was set".)
 	if(dbglog_throttle("grad_draw"))
-		dbglog("[PostFX] DrawGodRays: sun=(%.2f,%.2f) exp=%.4f dec=%.2f shader=%p blend=ONE/ONE(rw+raw)",
+		dbglog("[PostFX] DrawGodRays: sun=(%.2f,%.2f) exp=%.4f dec=%.2f shader=%p",
 			sunScreenX, sunScreenY, config->godRaysExposure,
 			config->godRaysDecay, GodRays);
 
+	// POD locals only from here — the function contains __try (C2712), and
+	// these must stay visible to the __except cleanup below.
 	DWORD rawGeom[9];
-	bool rawGeomSaved = SaveRawGeomStates(rawGeom); // no depth hook in this pass
-	CPostEffects::ImmediateModeRenderStatesStore();
-	CPostEffects::ImmediateModeRenderStatesSet();
-	RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
-	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
-	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
+	bool rawGeomSaved = false;
+	bool grBlendSetLogged = false;
 
-	// Enable additive blending — through the RW cache FIRST, raw mirror after.
-	// Doctrine (same failure mode the SSAO multiply documents): RwIm2D re-emits
-	// its cached rwRENDERSTATEVERTEXALPHAENABLE (just set FALSE above) at draw
-	// time, which rewrites D3DRS_ALPHABLENDENABLE=FALSE over these raw sets.
-	// The draw then degrades to a REPLACE of the whole screen with the shader's
-	// ray-only output (GodRays.hlsl deliberately emits NO scene colour for the
-	// additive contract) = full-screen black with bright streaks along the
-	// sun-facing edges, OUTDOORS ONLY — the sun-on-screen gate below returns
-	// early whenever the sun is behind the camera or off-screen, which is why
-	// interiors looked perfect.
-	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
-	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDONE);
-	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDONE);
-	RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-	RwD3D9SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
-	RwD3D9SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
+	__try {
+		rawGeomSaved = SaveRawGeomStates(rawGeom); // no depth hook in this pass
+		CPostEffects::ImmediateModeRenderStatesStore();
+		CPostEffects::ImmediateModeRenderStatesSet();
+		RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+		RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
+		RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
+		RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
+		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
+		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
 
-	// s0: scene color (front buffer)
-	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)CPostEffects::pRasterFrontBuffer);
+		// Enable additive blending — through the RW cache FIRST, raw mirror after.
+		// Doctrine (same failure mode the SSAO multiply documents): RwIm2D re-emits
+		// its cached rwRENDERSTATEVERTEXALPHAENABLE (just set FALSE above) at draw
+		// time, which rewrites D3DRS_ALPHABLENDENABLE=FALSE over these raw sets.
+		// The draw then degrades to a REPLACE of the whole screen with the shader's
+		// ray-only output (GodRays.hlsl deliberately emits NO scene colour for the
+		// additive contract) = full-screen black with bright streaks along the
+		// sun-facing edges, OUTDOORS ONLY — the sun-on-screen gate below returns
+		// early whenever the sun is behind the camera or off-screen, which is why
+		// interiors looked perfect.
+		// H1 fix: paired blend logging. grBlendSetLogged records whether the SET
+		// log fired this invocation; the RESTORE log at the end of the pass is
+		// gated on this same bool — NOT on an independent throttle tag — so a
+		// restore log fires whenever a set log fired (1:1 by construction, no
+		// throttle drift). Both live after every gate above, so a disabled pass
+		// (godRaysEnable=0) can never emit either one. Declared before __try so
+		// both the __except path and the restore log below can see it.
+		grBlendSetLogged = dbglog_throttle("pf_gr_set");
+		if(grBlendSetLogged)
+			dbglog("[PF] GodRays: blend ONE/ONE SET (rw cache + RwD3D9 + raw), sun=(%.2f,%.2f)",
+				sunScreenX, sunScreenY);
+		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
+		// test-11 lane: 3-layer park-and-set pairing for the blend family
+		// (doctrine: pipelinecommon.cpp:1144 — L1 park->target, L2 park->target,
+		// L3 unconditional raw pin). The old entry wrote L1+L2 only: if both
+		// caches already held ONE/ONE from a prior leak while the device held
+		// something else, both sets no-op'd and the quad blended with a stale
+		// device factor; and no raw pin meant a foreign L3 writer between the
+		// set and the draw went uncorrected. Park values are the normal world
+		// blend (SRCALPHA/INVSRCALPHA) — != the ONE/ONE target on every leg, so
+		// each cache takes a guaranteed real transition. Exit-side restore is
+		// already 3-layer paired via RestoreRawGeomStates (snapshot bracket).
+		RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
+		RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDONE);
+		RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
+		RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDONE);
+		pipeL2ParkSet(D3DRS_ALPHABLENDENABLE, FALSE, TRUE);
+		pipeL2ParkSet(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA, D3DBLEND_ONE);
+		pipeL2ParkSet(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA, D3DBLEND_ONE);
+		// L3 raw pins — authoritative device writes (applied[]-gated flush can
+		// never repair a device a foreign raw writer moved).
+		pipeL3Set(D3DRS_ALPHABLENDENABLE, TRUE);
+		pipeL3Set(D3DRS_SRCBLEND, D3DBLEND_ONE);
+		pipeL3Set(D3DRS_DESTBLEND, D3DBLEND_ONE);
 
-	// c0: sun screen position
-	float c0[4] = { sunScreenX, sunScreenY, 0.0f, 0.0f };
-	RwD3D9SetPixelShaderConstant(0, c0, 1);
+		// s0: scene color (front buffer)
+		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)CPostEffects::pRasterFrontBuffer);
 
-	// c1: ray params — sanitize: config may be zero-initialised (no INI key),
-	// which previously collapsed the effect to a pure additive frame double.
-	float grExposure = (config->godRaysExposure > 0.0f) ? config->godRaysExposure : 0.0034f;
-	float grDecay    = (config->godRaysDecay > 0.0f && config->godRaysDecay <= 1.0f) ? config->godRaysDecay : 1.0f;
-	float grDensity  = (config->godRaysDensity > 0.0f) ? config->godRaysDensity : 0.84f;
-	float grWeight   = (config->godRaysWeight > 0.0f) ? config->godRaysWeight : 1.0f;
-	float c1[4] = { grExposure, grDecay, grDensity, grWeight };
-	RwD3D9SetPixelShaderConstant(1, c1, 1);
+		// c0: sun screen position
+		float c0[4] = { sunScreenX, sunScreenY, 0.0f, 0.0f };
+		RwD3D9SetPixelShaderConstant(0, c0, 1);
 
-	// c2: num samples
-	float numSamples = (float)config->godRaysNumSamples;
-	if(config->godRaysNumSamples < 1) numSamples = 20.0f;
-	float c2[4] = { numSamples, 0.0f, 0.0f, 0.0f };
-	RwD3D9SetPixelShaderConstant(2, c2, 1);
+		// c2: num samples — also clamped to the shader's compile-time loop
+		// bound (GodRays.hlsl:56 `for(int i = 0; i < 20; i++)`): a hand-edited
+		// INI value above 20 would make the CPU-side energy bound below assume
+		// more accumulation than the shader actually performs.
+		float numSamples = (float)config->godRaysNumSamples;
+		if(config->godRaysNumSamples < 1) numSamples = 20.0f;
+		if(numSamples > 20.0f) numSamples = 20.0f;
+		float c2[4] = { numSamples, 0.0f, 0.0f, 0.0f };
 
-	// Render fullscreen quad — SEH-guarded so the override clears on fault too.
-	guardedIm2DRender(GodRays, rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6, "godrays");
+		// c1: ray params — sanitize: config may be zero-initialised (no INI key),
+		// which previously collapsed the effect to a pure additive frame double.
+		float grExposure = (config->godRaysExposure > 0.0f) ? config->godRaysExposure : 0.0034f;
+		float grDecay    = (config->godRaysDecay > 0.0f && config->godRaysDecay <= 1.0f) ? config->godRaysDecay : 1.0f;
+		float grDensity  = (config->godRaysDensity > 0.0f) ? config->godRaysDensity : 0.84f;
+		float grWeight   = (config->godRaysWeight > 0.0f) ? config->godRaysWeight : 1.0f;
 
-	// Cleanup — push the blend factors back through BOTH layers: the rw cache
-	// now owns ONE/ONE for this pass, and leaving it there would leak additive
-	// blending into the next draw that re-emits cached states.
-	RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
-	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
-	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)TRUE);
-	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
-	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
-	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)NULL);
-	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
-	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
-	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
-	RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
+		// test-11 white-blowout lane: BOUND the additive accumulation. This pass
+		// draws ONE/ONE onto the back buffer, and the shader's ray sum samples
+		// the FRONT BUFFER (post-tonemap, so every sample is <= 1.0 per channel).
+		// Worst-case per-pixel additive contribution is therefore
+		//   exposure * weight * sum(decay^i, i=0..N-1)      (sunVis <= 1 in-shader)
+		// With decay=1.0 the geometric sum is N, so a bright-fog scene (weather
+		// 9->2, fog=-29, cloud=1.00 — test-11 findings) turns a large exposure/
+		// weight config into a full-screen white add on an already-near-white
+		// frame. Scale exposure+weight down UNIFORMLY when the worst case
+		// exceeds the cap: ray shape/falloff/intent preserved, saturation made
+		// impossible. Defaults (0.0034 * 1.0 * 20 = 0.068) sit far below the cap
+		// and are untouched. NaN-safe: the sanitize above rejects NaN config
+		// (all comparisons false -> defaults), and grWorst > cap is false for NaN.
+		float grGeoSum = (grDecay >= 1.0f)
+			? numSamples
+			: (1.0f - powf(grDecay, numSamples)) / max(1.0f - grDecay, 1e-7f);
+		float grWorst = grExposure * grWeight * grGeoSum;
+		const float kGRAdditiveCap = 0.30f;
+		if(grWorst > kGRAdditiveCap){
+			float grScale = kGRAdditiveCap / max(grWorst, 1e-7f);
+			grExposure *= grScale;
+			grWeight  *= grScale;
+			if(dbglog_throttle("gr_bound"))
+				dbglog("[PF] GodRays: additive energy bound applied worst=%.4f -> cap=%.2f "
+					"(exp=%.5f w=%.3f N=%.0f decay=%.2f)",
+					grWorst, kGRAdditiveCap, grExposure, grWeight, numSamples, grDecay);
+		}
+		float c1[4] = { grExposure, grDecay, grDensity, grWeight };
+		RwD3D9SetPixelShaderConstant(1, c1, 1);
+		RwD3D9SetPixelShaderConstant(2, c2, 1);
 
-	CPostEffects::ImmediateModeRenderStatesReStore();
-	if(rawGeomSaved){
-		RestoreRawGeomStates(rawGeom);
-		rawGeomSaved = false;
+		// Render fullscreen quad — SEH-guarded so the override clears on fault too.
+		PfBindPS(GodRays, "IDR_GODRAYS(251)");
+		PfDraw(4, 2);
+		guardedIm2DRender(GodRays, rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6, "godrays");
+
+		// Cleanup — blend OFF through the RW cache FIRST (guaranteed transition:
+		// this pass set VERTEXALPHA TRUE on entry, so the FALSE set always moves
+		// and re-pushes L2+L3), then the factors back through the cache. The old
+		// order — L2-only ALPHABLENDENABLE FALSE first, rw VERTEXALPHA TRUE last
+		// — left the device blend OFF under a cache that said ON: the TRUE
+		// no-oped against the cache this pass set at entry, so later consumers
+		// whose TRUE set no-oped drew REPLACE (black squares). No TRUE re-set
+		// afterwards: what follows (ImmediateModeRenderStatesReStore +
+		// RestoreRawGeomStates) restores the pre-pass snapshot through all three
+		// layers, and every consumer pass sets its own blend state on entry.
+		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
+		RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
+		RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)TRUE);
+		RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
+		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
+		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)NULL);
+		RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
+		RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
+		RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
+
+		CPostEffects::ImmediateModeRenderStatesReStore();
+		if(rawGeomSaved){
+			RestoreRawGeomStates(rawGeom);
+			rawGeomSaved = false;
+		}
+	} __except(EXCEPTION_EXECUTE_HANDLER){
+		// Fault-safety: run the SAME cleanup sequence as the normal path so a
+		// fault in the state-set/draw span can't leak blend ONE/ONE + ZWRITE
+		// FALSE + ALPHATEST FALSE into the next frame's world pass.
+		DWORD ex = GetExceptionCode();	// captured before any nested __try (see below)
+		// Nested guard: the cleanup below re-enters D3D/RW (device-lost can
+		// re-fault inside __except -> unhandled crash outside any filter).
+		// POD-only locals inside (C2712); inner filter swallows + throttled-logs.
+		__try {
+			if(dbglog_throttle("gr_crash"))
+				dbglog("[PostFX] DrawGodRays CRASHED exception=0x%08X", ex);
+			RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
+			RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
+			RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)TRUE);
+			RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
+			RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
+			RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)NULL);
+			RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
+			RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
+			RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
+			CPostEffects::ImmediateModeRenderStatesReStore();
+			if(rawGeomSaved)
+				RestoreRawGeomStates(rawGeom);
+		} __except(EXCEPTION_EXECUTE_HANDLER){
+			if(dbglog_throttle("gr_crash2"))
+				dbglog("[PostFX] DrawGodRays cleanup re-faulted exception=0x%08X", GetExceptionCode());
+		}
+		return;
 	}
+	// H1 fix: restore log gated on the set-log bool, not its own throttle tag.
+	// Fires iff the SET log fired above, AFTER the full 3-layer restore has
+	// completed (rw cache OFF + SRCALPHA/INVSRCALPHA, ImmediateMode ReStore,
+	// raw snapshot ReStore incl. ALPHABLENDENABLE/SRCBLEND/DESTBLEND), so the
+	// line is always truthful when it appears. (Fault path: the __except above
+	// returns after cleanup, so a crashing frame logs CRASHED instead of the
+	// restore line.)
+	if(grBlendSetLogged)
+		dbglog("[PF] GodRays: blend RESTORED (rw cache OFF + SRCALPHA/INVSRCALPHA + raw snapshot ReStore, all 3 layers)");
 }
 
 void (*CPostEffects::Initialise_orig)(void);
@@ -7361,6 +5360,13 @@ CPostEffects::Initialise_skygfx(void*)
 	diag_registerScope("DrawVelocityBuffer", (void*)DrawVelocityBuffer);
 	diag_registerScope("DrawHeightFog", (void*)DrawHeightFog);
 	diag_registerScope("DrawGodRays", (void*)DrawGodRays);
+	diag_registerScope("DrawSunShafts", (void*)DrawSunShafts);
+	diag_registerScope("DrawDOF", (void*)DrawDOF);
+	diag_registerScope("DrawBloom", (void*)DrawBloom);
+	diag_registerScope("DrawChromaticAberration", (void*)DrawChromaticAberration);
+	diag_registerScope("DrawFilmGrain", (void*)DrawFilmGrain);
+	diag_registerScope("DrawVignette", (void*)DrawVignette);
+	diag_registerScope("DrawFXAA3", (void*)DrawFXAA3);
 	diag_registerScope("DrawNormalBufferToTexture", (void*)DrawNormalBufferToTexture);
 	diag_registerScope("DrawPipeChain", (void*)DrawPipeChain);
 	diag_registerScope("RenderIBLBuffer", (void*)RenderIBLBuffer);
@@ -7371,202 +5377,4 @@ CPostEffects::Initialise_skygfx(void*)
 	grainRaster = RwRasterCreate(64, 64, 32, rwRASTERTYPETEXTURE | rwRASTERFORMAT8888);
 	dbglog("  grain raster=%p", grainRaster);
 	return true;
-}
-
-
-// Colorcycle stuff, partly taken from NTAuthority...at least originally
-
-class CFileMgr
-{
-public:
-	static void* OpenFile(const char* filename, const char* mode);
-
-	static void  CloseFile(void* file);
-};
-
-class CFileLoader
-{
-public:
-	static char* LoadLine(void* file);
-};
-
-WRAPPER void* CFileMgr::OpenFile(const char* filename, const char* mode) { EAXJMP(0x538900); }
-WRAPPER void  CFileMgr::CloseFile(void* file) { EAXJMP(0x5389D0); }
-WRAPPER char* CFileLoader::LoadLine(void* file) { EAXJMP(0x536F80); }
-
-static int &CTimeCycle__m_ExtraColourWeatherType = *(int*)0xB79E40;
-static int &CTimeCycle__m_ExtraColour = *(int*)0xB79E44;
-static int &CTimeCycle__m_bExtraColourOn = *(int*)0xB7C484;
-static float &CTimeCycle__m_ExtraColourInter = *(float*)0xB79E3C;
-static float &CWeather__UnderWaterness = *(float*)0xC8132C;
-static float &CWeather__InTunnelness = *(float*)0xC81334;
-static int &tunnelWeather = *(int*)0x8CDEE0;
-
-
-// 24 instead of NUMHOURS because we might be using timecycle_24h with extended extra colour hours
-Grade Colorcycle::redGrade[24][NUMWEATHERS];
-Grade Colorcycle::greenGrade[24][NUMWEATHERS];
-Grade Colorcycle::blueGrade[24][NUMWEATHERS];
-bool Colorcycle::initialised;
-
-GradeColorset::GradeColorset(int h, int w)
-{
-	this->red = Colorcycle::redGrade[h][w];
-	this->green = Colorcycle::greenGrade[h][w];
-	this->blue = Colorcycle::blueGrade[h][w];
-}
-
-void
-GradeColorset::Interpolate(GradeColorset *a, GradeColorset *b, float fa, float fb)
-{
-	this->red.r = fa * a->red.r + fb * b->red.r;
-	this->red.g = fa * a->red.g + fb * b->red.g;
-	this->red.b = fa * a->red.b + fb * b->red.b;
-	this->red.a = fa * a->red.a + fb * b->red.a;
-	this->green.r = fa * a->green.r + fb * b->green.r;
-	this->green.g = fa * a->green.g + fb * b->green.g;
-	this->green.b = fa * a->green.b + fb * b->green.b;
-	this->green.a = fa * a->green.a + fb * b->green.a;
-	this->blue.r = fa * a->blue.r + fb * b->blue.r;
-	this->blue.g = fa * a->blue.g + fb * b->blue.g;
-	this->blue.b = fa * a->blue.b + fb * b->blue.b;
-	this->blue.a = fa * a->blue.a + fb * b->blue.a;
-}
-
-static int timecycleHours[] = { 0, 5, 6, 7, 12, 19, 20, 22, 24 };
-
-void
-Colorcycle::Update(GradeColorset *colorset)
-{
-	float time;
-	int curHourSel, nextHourSel;
-	int curHour, nextHour;
-	float timeInterp, invTimeInterp, weatherInterp, invWeatherInterp;
-
-	time = CClock__ms_nGameClockMinutes / 60.0f
-	     + CClock__ms_nGameClockSeconds / 3600.0f
-	     + CClock__ms_nGameClockHours;
-	if(time >= 23.999f)
-		time = 23.999f;
-
-	for(curHourSel = 0; time >= timecycleHours[curHourSel+1]; curHourSel++);
-	nextHourSel = (curHourSel + 1) % NUMHOURS;
-	curHour = timecycleHours[curHourSel];
-	nextHour = timecycleHours[curHourSel+1];
-	timeInterp = (time - curHour) / (float)(nextHour - curHour);
-	invTimeInterp = 1.0f - timeInterp;
-	weatherInterp = CWeather__InterpolationValue;
-	invWeatherInterp = 1.0f - weatherInterp;
-	GradeColorset curold(curHourSel, CWeather__OldWeatherType);
-	GradeColorset nextold(nextHourSel, CWeather__OldWeatherType);
-	GradeColorset curnew(curHourSel, CWeather__NewWeatherType);
-	GradeColorset nextnew(nextHourSel, CWeather__NewWeatherType);
-
-	// Skipping smog weather handling
-	GradeColorset oldInterp, newInterp;
-	oldInterp.Interpolate(&curold, &nextold, invTimeInterp, timeInterp);
-	newInterp.Interpolate(&curnew, &nextnew, invTimeInterp, timeInterp);
-	colorset->Interpolate(&oldInterp, &newInterp, invWeatherInterp, weatherInterp);
-
-	float inc = CTimer__ms_fTimeStep/120.0f;
-	if(CTimeCycle__m_bExtraColourOn){
-		CTimeCycle__m_ExtraColourInter += inc;
-		if(CTimeCycle__m_ExtraColourInter > 1.0f)
-			CTimeCycle__m_ExtraColourInter = 1.0f;
-	}else{
-		CTimeCycle__m_ExtraColourInter -= inc;
-		if(CTimeCycle__m_ExtraColourInter < 0.0f)
-			CTimeCycle__m_ExtraColourInter = 0.0f;
-	}
-	if(CTimeCycle__m_ExtraColourInter > 0.0f){
-		GradeColorset extraset(CTimeCycle__m_ExtraColour, CTimeCycle__m_ExtraColourWeatherType);
-		colorset->Interpolate(colorset, &extraset, 1.0f-CTimeCycle__m_ExtraColourInter, CTimeCycle__m_ExtraColourInter);
-	}
-
-	if(CWeather__UnderWaterness > 0.0f){
-		GradeColorset curuwset(curHourSel, 20);
-		GradeColorset nextuwset(nextHourSel, 20);
-		GradeColorset tmpset;
-		tmpset.Interpolate(&curuwset, &nextuwset, invTimeInterp, timeInterp);
-		colorset->Interpolate(colorset, &tmpset, 1.0f-CWeather__UnderWaterness, CWeather__UnderWaterness);
-	}
-
-	if(CWeather__InTunnelness > 0.0f){
-		GradeColorset tunnelset(tunnelWeather % NUMHOURS, tunnelWeather / NUMHOURS + EXTRASTART);
-		colorset->Interpolate(colorset, &tunnelset, 1.0f-CWeather__InTunnelness, CWeather__InTunnelness);
-	}
-
-}
-
-void
-Colorcycle::Initialise(void)
-{
-	int have24h = ModuleList().Get(L"timecycle24") != 0;
-	for(int i = 0; i < 24; i++)
-		for(int j = 0; j < NUMHOURS; j++){
-			redGrade[j][i].r = 1.0f;
-			redGrade[j][i].g = 0.0f;
-			redGrade[j][i].b = 0.0f;
-			redGrade[j][i].a = 0.0f;
-			greenGrade[j][i].r = 0.0f;
-			greenGrade[j][i].g = 1.0f;
-			greenGrade[j][i].b = 0.0f;
-			greenGrade[j][i].a = 0.0f;
-			blueGrade[j][i].r = 0.0f;
-			blueGrade[j][i].g = 0.0f;
-			blueGrade[j][i].b = 1.0f;
-			blueGrade[j][i].a = 0.0f;
-		}
-	void *f = CFileMgr::OpenFile("data/colorcycle.dat", "r");
-	if(f){
-		char *line;
-		for(int i = 0; i < NUMWEATHERS; i++){
-			for(int j = 0; j < NUMHOURS; j++){
-				line = CFileLoader::LoadLine(f);
-				sscanf(line, "%f %f %f %f %f %f %f %f %f %f %f %f",
-				       &redGrade[j][i].r, &redGrade[j][i].g,
-				       &redGrade[j][i].b, &redGrade[j][i].a,
-				       &greenGrade[j][i].r, &greenGrade[j][i].g,
-				       &greenGrade[j][i].b, &greenGrade[j][i].a,
-				       &blueGrade[j][i].r, &blueGrade[j][i].g,
-				       &blueGrade[j][i].b, &blueGrade[j][i].a);
-				float sum;
-				sum = redGrade[j][i].r + redGrade[j][i].g + redGrade[j][i].b;
-				if(sum > 1.7f)
-					redGrade[j][i].a -= (sum - 1.7f)*0.13f;
-				sum = greenGrade[j][i].r + greenGrade[j][i].g + greenGrade[j][i].b;
-				if(sum > 1.7f)
-					greenGrade[j][i].a -= (sum - 1.7f)*0.13f;
-				sum = blueGrade[j][i].r + blueGrade[j][i].g + blueGrade[j][i].b;
-				if(sum > 1.7f)
-					blueGrade[j][i].a -= (sum - 1.7f)*0.13f;
-
-
-				redGrade[j][i].r /= 1.5f;
-				redGrade[j][i].g /= 1.5f;
-				redGrade[j][i].b /= 1.5f;
-				redGrade[j][i].a /= 1.5f;
-				greenGrade[j][i].r /= 1.5f;
-				greenGrade[j][i].g /= 1.5f;
-				greenGrade[j][i].b /= 1.5f;
-				greenGrade[j][i].a /= 1.5f;
-				blueGrade[j][i].r /= 1.5f;
-				blueGrade[j][i].g /= 1.5f;
-				blueGrade[j][i].b /= 1.5f;
-				blueGrade[j][i].a /= 1.5f;
-				//printf("%f %f %f %f X %f %f %f %f X %f %f %f %f\n",
-				//	redGrade[j][i].r, redGrade[j][i].g, redGrade[j][i].b, redGrade[j][i].a,
-				//	greenGrade[j][i].r, greenGrade[j][i].g, greenGrade[j][i].b, greenGrade[j][i].a,
-				//	blueGrade[j][i].r, blueGrade[j][i].g, blueGrade[j][i].b, blueGrade[j][i].a);
-			}
-		}
-		if(have24h)
-			for(int j = 0; j < NUMHOURS; j++){
-				redGrade[j+8][21] = redGrade[j][22];
-				greenGrade[j+8][21] = greenGrade[j][22];
-				blueGrade[j+8][21] = blueGrade[j][22];
-			}
-		CFileMgr::CloseFile(f);
-	}
-	initialised = true;
 }

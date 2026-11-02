@@ -131,7 +131,7 @@ movzx eax, byte [ebx+0x23]
 
 ### 0x7F39F0 Identity — CRITICAL
 
-`normalmap_plugin.cpp:771` defines:
+The retired `normalmap_plugin.cpp:771` (no longer in the tree; kept as history) defined:
 ```cpp
 #define RwTexDictionaryFindNamedTexture(dict, name) \
     ((RwTexture *(__cdecl *)(RwTexDictionary *, char *))0x7F39F0)(dict, name)

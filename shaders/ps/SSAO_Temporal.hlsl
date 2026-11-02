@@ -21,6 +21,14 @@ uniform sampler2D noiseTexture   : register(s1);
 uniform sampler2D normalTexture  : register(s2);
 uniform sampler2D velocityTexture : register(s3);
 uniform sampler2D historyTexture : register(s4);
+// --- FORWARD+ SLOT ALIASING (do not "fix" by renumbering here) ---------------
+// s5/s6 here are PASS-EXCLUSIVE with Forward+ s5/s6/s7. They alias the same
+// stage slots used by the Forward+ atlas, so SSAO_Temporal and ANY Forward+
+// consumer must never be bound/sampled in the same pass. The current draws are
+// separate passes, so there is no same-draw collision today. If the CPU side
+// (src/render/postfx_ssao.cpp) needs both in one pass, it must move these binds
+// to free slots first; changing the register numbers in this shader alone would
+// desync it from its own CPU binder.
 uniform sampler2D prevDepthTexture : register(s5);
 uniform sampler2D prevNormalTexture : register(s6);
 
@@ -53,16 +61,9 @@ float3 GetViewPos(float2 texCoord, float depth)
     return float3(viewXY, viewZ);
 }
 
-// Exact inverse of GetViewPos (same corrected math as SSAO.hlsl): divide by
-// projInfo.xy AND un-flip y. The old samplePos.xy/samplePos.z here fetched
-// every occlusion sample from a mirrored, projection-scaled wrong texel.
-float2 ProjectToUV(float3 viewPos)
-{
-    float invZ = 1.0 / max(viewPos.z, 1e-7);
-    float nx = viewPos.x * invZ / max(projInfo.x, 1e-7);
-    float ny = viewPos.y * invZ / max(projInfo.y, 1e-7);
-    return float2(nx * 0.5 + 0.5, 0.5 - ny * 0.5);
-}
+// ProjectToUV (exact GetViewPos inverse) moved verbatim to SSAOCommon.hlsl
+// (shared with SSAO.hlsl).
+#include "../include/SSAOCommon.hlsl"
 
 // ---------------------------------------------------------------------------
 // Decode normal from [0,1] -> [-1,1]

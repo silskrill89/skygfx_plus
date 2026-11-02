@@ -5,19 +5,19 @@
 ## Overview
 All features are configured via `skygfx.ini`. Multiple INI files supported (`skygfx.ini`, `skygfx.1.ini` through `skygfx.9.ini`). All keys live under the `[SkyGfx]` section.
 
-INI parsing happens in two locations:
-- `config.cpp` — base configuration (legacy aap/junior keys)
-- `main.cpp::refreshIni()` — unified pipeline, quality presets, and additional keys
+INI parsing happens in `src/core/main.cpp`:
+- `readIniFile()` — base configuration and per-slot keys
+- `refreshIni()` — unified pipeline, quality presets, and additional keys
 
 ## Pipeline Selection
 
 | Key | Type | Default | Options | Notes |
 |-----|------|---------|---------|-------|
 | `pipeline` | string | `PBR` | `PBR`, `PS2`, `Xbox`, `Mobile`, `GTAIV` | Locks building/vehicle pipes to preset. Parsed in main.cpp. |
-| `qualityPreset` | int | `3` | `0`=LOW, `1`=MEDIUM, `2`=HIGH, `3`=ULTRA | Sets feature defaults. Individual INI values override. Parsed in main.cpp. |
+| `qualityPreset` | int | `3` | `0`=LOW, `1`=MEDIUM, `2`=HIGH, `3`=ULTRA | Sets feature defaults. Tiers 0-2 also write pipes only when no mode owns them; tier 3 is feature-only (no pipe writes). Individual INI values override. Parsed in main.cpp. |
 | `buildingPipe` | string | *(from pipeline)* | `PS2`, `Xbox`, `GTAIV`, `PBR` | Explicit override of pipeline mapping. Parsed in main.cpp. |
 | `vehiclePipe` | string | *(from pipeline)* | `PS2`, `PC`, `Xbox`, `Specular`, `Neo`, `Leeds`, `VCS`, `Mobile`, `Env`, `GTAIV`, `Modern` | Explicit override of pipeline mapping. Parsed in main.cpp. |
-| `colorFilter` | string | `PC` | `None`, `PS2`, `PC`, `Mobile`, `III`, `VC`, `VCS`, `GTAIV`, `Modern` | Color filter mode. Parsed in main.cpp. |
+| `colorFilter` | string | `PC` (map default; PBR forces `Modern`) | `None`, `PS2`, `PC`, `Mobile`, `III`, `VC`, `VCS`, `GTAIV`, `Modern` | Color filter mode. Parsed in main.cpp. An absent key maps to `PC` (main.cpp:5784), but a PBR pipeline forces `Modern` (main.cpp:5798-5805; re-asserted per frame by derivePipelineFromPipes, main.cpp:711-723). |
 
 **Pipeline mapping** (when `buildingPipe`/`vehiclePipe` are not explicitly set):
 
@@ -26,8 +26,10 @@ INI parsing happens in two locations:
 | PBR | PBR | Modern | Modern |
 | PS2 | PS2 | PS2 | — |
 | Xbox | Xbox | Xbox | — |
-| Mobile | Xbox | Mobile | — |
+| Mobile | Xbox | Mobile | `Mobile` (3) |
 | GTAIV | GTAIV | GTAIV | — |
+
+The load-time pipeline map writes `colorFilter` only for PBR; the other rows are owned by the matching mode profile (e.g. Mobile = `COLORFILTER_MOBILE(3)`, modeManager.cpp:645).
 
 ## Quality Presets
 
@@ -36,7 +38,9 @@ INI parsing happens in two locations:
 | LOW | 0 | PS2 | PS2 | None |
 | MEDIUM | 1 | PC | Xbox | SMAA LOW |
 | HIGH | 2 | Modern | Xbox | SMAA HIGH + SSAO + Motion Blur + SSS |
-| ULTRA | 3 | Modern | Xbox | SMAA ULTRA + SSAO + Motion Blur + SSS + all enhancements |
+| ULTRA | 3 | *(not written — inherited)* | *(not written — inherited)* | SMAA ULTRA + SSAO + Motion Blur + SSS + all enhancements |
+
+Tiers 0-2 write pipes only while no pipe-owning mode is active (`modePipesOwned`); tier 3 (ULTRA) never writes pipes — pipes come from the `pipeline` mapping or the active mode profile (main.cpp:5415-5566, especially :5505-5507).
 
 Preset defaults are applied first, then individual INI values override them.
 
@@ -53,7 +57,7 @@ Preset defaults are applied first, then individual INI values override them.
 | `dualPassDefault` | int | *(from dualPass)* | config.cpp | Default dual-pass |
 | `dualPassPed` | int | *(from dualPass)* | config.cpp | Ped dual-pass |
 | `detailMaps` | int | `0` | main.cpp | Detail map rendering |
-| `stochasticTexturing` | int | `0` | main.cpp | Stochastic sampling |
+| `noiseDetail` | bool | *(from qualityPreset; ULTRA=`1`)* | main.cpp | Blue-noise UV jitter on tiled detail textures to hide repeats. Canonical key; legacy aliases `stochasticTexturing` / `stochastic` are still read (deprecated). |
 | `usePCTimecyc` | int | `0` | config.cpp | Use PC timecycle |
 | `grassAddAmbient` | int | `0` | config.cpp | Grass add ambient |
 | `grassBackfaceCull` | int | `1` | config.cpp | Grass backface culling |
@@ -169,10 +173,7 @@ Preset defaults are applied first, then individual INI values override them.
 
 | Key | Type | Default | Parsed In | Notes |
 |-----|------|---------|-----------|-------|
-| `smaaEnable` | int | `1` | config.cpp | Enable SMAA |
-| `smaaPreset` | int | `3` | config.cpp | `0`=LOW, `1`=MEDIUM, `2`=HIGH, `3`=ULTRA |
-| `smaaPredication` | int | `0` | config.cpp | Depth-based edge detection |
-| `smaaTemporal` | int | `0` | config.cpp | Temporal AA |
+| `smaaEnable` | int | `1` | main.cpp | Enable SMAA. Quality is an internal HIGH preset constant; temporal resolve is always on. |
 
 ## SSAO (Ambient Occlusion)
 
@@ -289,6 +290,8 @@ Preset defaults are applied first, then individual INI values override them.
 | `ps2ModulateVehicle` | Deprecated | Use `dualPassVehicle` instead |
 | `ps2grassFiles` | Removed | Was commented out in aap, never used |
 | `tagsBuildingPipe` | Deprecated | Now follows `buildingPipe` automatically |
+| `stochasticTexturing` | Deprecated alias | Legacy alias for `noiseDetail`; still accepted when `noiseDetail` is absent (main.cpp:5613-5625) |
+| `stochastic` | Deprecated alias | Legacy alias for `noiseDetail`; still accepted when `noiseDetail` is absent (main.cpp:5619-5625) |
 
 ## See Also
 - [[Vehicle Pipeline]] — Vehicle pipe options

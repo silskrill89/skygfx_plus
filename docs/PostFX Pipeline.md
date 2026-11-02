@@ -21,7 +21,7 @@ Screen-space post-processing effects applied after the main scene render. Implem
 - 4 quality presets: LOW, MEDIUM, HIGH, ULTRA
 - Predication support (depth-based edge detection)
 - Must run AFTER hardware MSAA resolve
-- Config: `smaaEnable`, `smaaPreset` (0=LOW, 1=MEDIUM, 2=HIGH, 3=ULTRA), `smaaPredication`, `smaaTemporal`
+- Config: `smaaEnable` (quality is an internal HIGH preset constant; temporal resolve is always on)
 
 ### Motion Blur
 - Burnout Paradise-style speed-based blur

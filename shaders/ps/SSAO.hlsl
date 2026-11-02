@@ -37,19 +37,9 @@ float3 GetViewPos(float2 texCoord, float depth)
     return float3(viewXY, viewZ);
 }
 
-// Exact inverse of GetViewPos: view-space position -> screen UV.
-// GetViewPos does: ndc = uv*2-1; ndc.y = -ndc.y; viewXY = ndc * viewZ * projInfo.xy
-// so the reverse must divide by projInfo.xy AND un-flip y. The old code did
-// neither (plain samplePos.xy / samplePos.z), so every occlusion sample was
-// fetched from a mirrored, projection-scaled wrong texel — garbage occlusion
-// everywhere (the other primary cause of the black AO buffer).
-float2 ProjectToUV(float3 viewPos)
-{
-    float invZ = 1.0 / max(viewPos.z, 1e-7);
-    float nx = viewPos.x * invZ / max(projInfo.x, 1e-7);
-    float ny = viewPos.y * invZ / max(projInfo.y, 1e-7);
-    return float2(nx * 0.5 + 0.5, 0.5 - ny * 0.5);
-}
+// ProjectToUV (exact GetViewPos inverse) moved verbatim to SSAOCommon.hlsl
+// (shared with SSAO_Temporal.hlsl).
+#include "../include/SSAOCommon.hlsl"
 
 float3x3 BuildTBN(float3 normal, float2 texCoord, float2 noiseScale)
 {

@@ -14,10 +14,7 @@ struct PS_INPUT
 	float2 texCoord : TEXCOORD0;
 };
 
-float Lum(float3 c)
-{
-	return dot(c, float3(0.2126, 0.7152, 0.0722));
-}
+#include "../include/BloomCommon.hlsl"
 
 float4 main(PS_INPUT IN) : COLOR
 {
@@ -36,7 +33,7 @@ float4 main(PS_INPUT IN) : COLOR
 		for (int i = 0; i < 4; i++)
 		{
 			float2 off = float2((i - 1.5) * STEP, (j - 1.5) * STEP);
-			acc += Lum(tex2D(tex, tileCentre + off).rgb);
+			acc += Luminance(tex2D(tex, tileCentre + off).rgb);
 		}
 	}
 

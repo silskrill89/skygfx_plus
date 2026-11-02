@@ -13,7 +13,7 @@ The normal map plugin adds bump/environment mapping to GTA SA's building and veh
 
 ### DK22Pac's Plugin (Reference)
 
-**Source**: `E:\SDKs\normalmap_byDK_1.01\sources\normalmap\main.cpp` (1327 lines)
+**Source**: retired reference copy at `_backup/src/rw/normalmap_plugin.cpp` (1328 lines). The external SDK path once recorded here (`E:\SDKs\normalmap_byDK_1.01\sources\normalmap\main.cpp`) is not present on this machine as of 2026-10-25 — UNVERIFIED.
 
 Key functions:
 - `IsCBPCPipelineAttached` (line 1227): Pure query — checks NM pipelines, MatFX effects
@@ -25,19 +25,21 @@ Key functions:
 
 ### Our Integration
 
-**Source**: `src/normalmap.cpp` (322 lines)
+**Current source**:
+- `src/rw/normalmap.cpp` (312 lines) — DK22Pac-derived pipeline hooks plus the deferred `RpNormMapPluginAttach()` path
+- `src/render/normalmap.cpp` (280 lines) + `src/render/normalmap.h` (30 lines) — NM lane: `<diffuse>_n` / `<diffuse>_norm` pairing, gloss-in-alpha, per-mesh binding to the PBR pipes
 
 Differences from DK22Pac:
-1. `MaterialHasDefaultMatFXEffect_cb` returns `void` (DK22Pac returns `RpMaterial*`)
-2. We add frame creation in query functions (DK22Pac does NOT)
-3. `normalmap_init()` calls `RpNormMapPluginAttach()` which may fail
+1. `MaterialHasDefaultMatFXEffect_cb` keeps DK22Pac's `RpMaterial*` return (and returns `NULL` to stop when a default MatFX effect is present).
+2. `normalmap_tryAttach()` defers `RpNormMapPluginAttach()` until the engine pointer at `0xC97B24` is valid (DK22Pac's `FUNC_REGISTER_RW_PLUGIN` timing) instead of attaching from `DllMain`.
+3. `RpNormMapPluginAttach()` may fail; the result is logged and the PBR normal-map lane stays off.
 
 ## RW SDK Normal Map Plugin
 
 ### Plugin Registration
 
 ```cpp
-// From normalmap_plugin.cpp:782
+// Historical reference: retired normalmap_plugin.cpp:782 (not in the current tree)
 #define CopyTexture(tex) \
     ((RwTexture *(__cdecl *)(RwTexture *))0x5A5730)(tex)
 ```
@@ -78,6 +80,9 @@ These are the static and skinned normal map atomic pipelines provided by the `rp
 
 ## Player Normal Maps
 
+> [!note] Historical
+> This section describes DK22Pac's plugin. The player normal-map compositing code lived in the retired `normalmap_plugin.cpp` and is not part of the current build.
+
 DK22Pac's plugin includes a full player normal map system (lines 754-1115):
 
 1. **Loading**: Reads player body part normal maps from TXD files
@@ -88,7 +93,7 @@ DK22Pac's plugin includes a full player normal map system (lines 754-1115):
 ### CopyTexture Usage
 
 ```cpp
-// Player normal map compositing (normalmap_plugin.cpp:872)
+// Historical: player normal map compositing in the retired normalmap_plugin.cpp:872
 destTexture = CopyTexture(texture);
 
 // Torso compositing (line 948)
@@ -152,15 +157,18 @@ static RpMaterial *MaterialHasDefaultMatFXEffect_cb(RpMaterial *material,
 }
 ```
 
-**Key difference**: DK22Pac's version returns `RpMaterial*` to continue iteration. Our version returns `NULL` to stop. Both work with `RpGeometryForAllMaterials` but the semantics differ.
+**Current status**: the live `MaterialHasDefaultMatFXEffect_cb` (in `src/rw/normalmap.cpp`) matches DK22Pac's semantics — return `material` to continue iteration, `NULL` when a default MatFX effect is present (stop iteration).
 
 ## Build System
 
-### Compiled Files
+### Compiled Files (current)
 
-- `src/normalmap.cpp` (322 lines) — active normalmap hooks
-- `src/normalmap_plugin.cpp` (1327 lines) — DK22Pac player normal maps
-- `src/normmap_stubs.cpp` — stubs when normalmap disabled
+- `src/rw/normalmap.cpp` (312 lines) — DK22Pac-derived pipeline hooks + deferred `RpNormMapPluginAttach()`
+- `src/render/normalmap.cpp` (280 lines) / `normalmap.h` (30 lines) — NM pairing and PBR normal-map lane
+
+**Retired, not in the current tree** (kept here as history):
+- `_backup/src/rw/normalmap_plugin.cpp` (1328 lines) — DK22Pac player normal maps (reference copy only)
+- former `src/normmap_stubs.cpp` (archive copy: `backup_original/src/normmap_stubs.cpp`, 50 lines) — symbol-export stubs, removed to fix the SilentPatch symbol clash (see [[Crash Analysis - 0x4C9FB5 and 0x40890A]])
 
 ### Build Commands
 

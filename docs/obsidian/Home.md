@@ -74,9 +74,9 @@ skygfx_plus_expIV/
 │   └── ...
 ├── shaders/       # HLSL pixel/vertex shaders
 │   ├── vs/        # Vertex shaders
-│   ├── ps/        # Pixel shaders
-│   ├── ps/2_a/    # Stochastic variants
-│   └── include/   # Shared includes (colorSpace, PerlinNoise, SSS)
+│   ├── ps/        # Pixel shaders (+ ps/xbox/)
+│   ├── include/   # Shared includes (colorSpace, Noise, SSS)
+│   └── noiseDetailBuildingPS.hlsl  # Noise-detail building entries
 ├── resources/     # CSO binaries, RC resources
 ├── external/      # RW D3D9 headers, injector
 └── build/         # VS solution, vcxproj

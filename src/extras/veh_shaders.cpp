@@ -158,7 +158,7 @@ int VehShaders_SelectPaintType(int modelID, unsigned int hash){
 void VehShaders_GetPaintPBR(int paintType, float *specular, float *glossiness,
                              float *specularTintR, float *specularTintG, float *specularTintB,
                              float *noiseScale, float *edgeBlend){
-    if(paintType < 0 || paintType > 3) paintType = 0;
+    if(paintType < 0 || paintType > 4) paintType = 0;
     const PaintProps *p = &paintTable[paintType];
     *specular = p->specular;
     *glossiness = p->glossiness;
@@ -286,32 +286,6 @@ int VehShaders_GetSurfaceType(const char *texName){
 }
 
 // ============================================================
-// Dirt level from CVehicle (offset 0x4B0, 0.0=clean, 15.0=max dirt)
-// ============================================================
-
-// Get dirt level from a CVehicle pointer
-// Returns normalized dirt level 0.0 (clean) to 1.0 (max dirt)
-float VehShaders_GetDirtLevel(void *vehicle){
-    if(!vehicle) return 0.0f;
-    // CVehicle::m_fDirtLevel at offset 0x4B0
-    float dirtLevel = *(float*)((char*)vehicle + 0x4B0);
-    // Normalize from 0-15 to 0-1
-    return max(0.0f, min(dirtLevel / 15.0f, 1.0f));
-}
-
-// Apply dirt modification to PBR properties (CryEngine-style)
-// Dirt increases roughness (reduces glossiness), reduces specular
-void VehShaders_ApplyDirtToPBR(float dirtLevel, float *specular, float *glossiness, float *specularTintR, float *specularTintG, float *specularTintB){
-    // Dirt makes surfaces rougher (lower glossiness) and less reflective (lower specular)
-    *glossiness = max(*glossiness * (1.0f - dirtLevel * 0.60f), 0.05f);
-    *specular = max(*specular * (1.0f - dirtLevel * 0.40f), 0.02f);
-    // Dirt tint (brownish-grey)
-    *specularTintR = *specularTintR * (1.0f - dirtLevel * 0.3f) + dirtLevel * 0.15f;
-    *specularTintG = *specularTintG * (1.0f - dirtLevel * 0.3f) + dirtLevel * 0.10f;
-    *specularTintB = *specularTintB * (1.0f - dirtLevel * 0.3f) + dirtLevel * 0.05f;
-}
-
-// ============================================================
 // Model index extraction (from atomic ID)
 // ============================================================
 
@@ -408,132 +382,4 @@ bool VehShaders_FrameNameIsChrome(RpAtomic *atomic){
     cache[slot].ptr = atomic;
     cache[slot].chrome = match;
     return match;
-}
-
-
-// ============================================================
-// Area-based color saturation system
-// GTA SA zones: Richman, Rodeo, Hollywood/Beverly Hills, Vinewood
-// ============================================================
-
-enum VehColorArea {
-    COLORAREA_DEFAULT = 0,      // Standard LA — moderate saturation
-    COLORAREA_RICHMAN,          // Rich hills — high saturation, any color
-    COLORAREA_RODEO,            // Beverly Hills — very high saturation
-    COLORAREA_HOLLYWOOD,        // Hollywood/Vinewood — craziest colors only
-    COLORAREA_INDUSTRIAL,       // Industrial — lower saturation
-    COLORAREA_COUNT
-};
-
-// Minimum saturation thresholds per area
-// 0.0 = any color allowed, 1.0 = only fully saturated colors
-static const float minSaturation[] = {
-    0.15f,  // DEFAULT — moderate minimum
-    0.30f,  // RICHMAN — rejects boring colors
-    0.40f,  // RODEO — high saturation minimum
-    0.55f,  // HOLLYWOOD — only craziest colors pass
-    0.05f,  // INDUSTRIAL — almost anything allowed
-};
-
-// Maximum brightness cap per area (prevents washed-out colors)
-static const float maxBrightness[] = {
-    0.85f,  // DEFAULT
-    0.95f,  // RICHMAN
-    1.00f,  // RODEO
-    1.00f,  // HOLLYWOOD
-    0.80f,  // INDUSTRIAL
-};
-
-// Random color with saturation filtering
-// Returns true if color passes area filter, false if rejected (should re-roll)
-bool VehShaders_CheckColorSaturation(float r, float g, float b, int area){
-    if(area < 0 || area >= COLORAREA_COUNT) area = COLORAREA_DEFAULT;
-
-    // Calculate HSL saturation from RGB
-    float maxC = max(max(r, g), b);
-    float minC = min(min(r, g), b);
-    float luma = (maxC + minC) * 0.5f;
-    float sat = 0.0f;
-    if(maxC > 0.001f){
-        float delta = maxC - minC;
-        sat = delta / maxC;  // HSV saturation (simpler than HSL for filtering)
-    }
-
-    // Reject if below minimum saturation for this area
-    if(sat < minSaturation[area])
-        return false;
-
-    // Reject if too bright/washed out
-    if(luma > maxBrightness[area])
-        return false;
-
-    return true;
-}
-
-// Generate a random color for a vehicle in a given area
-// Uses hash for deterministic per-vehicle randomness
-// Applies saturation filtering — rejects boring colors
-void VehShaders_GenerateColor(unsigned int hash, int area,
-    float *outR, float *outG, float *outB)
-{
-    if(area < 0 || area >= COLORAREA_COUNT) area = COLORAREA_DEFAULT;
-
-    float minSat = minSaturation[area];
-    float maxBri = maxBrightness[area];
-
-    // Generate base color from hash (HSV space for better control)
-    float h = (float)(hash & 0xFF) / 255.0f;  // hue [0,1]
-    float s = (float)((hash >> 8) & 0xFF) / 255.0f;  // saturation [0,1]
-    float v = (float)((hash >> 16) & 0xFF) / 255.0f;  // value [0,1]
-
-    // Scale saturation: minimum from area, maximum always 1.0
-    s = minSat + s * (1.0f - minSat);
-
-    // Scale brightness: cap from area
-    v = v * maxBri;
-
-    // HSV to RGB conversion
-    float c = v * s;
-    float x = c * (1.0f - fabsf(fmodf(h * 6.0f, 2.0f) - 1.0f));
-    float m = v - c;
-
-    float r, g, b;
-    if(h < 1.0f/6.0f)      { r = c; g = x; b = 0; }
-    else if(h < 2.0f/6.0f) { r = x; g = c; b = 0; }
-    else if(h < 3.0f/6.0f) { r = 0; g = c; b = x; }
-    else if(h < 4.0f/6.0f) { r = 0; g = x; b = c; }
-    else if(h < 5.0f/6.0f) { r = x; g = 0; b = c; }
-    else                    { r = c; g = 0; b = x; }
-
-    *outR = r + m;
-    *outG = g + m;
-    *outB = b + m;
-}
-
-// Determine color area from vehicle position (X,Y world coords)
-// GTA SA map zones: Richman = northwest hills, Rodeo = west coast,
-// Hollywood = north-central, Industrial = east/south
-int VehShaders_GetColorArea(float posX, float posY){
-    // Richman (northwest hills — richest area)
-    if(posX < -1000.0f && posY > 1000.0f)
-        return COLORAREA_RICHMAN;
-
-    // Rodeo (west coast — Beverly Hills equivalent)
-    if(posX < -500.0f && posY > 0.0f && posY < 1500.0f)
-        return COLORAREA_RODEO;
-
-    // Hollywood/Vinewood (north-central — craziest colors)
-    if(posX > -500.0f && posX < 500.0f && posY > 1500.0f)
-        return COLORAREA_HOLLYWOOD;
-
-    // Industrial (east/south — muted colors)
-    if(posX > 1000.0f || posY < -1000.0f)
-        return COLORAREA_INDUSTRIAL;
-
-    return COLORAREA_DEFAULT;
-}
-
-// Get minimum saturation for a world position
-float VehShaders_GetMinSaturation(float posX, float posY){
-    return minSaturation[VehShaders_GetColorArea(posX, posY)];
 }

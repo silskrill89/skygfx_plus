@@ -20,6 +20,11 @@ sampler2D envMapTex    : register(s1);
 sampler2D maskTex      : register(s2);
 sampler2D iblTex       : register(s3);
 sampler2D normalBufTex : register(s4);
+// NM lane: <diffuse>_n texture normal map (gloss in .a). Bound raw on s8 by
+// the PBR cbs (vehiclePipe.cpp / buildingPipe.cpp) — s5/s6/s7 are owned by
+// Forward+ (cluster tile + light atlases), s8 is the first genuinely free
+// stage across every bind site in the project.
+sampler2D nmTex        : register(s8);
 
 float4 surfProps   : register(c0);
 float4 fxParams    : register(c1);  // .z = envIntensity
@@ -39,10 +44,19 @@ float3 viewUp       : register(c26); // view matrix row 1
 float3 viewFwd      : register(c27); // view matrix row 2
 float4 skyParams    : register(c28); // xyz=skyTop color (0-1), w=skyReflect strength
 float4 screenSize   : register(c29); // (screenW, screenH, 1/screenW, 1/screenH) — screen UV for normal-buffer sampling
+// NM lane: {bound, intensity, glossFromAlpha, alphaOverride} — uploaded
+// PER MESH by the PBR cbs next to the s8 bind. x/y/z are zeroed whenever no
+// normal map is bound (D3D9 constants persist across draws). .z gates
+// gloss-in-alpha on the CPU format check (DXT5/RGBA only — DXT1's 1-bit alpha
+// is not gloss data). .w is the per-TEXTURE alpha override written on BOTH
+// the normal-map and no-normal-map paths: 1 = force output alpha 1 (solid
+// opaque textures, incl. DXT3 with unused/empty alpha blocks), 0 = use the
+// texture alpha (cutout/faded/legacy textures).
+float4 nmParams     : register(c48);
 
 // Forward+ clustered lights
-sampler2D clusterTex : register(s5);   // 128x128 RGBA8 tile light index texture
-float4 clusterParams : register(c45);  // (tileSize, gridW, gridH, lightCount)
+sampler2D clusterTex  : register(s5);  // tile index texture (RGBA8 POINT/CLAMP)
+float4 clusterParams  : register(c45); // (tileSizePx, gridW, gridH, lightCount)
 float4 layerCfg   : register(c46);  // x = vehPBRLayers layer bitmask
 // PBR BUILDING env — uploaded per mesh by the PBR cb (buildingPipe.cpp).
 // {x = enable, y = material env-map weight, z = sky reflect strength, w = 0}
@@ -56,8 +70,11 @@ float4 bldEnv     : register(c47);
 // vehicle-reflection config inputs of main(); the rest ride iblParams (c3),
 // fxParams (c1), layerCfg (c46) and skyParams (c28).
 float4 chromeParams : register(c44);
-float4 clusterLightPos[32] : register(c48);  // (pos.x, pos.y, pos.z, radius) per light
-float4 clusterLightCol[32] : register(c80);  // (col.r*intensity, col.g*intensity, col.b*intensity, 0) per light
+// Forward+ light atlases (see ClusterLighting below):
+// s6 = pos/radius, s7 = color/type, both A32B32G32R32F 64x64 POINT.
+// (The old <=32-light constant arrays at c48-c111 are gone.)
+sampler2D lightPosTex : register(s6);
+sampler2D lightColTex : register(s7);
 // x = sky hemisphere ambient weight (config->pbrIblAmbientWeight)
 // y = vehEnvFallback (0/1)   z = WetRoads 0..1 (CPU-gated by config->vehWetEnv)
 // w = vehEnvMask (0/1)
@@ -72,6 +89,7 @@ float4 iblAmbient : register(c20);
 // at 1.0. Modulating the surface preserves shadows (near-black stays near-black) and
 // can never lift blacks the way an additive deviation did. sky==ambient -> 1.0 -> no
 // double-ambient. iblAmbient.x (config pbrIblAmbientWeight) is the tuning knob.
+// PENDING in-game A/B (reverted after black-screen regression) — keep as-is.
 float3 SkyHemisphereTint(float3 N){
     float2 uv = float2(0.5, saturate(N.y * 0.5 + 0.5));
     float3 skyCol = tex2D(iblTex, uv).rgb;
@@ -86,7 +104,7 @@ float3 SkyHemisphereTint(float3 N){
     float skyL = max(dot(skyCol, LUMA), 1e-4);
     float ambL = max(dot(ambientColor.rgb, LUMA), 1e-4);
     float3 ratio = (skyCol / skyL) / max(ambientColor.rgb / ambL, 1e-4);
-    ratio = clamp(ratio, 0.6, 1.5);
+    ratio = clamp(ratio, 0.6, 1.5);   // PENDING in-game A/B — leave clamp weights as-is.
     return lerp(float3(1.0, 1.0, 1.0), ratio, iblAmbient.x * 0.15);
 }
 
@@ -110,6 +128,287 @@ float BurleyDiffuse(float NdotL, float NdotV, float VdotH, float roughness){
     float scatterL = lerp(1.0, fd90, pow(1.0 - NdotL, 5.0));
     float scatterV = lerp(1.0, fd90, pow(1.0 - NdotV, 5.0));
     return scatterL * scatterV * lerp(1.0, 1.0/1.51, roughness) * NdotL;
+}
+
+// ============================================================================
+// FORWARD+ CLUSTER LIGHTS — tile index texture + light atlases
+// ============================================================================
+// c45 = (tileSizePx, gridW, gridH, lightCount); lightCount > 0 == enabled
+//       (forwardPlusEnable==0 makes the C++ zero c45 and unbind s5).
+// s5  tile index texture, RGBA8 POINT/CLAMP, (gridW*2)x(gridH*2) texels.
+//     tile (x,y) = clamp(floor(vpos.xy / tileSizePx), grid); its 16 light
+//     indices live in the 2x2 texel block at (2x..2x+1, 2y..2y+1):
+//     texel (2x + k%2, 2y + k/2) R,G,B,A = indices 4k..4k+3 (k = 0..3).
+//     Value 0 = empty slot, else a 1-based index into the light atlases.
+//     Slots are FRONT-PACKED by the CPU culler (nonzero run then zeros), so
+//     the first 0 ends the tile and the loop breaks there.
+// s6  A32B32G32R32F 64x64 POINT — texel i = (pos.xyz VIEW space, radius)
+// s7  A32B32G32R32F 64x64 POINT — texel i = (r, g, b, type)
+// Atlas texel i (i = idx-1, row-major): u = (i%64 + 0.5)/64, v = (i/64 + 0.5)/64.
+//
+// Fetch budget: exactly ONE dependent hop (s5 index -> s6/s7 texel); every
+// other coordinate derives from VPOS and the loop counter. s5/s6/s7 are
+// POINT-filtered single-mip textures, so all in-loop fetches use tex2Dlod
+// (explicit LOD 0 — no gradient instructions, which fxc X3526 rejects inside
+// a [loop] containing break/continue). Semantics identical to tex2D here:
+// POINT + single mip means every mip level would resolve to the same texel.
+// SM3.0: dynamic [loop] over 16 slots with early break (instruction budget
+// stays flat regardless of slot count); all normalize/divide guarded at 1e-7.
+
+// SM3.0-safe normalize: never divides by < 1e-7 (zero vector stays zero, no NaN).
+float3 FPNorm(float3 v){
+    return v * (1.0 / max(length(v), 1e-7));
+}
+
+// ============================================================================
+// NM LANE — texture normal maps + gloss-in-alpha (s8 / c48)
+// ============================================================================
+// Detection is load-time (normalmap.cpp): when the game requests texture
+// `foo`, the current txd is probed for `foo_n` (DK22Pac convention) then
+// `foo_norm`; the pairing rides an RW texture plugin slot on the diffuse
+// texture. The PBR cbs bind the map raw on s8 and upload c48 per mesh:
+//   x = bound (1 = s8 holds this mesh's normal map)
+//   y = normalMapIntensity (tangent XY perturbation scale)
+//   z = glossFromAlpha (1 = the map's format carries a real alpha channel)
+// Gloss decode (CryEngine DDNA convention): gloss = nmTex.a, roughness =
+// 1 - gloss, blended 85% toward the map over the material's c22 glossiness.
+// Tangent frame: RW geometry ships no tangents and the vertex decl must not
+// change — the frame is derived per pixel from screen-space derivatives
+// (cotangent-frame trick). ddx/ddy run at TOP-LEVEL flow only (fxc X3526
+// rejects gradient instructions inside a [loop] containing break/continue —
+// the same rule the Forward+ cluster fetch follows); the s8 tex2D sits in a
+// plain flag-gated if (same pattern as the normalBufTex sample).
+
+// Cotangent frame from screen-space derivatives. N must be normalized.
+// All divides guarded at 1e-7 (NaN = black rule).
+void nmCotangentFrame(float3 N, float3 p, float2 uv, out float3 T, out float3 B){
+    float3 dp1 = ddx(p);
+    float3 dp2 = ddy(p);
+    float2 duv1 = ddx(uv);
+    float2 duv2 = ddy(uv);
+    float3 dp2perp = cross(dp2, N);
+    float3 dp1perp = cross(N, dp1);
+    T = dp2perp * duv1.x + dp1perp * duv2.x;
+    B = dp2perp * duv1.y + dp1perp * duv2.y;
+    float invmax = rsqrt(max(dot(T, T) + dot(B, B), 1e-7));
+    T *= invmax;
+    B *= invmax;
+}
+
+// Tangent-space -> world perturbation. nmS is the raw s8 sample; N is the
+// (already SS-blended) surface normal; V points at the eye. Black/degenerate
+// samples leave N untouched (NaN = black rule). Z is reconstructed from the
+// (intensity-scaled) XY so the perturbation stays unit-length.
+float3 nmPerturbNormal(float3 N, float3 V, float4 nmS, float2 uv,
+                       float3 T, float3 B, float intensity){
+    if(dot(nmS.rgb, nmS.rgb) <= 1e-6)
+        return N;                                // black/unbound sample — no perturbation
+    float3 mapN = nmS.rgb * 2.0 - 1.0;
+    mapN.xy *= max(intensity, 0.0);
+    mapN.z = sqrt(saturate(1.0 - dot(mapN.xy, mapN.xy)));
+    float3 wn = mapN.x * T + mapN.y * B + mapN.z * N;
+    float wLen2 = dot(wn, wn);
+    // Degenerate guard: a zero-length result (degenerate UV derivatives +
+    // extreme texel) would NaN through normalize — keep the geometric normal.
+    if(wLen2 <= 1e-6)
+        return N;
+    return wn * (1.0 / max(sqrt(wLen2), 1e-7));
+}
+
+// The single index->atlas hop: fetch pos/radius (s6) + color/type (s7) at
+// the 0-based atlas texel for a 1-based light index. posView is VIEW space.
+void ClusterFetchLight(int idx1, out float3 posView, out float radius, out float3 col){
+    float fi = (float)(idx1 - 1);                       // 0-based row-major texel
+    float row = floor(fi * (1.0 / 64.0));
+    float2 auv = (float2(fi - row * 64.0, row) + 0.5) * (1.0 / 64.0);
+    float4 pr = tex2Dlod(lightPosTex, float4(auv, 0.0, 0.0)); // (pos.xyz view, radius)
+    float4 ct = tex2Dlod(lightColTex, float4(auv, 0.0, 0.0)); // (rgb, type — type unused: point lobe)
+    posView = pr.xyz;
+    radius  = pr.w;
+    col     = ct.rgb;
+}
+
+// Per-light GGX + clearcoat + Burley accumulation — the exact BRDF the old
+// constant-array loops ran (only the light fetch changed). Flavors:
+//   main           : fresnelLH=1 (F_SchlickLH), ccStr=chrome clearcoat (0.05 lobe)
+//   main_building  : fresnelLH=0 (F_Schlick),    ccStr=0 (no clearcoat)
+//   main_rubber    : specW=0 (diffuse only),     kD=0.5
+// specW scales the GGX lobe only; ccStr scales the clearcoat lobe (old main
+// multiplied it by ccStr alone — preserved).
+void ClusterShadeOne(float3 ToLight, float radius, float3 lcol,
+                     float3 N, float3 V, float3 F0, float roughness,
+                     float3 baseColor, float3 kD, float ccStr, float specW,
+                     float fresnelLH,
+                     inout float3 specAccum, inout float3 diffAccum){
+    float dist = length(ToLight);
+    if(dist >= radius || dist <= 1e-6) return;
+    float3 Lc = ToLight * (1.0 / max(dist, 1e-7));
+    float atten = saturate(1.0 - dist / max(radius, 1e-7));
+    atten *= atten;                                     // quadratic falloff
+    float NdotLc = max(dot(N, Lc), 0.0);
+    if(NdotLc <= 0.0) return;
+    float NdotV = max(dot(N, V), 0.0);
+    float3 Hc = FPNorm(V + Lc);
+    float NdotHc = max(dot(N, Hc), 0.0);
+    float LdotHc = max(dot(Lc, Hc), 0.0);
+    if(specW > 0.0){
+        float Dc = D_GGX(NdotHc, roughness);
+        float Visc = V_SmithCorrelated(NdotV, NdotLc, roughness);
+        float3 Fc = (fresnelLH > 0.5) ? F_SchlickLH(LdotHc, F0) : F_Schlick(LdotHc, F0);
+        specAccum += Dc * Fc * Visc * NdotLc * lcol * atten * specW;
+        if(ccStr > 0.0){
+            // Clearcoat per-cluster-light (old main: sigma 0.05, white F0, * ccStr)
+            float Dc_cc = D_GGX(NdotHc, 0.05);
+            float Visc_cc = V_SmithCorrelated(NdotV, NdotLc, 0.05);
+            float3 Fc_cc = F_SchlickLH(LdotHc, float3(0.04, 0.04, 0.04));
+            specAccum += Dc_cc * Fc_cc * Visc_cc * NdotLc * lcol * atten * ccStr;
+        }
+    }
+    // Diffuse from cluster lights (Burley) — baseColor * diffc * col * atten * kD / PI
+    float VdotHc = max(dot(V, Hc), 0.0);
+    float diffc = BurleyDiffuse(NdotLc, NdotV, VdotHc, roughness);
+    diffAccum += baseColor * diffc * lcol * atten * kD * (1.0 / 3.14159);
+}
+
+// Shared cluster entry: world-space surface (used by main, main_building,
+// main_rubber, main_normMapVehicle). s6 light positions are VIEW space; lift
+// them back to world via eyePos (c2, camera world pos) + the world->view
+// rotation rows (c25-c27) before the world-space BRDF.
+void ClusterLighting(float2 px, float3 worldPos, float3 N, float3 V,
+                     float3 F0, float roughness, float3 baseColor, float3 kD,
+                     float ccStr, float specW, float fresnelLH,
+                     inout float3 specAccum, inout float3 diffAccum){
+    if(clusterParams.w <= 0.0) return;                  // forwardPlusEnable gate
+    // View-row validity gate: c25-c27 are unit rows of the view rotation, so
+    // the squared-length sum is ~3. Zero/garbage rows (register never uploaded
+    // on a path) would teleport every light to the eye — skip instead.
+    float rowsLen = dot(viewRight, viewRight) + dot(viewUp, viewUp) + dot(viewFwd, viewFwd);
+    if(abs(rowsLen - 3.0) > 0.5) return;
+
+    // Screen-space tile (VPOS), clamped to the grid — same binning the CPU
+    // culler fills. The 16 indices live in the 2x2 texel block at 2*tile.
+    float2 tileF = floor(px / max(clusterParams.x, 1e-7));
+    tileF = clamp(tileF, float2(0.0, 0.0), max(clusterParams.yz - 1.0, float2(0.0, 0.0)));
+    float2 blockBase = tileF * 2.0;
+    float2 texelStep = 0.5 / max(clusterParams.yz, float2(1.0, 1.0));  // 1/(2*grid)
+
+    [loop] for(int s = 0; s < 16; s++){
+        float sf = (float)s;
+        float k4f = floor(sf * 0.25);                   // texel in the 2x2 block (0..3)  = s >> 2
+        int c  = (int)(sf - k4f * 4.0 + 0.5);           // channel in that texel (0..3)   = s & 3
+        float kx = k4f - 2.0 * floor(k4f * 0.5);        // block column                   = k4 & 1
+        float ky = floor(k4f * 0.5);                    // block row                      = k4 >> 1
+        float2 tuv = (blockBase + float2(kx, ky) + 0.5) * texelStep;
+        float4 t = tex2Dlod(clusterTex, float4(tuv, 0.0, 0.0));
+        float4 m = float4((c == 0) ? 1.0 : 0.0, (c == 1) ? 1.0 : 0.0,
+                          (c == 2) ? 1.0 : 0.0, (c == 3) ? 1.0 : 0.0);
+        int idx = (int)(dot(t, m) * 255.0 + 0.5);       // 0 = empty
+        if(idx == 0) break;                             // front-packed tail
+        if(idx > 4096) continue;
+        float3 lpView, lcol;
+        float radius;
+        ClusterFetchLight(idx, lpView, radius, lcol);
+        float3 lpWorld = eyePos + viewRight * lpView.x + viewUp * lpView.y + viewFwd * lpView.z;
+        ClusterShadeOne(lpWorld - worldPos, radius, lcol, N, V, F0, roughness,
+                        baseColor, kD, ccStr, specW, fresnelLH, specAccum, diffAccum);
+    }
+}
+
+// ADAPTED SIGNATURE: cluster variant for entries whose VS provides NO surface
+// world position/normal (main_mobileVehicle, main_specCarFx, main_ps2EnvSpecFx
+// — vehiclePipeVS.hlsl gives them env UVs / a reflection vector only, and the
+// legacy cbs upload no eye/view-row registers). Runs entirely in the light
+// atlas' native VIEW space: the pixel's view ray (tanHalfFov ~ 0.7, SA default
+// ~70deg; screen size estimated from the c45 tile grid) is the surface proxy.
+// The tile lookup keeps the light list screen-local, so this is a bounded
+// approximation of the same GGX + clearcoat + Burley lobes (shared
+// ClusterShadeOne). Needs only c45 + s5/s6/s7 + VPOS. Fixed dielectric
+// material (F0 0.04) at the call sites since these entries expose no material
+// registers.
+//
+// NO DEPTH SOURCE — why the surface is a ray proxy, not a reconstructed
+// position (orc-1 code review, finding #1). None of the three calling cbs
+// binds a depth/normal texture: CustomPipeRenderCB_PS2 / _Specular / _mobile
+// set only s0-s2 (material/env/spec) plus the Forward+ s5/s6/s7 block — s4
+// (normalBufTex, whose alpha carries linear depth/far, NormalBuffer.hlsl:90)
+// and c29 (screenSize) are uploaded ONLY by the Env/Building cbs
+// (vehiclePipe.cpp:2744/:2749, buildingPipe.cpp:1735), whose entries run the
+// world-space ClusterLighting instead. The pixel's true view-space position
+// is therefore NOT derivable here without new binds (staged — see the
+// checkpoint report), so the proxy is:
+//   proxy point P  = the point of the pixel's view ray closest to each light;
+//   ToLight        = lpView - P = the exact perpendicular light-to-ray
+//                    offset — the MINIMUM distance from the light to ANY
+//                    point of the ray, hence a lower bound on the true
+//                    light-to-surface distance. Attenuation from it is an
+//                    upper bound on true brightness (no invented depth error,
+//                    unlike a fixed/eye-depth proxy would be);
+//   N              = normalize(lpView), the camera->light direction (per
+//                    light). The previous camera-facing N = -dir was
+//                    self-defeating with this ToLight: ToLight ⊥ dir by
+//                    construction and N ∥ dir, so dot(N,ToLight) ≡ 0 and
+//                    ClusterShadeOne's `if(NdotLc <= 0.0) return;` fired for
+//                    EVERY light — the feature was dead while still paying
+//                    the 16-tap loop. Now, with θ = angle(lpView, dir):
+//                      dot(N,ToLight) = |lpView|·sin²θ ≥ 0
+//                      NdotLc         = sinθ
+//                    which is > 0 for every light with ToLight ≠ 0; the only
+//                    zero case (lpView ∥ dir) implies ToLight = 0 ⇒ dist = 0
+//                    ⇒ the dist ≤ 1e-6 guard bails first anyway. FPNorm
+//                    guards |lpView| < 1e-7 (light at the eye ⇒ N = 0 ⇒
+//                    NdotLc = 0 ⇒ no light, no NaN).
+//   KNOWN APPROXIMATION: directionally dim for lights near the view axis
+//   (sinθ → 0) and brightest ~90° off-axis; no depth means no better surface
+//   orientation is derivable without new binds. V stays the camera-facing
+//   ray direction (view vector from a proxy point on the ray toward the eye).
+void ClusterLightingScreen(float2 px, float3 F0, float roughness,
+                           float3 baseColor, float3 kD, float ccStr, float specW,
+                           inout float3 specAccum, inout float3 diffAccum){
+    if(clusterParams.w <= 0.0) return;                  // forwardPlusEnable gate
+    float2 scrSize = max(clusterParams.x * clusterParams.yz, float2(1e-7, 1e-7));
+    float2 uv = px / scrSize;                           // 0..1 within the tile grid
+    float3 dir = float3((uv.x * 2.0 - 1.0) * 0.7, (1.0 - uv.y * 2.0) * 0.7, 1.0);
+    // View vector: the proxy point sits ON the ray, so the direction back
+    // toward the eye is the camera-facing ray direction (loop-invariant).
+    // N is per-light now (see header) and is fetched inside the loop.
+    float3 V = FPNorm(-dir);
+
+    float2 tileF = floor(px / max(clusterParams.x, 1e-7));
+    tileF = clamp(tileF, float2(0.0, 0.0), max(clusterParams.yz - 1.0, float2(0.0, 0.0)));
+    float2 blockBase = tileF * 2.0;
+    float2 texelStep = 0.5 / max(clusterParams.yz, float2(1.0, 1.0));
+
+    [loop] for(int s = 0; s < 16; s++){
+        float sf = (float)s;
+        float k4f = floor(sf * 0.25);
+        int c  = (int)(sf - k4f * 4.0 + 0.5);
+        float kx = k4f - 2.0 * floor(k4f * 0.5);
+        float ky = floor(k4f * 0.5);
+        float2 tuv = (blockBase + float2(kx, ky) + 0.5) * texelStep;
+        float4 t = tex2Dlod(clusterTex, float4(tuv, 0.0, 0.0));
+        float4 m = float4((c == 0) ? 1.0 : 0.0, (c == 1) ? 1.0 : 0.0,
+                          (c == 2) ? 1.0 : 0.0, (c == 3) ? 1.0 : 0.0);
+        int idx = (int)(dot(t, m) * 255.0 + 0.5);
+        if(idx == 0) break;
+        if(idx > 4096) continue;
+        float3 lpView, lcol;
+        float radius;
+        ClusterFetchLight(idx, lpView, radius, lcol);
+        // Closest point of the pixel's view ray to the light -> proxy surface;
+        // ToLight is the exact perpendicular light-to-ray distance (lower
+        // bound on the true light-to-surface distance — see header).
+        float t0 = dot(lpView, dir) / max(dot(dir, dir), 1e-7);
+        float3 ToLight = lpView - dir * t0;
+        // Per-light shading normal = camera->light direction. Replaces the old
+        // N = FPNorm(-dir): that was ∥ dir while ToLight ⊥ dir, so
+        // dot(N,ToLight) ≡ 0 and every light bailed at NdotLc <= 0 (orc-1
+        // finding #1). Now dot(N,ToLight) = |lpView|·sin²θ ≥ 0 and
+        // NdotLc = sinθ > 0 whenever ToLight ≠ 0; FPNorm guards |lpView|
+        // < 1e-7 (light at the eye ⇒ N = 0 ⇒ no light, no NaN).
+        float3 N = FPNorm(lpView);
+        ClusterShadeOne(ToLight, radius, lcol, N, V, F0, roughness,
+                        baseColor, kD, ccStr, specW, 1.0, specAccum, diffAccum);
+    }
 }
 
 struct PS_INPUT{
@@ -145,8 +444,8 @@ float4 main(PS_INPUT IN, float4 vpos : VPOS) : COLOR
         // across the paint.
         float2 screenUV = vpos.xy * screenSize.zw;
         float4 ssSample = tex2D(normalBufTex, screenUV);
-        float3 ssNormal = ssSample.rgb * 2.0 - 1.0;
-        float ssLen = length(ssNormal);
+        float3 ssNormalView = ssSample.rgb * 2.0 - 1.0;
+        float ssLen = length(ssNormalView);
         // Validity gate — hardened, backported verbatim from main_building
         // (:560+), which needed exactly this fix. The old test here was
         //   if(dot(ssNormal, ssNormal) > 0.25)
@@ -160,8 +459,45 @@ float4 main(PS_INPUT IN, float4 vpos : VPOS) : COLOR
         float ssValid = smoothstep(0.55, 0.85, ssLen)
                       * (1.0 - smoothstep(1.15, 1.45, ssLen))
                       * (1.0 - step(0.99, ssSample.a));
+        // NormalBuffer.hlsl reconstructs from view-space depth and writes a
+        // VIEW-space normal. c25-c27 are the world->view rotation ROWS, so
+        // n_world = n_view.x*row0 + n_view.y*row1 + n_view.z*row2 (= R^T*n).
+        // Without this transform a view-space vector was lerped into world N,
+        // making the shading rotate with the camera (back faces on front).
+        // PENDING in-game A/B (reverted after black-screen regression) — keep
+        // this view->world normal-buffer transform as-is.
+        float3 ssNormalWorld = ssNormalView.x * viewRight
+                             + ssNormalView.y * viewUp
+                             + ssNormalView.z * viewFwd;
+        float ssWorldLen = length(ssNormalWorld);
+        // Rows must be a sane orthonormal view rotation (same gate
+        // ClusterLighting uses). s4 is only bound by the Env/Building cbs,
+        // which upload c25-c27; fail closed on zero/garbage rows or NaN.
+        float rowsLen = dot(viewRight, viewRight) + dot(viewUp, viewUp) + dot(viewFwd, viewFwd);
+        ssValid *= (abs(rowsLen - 3.0) < 0.5) ? 1.0 : 0.0;
+        // Anti-flip: the world-space sample must agree with the rendered face's
+        // geometric normal and with its world-Z sign (GTA world is Z-up). The
+        // Z test is skipped for near-vertical walls (|N.z| small) so wall
+        // detail still blends; horizontal surfaces fail closed on a flipped
+        // sample. All comparisons fail closed on NaN; ssWorldLen guards the
+        // divide.
+        ssValid *= (ssWorldLen > 1e-6 && dot(ssNormalWorld, N) > 0.0) ? 1.0 : 0.0;
+        ssValid *= (abs(N.z) < 0.1 || ssNormalWorld.z * N.z >= 0.0) ? 1.0 : 0.0;
         if(ssValid > 0.001)
-            N = normalize(lerp(N, ssNormal / max(ssLen, 1e-7), 0.3 * ssValid));
+            N = normalize(lerp(N, ssNormalWorld / max(ssWorldLen, 1e-7), 0.3 * ssValid));
+    }
+
+    // ---- NM lane: texture normal map perturbation (s8/c48) ----
+    // Cotangent frame from screen-space derivatives — computed at TOP-LEVEL
+    // flow (ddx/ddy are illegal inside [loop]+break in SM3.0, X3526). The s8
+    // sample sits in a plain flag-gated if (defined-sample rule: never read a
+    // potentially unbound stage unconditionally).
+    float3 nmT, nmB;
+    nmCotangentFrame(N, -V, IN.texcoord0, nmT, nmB);
+    float4 nmS = float4(0.5, 0.5, 1.0, 1.0);
+    if(nmParams.x > 0.5){
+        nmS = tex2D(nmTex, IN.texcoord0);
+        N = nmPerturbNormal(N, V, nmS, IN.texcoord0, nmT, nmB, nmParams.y);
     }
 
     // ---- PBR material properties (KHR_materials_pbrSpecularGlossiness workflow) ----
@@ -175,6 +511,13 @@ float4 main(PS_INPUT IN, float4 vpos : VPOS) : COLOR
     //   so we pass (1 - glossiness) as σ, giving α² correctly.
     //   c_diff = diffuse * (1 - max(specular.r, specular.g, specular.b))
     float glossiness  = pbrParams.x;
+    // NM lane gloss-in-alpha (CryEngine DDNA): gloss = nmTex.a → roughness =
+    // 1 - gloss. Blended 85% toward the map over the material's c22 glossiness;
+    // c48.z gates on the CPU format check (real alpha channel only). Applied
+    // BEFORE the wheel-roughness override and the wet-road block below so both
+    // still layer on top of the map's gloss.
+    if(nmParams.x > 0.5 && nmParams.z > 0.5)
+        glossiness = lerp(glossiness, nmS.a, 0.85);
     float specularF0  = pbrParams.y;
     float specTint    = pbrParams.z;
     // Metalness drives the env-reflection Fresnel F0 and the neutral reflection
@@ -218,8 +561,13 @@ float4 main(PS_INPUT IN, float4 vpos : VPOS) : COLOR
     // Fresnel for specular energy split (kD not used for the VS-baked directional
     // diffuse — that is already energy-managed by the game). It IS used for the
     // new cluster-light diffuse term further down.
+    // BUG FIX (interior blackout): kDv is the DIFFUSE energy budget and must be
+    // VIEW-INDEPENDENT. Deriving it from F_Schlick(NdotV, F0) collapsed it to 0
+    // at grazing angles (normal-mapped NdotV -> 0), zeroing every Forward+
+    // point-light diffuse term indoors as the camera angle changed (black).
+    // EnergyConservation(F0) = saturate(1 - luminance(F0)) is view-independent.
     float3 F_atNdotV = F_Schlick(NdotV, F0);
-    float3 kDv = saturate(1.0 - F_atNdotV);
+    float3 kDv = EnergyConservation(F0);
 
     // ---- Daylight sky-lift (vehicle diffuse only) ----
     // The timecycle ambient reaching car materials is near-zero (live log:
@@ -229,6 +577,7 @@ float4 main(PS_INPUT IN, float4 vpos : VPOS) : COLOR
     // never grey/wash the paint (the additive version pushed saturated colours
     // into the tonemap's desaturating top end) and never lifts true blacks.
     // Self-extinguishes at night, stronger on sky-facing surfaces.
+    // PENDING in-game A/B (reverted after black-screen regression) — leave skyFill as-is.
     float3 skyFill = tex2D(iblTex, float2(0.5, saturate(N.y * 0.5 + 0.5))).rgb;
     float skyFillLuma = dot(skyFill, float3(0.299, 0.587, 0.114));
     baseColor *= 1.0 + skyFillLuma * 0.22 * LF(4) * saturate(N.y * 0.5 + 0.5);
@@ -297,7 +646,7 @@ float4 main(PS_INPUT IN, float4 vpos : VPOS) : COLOR
         envRefl *= tex2D(maskTex, envReflUV).rgb;
 
     // [missing term: env-source VALIDITY FALLBACK]
-    // layer2 = lerp(body, envTerm, kr) against an EMPTY reflectionTex replaced
+    // The old lerp(body, envTerm, kr) against an EMPTY reflectionTex replaced
     // up to kr of the paint with black — the single biggest reason Modern read
     // darker than Mobile. Only a texture with no content runs the chain
     // env -> ibl -> sky (a masked-to-black region deliberately does NOT: that
@@ -360,22 +709,31 @@ float4 main(PS_INPUT IN, float4 vpos : VPOS) : COLOR
     float envPow = max(fxParams.y, 1.0f);
     float envGlint = pow(saturate(dot(R_world, L)), envPow);
     float3 envTerm = iblBlend * reflTint * envContent * (1.0 + 0.5 * envGlint);
-    // Energy-conserving clearcoat blend (carcols-shade safe):
-    // paint dominates face-on (kr ~0.15), world mirrors at grazing (kr -> ~0.7+).
-    // carcols shininess widens the reflection band for shiny paints.
-    // Pure additive env (previous versions) always lifted/washed the paint.
+    // Clearcoat coverage scalar (carcols-shade safe): paint dominates face-on
+    // (kr ~0.15); carcols shininess widens the env band toward grazing. This is
+    // the weight of the ADDITIVE env layer below, never a body replacement.
     float kr = saturate(clearcoatFresnel * (1.0 + 2.0 * carcolsShine) + 0.05) * LF(1);
     kr = lerp(kr, saturate(kr * 1.5), metallicFactor);
     // Chrome/wheel: guarantee a visible mirror band regardless of paint carcols,
     // so metallic trim reads as metal instead of dark tinted paint.
     kr = saturate(max(kr, metallicness * 0.55));
-    // Energy-consistent composite  F*env + (1-F)*body:
-    //   * envCoverage — the strength knob scales the FRACTION OF THE BODY the
-    //     env may replace, never the env content (chromeParams.z note above);
-    //   * envUsable   — an environment with no content replaces nothing.
+    // Coverage inputs for the additive env layer:
+    //   * envCoverage — the strength knob scales the env layer's weight, never
+    //     the env content (chromeParams.z note above);
+    //   * envUsable   — an environment with no content contributes nothing.
     // Toggle off (config->vehEnvFallback=0) => envUsable stays 1 => legacy.
     kr = saturate(kr * envCoverage * envUsable);
-    float3 layer2 = lerp(layer1, envTerm, kr);
+    // ---- c270294 ADDITIVE CLEARCOAT COMPOSITE (restored) ----
+    // Sept-3 target: body + environment; the env NEVER replaces the paint.
+    // The lerp(layer1, envTerm, kr) form erased the body at grazing (kr -> 1)
+    // and read as an x-ray sphere. The old envMask does not exist any more;
+    // the substitute is saturate(kr) * 0.5 — kr is the current coverage
+    // scalar (clearcoat Fresnel x carcols shine + metallic band, scaled by
+    // envCoverage x envUsable and LF(1)), whose 0..1 range maps onto the old
+    // envMask's 0.15..0.50 range. envTerm keeps the newer envContent/envGlint
+    // factors and envTexMod restores the target's texture-AO/dirt modulation.
+    float3 envTexMod = max(diff.rgb, float3(0.05, 0.05, 0.05));
+    float3 layer2 = envTerm * (saturate(kr) * 0.5) * envTexMod;
 
     // [missing term: standalone MOBILE sun glint]
     // main_mobileVehicle adds pow(dot(reflectV, sunDir), 10) * strength * 2
@@ -428,66 +786,21 @@ float4 main(PS_INPUT IN, float4 vpos : VPOS) : COLOR
     }
 
     // ---- Clustered Point Lights (Forward+) ----
+    // Atlas scheme: 16 indices/tile from s5, lights from s6/s7 (see
+    // ClusterLighting). Same GGX + clearcoat + Burley math as before — the
+    // kDv diffuse, ccStr clearcoat (sigma 0.05) and F_SchlickLH flavor of the
+    // old 4-light constant loop are preserved via the helper parameters.
     float3 clusterDiffuse = float3(0, 0, 0);
-    if(clusterParams.w > 0.0) {  // lightCount > 0
-        // Screen-space tile: the CPU culler bins lights into a 16px screen tile
-        // grid (CullLightsToTiles). VPOS gives the current pixel; derive the
-        // same tile the CPU filled (old code used world XZ -> always corner).
-        float2 tileUV = (floor(vpos.xy / clusterParams.x) + 0.5) / float2(clusterParams.y, clusterParams.z);
-        float4 clusterSample = tex2D(clusterTex, tileUV);
-        
-        int indices[4];
-        indices[0] = (int)(clusterSample.r * 255.0 + 0.5);
-        indices[1] = (int)(clusterSample.g * 255.0 + 0.5);
-        indices[2] = (int)(clusterSample.b * 255.0 + 0.5);
-        indices[3] = (int)(clusterSample.a * 255.0 + 0.5);
-        
-        [unroll] for(int ci = 0; ci < 4; ci++) {
-            if(indices[ci] <= 0) continue;
-            int li = indices[ci] - 1;  // 0-based index (0 in texture = no light)
-            if(li < 0 || li >= 32) continue;
-            
-            float4 clPos = clusterLightPos[li];
-            float4 clCol = clusterLightCol[li];
-            float3 ToLight = clPos.xyz - IN.WorldPos.xyz;
-            float dist = length(ToLight);
-            float radius = clPos.w;
-            
-            if(dist < radius && dist > 1e-6) {
-                float3 Lc = ToLight / dist;
-                float atten = saturate(1.0 - dist / radius);
-                atten *= atten;  // quadratic falloff
-                float NdotLc = max(dot(N, Lc), 0.0);
-                if(NdotLc > 0.0) {
-                    float3 Hc = normalize(V + Lc);
-                    float NdotHc = max(dot(N, Hc), 0.0);
-                    float LdotHc = max(dot(Lc, Hc), 0.0);
-                    float Dc = D_GGX(NdotHc, 1.0 - glossiness);
-                    float Visc = V_SmithCorrelated(NdotV, NdotLc, 1.0 - glossiness);
-                    float3 Fc = F_SchlickLH(LdotHc, F0);
-                    specTotal += Dc * Fc * Visc * NdotLc * clCol.rgb * atten;
-                    // Clearcoat per-cluster-light
-                    float Dc_cc = D_GGX(NdotHc, 0.05);
-                    float Visc_cc = V_SmithCorrelated(NdotV, NdotLc, 0.05);
-                    float3 Fc_cc = F_SchlickLH(LdotHc, float3(0.04, 0.04, 0.04));
-                    specTotal += Dc_cc * Fc_cc * Visc_cc * NdotLc * clCol.rgb * atten * ccStr;
-                    // Diffuse from cluster lights. Vehicles accumulated ONLY specular
-                    // before this, so street lamps lit the road but left car bodies as
-                    // black silhouettes at night. Mirrors main_building's clusterDiffuse.
-                    float VdotHc = max(dot(V, Hc), 0.0);
-                    float diffc = BurleyDiffuse(NdotLc, NdotV, VdotHc, 1.0 - glossiness);
-                    clusterDiffuse += baseColor * diffc * clCol.rgb * atten * kDv / 3.14159;
-                }
-            }
-        }
-    }
+    ClusterLighting(vpos.xy, IN.WorldPos, N, V, F0, 1.0 - glossiness,
+                    baseColor, kDv, ccStr, 1.0, 1.0,
+                    specTotal, clusterDiffuse);
 
     // Edge highlight: subtle Fresnel rim catches sun at grazing angles.
     // Reduced from 0.45 — game lighting already has edge detail from VS.
     float rimFresnel = pow(1.0 - saturate(NdotV), 2.0);
-    float3 rimLight = sunContrib * rimFresnel * 0.18 * LF(3);
+    float3 rimLight = sunContrib * rimFresnel * 0.10 * LF(3);
 
-    specTotal *= 1.5 * LF(2);  // visible sun glints
+    specTotal *= 1.0 * LF(2);  // visible sun glints
     // Part A3 (envSpecularityMult, PS c44.y): the CPU surfProps.specular mult was
     // dead (main() never reads surfProps.y / c0.z), so the slider did nothing.
     // Scale the final spec combine here instead — c44.y default 1.0 = identity.
@@ -496,15 +809,19 @@ float4 main(PS_INPUT IN, float4 vpos : VPOS) : COLOR
 
     // ---- COMPOSITE ----
     // layer1 = VS game lighting (ambient + 7 directional × matCol, matches building pipe)
-    // layer2 = layer1 + additive env gloss (glass-style: env × intensity, added on top)
+    // layer2 = additive env gloss (c270294: color = layer1 + layer2 — the body is
+    // never removed at grazing angles, which was the see-through-sphere bug)
     // specTotal and rimLight are additive on top
-    float3 color = layer2;
+    // PENDING in-game A/B (reverted after black-screen regression) — keep this
+    // additive clearcoat composite as-is.
+    float3 color = layer1 + layer2;
     color += specTotal;                                // specular highlights (base + clearcoat)
     color += rimLight;                                 // Fresnel rim on top of clearcoat
     color += clusterDiffuse;                           // street-lamp diffuse (was missing)
 
-    // Output linear HDR — PostFX TonemapPass handles everything
-    return float4(max(color, 0.0), diff.a);
+    // Output linear HDR — PostFX TonemapPass handles everything.
+    // c48.w = per-texture alpha override (1 = force opaque, 0 = texture alpha).
+    return float4(max(color,0.0), lerp(diff.a, 1.0, nmParams.w));
 }
 
 // ============================================================
@@ -530,10 +847,13 @@ struct PS_INPUT_PS2SPEC {
     float4 speccolor : COLOR1;
 };
 
-float4 main_ps2EnvSpecFx(PS_INPUT_PS2SPEC IN) : COLOR
+float4 main_ps2EnvSpecFx(PS_INPUT_PS2SPEC IN, float4 vpos : VPOS) : COLOR
 {
     float4 color = tex2D(envMapTex, IN.texcoord1.xy) * IN.envcolor +
            tex2D(maskTex, IN.texcoord2.xy) * IN.speccolor;
+    // NO ClusterLightingScreen here: this additive FX pass binds neither the
+    // Forward+ constants (c45) nor the light atlases (s5-s7), so clustered
+    // lights would be an undefined read. FX quads stay unclustered.
     return saturate(color);
 }
 
@@ -548,9 +868,12 @@ struct PS_INPUT_SPECCAR {
     float4 speccolor : COLOR1;
 };
 
-float4 main_specCarFx(PS_INPUT_SPECCAR IN) : COLOR
+float4 main_specCarFx(PS_INPUT_SPECCAR IN, float4 vpos : VPOS) : COLOR
 {
     float4 color = tex2D(envMapTex, IN.texcoord1.xy) * IN.envcolor + IN.speccolor;
+    // NO ClusterLightingScreen here: this additive FX pass binds neither the
+    // Forward+ constants (c45) nor the light atlases (s5-s7), so clustered
+    // lights would be an undefined read. FX quads stay unclustered.
     return saturate(color);
 }
 
@@ -565,7 +888,7 @@ struct PS_INPUT_MOBILE {
     float3 spec      : COLOR1;
 };
 
-float4 main_mobileVehicle(PS_INPUT_MOBILE IN) : COLOR
+float4 main_mobileVehicle(PS_INPUT_MOBILE IN, float4 vpos : VPOS) : COLOR
 {
     float4 col = tex2D(diffuseTex, IN.texcoord0) * IN.color;
 
@@ -576,6 +899,19 @@ float4 main_mobileVehicle(PS_INPUT_MOBILE IN) : COLOR
     col.a += ReflCol.b * 0.125;
 
     col.rgb += IN.spec;
+
+    // Forward+ cluster response (was missing): this VS gives only a world
+    // reflection vector (no world position/normal) and the mobile cb uploads
+    // no eye/view rows, so the adapted screen-ray variant lights the composed
+    // surface color (see ClusterLightingScreen). Small clearcoat (0.3) since
+    // this is a full vehicle surface pass.
+    float3 clusterSpec = float3(0, 0, 0);
+    float3 clusterDiff = float3(0, 0, 0);
+    ClusterLightingScreen(vpos.xy, float3(0.04, 0.04, 0.04), 0.5,
+                          col.rgb, float3(0.5, 0.5, 0.5), 0.3, 1.0,
+                          clusterSpec, clusterDiff);
+    col.rgb += clusterSpec + clusterDiff;
+
     col.rgb = saturate(col.rgb);
     return col;
 }
@@ -592,7 +928,7 @@ struct PS_INPUT_NORMMAP {
     float4 envColor    : COLOR1;
 };
 
-float4 main_normMapVehicle(PS_INPUT_NORMMAP IN) : COLOR
+float4 main_normMapVehicle(PS_INPUT_NORMMAP IN, float4 vpos : VPOS) : COLOR
 {
     float4 diff = tex2D(diffuseTex, IN.texcoord0) * IN.color;
     // Compute view-space reflection vector for camera-rendered sphere map
@@ -605,6 +941,23 @@ float4 main_normMapVehicle(PS_INPUT_NORMMAP IN) : COLOR
     // Lerp-replace: env replaces diffuse at grazing angles (clearcoat behavior)
     float envBlend = saturate(IN.envColor.a * 0.8);
     float3 color = lerp(diff.rgb, env.rgb * IN.envColor.rgb, envBlend);
+
+    // Forward+ cluster response (was missing). This entry has real WorldPos /
+    // WorldNormal, so the full world-space helper applies. Adapted inputs:
+    // the entry exposes no material registers (c22 is stale off the PBR
+    // paths), so a fixed dielectric preset is used (F0 0.04, roughness 0.5),
+    // and V is derived from eyePos (the env blend above keeps its own
+    // approximate (0,0,1) — untouched).
+    float3 toEye = eyePos - IN.WorldPos;
+    float3 Vn = length(toEye) > 1e-6 ? toEye / length(toEye) : float3(0, 0, 1);
+    float3 clusterSpec = float3(0, 0, 0);
+    float3 clusterDiff = float3(0, 0, 0);
+    ClusterLighting(vpos.xy, IN.WorldPos, N, Vn,
+                    float3(0.04, 0.04, 0.04), 0.5,
+                    diff.rgb, float3(1.0, 1.0, 1.0), 0.0, 1.0, 1.0,
+                    clusterSpec, clusterDiff);
+    color.rgb += clusterSpec + clusterDiff;
+
     color.rgb = saturate(color.rgb);
     return float4(color.rgb, diff.a);
 }
@@ -642,6 +995,15 @@ float4 main_building(PS_INPUT_BUILDING IN, float4 vpos : VPOS) : COLOR
 
     // BRDF material properties from library
     float glossiness   = pbrParams.x;  // from c22 (CryEngine glossiness workflow)
+    // NM lane gloss-in-alpha (see main() note): gloss = nmTex.a, blended 85%
+    // toward the map; c48.z gates on the CPU format check. Sampled here —
+    // BEFORE roughness is derived — so the wet-road block below still layers
+    // on top of the map's gloss.
+    float4 nmS = float4(0.5, 0.5, 1.0, 1.0);
+    if(nmParams.x > 0.5)
+        nmS = tex2D(nmTex, IN.texcoord0);
+    if(nmParams.x > 0.5 && nmParams.z > 0.5)
+        glossiness = lerp(glossiness, nmS.a, 0.85);
     float roughness    = 1.0 - glossiness;
     float reflectance  = pbrParams.y;
     float clearcoat    = pbrParams.z;
@@ -676,8 +1038,8 @@ float4 main_building(PS_INPUT_BUILDING IN, float4 vpos : VPOS) : COLOR
     if(ambientColor.w > 0.5){
         float2 screenUV = vpos.xy * screenSize.zw;
         float4 ssSample = tex2D(normalBufTex, screenUV);
-        float3 ssNormal = ssSample.rgb * 2.0 - 1.0;
-        float ssLen = length(ssNormal);
+        float3 ssNormalView = ssSample.rgb * 2.0 - 1.0;
+        float ssLen = length(ssNormalView);
         // Validity gate (strengthened): NormalBuffer encodes normalized
         // normals, so valid texels decode to unit length; stale/garbage texels
         // (never-cleared RT, skipped refresh, resolution-change remnants)
@@ -689,9 +1051,35 @@ float4 main_building(PS_INPUT_BUILDING IN, float4 vpos : VPOS) : COLOR
         float ssValid = smoothstep(0.55, 0.85, ssLen)
                       * (1.0 - smoothstep(1.15, 1.45, ssLen))
                       * (1.0 - step(0.99, ssSample.a));
+        // View -> world: same c25-c27 world->view rotation rows as the vehicle
+        // main() block above. NormalBuffer.hlsl is view-space; blending it raw
+        // into this world-space N tilted the face shading with the camera.
+        float3 ssNormalWorld = ssNormalView.x * viewRight
+                             + ssNormalView.y * viewUp
+                             + ssNormalView.z * viewFwd;
+        float ssWorldLen = length(ssNormalWorld);
+        // Fail closed on zero/garbage view rows (buildingPipe.cpp uploads
+        // c25-c27 before dispatch; a missing upload must not teleport the
+        // normal). Same |rowsLen-3| gate as ClusterLighting.
+        float rowsLen = dot(viewRight, viewRight) + dot(viewUp, viewUp) + dot(viewFwd, viewFwd);
+        ssValid *= (abs(rowsLen - 3.0) < 0.5) ? 1.0 : 0.0;
+        // Anti-flip: same hemisphere as the geometric face; for horizontal
+        // surfaces (|N.z| significant) also require the same world-Z sign
+        // (Z-up). Near-vertical walls skip the Z test so wall detail blends.
+        // NaN fails every comparison -> weight 0; ssWorldLen guards the divide.
+        ssValid *= (ssWorldLen > 1e-6 && dot(ssNormalWorld, N) > 0.0) ? 1.0 : 0.0;
+        ssValid *= (abs(N.z) < 0.1 || ssNormalWorld.z * N.z >= 0.0) ? 1.0 : 0.0;
         if(ssValid > 0.001)
-            N = normalize(lerp(N, ssNormal / max(ssLen, 1e-7), 0.3 * ssValid));
+            N = normalize(lerp(N, ssNormalWorld / max(ssWorldLen, 1e-7), 0.3 * ssValid));
     }
+
+    // NM lane: tangent perturbation from the texture normal map (s8/c48).
+    // Frame computed at TOP-LEVEL flow (ddx/ddy — see the NM lane note at the
+    // cotangent-frame helper); nmS was sampled at the gloss decode above.
+    float3 nmT, nmB;
+    nmCotangentFrame(N, -V, IN.texcoord0, nmT, nmB);
+    if(nmParams.x > 0.5)
+        N = nmPerturbNormal(N, V, nmS, IN.texcoord0, nmT, nmB, nmParams.y);
 
     // Core PBR vectors
     float NdotV = max(dot(N, V), 0.0);
@@ -703,7 +1091,14 @@ float4 main_building(PS_INPUT_BUILDING IN, float4 vpos : VPOS) : COLOR
     // Fresnel
     float3 F_atNdotV = F_Schlick(NdotV, F0);
     float3 kS = F_atNdotV;
-    float3 kD = 1.0 - kS;  // dielectric: all non-reflected energy is diffuse
+    // BUG FIX (interior blackout): kD is the DIFFUSE energy budget and must be
+    // VIEW-INDEPENDENT. kD = 1-kS tied it to view-dependent Fresnel: at grazing
+    // angles (or normal-mapped NdotV -> 0) F_Schlick -> 1, kD -> 0, and
+    // ClusterShadeOne's point-light diffuse vanished indoors (black at random
+    // camera angles). EnergyConservation(F0) = saturate(1 - luminance(F0)).
+    // PENDING in-game A/B (reverted after black-screen regression) — kD /
+    // EnergyConservation (and the bldEnv block below) stay as-is.
+    float3 kD = EnergyConservation(F0);
 
     // NOTE: Ambient is already baked into IN.color.rgb by the VS
     // (OUT.Color = (prelight*surfDiff + ambient*surfAmb) * matCol).
@@ -743,56 +1138,29 @@ float4 main_building(PS_INPUT_BUILDING IN, float4 vpos : VPOS) : COLOR
     }
 
     // ---- Clustered Point Lights (Forward+) ----
+    // Atlas scheme (s5 2x2 tile block + s6/s7 light atlases, see
+    // ClusterLighting). Building flavor preserved: F_Schlick (not LH), NO
+    // clearcoat lobe (ccStr=0), Burley diffuse with kD.
     float3 clusterDiffuse = float3(0, 0, 0);
-    if(clusterParams.w > 0.0) {
-        // Screen-space tile: the CPU culler bins lights into a 16px screen tile
-        // grid (CullLightsToTiles). VPOS gives the current pixel; derive the
-        // same tile the CPU filled (old code used world XZ -> always corner).
-        float2 tileUV = (floor(vpos.xy / clusterParams.x) + 0.5) / float2(clusterParams.y, clusterParams.z);
-        float4 clusterSample = tex2D(clusterTex, tileUV);
-        
-        int indices[4];
-        indices[0] = (int)(clusterSample.r * 255.0 + 0.5);
-        indices[1] = (int)(clusterSample.g * 255.0 + 0.5);
-        indices[2] = (int)(clusterSample.b * 255.0 + 0.5);
-        indices[3] = (int)(clusterSample.a * 255.0 + 0.5);
-        
-        [unroll] for(int ci = 0; ci < 4; ci++) {
-            if(indices[ci] <= 0) continue;
-            int li = indices[ci] - 1;
-            if(li < 0 || li >= 32) continue;
-            
-            float4 clPos = clusterLightPos[li];
-            float4 clCol = clusterLightCol[li];
-            float3 ToLight = clPos.xyz - IN.WorldPos.xyz;
-            float dist = length(ToLight);
-            float radius = clPos.w;
-            
-            if(dist < radius && dist > 1e-6) {
-                float3 Lc = ToLight / dist;
-                float atten = saturate(1.0 - dist / radius);
-                atten *= atten;
-                float NdotLc = max(dot(N, Lc), 0.0);
-                if(NdotLc > 0.0) {
-                    float3 Hc = length(V + Lc) > 1e-6 ? normalize(V + Lc) : float3(0, 0, 1);
-                    float NdotHc = max(dot(N, Hc), 0.0);
-                    float LdotHc = max(dot(Lc, Hc), 0.0);
-                    float Dc = D_GGX(NdotHc, roughness);
-                    float Visc = V_SmithCorrelated(NdotV, NdotLc, roughness);
-                    float3 Fc = F_Schlick(LdotHc, F0);
-                    specTotal += Dc * Fc * Visc * NdotLc * clCol.rgb * atten;
-                    // Diffuse from cluster lights (Burley)
-                    float VdotHc = max(dot(V, Hc), 0.0);
-                    float diffc = BurleyDiffuse(NdotLc, NdotV, VdotHc, roughness);
-                    clusterDiffuse += baseColor * diffc * clCol.rgb * atten * kD / 3.14159;
-                }
-            }
-        }
-    }
+    ClusterLighting(vpos.xy, IN.WorldPos, N, V, F0, roughness,
+                    baseColor, kD, 0.0, 1.0, 0.0,
+                    specTotal, clusterDiffuse);
 
     // Universal dynamic-sky ambient tint — MULTIPLICATIVE (see SkyHemisphereTint):
     // modulates the surface so black stays black and shadows are preserved.
+    // This term consumes the SAME iblTex (s3) capture as the sky-reflection
+    // lerp below, so it gets the same dark-capture rule: fade the tint's
+    // DEVIATION FROM NEUTRAL 1.0 by the capture's own luminance. A dim
+    // indoor/night capture then contributes proportionally less tint instead
+    // of colouring a surface it has no valid sky data for. Scaling the tint's
+    // magnitude itself would darken the body; fading toward 1.0 is the
+    // multiplicative-safe form of "scale by sample luminance". NaN luminance
+    // fails the > 0 compare -> gate 0 -> neutral (NaN = black rule).
     float3 ibl = SkyHemisphereTint(N);
+    float3 iblRaw = tex2D(iblTex, float2(0.5, saturate(N.y * 0.5 + 0.5))).rgb;
+    float iblLum = dot(iblRaw, float3(0.2126, 0.7152, 0.0722));
+    float iblGate = (iblLum > 0.0) ? saturate(iblLum * 6.0) : 0.0;
+    ibl = lerp(float3(1.0, 1.0, 1.0), ibl, iblGate);
 
     // Composite: modulate the VS-lit base by the sky tint (multiplicative => shadows
     // preserved), then add PBR specular and cluster lights.
@@ -820,6 +1188,7 @@ float4 main_building(PS_INPUT_BUILDING IN, float4 vpos : VPOS) : COLOR
     //   UV  TEXCOORD5 = camera-space normal, `n.xy * 0.5 + 0.5` — IV's model
     //       (GTAIVBuilding_ps does exactly this remap; its c0 = {0.5,0,0,0}
     //       is the same affine map, folded into the expression here).
+    // PENDING in-game A/B (reverted after black-screen regression) — keep bldEnv as-is.
     if(bldEnv.x > 0.0){
         if(bldEnv.y > 0.0){
             float2 envUV = saturate(IN.CamNormal.xy * 0.5 + 0.5);
@@ -849,11 +1218,41 @@ float4 main_building(PS_INPUT_BUILDING IN, float4 vpos : VPOS) : COLOR
             // SkyHemisphereTint already use, so no new sampler or UV scheme.
             float3 R = reflect(-V, N);
             float3 skyEnv = tex2D(iblTex, float2(0.5, saturate(R.y * 0.5 + 0.5))).rgb;
-            float skyValid = (dot(skyEnv, skyEnv) > 1e-6) ? 1.0 : 0.0;
+            // GRAZING-ANGLE BLACK-SCREEN GUARD — three named constants, no new
+            // register (all derive from bldEnv.z / F_atNdotV / the sample):
+            //   BLD_SKY_LUM_FLOOR  0.10: a capture below this luminance is
+            //                      black in all but name (the old 0.02 floor
+            //                      accepted it) and must never replace the
+            //                      body where F -> 1.
+            //   BLD_ENV_WEIGHT_MAX 0.85: grazing limiter — even a fully-faded
+            //                      Fresnel may own at most this fraction of
+            //                      the surface; the rest stays body colour.
+            //   BLD_SKY_LUM_GAIN   6.0: dim sample -> proportionally weaker
+            //                      blend (full weight at skyLum >= 1/6).
+            const float BLD_SKY_LUM_FLOOR  = 0.10;  // raised from 0.02: a
+                                                    // 0.02-lum sample is black
+                                                    // yet used to replace the body
+            const float BLD_ENV_WEIGHT_MAX = 0.85;
+            const float BLD_SKY_LUM_GAIN   = 6.0;
+            // LUMINANCE floor: indoors the DynamicSky capture is dark and
+            // meaningless, so at grazing F->1 a dark sample REPLACED the body
+            // and geometry went black at view-dependent angles. A near-black
+            // sample must NEVER replace the body; bright outdoor sky keeps
+            // reflecting. A NaN luminance fails the compare -> skyValid = 0
+            // (NaN = black rule).
+            float skyLum = dot(skyEnv, float3(0.2126, 0.7152, 0.0722));
+            float skyValid = (skyLum > BLD_SKY_LUM_FLOOR) ? 1.0 : 0.0;
             // Energy-consistent F*env + (1-F)*body (same rule the vehicle
             // lane uses): an environment with no content replaces NOTHING, so
             // a dead IBL can never darken a wall the way a raw lerp would.
             float envW = saturate(bldEnv.z * saturate(F_atNdotV.r) * skyValid);
+            // Grazing limiter + luminance-proportional scale. The scale is
+            // applied ONLY when skyValid == 1: skyLum may be NaN on a dead
+            // sample, and 0 * NaN is still NaN — the branch (not arithmetic)
+            // is what enforces the NaN = black rule here.
+            envW = min(envW, BLD_ENV_WEIGHT_MAX);
+            if(skyValid > 0.5)
+                envW *= saturate(skyLum * BLD_SKY_LUM_GAIN);  // dim sample -> weaker
             color = lerp(color, skyEnv, envW);
         }
     }
@@ -862,7 +1261,14 @@ float4 main_building(PS_INPUT_BUILDING IN, float4 vpos : VPOS) : COLOR
     // Alpha must match PS2 simplePS (tex * IN.color * colorscale → a = tex.a
     // * color.a): vertex/material alpha (WIND fade, decal vertex fade) was
     // dropped → alpha-blended road decals rendered opaque → black marks.
-    return float4(max(color, 0.0), saturate(diff.a * IN.color.a));
+    // c48.w = per-texture alpha override (1 = force opaque, 0 = texture alpha).
+    // Paint-marker guard: material alpha byte 16 (c19.a = 16/255 = 0.063) is
+    // the SA "use vehicle paint" marker, not translucency — it reaches here as
+    // IN.color.a and would make painted surfaces ~6% opaque. Real fades stay
+    // below 0.1 only in the marker band, so lift exactly that band to 1.
+    float matA = IN.color.a;
+    if(matA > 0.0 && matA < 0.1) matA = 1.0;
+    return float4(max(color, 0.0), lerp(saturate(diff.a * matA), 1.0, nmParams.w));
 }
 
 // ============================================================
@@ -918,37 +1324,15 @@ float4 main_rubber(PS_INPUT IN, float4 vpos : VPOS) : COLOR
 
     // Cluster (street) lights — tyres were lit ONLY by the 6 directional lobes,
     // so at night they went pure black while the body received cluster diffuse.
-    // Matching the body keeps wheel shading in step with the paint.
-    if(clusterParams.w > 0.0) {
-        // Screen-space tile (same 16px binning as the body): VPOS -> tile UV.
-        float2 tireTileUV = (floor(vpos.xy / clusterParams.x) + 0.5) / float2(clusterParams.y, clusterParams.z);
-        float4 tireCluster = tex2D(clusterTex, tireTileUV);
-        int tireIdx[4];
-        tireIdx[0] = (int)(tireCluster.r * 255.0 + 0.5);
-        tireIdx[1] = (int)(tireCluster.g * 255.0 + 0.5);
-        tireIdx[2] = (int)(tireCluster.b * 255.0 + 0.5);
-        tireIdx[3] = (int)(tireCluster.a * 255.0 + 0.5);
-        [unroll] for(int tci = 0; tci < 4; tci++) {
-            if(tireIdx[tci] <= 0) continue;
-            int tli = tireIdx[tci] - 1;
-            if(tli < 0 || tli >= 32) continue;
-            float4 clPos = clusterLightPos[tli];
-            float4 clCol = clusterLightCol[tli];
-            float3 ToLight = clPos.xyz - IN.WorldPos.xyz;
-            float dist = length(ToLight);
-            float radius = clPos.w;
-            if(dist < radius && dist > 1e-6) {
-                float3 Lc = ToLight / dist;
-                float atten = saturate(1.0 - dist / radius);
-                atten *= atten;
-                float NdotLc = max(dot(N, Lc), 0.0);
-                if(NdotLc > 0.0) {
-                    float diffc = BurleyDiffuse(NdotLc, NdotV, max(dot(V, normalize(V + Lc)), 0.0), roughness);
-                    color += baseColor * diffc * clCol.rgb * atten * 0.5 / 3.14159;
-                }
-            }
-        }
-    }
+    // Matching the body keeps wheel shading in step with the paint. Atlas scheme
+    // (s5 2x2 tile block + s6/s7): diffuse-only flavor preserved via specW=0
+    // and kD=0.5 (old `* 0.5 / 3.14159`); the helper adds straight into color.
+    float3 rubberClusterSpec = float3(0, 0, 0);  // unused (specW=0)
+    ClusterLighting(vpos.xy, IN.WorldPos, N, V,
+                    float3(0.04, 0.04, 0.04), roughness,
+                    baseColor, float3(0.5, 0.5, 0.5), 0.0, 0.0, 0.0,
+                    rubberClusterSpec, color);
 
-    return float4(color, diff.a);
+    // c48.w = per-texture alpha override (1 = force opaque, 0 = texture alpha).
+    return float4(color, lerp(diff.a, 1.0, nmParams.w));
 }

@@ -373,6 +373,3 @@ bool IsVehicleTaxiByID(int modelID){
 bool IsVehicleFWDByID(int modelID){
     return GetVehicleDrive(modelID) == VDRIVE_FWD;
 }
-
-int GetVehicleDBCount(void){ return vehicleDBCount; }
-const VehicleEntry* GetVehicleDB(void){ return vehicleDB; }

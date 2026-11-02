@@ -18,203 +18,98 @@ PartSSSParams g_partSSSParams[NUM_PARTTYPES] = {
 };
 
 // ============================================================
-// RW API wrappers (game functions via direct addresses)
+// S5 diagnostic receipt — head-part texture probe (bandana family)
 // ============================================================
-extern RxPipeline *&skinPipe;
-
-typedef void* (__cdecl *fnClumpForAllAtomics)(void *clump, void *callback, void *data);
-typedef void* (__cdecl *fnAtomicGetGeometry)(void *atomic);
-typedef void* (__cdecl *fnGeometryGetMaterial)(void *geo, int n);
-typedef void* (__cdecl *fnMaterialGetTexture)(void *mat);
-typedef void* (__cdecl *fnAtomicGetFrame)(void *atomic);
-
-static fnClumpForAllAtomics  _ClumpForAllAtomics  = (fnClumpForAllAtomics)0x74A890;
-static fnAtomicGetGeometry   _AtomicGetGeometry   = (fnAtomicGetGeometry)0x749AB0;
-static fnGeometryGetMaterial _GeometryGetMaterial  = (fnGeometryGetMaterial)0x74B280;
-static fnMaterialGetTexture  _MaterialGetTexture   = (fnMaterialGetTexture)0x7EF4D0;
-static fnAtomicGetFrame      _AtomicGetFrame       = (fnAtomicGetFrame)0x7499A0;
-
-// ============================================================
-// Frame name classification
-// GTA SA ped clump hierarchy (from anim/RW data):
-//   Root
-//     Pelvis
-//       Spine (chest)
-//         Neck
-//           Head
-//             Hair (optional)
-//         L_Bicep -> L_Forearm -> L_Hand
-//         R_Bicep -> R_Forearm -> R_Hand
-//       L_Thigh -> L_Calf -> L_Foot
-//       R_Thigh -> R_Calf -> R_Foot
-// ============================================================
-
-int chars_classifyByFrameName(const char *name)
+// Called from the ped skin-pipe draw path (main.cpp myDefaultCallback,
+// isPedPipe branch) once per run for the first ped atomic that carries a
+// head-part texture. Names the texture, its TexAlpha class, and the frame
+// the atomic is attached to — the three facts needed to attribute the
+// "bandana green mask over the face" symptom (S5) to either (a) the
+// texture's alpha class (a bandana mask should classify TAC_CUTOUT) or
+// (b) the draw state at the ped pipe (alpha test OFF + blending OFF paints
+// the chroma-green RGB stored in the transparent texels as SOLID fill —
+// the same mechanism as the ped dual-pass leg 2, which is why the leg-2
+// blend fix at main.cpp:2188-2204 and this receipt name the same family).
+//
+// NOTE: there is NO bandana-specific draw path and NO component
+// attach/orientation code anywhere in this mod — the bandana is a game-side
+// ped component rendered through the skin pipe like every other ped atomic.
+// The historical "bandana draws backwards" note therefore cannot be an
+// attach flip in this codebase; this receipt exists to prove which texture
+// and class actually draw on the head part.
+static bool icontains_ascii(const char *hay, const char *needle)
 {
-	if(!name) return PARTTYPE_NONE;
-	char lower[64];
-	int i;
-	for(i = 0; i < 63 && name[i]; i++)
-		lower[i] = tolower(name[i]);
-	lower[i] = '\0';
-
-	// Skin parts
-	if(strstr(lower, "head"))    return PARTTYPE_SKIN;
-	if(strstr(lower, "neck"))    return PARTTYPE_SKIN;
-	if(strstr(lower, "hand"))    return PARTTYPE_SKIN;
-	if(strstr(lower, "finger"))  return PARTTYPE_SKIN;
-	if(strstr(lower, "thumb"))   return PARTTYPE_SKIN;
-	if(strstr(lower, "jaw"))     return PARTTYPE_SKIN;
-	if(strstr(lower, "cheek"))   return PARTTYPE_SKIN;
-	if(strstr(lower, "lip"))     return PARTTYPE_SKIN;
-	if(strstr(lower, "nose"))    return PARTTYPE_SKIN;
-	if(strstr(lower, "eye"))     return PARTTYPE_EYES;
-	if(strstr(lower, "eyeball")) return PARTTYPE_EYES;
-
-	// Hair parts
-	if(strstr(lower, "hair"))    return PARTTYPE_HAIR;
-	if(strstr(lower, "mohawk"))  return PARTTYPE_HAIR;
-	if(strstr(lower, "beard"))   return PARTTYPE_HAIR;
-	if(strstr(lower, "mustache"))return PARTTYPE_HAIR;
-	if(strstr(lower, "moustache"))return PARTTYPE_HAIR;
-
-	// Shoes
-	if(strstr(lower, "foot"))    return PARTTYPE_SHOES;
-	if(strstr(lower, "toe"))     return PARTTYPE_SHOES;
-	if(strstr(lower, "heel"))    return PARTTYPE_SHOES;
-	if(strstr(lower, "shoe"))    return PARTTYPE_SHOES;
-	if(strstr(lower, "boot"))    return PARTTYPE_SHOES;
-
-	// Cloth (clothing areas)
-	if(strstr(lower, "pelvis"))  return PARTTYPE_CLOTH;
-	if(strstr(lower, "spine"))   return PARTTYPE_CLOTH;
-	if(strstr(lower, "bicep"))   return PARTTYPE_CLOTH;
-	if(strstr(lower, "forearm")) return PARTTYPE_SKIN;  // forearms often exposed
-	if(strstr(lower, "thigh"))   return PARTTYPE_CLOTH;
-	if(strstr(lower, "calf"))    return PARTTYPE_CLOTH;
-	if(strstr(lower, "shoulder"))return PARTTYPE_CLOTH;
-	if(strstr(lower, "chest"))   return PARTTYPE_CLOTH;
-	if(strstr(lower, "stomach")) return PARTTYPE_CLOTH;
-	if(strstr(lower, "belt"))    return PARTTYPE_ACCESS;
-	if(strstr(lower, "collar"))  return PARTTYPE_CLOTH;
-
-	// Accessories
-	if(strstr(lower, "watch"))   return PARTTYPE_ACCESS;
-	if(strstr(lower, "ring"))    return PARTTYPE_ACCESS;
-	if(strstr(lower, "bracelet"))return PARTTYPE_ACCESS;
-
-	return PARTTYPE_NONE;
-}
-
-// ============================================================
-// Texture-based classification
-// GTA SA ped textures often have naming conventions
-// ============================================================
-int chars_classifyByTexture(RwTexture *tex)
-{
-	if(!tex) return PARTTYPE_NONE;
-	const char *name = GetFrameNodeName((RwFrame*)tex);
-	if(!name) return PARTTYPE_NONE;
-	// Also try RwTextureGetName - but RW doesn't expose it directly
-	// We use the TexDB system instead
-	TexInfo *info = RwTextureGetTexDBInfo(tex);
-	if(info && info->materialType != MATTYPE_NONE)
-		return info->materialType;
-
-	char lower[64];
-	int i;
-	for(i = 0; i < 63 && name[i]; i++)
-		lower[i] = tolower(name[i]);
-	lower[i] = '\0';
-
-	// Texture name patterns
-	if(strstr(lower, "head") || strstr(lower, "face") || strstr(lower, "skin"))
-		return PARTTYPE_SKIN;
-	if(strstr(lower, "hair"))
-		return PARTTYPE_HAIR;
-	if(strstr(lower, "shirt") || strstr(lower, "pants") || strstr(lower, "jacket") ||
-	   strstr(lower, "torso") || strstr(lower, "vest") || strstr(lower, "top"))
-		return PARTTYPE_CLOTH;
-	if(strstr(lower, "shoe") || strstr(lower, "boot") || strstr(lower, "feet"))
-		return PARTTYPE_SHOES;
-	if(strstr(lower, "eye"))
-		return PARTTYPE_EYES;
-
-	return PARTTYPE_NONE;
-}
-
-// ============================================================
-// Position-based classification
-// Uses bounding box Y position relative to clump root
-// ============================================================
-int chars_classifyByPosition(RpAtomic *atomic, RpAtomic **allAtomics, int numAtomics)
-{
-	if(!atomic || numAtomics < 2) return PARTTYPE_NONE;
-
-	void *geo = _AtomicGetGeometry(atomic);
-	if(!geo) return PARTTYPE_NONE;
-
-	// RpGeometry bounding box: offset 0x20 = RpBox (contains min/max RwV3d)
-	// RpBox.min at +0x00, RpBox.max at +0x0C (each RwV3d = 12 bytes)
-	float atomicY = (*(float*)((BYTE*)geo + 0x20 + 0x04) + *(float*)((BYTE*)geo + 0x20 + 0x04 + 0x04)) * 0.5f;
-
-	float minY = 1e10f, maxY = -1e10f;
-	for(int i = 0; i < numAtomics; i++){
-		void *g = _AtomicGetGeometry(allAtomics[i]);
-		if(!g) continue;
-		float y0 = *(float*)((BYTE*)g + 0x20 + 0x04);
-		float y1 = *(float*)((BYTE*)g + 0x20 + 0x04 + 0x04);
-		if(y0 < minY) minY = y0;
-		if(y1 > maxY) maxY = y1;
+	if(!hay || !needle) return false;
+	for(; *hay; hay++){
+		const char *h = hay, *n = needle;
+		while(*n){
+			char hc = *h, nc = *n;
+			if(hc >= 'A' && hc <= 'Z') hc += 32;
+			if(nc >= 'A' && nc <= 'Z') nc += 32;
+			if(hc != nc) break;
+			h++; n++;
+		}
+		if(!*n) return true;
 	}
-
-	float range = maxY - minY;
-	if(range < 0.01f) return PARTTYPE_NONE;
-
-	float relativeY = (atomicY - minY) / range;
-
-	if(relativeY > 0.80f) return PARTTYPE_SKIN;
-	if(relativeY > 0.45f) return PARTTYPE_CLOTH;
-	if(relativeY > 0.15f) return PARTTYPE_CLOTH;
-	return PARTTYPE_SHOES;
+	return false;
 }
 
-// ============================================================
-// Master classification: combines all methods
-// ============================================================
-int chars_classifyAtomic(RpAtomic *atomic, RpAtomic **allAtomics, int numAtomics)
+void chars_logHeadPartReceipt(const RpAtomic *atomic)
 {
-	if(!atomic) return PARTTYPE_NONE;
+	static bool logged = false;
+	if(logged) return;
+	if(!atomic) return;
+	RpGeometry *geom = atomic->geometry;
+	if(!geom || !geom->matList.materials) return;
 
-	// 1. Try frame name first
-	void *frame = _AtomicGetFrame(atomic);
-	if(frame){
-		// RwFrame name is at offset 0x00 in the name field (first 16 chars)
-		// Use GetFrameNodeName which is the game's own function
-		char *frameName = GetFrameNodeName((RwFrame*)frame);
-		int result = chars_classifyByFrameName(frameName);
-		if(result != PARTTYPE_NONE)
-			return result;
-	}
+	// Attach frame: the atomic's own frame plus the clump root (the ped
+	// hierarchy root), so the receipt names where the head part hangs.
+	RwFrame *frame = RpAtomicGetFrame((RpAtomic*)atomic);
+	const char *frameName = frame ? GetFrameNodeName(frame) : NULL;
+	RpClump *clump = RpAtomicGetClump((RpAtomic*)atomic);
+	RwFrame *rootFrame = clump ? RpClumpGetFrame(clump) : NULL;
+	const char *rootName = rootFrame ? GetFrameNodeName(rootFrame) : NULL;
 
-	// 2. Try texture name
-	void *geo = _AtomicGetGeometry(atomic);
-	if(geo){
-		// RpGeometry::numMaterials is at offset 0x34
-		int numMats = *(int*)((BYTE*)geo + 0x34);
-		for(int i = 0; i < numMats; i++){
-			void *mat = _GeometryGetMaterial(geo, i);
-			if(!mat) continue;
-			void *tex = _MaterialGetTexture(mat);
-			if(!tex) continue;
-			TexInfo *info = RwTextureGetTexDBInfo((RwTexture*)tex);
-			if(info && info->materialType != MATTYPE_NONE)
-				return info->materialType;
+	// Local extern (texalpha.cpp): TAC_CUTOUT=2, TAC_FADED=3 — same pattern
+	// as main.cpp atomicHasAlpha; enum TexAlphaClass lives in texalpha.h.
+	extern int TexAlpha_Classify(const RwTexture *tex);
+
+	char texList[256];
+	size_t pos = 0;
+	texList[0] = 0;
+	bool found = false;
+	for(RwInt32 i = 0; i < geom->matList.numMaterials; i++){
+		RpMaterial *m = geom->matList.materials[i];
+		if(!m || !m->texture) continue;
+		const char *tn = m->texture->name;
+		bool isHeadPart = icontains_ascii(tn, "bandana") ||
+			icontains_ascii(tn, "hair") ||
+			icontains_ascii(tn, "afro") ||
+			icontains_ascii(tn, "cap") ||
+			icontains_ascii(tn, "hat");
+		int tac = TexAlpha_Classify(m->texture);
+		// Report head-part textures by name, plus any alpha-carrying mask
+		// (CUTOUT/FADED) — head-part planes are the chroma-green carriers
+		// even when the texture name does not match the keywords.
+		if(isHeadPart || tac == 2 || tac == 3){
+			found = true;
+			int cls = isHeadPart ? 1 : 0;	// 1=name-matched head part
+			int w = _snprintf_s(texList + pos, sizeof(texList) - pos,
+				_TRUNCATE, "%s[%s tac=%d]%s",
+				pos ? " " : "", tn ? tn : "(null)", tac,
+				cls ? "*" : "");
+			if(w < 0) break;	// list full — first entries are the important ones
+			pos += (size_t)w;
 		}
 	}
-
-	// 3. Fall back to position
-	return chars_classifyByPosition(atomic, allAtomics, numAtomics);
+	if(!found) return;
+	logged = true;
+	dbglog("[CharsHead] receipt: atomic=%p frame='%s' root='%s' textures:%s "
+		"(*=name-matched head part; tac: 1=OPAQUE 2=CUTOUT 3=FADED 0=UNKNOWN)",
+		(const void*)atomic,
+		frameName ? frameName : "(null)",
+		rootName ? rootName : "(null)",
+		texList[0] ? texList : " (none)");
 }
 
 // ============================================================
@@ -223,6 +118,18 @@ int chars_classifyAtomic(RpAtomic *atomic, RpAtomic **allAtomics, int numAtomics
 IDirect3DTexture9 *g_charsClassifyTex = NULL;
 static IDirect3DSurface9 *g_charsClassifySurf = NULL;
 static RwRaster *g_charsClassifyRaster = NULL;
+
+// Per-frame validity latch for the SSS composite gate (chars_drawSSSBlur
+// Pass 2 "Blend back"). Set ONLY by the mask producer when it has produced
+// g_charsClassifyTex for the CURRENT frame (chars_classifyClump marks it —
+// see its tail and the TODO in chars_buildClassificationBuffer). The
+// composite consumes it via snapshot-and-clear at chars_drawSSSBlur entry, so
+// a mask produced on an earlier frame can never satisfy the gate later.
+// Nothing produces the mask today (chars_classifyClump is never called), so
+// the latch is never set and the composite stays a no-op by design — that is
+// the CJ ghost fix: the depth-masked blur blend laid a double image over the
+// ped whenever a real per-part mask was absent.
+static bool s_charsClassifyFresh = false;
 
 // Per-pixel classification values stored as RGBA
 // R=partType (encoded), G=sssStrength, B=sssRadius, A=unused
@@ -237,40 +144,6 @@ static void EnsureClassifyBuffer(int w, int h)
 	g_charsClassifyTex->GetSurfaceLevel(0, &g_charsClassifySurf);
 	g_charsClassifyRaster = RwRasterCreate(w, h, 32, rwRASTERTYPECAMERATEXTURE);
 	dbglog("chars: classify buffer created %dx%d", w, h);
-}
-
-// ============================================================
-// Build classification buffer from all atomics in a clump
-// ============================================================
-struct ClassifyData {
-	RpAtomic **atomics;
-	int count;
-	int *classifications;
-};
-
-static RpAtomic *classifyAtomics[256];
-static int classifyResults[256];
-static int classifyCount = 0;
-
-static void *classifyCB(void *atomic, void *data)
-{
-	if(classifyCount >= 256) return NULL;
-	classifyAtomics[classifyCount] = (RpAtomic*)atomic;
-	classifyCount++;
-	return (void*)1; // continue
-}
-
-void chars_classifyClump(void *clump)
-{
-	if(!clump) return;
-	classifyCount = 0;
-	_ClumpForAllAtomics(clump, classifyCB, NULL);
-
-	// Now classify each atomic
-	for(int i = 0; i < classifyCount; i++){
-		classifyResults[i] = chars_classifyAtomic(
-			classifyAtomics[i], classifyAtomics, classifyCount);
-	}
 }
 
 // ============================================================
@@ -304,6 +177,55 @@ static void EnsureSSSRasters(int w, int h)
 	sssBlurRasterB = RwRasterCreate(w, h, 32, rwRASTERTYPECAMERATEXTURE);
 	sssLastW = w;
 	sssLastH = h;
+}
+
+// SSS exit contract, shared by the normal path and the SEH fault path.
+// rwRENDERSTATETEXTURERASTER is NOT one of ImmediateModeRenderStatesReStore's
+// 10 rw states, so the pass's sssBlurRasterA/B stage-0 binds would be inherited
+// by the next consumer as its texture. Park on a guaranteed-different raster
+// first (so the L1 cache cannot no-op), set the captured entry raster back,
+// then raw-pin its resolved IDirect3DTexture9 (L3). Sampler stage 1 is
+// raw-device state too: the CLAMP forced for the depth bind must go back to
+// the captured entry fields.
+static void RestoreSSSStage0AndSampler(RwRaster *saved0,
+	DWORD s1AddrU, DWORD s1AddrV, DWORD s1Min, DWORD s1Mag, bool s1Valid)
+{
+	IDirect3DDevice9 *dev = d3d9device;
+	if(!dev) return;
+
+	RwRaster *park = sssBlurRasterA;
+	if(park == saved0) park = sssBlurRasterB;
+	if(park == saved0) park = NULL;
+	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)park);
+	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)saved0);
+
+	// L3 raw pin — proven extraction (main.cpp pedStage0Resync): ext =
+	// raster + *(DWORD*)0xB4E9E0, ext+0 = IDirect3DTexture9*. An empty entry
+	// raster must still clear the device bind, otherwise sssBlurRasterB's
+	// texture would survive the rw-level NULL.
+	IDirect3DTexture9 *tex = NULL;
+	if(saved0){
+		DWORD extOff = *(DWORD*)0xB4E9E0;
+		if(extOff > 0 && extOff < 0x100000){
+			IDirect3DTexture9 *cand = *(IDirect3DTexture9**)((uint8*)saved0 + extOff);
+			if(cand && (uintptr_t)cand >= 0x10000u && (((uintptr_t)cand & 3u) == 0))
+				tex = cand;
+		}
+	}
+	if(tex || !saved0)
+		dev->SetTexture(0, tex);
+
+	if(s1Valid){
+		dev->SetSamplerState(1, D3DSAMP_ADDRESSU, s1AddrU);
+		dev->SetSamplerState(1, D3DSAMP_ADDRESSV, s1AddrV);
+		dev->SetSamplerState(1, D3DSAMP_MINFILTER, s1Min);
+		dev->SetSamplerState(1, D3DSAMP_MAGFILTER, s1Mag);
+	} else {
+		// Capture failed: fall back to the old default rather than leaving the
+		// depth bind's CLAMP behind.
+		dev->SetSamplerState(1, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP);
+		dev->SetSamplerState(1, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
+	}
 }
 
 void chars_drawSSSBlur(void)
@@ -345,6 +267,32 @@ void chars_drawSSSBlur(void)
 		if(dbglog_throttle( "sss_bail4"))
 			dbglog("[PostFX] chars_drawSSSBlur bailing: no valid depth (ssaoEnable=%d depthTex=%p)",
 				config->ssaoEnable, g_ssaoDepthTex);
+		return;
+	}
+
+	// Snapshot-and-clear the per-frame mask-validity latch (see
+	// s_charsClassifyFresh above). Consumed ONCE here, at entry: a mask
+	// produced later in this frame can never retroactively satisfy the Pass 2
+	// gate below. POD local only — the SEH fence further down (__try, C2712)
+	// forbids non-POD locals in this function.
+	bool classifyFresh = s_charsClassifyFresh;
+	s_charsClassifyFresh = false;
+
+	// EARLY-OUT (dead-pass elimination): Pass 2 composites ONLY when
+	// classifyFresh && g_charsClassifyTex, and nothing produces the mask
+	// today (s_charsClassifyFresh has no setter anywhere in this TU;
+	// chars_classifyClump has no caller). Passes 0/1 are a full-screen copy
+	// plus a two-tap blur pair whose only consumer is that gated composite,
+	// so they would render two camera-sized rasters for nothing. Bail BEFORE
+	// any raster creation/copy/blur (EnsureSSSRasters/EnsureClassifyBuffer
+	// included). No camera raster has been touched yet — the first
+	// RwCameraSetRaster lives inside the pass body — so no camera restore is
+	// owed here; every existing bail above stays verbatim.
+	if(!classifyFresh || !g_charsClassifyTex){
+		if(dbglog_throttle("sss_early"))
+			dbglog("[PostFX] chars_drawSSSBlur early-out: %s — Passes 0/1 (copy+blur) skipped, Pass 2 could not composite",
+				!classifyFresh ? "no fresh classify mask (s_charsClassifyFresh has no producer)"
+				               : "g_charsClassifyTex is NULL");
 		return;
 	}
 
@@ -416,200 +364,284 @@ void chars_drawSSSBlur(void)
 	DWORD rawGeom[RAW_GEOM_STATE_COUNT];
 	bool rawGeomSaved = SaveRawGeomStates(rawGeom);
 
-	// Common render state
-	CPostEffects::ImmediateModeRenderStatesStore();
-	CPostEffects::ImmediateModeRenderStatesSet();
-	RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
-	RwD3D9SetRenderState(D3DRS_ZENABLE, FALSE);
-	RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
-	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
-	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
+	// Exit-contract captures (read by BOTH exit paths): the entry stage-0
+	// raster (pre-seeded NULL) and the sampler-1 fields the depth bind
+	// overwrites. POD only — they live across __try into the handler.
+	RwRaster *savedStage0 = NULL;
+	DWORD savedS1AddrU = 0, savedS1AddrV = 0, savedS1Min = 0, savedS1Mag = 0;
+	bool savedS1Valid = false;
 
-	// Depth on stage 1
-	if(g_ssaoDepthTex){
-		dev->SetTexture(1, g_ssaoDepthTex);
-		dev->SetSamplerState(1, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
-		dev->SetSamplerState(1, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+	// SEH fence (postfx DrawHeightFog idiom, POD locals only — C2712): a
+	// fault in the camera/raster/RT section below used to skip the restore
+	// at the bottom, leaking raw ZWRITE=FALSE/ZENABLE=FALSE/ALPHATEST=FALSE
+	// + blend factors into the NEXT frame's scene render (log-proven:
+	// "[PED] ZWRITE off/desynced on entry (rw=1 dev=0)" — see-through cars,
+	// ground dots).
+	__try {
+		// Capture the ENTRY stage-0 raster before this pass binds anything
+		// (Pass 0/1 bind pRasterFrontBuffer / sssBlurRasterA, Pass 2 binds
+		// sssBlurRasterB). A failed Get returns 0xFFFFFFFF; the NULL pre-seed
+		// stands. Restored by RestoreSSSStage0AndSampler on every exit.
+		RwRenderStateGet(rwRENDERSTATETEXTURERASTER, &savedStage0);
+		if(savedStage0 == (RwRaster*)0xFFFFFFFF)
+			savedStage0 = NULL;
+		// Sampler-1 entry fields: the depth bind below forces U/V CLAMP
+		// (filters are captured too so a future filter change cannot leak).
+		savedS1Valid =
+			SUCCEEDED(dev->GetSamplerState(1, D3DSAMP_ADDRESSU, &savedS1AddrU)) &&
+			SUCCEEDED(dev->GetSamplerState(1, D3DSAMP_ADDRESSV, &savedS1AddrV)) &&
+			SUCCEEDED(dev->GetSamplerState(1, D3DSAMP_MINFILTER, &savedS1Min)) &&
+			SUCCEEDED(dev->GetSamplerState(1, D3DSAMP_MAGFILTER, &savedS1Mag));
+
+		// Common render state
+		CPostEffects::ImmediateModeRenderStatesStore();
+		CPostEffects::ImmediateModeRenderStatesSet();
+		RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+		RwD3D9SetRenderState(D3DRS_ZENABLE, FALSE);
+		RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+		RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
+		RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
+		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
+
+		// Depth on stage 1
+		if(g_ssaoDepthTex){
+			dev->SetTexture(1, g_ssaoDepthTex);
+			dev->SetSamplerState(1, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+			dev->SetSamplerState(1, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+		}
+
+		float depthP[4] = { nearClip, farClip, 0.0f, 0.0f };
+		RwD3D9SetPixelShaderConstant(18, depthP, 1);
+
+		// Skin material params: c19 = (skinStrength, warmTint, rimStrength, texelSizeX)
+		//                        c20 = (texelSizeY, unused, unused, unused)
+		float skinP[4] = { skinSSSStrength, warmTint, rimStrength, pixelW };
+		RwD3D9SetPixelShaderConstant(19, skinP, 1);
+		float texelP[4] = { pixelH, 0.0f, 0.0f, 0.0f };
+		RwD3D9SetPixelShaderConstant(20, texelP, 1);
+
+		// Timecycle ambient for brightness matching: c21 = (ambientR, ambientG, ambientB, luminance)
+		// Building PBR uses GetTimecycleAmbient() for PS c24 (world ambient * 0.85).
+		// Previously used ambientObj which caused peds to be dimmer than buildings.
+		// Scaled by the sssAmbientBoost knob — the shader adds c21 once per blur
+		// pass (so the ambient match compounds across the two passes), and that
+		// boost is then composited over the whole depth-masked lower half of the
+		// frame (water surface included — the mask is depth-only).
+		RwRGBAReal tcAmbient = GetTimecycleAmbientPBR();
+		float ambR = tcAmbient.red * ambBoost;
+		float ambG = tcAmbient.green * ambBoost;
+		float ambB = tcAmbient.blue * ambBoost;
+		float ambLuma = ambR * 0.2126f + ambG * 0.7152f + ambB * 0.0722f;
+		float tcAmbP[4] = { ambR, ambG, ambB, ambLuma };
+		RwD3D9SetPixelShaderConstant(21, tcAmbP, 1);
+
+		// ---- Pass 0: Horizontal blur ----
+		{
+			RwCameraEndUpdate(Scene.camera);
+			RwCameraSetRaster(Scene.camera, sssBlurRasterA);
+			RwCameraBeginUpdate(Scene.camera);
+
+			float sssP[4] = { pixelW, 0.0f, sssWidth, strength };
+			RwD3D9SetPixelShaderConstant(17, sssP, 1);
+
+			RwRenderStateSet(rwRENDERSTATETEXTURERASTER, CPostEffects::pRasterFrontBuffer);
+
+			// guardedIm2DRender (not a bare RwIm2DRenderIndexedPrimitive): it sets
+			// overrideIm2dPixelShader itself AND clears it in __except — a fault
+			// in the unguarded form used to skip the `override = nil` line, leaving
+			// SSS_Blur bound as the override for EVERY later Im2D dispatch (HUD,
+			// front-buffer sync), i.e. a full-screen composite of this shader.
+			guardedIm2DRender(SSS_Blur, rwPRIMTYPETRILIST, colorfilterVerts, 4,
+				colorfilterIndices, 6, "SSS_Blur_H");
+		}
+
+		// ---- Pass 1: Vertical blur ----
+		{
+			RwCameraEndUpdate(Scene.camera);
+			RwCameraSetRaster(Scene.camera, sssBlurRasterB);
+			RwCameraBeginUpdate(Scene.camera);
+
+			float sssP[4] = { 0.0f, pixelH, sssWidth, strength };
+			RwD3D9SetPixelShaderConstant(17, sssP, 1);
+
+			RwRenderStateSet(rwRENDERSTATETEXTURERASTER, sssBlurRasterA);
+
+			guardedIm2DRender(SSS_Blur, rwPRIMTYPETRILIST, colorfilterVerts, 4,
+				colorfilterIndices, 6, "SSS_Blur_V");
+		}
+
+		// ---- Pass 2: Blend back ----
+		{
+			RwCameraEndUpdate(Scene.camera);
+			RwCameraSetRaster(Scene.camera, origRaster);
+			RwCameraBeginUpdate(Scene.camera);
+
+			// VALIDITY GATE (s_charsClassifyFresh / g_charsClassifyTex): the
+			// composite is a STRICT NO-OP unless the per-part classify mask
+			// (g_charsClassifyTex, produced by chars_classifyClump) exists for THIS
+			// frame. classifyFresh was snapshotted and the latch cleared at function
+			// entry, so a mask produced later in this frame can never satisfy this
+			// gate retroactively. Without a real per-part mask the depth-masked blur
+			// blend laid a translucent double image over the ped — the CJ ghost.
+			// The camera restore above and the blend-off resets below stay OUTSIDE
+			// the gate, so a skipped composite still leaves camera/render state
+			// correct (nothing was drawn over the scene raster either).
+			if(classifyFresh && g_charsClassifyTex){
+				// Copy original scene — force blend OFF through BOTH driver layers.
+				// colorfilterVerts carry alpha=0, so if a stale device
+				// ALPHABLENDENABLE survived (rw cache already FALSE -> rw set no-ops)
+				// the copy would blend instead of replace.
+				RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+				dev->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+				RwRenderStateSet(rwRENDERSTATETEXTURERASTER, CPostEffects::pRasterFrontBuffer);
+				guardedIm2DRender(NULL, rwPRIMTYPETRILIST, colorfilterVerts, 4,
+					colorfilterIndices, 6, "SSS_Copy");
+
+				// Blend blurred result back with a BOUNDED lerp, not a plain additive:
+				//   out = blur*factor + scene*(1-factor),  factor = strength (0..1)
+				// (SRCBLEND=BLENDFACTOR, DESTBLEND=INVBLENDFACTOR). The old
+				// DESTBLEND=ONE over-blended: out = scene + strength*blur could exceed
+				// 1.0 and clipped to white on bright content (glow plume). Both the
+				// RwD3D9 push and the raw write are needed — RwD3D9SetRenderState
+				// no-ops against an unchanged pending[] value, which is exactly how a
+				// device drift survives a cache-only set.
+				// Three-layer doctrine (rw cache / RwD3D9 driver cache / raw device,
+				// see pipelinecommon.cpp:883): all three must carry the blend state or
+				// a later restore can no-op against a stale/hidden layer.
+				// BLENDFACTOR/INVBLENDFACTOR (14/15) are OUTSIDE the RwBlendFunction
+				// enum (rwplcore.h:5299-5314: 0=NA .. 11=SRCALPHASAT) — pushing them
+				// through RwRenderStateSet makes the game's RW D3D9 driver index its
+				// rw->D3D blend conversion table out of bounds (undefined device
+				// state / garbage blend). So the layers SPLIT by domain:
+				//   (1) rw cache gets the closest VALID rw pair, SRCALPHA/INVSRCALPHA
+				//       (5/6) — the canonical lerp modes — so any later rw round-trip
+				//       of the cache stays in-domain and sane;
+				//   (2)+(3) driver pending[] and raw device get the real
+				//       BLENDFACTOR/INVBLENDFACTOR (raw D3D domain: RwD3D9SetRenderState
+				//       stores pending[] verbatim with no enum conversion, so 14/15 are
+				//       valid THERE) — these drive the actual composite draw.
+				// (1) is written first; the explicit (2) write below then wins the
+				// pending[] slot (pending holds 5/6 from (1), 14/15 differ → real
+				// device write), so the device ends on BLENDFACTOR/INVBLENDFACTOR
+				// exactly as before — visual unchanged, OOB table read gone.
+				RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE); // == D3DRS_ALPHABLENDENABLE
+				RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
+				RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
+				RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+				RwD3D9SetRenderState(D3DRS_SRCBLEND, D3DBLEND_BLENDFACTOR);
+				RwD3D9SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVBLENDFACTOR);
+				int blendAmt = (int)(strength * 255.0f);
+				if(blendAmt < 0) blendAmt = 0;
+				if(blendAmt > 255) blendAmt = 255;
+				// D3DRS_BLENDFACTOR has NO rw render state — it is raw-only, so only
+				// layers (2)/(3) can carry it; layer (1) has no slot for it.
+				RwD3D9SetRenderState(D3DRS_BLENDFACTOR, D3DCOLOR_ARGB(0xFF, blendAmt, blendAmt, blendAmt));
+				dev->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+				dev->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_BLENDFACTOR);
+				dev->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVBLENDFACTOR);
+				dev->SetRenderState(D3DRS_BLENDFACTOR, D3DCOLOR_ARGB(0xFF, blendAmt, blendAmt, blendAmt));
+
+				RwRenderStateSet(rwRENDERSTATETEXTURERASTER, sssBlurRasterB);
+				guardedIm2DRender(NULL, rwPRIMTYPETRILIST, colorfilterVerts, 4,
+					colorfilterIndices, 6, "SSS_Composite");
+			} else if(dbglog_throttle("sss_nomask")){
+				dbglog("[PostFX] chars_drawSSSBlur: Pass 2 composite skipped (no fresh classify mask)");
+			}
+
+			// Blend-off resets stay unconditional (outside the validity gate) so a
+			// skipped composite still scrubs any blend state the pass left behind.
+
+			RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+			dev->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+		}
+
+		// Cleanup
+		dev->SetTexture(1, NULL);
+		// Sampler stage 1 was forced to CLAMP for the depth bind — the captured
+		// entry fields are restored in the shared exit tail below. Keep the rw
+		// cache default at WRAP (the pass only changed the raw device).
+		RwRenderStateSet(rwRENDERSTATETEXTUREADDRESSU, (void*)rwTEXTUREADDRESSWRAP);
+		RwRenderStateSet(rwRENDERSTATETEXTUREADDRESSV, (void*)rwTEXTUREADDRESSWRAP);
+		// The device pixel shader is still SSS_Blur after the last override draw
+		// (the Im2D hook only rewrites it on the NEXT Im2D dispatch). Clear it so
+		// a non-Im2D full-screen blit in between (front-buffer sync) can't run
+		// through SSS_Blur and composite garbage to the screen.
+		RwD3D9SetPixelShader(NULL);
+
+		CPostEffects::ImmediateModeRenderStatesReStore();
+		// Restore LAST so it wins over ReStore's rw-only round-trip: this pushes
+		// all 9 raw states (incl. the 6 that ReStore never sees) through rw +
+		// driver cache + raw device.
+		if(rawGeomSaved)
+			RestoreRawGeomStates(rawGeom);
+		// Exit contract that ReStore cannot cover: stage 0 (TEXTURERASTER) and
+		// the raw sampler-1 fields.
+		RestoreSSSStage0AndSampler(savedStage0, savedS1AddrU, savedS1AddrV,
+			savedS1Min, savedS1Mag, savedS1Valid);
+	} __except(EXCEPTION_EXECUTE_HANDLER){
+		// Fault path: the normal-path restore at the bottom of the __try was
+		// skipped. Mirror its tail so the raw ZWRITE/ZENABLE/ALPHATEST + blend
+		// snapshot still reaches the device (no DepthHook_Suspend in this pass,
+		// so no DepthHook_Restore), clear the pass-bound PS/s1 texture, log
+		// once, and bail (void function).
+		if(dbglog_throttle("sss_fault"))
+			dbglog("[PostFX] chars_drawSSSBlur CRASHED exception=0x%08X", GetExceptionCode());
+		dev->SetTexture(1, NULL);
+		RwD3D9SetPixelShader(NULL);
+		CPostEffects::ImmediateModeRenderStatesReStore();
+		if(rawGeomSaved)
+			RestoreRawGeomStates(rawGeom);
+		// Same exit contract as the normal path: stage 0 back to the captured
+		// entry raster (park-and-set + raw pin) and sampler-1 entry fields back.
+		RestoreSSSStage0AndSampler(savedStage0, savedS1AddrU, savedS1AddrV,
+			savedS1Min, savedS1Mag, savedS1Valid);
+		return;
 	}
-
-	float depthP[4] = { nearClip, farClip, 0.0f, 0.0f };
-	RwD3D9SetPixelShaderConstant(18, depthP, 1);
-
-	// Skin material params: c19 = (skinStrength, warmTint, rimStrength, texelSizeX)
-	//                        c20 = (texelSizeY, unused, unused, unused)
-	float skinP[4] = { skinSSSStrength, warmTint, rimStrength, pixelW };
-	RwD3D9SetPixelShaderConstant(19, skinP, 1);
-	float texelP[4] = { pixelH, 0.0f, 0.0f, 0.0f };
-	RwD3D9SetPixelShaderConstant(20, texelP, 1);
-
-	// Timecycle ambient for brightness matching: c21 = (ambientR, ambientG, ambientB, luminance)
-	// Building PBR uses GetTimecycleAmbient() for PS c24 (world ambient * 0.85).
-	// Previously used ambientObj which caused peds to be dimmer than buildings.
-	// Scaled by the sssAmbientBoost knob — the shader adds c21 once per blur
-	// pass (so the ambient match compounds across the two passes), and that
-	// boost is then composited over the whole depth-masked lower half of the
-	// frame (water surface included — the mask is depth-only).
-	RwRGBAReal tcAmbient = GetTimecycleAmbientPBR();
-	float ambR = tcAmbient.red * ambBoost;
-	float ambG = tcAmbient.green * ambBoost;
-	float ambB = tcAmbient.blue * ambBoost;
-	float ambLuma = ambR * 0.2126f + ambG * 0.7152f + ambB * 0.0722f;
-	float tcAmbP[4] = { ambR, ambG, ambB, ambLuma };
-	RwD3D9SetPixelShaderConstant(21, tcAmbP, 1);
-
-	// ---- Pass 0: Horizontal blur ----
-	{
-		RwCameraEndUpdate(Scene.camera);
-		RwCameraSetRaster(Scene.camera, sssBlurRasterA);
-		RwCameraBeginUpdate(Scene.camera);
-
-		float sssP[4] = { pixelW, 0.0f, sssWidth, strength };
-		RwD3D9SetPixelShaderConstant(17, sssP, 1);
-
-		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, CPostEffects::pRasterFrontBuffer);
-
-		// guardedIm2DRender (not a bare RwIm2DRenderIndexedPrimitive): it sets
-		// overrideIm2dPixelShader itself AND clears it in __except — a fault
-		// in the unguarded form used to skip the `override = nil` line, leaving
-		// SSS_Blur bound as the override for EVERY later Im2D dispatch (HUD,
-		// front-buffer sync), i.e. a full-screen composite of this shader.
-		guardedIm2DRender(SSS_Blur, rwPRIMTYPETRILIST, colorfilterVerts, 4,
-			colorfilterIndices, 6, "SSS_Blur_H");
-	}
-
-	// ---- Pass 1: Vertical blur ----
-	{
-		RwCameraEndUpdate(Scene.camera);
-		RwCameraSetRaster(Scene.camera, sssBlurRasterB);
-		RwCameraBeginUpdate(Scene.camera);
-
-		float sssP[4] = { 0.0f, pixelH, sssWidth, strength };
-		RwD3D9SetPixelShaderConstant(17, sssP, 1);
-
-		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, sssBlurRasterA);
-
-		guardedIm2DRender(SSS_Blur, rwPRIMTYPETRILIST, colorfilterVerts, 4,
-			colorfilterIndices, 6, "SSS_Blur_V");
-	}
-
-	// ---- Pass 2: Blend back ----
-	{
-		RwCameraEndUpdate(Scene.camera);
-		RwCameraSetRaster(Scene.camera, origRaster);
-		RwCameraBeginUpdate(Scene.camera);
-
-		// Copy original scene — force blend OFF through BOTH driver layers.
-		// colorfilterVerts carry alpha=0, so if a stale device
-		// ALPHABLENDENABLE survived (rw cache already FALSE -> rw set no-ops)
-		// the copy would blend instead of replace.
-		RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
-		dev->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
-		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, CPostEffects::pRasterFrontBuffer);
-		guardedIm2DRender(NULL, rwPRIMTYPETRILIST, colorfilterVerts, 4,
-			colorfilterIndices, 6, "SSS_Copy");
-
-		// Blend blurred result back with a BOUNDED lerp, not a plain additive:
-		//   out = blur*factor + scene*(1-factor),  factor = strength (0..1)
-		// (SRCBLEND=BLENDFACTOR, DESTBLEND=INVBLENDFACTOR). The old
-		// DESTBLEND=ONE over-blended: out = scene + strength*blur could exceed
-		// 1.0 and clipped to white on bright content (glow plume). Both the
-		// RwD3D9 push and the raw write are needed — RwD3D9SetRenderState
-		// no-ops against an unchanged pending[] value, which is exactly how a
-		// device drift survives a cache-only set.
-		// Three-layer doctrine (rw cache / RwD3D9 driver cache / raw device,
-		// see pipelinecommon.cpp:883): all three must carry the blend state or
-		// a later restore can no-op against a stale/hidden layer.
-		// BLENDFACTOR/INVBLENDFACTOR (14/15) are OUTSIDE the RwBlendFunction
-		// enum (rwplcore.h:5299-5314: 0=NA .. 11=SRCALPHASAT) — pushing them
-		// through RwRenderStateSet makes the game's RW D3D9 driver index its
-		// rw->D3D blend conversion table out of bounds (undefined device
-		// state / garbage blend). So the layers SPLIT by domain:
-		//   (1) rw cache gets the closest VALID rw pair, SRCALPHA/INVSRCALPHA
-		//       (5/6) — the canonical lerp modes — so any later rw round-trip
-		//       of the cache stays in-domain and sane;
-		//   (2)+(3) driver pending[] and raw device get the real
-		//       BLENDFACTOR/INVBLENDFACTOR (raw D3D domain: RwD3D9SetRenderState
-		//       stores pending[] verbatim with no enum conversion, so 14/15 are
-		//       valid THERE) — these drive the actual composite draw.
-		// (1) is written first; the explicit (2) write below then wins the
-		// pending[] slot (pending holds 5/6 from (1), 14/15 differ → real
-		// device write), so the device ends on BLENDFACTOR/INVBLENDFACTOR
-		// exactly as before — visual unchanged, OOB table read gone.
-		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE); // == D3DRS_ALPHABLENDENABLE
-		RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
-		RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
-		RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-		RwD3D9SetRenderState(D3DRS_SRCBLEND, D3DBLEND_BLENDFACTOR);
-		RwD3D9SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVBLENDFACTOR);
-		int blendAmt = (int)(strength * 255.0f);
-		if(blendAmt < 0) blendAmt = 0;
-		if(blendAmt > 255) blendAmt = 255;
-		// D3DRS_BLENDFACTOR has NO rw render state — it is raw-only, so only
-		// layers (2)/(3) can carry it; layer (1) has no slot for it.
-		RwD3D9SetRenderState(D3DRS_BLENDFACTOR, D3DCOLOR_ARGB(0xFF, blendAmt, blendAmt, blendAmt));
-		dev->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-		dev->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_BLENDFACTOR);
-		dev->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVBLENDFACTOR);
-		dev->SetRenderState(D3DRS_BLENDFACTOR, D3DCOLOR_ARGB(0xFF, blendAmt, blendAmt, blendAmt));
-
-		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, sssBlurRasterB);
-		guardedIm2DRender(NULL, rwPRIMTYPETRILIST, colorfilterVerts, 4,
-			colorfilterIndices, 6, "SSS_Composite");
-
-		RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
-		dev->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
-	}
-
-	// Cleanup
-	dev->SetTexture(1, NULL);
-	// Stage-1 sampler was forced to CLAMP for the depth bind — put the
-	// default back or every later s1 consumer inherits the leak.
-	dev->SetSamplerState(1, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP);
-	dev->SetSamplerState(1, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
-	RwRenderStateSet(rwRENDERSTATETEXTUREADDRESSU, (void*)rwTEXTUREADDRESSWRAP);
-	RwRenderStateSet(rwRENDERSTATETEXTUREADDRESSV, (void*)rwTEXTUREADDRESSWRAP);
-	// The device pixel shader is still SSS_Blur after the last override draw
-	// (the Im2D hook only rewrites it on the NEXT Im2D dispatch). Clear it so
-	// a non-Im2D full-screen blit in between (front-buffer sync) can't run
-	// through SSS_Blur and composite garbage to the screen.
-	RwD3D9SetPixelShader(NULL);
-
-	CPostEffects::ImmediateModeRenderStatesReStore();
-	// Restore LAST so it wins over ReStore's rw-only round-trip: this pushes
-	// all 9 raw states (incl. the 6 that ReStore never sees) through rw +
-	// driver cache + raw device.
-	if(rawGeomSaved)
-		RestoreRawGeomStates(rawGeom);
 }
 
 // ============================================================
 // Init / Shutdown
 // ============================================================
-void chars_init(void)
-{
-	dbglog("chars_init: SSS system ready (part params loaded)");
-}
-
-PartSSSParams chars_getPartParams(int partType)
-{
-	if(partType < 0 || partType >= NUM_PARTTYPES)
-		return g_partSSSParams[PARTTYPE_NONE];
-	return g_partSSSParams[partType];
-}
-
-void chars_buildClassificationBuffer(void)
-{
-	// Placeholder for future per-pixel classification rendering
-	// Currently unused — SSS blur uses depth-based character masking instead
-}
-
 void chars_shutdown(void)
 {
 	if(sssBlurRasterA){ RwRasterDestroy(sssBlurRasterA); sssBlurRasterA = nil; }
 	if(sssBlurRasterB){ RwRasterDestroy(sssBlurRasterB); sssBlurRasterB = nil; }
 	if(g_charsClassifyTex){ g_charsClassifyTex->Release(); g_charsClassifyTex = NULL; }
+	// Mask released — clear the validity latch so a stale "fresh" flag can
+	// never enable the SSS composite without a live mask.
+	s_charsClassifyFresh = false;
 	if(g_charsClassifySurf){ g_charsClassifySurf->Release(); g_charsClassifySurf = NULL; }
 	if(g_charsClassifyRaster){ RwRasterDestroy(g_charsClassifyRaster); g_charsClassifyRaster = nil; }
+	sssLastW = sssLastH = 0;
+}
+
+// Device-reset release (called from postfx.cpp OnDeviceReset).
+//
+// CRITICAL: g_charsClassifyTex is a raw D3DPOOL_DEFAULT render-target texture
+// (EnsureClassifyBuffer). It is NOT an RW raster, so RW's video-memory raster
+// restore list never sees it — if it is alive when the game calls
+// IDirect3DDevice9::Reset, Reset fails (D3DERR_INVALIDCALL) and the vanilla
+// RW restore path (D3D9DeviceRestoreVideoMemory, 0x7F9A21..) does an UNCHECKED
+// IDirect3DSurface9_Release(_RwD3D9RenderSurface) right after a failed
+// GetRenderTarget → Release(NULL) → 0xC0000005 read of NULL at 0x7F9A3C
+// (crash log 2026-10-17 07:04:00.350, 1.3s after the frame-1 Reset).
+// Everything here is lazily recreated by EnsureClassifyBuffer /
+// EnsureSSSBlurRasters on the next SSS pass, so releasing is invisible.
+void chars_OnDeviceReset(void)
+{
+	if(g_charsClassifyTex){
+		dbglog("chars_OnDeviceReset: releasing classify tex=%p surf=%p",
+			(void*)g_charsClassifyTex, (void*)g_charsClassifySurf);
+		g_charsClassifyTex->Release(); g_charsClassifyTex = NULL;
+	}
+	// Device reset — same as shutdown: released mask, so kill the latch.
+	s_charsClassifyFresh = false;
+	if(g_charsClassifySurf){ g_charsClassifySurf->Release(); g_charsClassifySurf = NULL; }
+	if(g_charsClassifyRaster){ RwRasterDestroy(g_charsClassifyRaster); g_charsClassifyRaster = nil; }
+	// SSS blur rasters are RW CAMERATEXTURE rasters (DEFAULT-pool RTs under the
+	// hood); RW's restore list covers them, but destroying here keeps the
+	// module fully device-reset-clean and they recreate lazily next pass.
+	if(sssBlurRasterA){ RwRasterDestroy(sssBlurRasterA); sssBlurRasterA = nil; }
+	if(sssBlurRasterB){ RwRasterDestroy(sssBlurRasterB); sssBlurRasterB = nil; }
 	sssLastW = sssLastH = 0;
 }

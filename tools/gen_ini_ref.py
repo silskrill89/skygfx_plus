@@ -34,9 +34,17 @@ except Exception:  # tool must stay standalone if the helper moves
     def setup_console():
         pass
 
-MAIN_CPP = PROJECT_DIR / "src" / "core" / "main.cpp"
-SKYGFX_H = PROJECT_DIR / "src" / "skygfx.h"
-MODE_MANAGER = PROJECT_DIR / "src" / "core" / "modeManager.cpp"
+# Source files parsed by this tool.  If a file is split or moved (e.g.
+# the planned main-split), update this mapping -- --check hashes every
+# entry so any source change invalidates the generated doc.
+SOURCE_FILES: dict[str, Path] = {
+    "main": PROJECT_DIR / "src" / "core" / "main.cpp",
+    "h": PROJECT_DIR / "src" / "skygfx.h",
+    "mode": PROJECT_DIR / "src" / "core" / "modeManager.cpp",
+}
+MAIN_CPP = SOURCE_FILES["main"]
+SKYGFX_H = SOURCE_FILES["h"]
+MODE_MANAGER = SOURCE_FILES["mode"]
 OUT_DOC = PROJECT_DIR / "docs" / "ini-reference.md"
 
 READ_FUNCS = ("readint", "readfloat", "readhex")
@@ -268,7 +276,7 @@ LEGACY_ALIASES = {"stochasticTexturing", "stochastic"}
 # reference must list them instead of silently omitting them.
 EXTERNAL_INI_SOURCES = (
     (PROJECT_DIR / "src" / "render" / "forwardplus.cpp", "int"),
-    (PROJECT_DIR / "src" / "rw" / "normalmap.cpp", "string"),
+    (PROJECT_DIR / "src" / "texdefs.cpp", "string"),
 )
 
 
@@ -611,8 +619,7 @@ def render(rows: list[dict], unresolved: list[dict], cfg_fields: dict[str, str],
     out.append("> ```")
     out.append("")
     out.append(
-        f"Source fingerprint: `main.cpp {hashes['main']}` · "
-        f"`skygfx.h {hashes['h']}` · `modeManager.cpp {hashes['mode']}`"
+        "Source fingerprint: " + " · ".join(f"`{SOURCE_FILES[k].name} {hashes[k]}`" for k in SOURCE_FILES)
     )
     out.append("")
     add_found, add_unread = add_stats
@@ -757,10 +764,10 @@ def build() -> tuple[str, int, int, int, int, int]:
     add_unread = sum(1 for k in add_map if k not in read_keys)
     rows.extend(parse_external_ini_keys(read_keys))
 
+    _texts = {"main": main_text, "h": header_text, "mode": mode_text}
     hashes = {
-        "main": hashlib.sha256(main_text.encode("utf-8", "replace")).hexdigest()[:12],
-        "h": hashlib.sha256(header_text.encode("utf-8", "replace")).hexdigest()[:12],
-        "mode": hashlib.sha256(mode_text.encode("utf-8", "replace")).hexdigest()[:12],
+        key: hashlib.sha256(_texts[key].encode("utf-8", "replace")).hexdigest()[:12]
+        for key in SOURCE_FILES
     }
     doc = render(rows, unresolved, cfg_fields, owned, helpers, body, hashes,
                  (len(add_map), add_unread))

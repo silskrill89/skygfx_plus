@@ -42,6 +42,29 @@ float3x3	envmat		: register(c38);
 #define surfLightScale (surfProps.y)
 #define surfDiff (surfProps.z)
 
+// ---- Sept-3 (c270294) prelight-dominant balance --------------------------
+// c270294 shipped `OUT.Color = (prelight*surfDiff + ambient*surfAmb)*matCol`
+// with buildingAmbient a dead static 0.0, i.e. the PBR building base was
+// prelight-only. The live timecycle ambient (c4) and the 7-light sum (c5-c18)
+// were added later ON TOP of the already-baked prelight, double-counting
+// illumination (the pastel / greenish daylight). These three constants restore
+// the prelight-dominant base and keep the live terms as small, tunable add-ons
+// — all tuning lives here.
+//
+// kPrelightDominance: 1.0 = exact c270294 prelight term. Raise only if a
+//   material's real surfDiff leaves the baked prelight too weak.
+// kAmbientScale: c270294 ambient was effectively 0 (dead static). 0.10 keeps a
+//   trace of timecycle tint in shadow instead of pure black while contributing
+//   only ~2-4% of a typical daylight prelight.
+// kDirectScale: 0.15 of the existing surfLightScale'd 7-light sum. At full
+//   daylight (directCol[0] ~= 1.0, NdotL ~= 0.7, diffuse ~= 0.8) that is ~0.08
+//   added against a ~0.4-0.6 prelight -> ~15-20% of the base: enough to keep
+//   the dawn/dusk sun-direction gradient, too little to re-wash the baked
+//   prelight. Baked-lighting assets (surfLightScale ~= 0) stay pure c270294.
+static const float kPrelightDominance = 1.0;
+static const float kAmbientScale      = 0.10;
+static const float kDirectScale       = 0.15;
+
 struct VS_INPUT
 {
 	float4 Position		: POSITION;
@@ -101,21 +124,22 @@ VS_OUTPUT main(in VS_INPUT IN)
 	float camNormLen = length(camNormal);
 	OUT.CamNormal = camNormLen > 1e-6 ? camNormal / camNormLen : float3(0, 0, 1);
 
-	// Vertex color: baked day/night prelight + LIVE timecycle sun (mirrors vehicleVS).
+	// Vertex color: baked day/night prelight (dominant) + SMALL live ambient/sun.
 	// directDir is WORLD-space here (buildingPipe.cpp pipeUploadLightDirectionForce),
 	// so NdotL uses worldNormal, not the object-space IN.Normal. saturate() is required
 	// now that sun is added (sunlit faces can otherwise exceed 1.0).
 	float4 prelight = IN.DayColor * dayparam + IN.NightColor * nightparam;
-	OUT.Color = prelight * surfDiff;
-	OUT.Color.xyz += ambient * surfAmb;
+	float4 vcol = prelight * surfDiff * kPrelightDominance;
+	vcol.xyz += ambient * surfAmb * kAmbientScale;
 	for (int i = 0; i < 7; i++){
 		float l = max(0.0, dot(worldNormal, -directDir[i]));
 		// Dynamic lights scale by surfLightScale (y), NOT surfDiff: for
 		// baked-lighting materials (diffuse=0) the CPU sends y~=0, so the
 		// live light sum stays off while prelight passes at full strength.
-		OUT.Color.xyz += l * directCol[i] * surfLightScale;
+		// kDirectScale keeps the live sun a small add-on over the prelight.
+		vcol.xyz += l * directCol[i] * surfLightScale * kDirectScale;
 	}
-	OUT.Color = saturate(OUT.Color) * matCol;
+	OUT.Color = saturate(vcol) * matCol;
 
 	// Env/Fresnel params for PBR specular
 	float3 V = normalize(eyePos - worldPos.xyz);

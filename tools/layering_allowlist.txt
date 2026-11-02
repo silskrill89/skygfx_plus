@@ -1,0 +1,5 @@
+# Layering allowlist (one path or glob per line; # starts a comment).
+# Intentionally empty in the seed commit: every raw device write outside the
+# doctrine TU is reported until it is either fixed or explicitly recorded here.
+# Example:
+#   src/render/waterPipe.cpp
