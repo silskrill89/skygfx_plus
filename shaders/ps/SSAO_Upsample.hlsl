@@ -29,9 +29,9 @@ struct PS_INPUT
 // ---------------------------------------------------------------------------
 float4 main(PS_INPUT IN) : COLOR
 {
-    // Compute quarter-res UV from full-res UV
-    float2 quarterScale = quarterSize.xy / screenSize.xy;
-    float2 quarterUV = IN.texCoord * quarterScale;
+    // Quarter-res and full-res textures share the same normalized [0,1] UV
+    // space — sample the quarter-res buffer at the same UV (no re-scaling).
+    float2 quarterUV = IN.texCoord;
 
     // Full-res center depth
     float centerDepth = tex2D(depthTexture, IN.texCoord).r;
@@ -66,7 +66,8 @@ float4 main(PS_INPUT IN) : COLOR
             float sampleConfidence = sampleSSAO.g;
 
             // Compute the full-res UV of this quarter texel for depth lookup
-            float2 sampleFullUV = sampleQuarterUV / quarterScale;
+            // (same normalized UV space — no scaling)
+            float2 sampleFullUV = sampleQuarterUV;
             float sampleDepth = tex2D(depthTexture, sampleFullUV).r;
 
             // Bilinear weight: distance from full-res pixel to this quarter texel center
@@ -75,7 +76,7 @@ float4 main(PS_INPUT IN) : COLOR
 
             // Bilateral (depth) weight
             float depthDiff = abs(centerDepth - sampleDepth);
-            float depthWeight = exp(-depthDiff * depthDiff / (depthThreshold * depthThreshold));
+            float depthWeight = exp(-depthDiff * depthDiff / max(depthThreshold * depthThreshold, 1e-7));
 
             float weight = bilinearWeight * depthWeight;
             totalOcclusion += sampleOcclusion * weight;

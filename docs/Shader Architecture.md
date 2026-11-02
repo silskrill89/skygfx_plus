@@ -10,7 +10,7 @@ All shaders compile to CSO (Compiled Shader Object) via `fxc.exe` during build. 
 shaders/
 ├── include/                    # Shared includes (7 files)
 │   ├── PBR_Common.hlsl         # GGX/Smith/Schlick, cloud FBM, Fresnel
-│   ├── StochasticSamplerPS.hlsl # Hash-based stochastic texture sampling
+│   ├── Noise.hlsl              # Universal packed noise fetch (SM3.0)
 │   ├── colorSpace.hlsl         # YCbCr, linear/gamma conversions
 │   ├── SubsurfaceScattering.hlsl # SSS material IDs, wrap lighting
 │   ├── CarPaintNoise.hlsl      # Paint noise functions
@@ -76,7 +76,7 @@ shaders/
 │   ├── GTA_SA_ModernColor.hlsl # GTA SA modern color
 │   └── Clamp.hlsl              # Color clamping
 ├── buildingPipePS.hlsl         # Consolidated building PS (5 entry points)
-├── stochasticBuildingPS.hlsl   # Consolidated stochastic building PS (3 entry points)
+├── noiseDetailBuildingPS.hlsl  # Consolidated noise-detail building PS (3 entry points)
 ├── vehiclePipeVS.hlsl          # Consolidated vehicle VS (10 entry points)
 └── unifiedPipe.hlsl            # 4-pass forward+ post-processing chain
 ```
@@ -95,8 +95,8 @@ float4 main_normMapBuilding(...) { /* normal-mapped */ }
 
 Each entry point is compiled to a separate CSO:
 ```
-fxc /E main_simple /T ps_2_0 /Fo cso/buildingPipePS_simple.cso buildingPipePS.hlsl
-fxc /E main_simpleDetail /T ps_2_0 /Fo cso/buildingPipePS_simpleDetail.cso buildingPipePS.hlsl
+fxc /E main_simple /T ps_3_0 /Fo cso/buildingPipePS_simple.cso buildingPipePS.hlsl
+fxc /E main_simpleDetail /T ps_3_0 /Fo cso/buildingPipePS_simpleDetail.cso buildingPipePS.hlsl
 ```
 
 This preserves backwards compatibility — `fix_build.py` compiles each wrapper to its own CSO with the correct entry point.
@@ -107,8 +107,8 @@ See [[Build System]]. Each HLSL compiles with:
 fxc /E <entry> /T <profile> /Fo cso/<name>.cso <name>.hlsl
 ```
 - Vehicle PBR shaders: `ps_3_0` / `vs_3_0`
-- Building shaders: `ps_2_0` / `vs_2_0`
-- PostFX shaders: `ps_2_0` / `ps_3_0`
+- Building shaders: `ps_3_0` / `vs_3_0`
+- PostFX shaders: `ps_3_0`
 
 ## Loading
 `CreateShaders()` in `pipelinecommon.cpp` loads all CSOs at startup via `makePS(IDR_*, &pointer)` and `makeVS(IDR_*, &pointer)`. Each IDR maps to a CSO in `Resource.rc`.
@@ -188,29 +188,29 @@ fxc /E <entry> /T <profile> /Fo cso/<name>.cso <name>.hlsl
 
 | HLSL File | Entry Point | Pipeline | Target |
 |---|---|---|---|
-| `vehiclePipeVS.hlsl` | `main_vehicle` | PS2/PC/Xbox basic | vs_2_0 |
+| `vehiclePipeVS.hlsl` | `main_vehicle` | PS2/PC/Xbox basic | vs_3_0 |
 | `vehiclePipeVS.hlsl` | `main_vehiclePBR` | Modern PBR | vs_3_0 |
-| `vehiclePipeVS.hlsl` | `main_ps2CarFx` | PS2 car effects | vs_2_0 |
-| `vehiclePipeVS.hlsl` | `main_specCarFx` | Specular car FX | vs_2_0 |
-| `vehiclePipeVS.hlsl` | `main_xboxCar` | Xbox car | vs_2_0 |
-| `vehiclePipeVS.hlsl` | `main_leedsCarFx` | Leeds/VCS car | vs_2_0 |
-| `vehiclePipeVS.hlsl` | `main_mobileVehicle` | Mobile vehicle | vs_2_0 |
-| `vehiclePipeVS.hlsl` | `main_neoPass1` | Neo pass 1 | vs_2_0 |
-| `vehiclePipeVS.hlsl` | `main_neoPass2` | Neo pass 2 | vs_2_0 |
-| `vehicleVS.hlsl` | `main` | Basic vehicle | vs_2_0 |
-| `ps2BuildingVS.hlsl` | `main` | PS2 building | vs_2_0 |
-| `ps2BuildingFxVS.hlsl` | `main` | PS2 building FX | vs_2_0 |
-| `ps2BuildingWindVS.hlsl` | `main` | PS2 building wind | vs_2_0 |
-| `ps2BuildingSSSVS.hlsl` | `main` | PS2 building SSS | vs_2_0 |
-| `xboxBuildingVS.hlsl` | `main` | Xbox building | vs_2_0 |
-| `xboxBuildingWindVS.hlsl` | `main` | Xbox building wind | vs_2_0 |
-| `sphereBuildingVS.hlsl` | `main` | Sphere-mapped building | vs_2_0 |
-| `mobileBuildingVS.hlsl` | `main` | Mobile building | vs_2_0 |
-| `mobileVehicleVS.hlsl` | `main` | Mobile vehicle | vs_2_0 |
-| `neoVehiclePass1VS.hlsl` | `main` | Neo vehicle pass 1 | vs_2_0 |
-| `neoVehiclePass2VS.hlsl` | `main` | Neo vehicle pass 2 | vs_2_0 |
-| `postfxVS.hlsl` | `main` | Post-processing quad | vs_2_0 |
-| `Water_VS.hlsl` | `main` | Water | vs_2_0 |
+| `vehiclePipeVS.hlsl` | `main_ps2CarFx` | PS2 car effects | vs_3_0 |
+| `vehiclePipeVS.hlsl` | `main_specCarFx` | Specular car FX | vs_3_0 |
+| `vehiclePipeVS.hlsl` | `main_xboxCar` | Xbox car | vs_3_0 |
+| `vehiclePipeVS.hlsl` | `main_leedsCarFx` | Leeds/VCS car | vs_3_0 |
+| `vehiclePipeVS.hlsl` | `main_mobileVehicle` | Mobile vehicle | vs_3_0 |
+| `vehiclePipeVS.hlsl` | `main_neoPass1` | Neo pass 1 | vs_3_0 |
+| `vehiclePipeVS.hlsl` | `main_neoPass2` | Neo pass 2 | vs_3_0 |
+| `vehicleVS.hlsl` | `main` | Basic vehicle | vs_3_0 |
+| `ps2BuildingVS.hlsl` | `main` | PS2 building | vs_3_0 |
+| `ps2BuildingFxVS.hlsl` | `main` | PS2 building FX | vs_3_0 |
+| `ps2BuildingWindVS.hlsl` | `main` | PS2 building wind | vs_3_0 |
+| `ps2BuildingSSSVS.hlsl` | `main` | PS2 building SSS | vs_3_0 |
+| `xboxBuildingVS.hlsl` | `main` | Xbox building | vs_3_0 |
+| `xboxBuildingWindVS.hlsl` | `main` | Xbox building wind | vs_3_0 |
+| `sphereBuildingVS.hlsl` | `main` | Sphere-mapped building | vs_3_0 |
+| `mobileBuildingVS.hlsl` | `main` | Mobile building | vs_3_0 |
+| `mobileVehicleVS.hlsl` | `main` | Mobile vehicle | vs_3_0 |
+| `neoVehiclePass1VS.hlsl` | `main` | Neo vehicle pass 1 | vs_3_0 |
+| `neoVehiclePass2VS.hlsl` | `main` | Neo vehicle pass 2 | vs_3_0 |
+| `postfxVS.hlsl` | `main` | Post-processing quad | vs_3_0 |
+| `Water_VS.hlsl` | `main` | Water | vs_3_0 |
 
 ### Pixel Shaders — Vehicle
 
@@ -218,77 +218,77 @@ fxc /E <entry> /T <profile> /Fo cso/<name>.cso <name>.hlsl
 |---|---|---|---|
 | `VehiclePBR_Modern.hlsl` | `main` | Modern PBR | ps_3_0 |
 | `VehiclePBR_Modern.hlsl` | `main_rubber` | PBR rubber/tire | ps_3_0 |
-| `VehiclePBR_Modern.hlsl` | `main_ps2EnvSpecFx` | PS2 env+spec | ps_2_0 |
-| `VehiclePBR_Modern.hlsl` | `main_specCarFx` | Specular car FX | ps_2_0 |
-| `VehiclePBR_Modern.hlsl` | `main_mobileVehicle` | Mobile vehicle | ps_2_0 |
+| `VehiclePBR_Modern.hlsl` | `main_ps2EnvSpecFx` | PS2 env+spec | ps_3_0 |
+| `VehiclePBR_Modern.hlsl` | `main_specCarFx` | Specular car FX | ps_3_0 |
+| `VehiclePBR_Modern.hlsl` | `main_mobileVehicle` | Mobile vehicle | ps_3_0 |
 | `VehiclePBR_Modern.hlsl` | `main_normMapVehicle` | Normal-mapped vehicle | ps_3_0 |
 | `VehiclePBR_Modern.hlsl` | `main_building` | PBR building | ps_3_0 |
 | `Glass_Vehicle.hlsl` | `main` | Vehicle glass | ps_3_0 |
 | `Rubber_Vehicle.hlsl` | `main` | Tire rendering (standalone) | ps_3_0 |
 | `CarPaint_Reflections.hlsl` | `main` | Car paint reflections | ps_3_0 |
 | `VehiclePaint_GTAIV.hlsl` | `main` | GTA IV vehicle paint | ps_3_0 |
-| `GTAIV_ps20.hlsl` | `main` | GTA IV post-process | ps_2_0 |
-| `simplePS.hlsl` | `main` | Basic texture * color | ps_2_0 |
-| `mobileVehiclePS.hlsl` | `main` | Mobile vehicle PS | ps_2_0 |
+| `GTAIV_ps20.hlsl` | `main` | GTA IV post-process | ps_3_0 |
+| `simplePS.hlsl` | `main` | Basic texture * color | ps_3_0 |
+| `mobileVehiclePS.hlsl` | `main` | Mobile vehicle PS | ps_3_0 |
 | `normMapVehiclePS.hlsl` | `main` | Normal-mapped vehicle | ps_3_0 |
 
 ### Pixel Shaders — Building
 
 | HLSL File | Entry Point | Pipeline | Target |
 |---|---|---|---|
-| `buildingPipePS.hlsl` | `main_simple` | PS2 simple building | ps_2_0 |
-| `buildingPipePS.hlsl` | `main_simpleDetail` | Building + detail map | ps_2_0 |
-| `buildingPipePS.hlsl` | `main_simpleFog` | Building + fog | ps_2_0 |
-| `buildingPipePS.hlsl` | `main_xboxBuilding` | Xbox dual-layer env | ps_2_0 |
-| `buildingPipePS.hlsl` | `main_normMapBuilding` | Normal-mapped building | ps_2_0 |
-| `stochasticBuildingPS.hlsl` | `main_simpleStochastic` | Stochastic simple | ps_2_0 |
-| `stochasticBuildingPS.hlsl` | `main_simpleDetailStochastic` | Stochastic + detail | ps_2_0 |
-| `stochasticBuildingPS.hlsl` | `main_xboxBuildingStochastic` | Stochastic Xbox env | ps_2_0 |
+| `buildingPipePS.hlsl` | `main_simple` | PS2 simple building | ps_3_0 |
+| `buildingPipePS.hlsl` | `main_simpleDetail` | Building + detail map | ps_3_0 |
+| `buildingPipePS.hlsl` | `main_simpleFog` | Building + fog | ps_3_0 |
+| `buildingPipePS.hlsl` | `main_xboxBuilding` | Xbox dual-layer env | ps_3_0 |
+| `buildingPipePS.hlsl` | `main_normMapBuilding` | Normal-mapped building | ps_3_0 |
+| `noiseDetailBuildingPS.hlsl` | `main_simpleNoiseDetail` | Noise-detail simple | ps_3_0 |
+| `noiseDetailBuildingPS.hlsl` | `main_simpleDetailNoiseDetail` | Noise detail + detail map | ps_3_0 |
+| `noiseDetailBuildingPS.hlsl` | `main_xboxBuildingNoiseDetail` | Noise detail Xbox env | ps_3_0 |
 
 ### Pixel Shaders — PostFX
 
 | HLSL File | Entry Point | Feature | Target |
 |---|---|---|---|
-| `SSAO_ps20.hlsl` | `main` | SSAO with normal buffer | ps_2_0 |
-| `SSAO_ps20_simple.hlsl` | `main` | Simple SSAO | ps_2_0 |
-| `SSAO_VertexDepth.hlsl` | `main` | SSAO vertex depth | ps_2_0 |
-| `SSAO_ps20_depthonly.hlsl` | `main` | SSAO depth only | ps_2_0 |
-| `SMAA_Edge.hlsl` | `main` | SMAA edge detection | ps_2_0 |
-| `SMAA_BlendWeight.hlsl` | `main` | SMAA blend weight | ps_2_0 |
-| `SMAA_BlendNeighbor.hlsl` | `main` | SMAA neighborhood blend | ps_2_0 |
-| `SMAA_Temporal.hlsl` | `main` | SMAA temporal | ps_2_0 |
-| `SMAA_EdgeNormal.hlsl` | `main` | SMAA normal-based edge | ps_2_0 |
-| `SMAA_EdgeDepth.hlsl` | `main` | SMAA depth-based edge | ps_2_0 |
-| `SMAA_EdgeCombined.hlsl` | `main` | SMAA combined edge | ps_2_0 |
-| `SMAA_EdgeMotionDepth.hlsl` | `main` | SMAA motion+depth edge | ps_2_0 |
-| `MotionBlur_Burnout.hlsl` | `main` | Burnout-style motion blur | ps_2_0 |
-| `ColorFilter_CrossMix.hlsl` | `main` | Color filter cross-mixing | ps_2_0 |
+| `SSAO_ps20.hlsl` | `main` | SSAO with normal buffer | ps_3_0 |
+| `SSAO_ps20_simple.hlsl` | `main` | Simple SSAO | ps_3_0 |
+| `SSAO_VertexDepth.hlsl` | `main` | SSAO vertex depth | ps_3_0 |
+| `SSAO_ps20_depthonly.hlsl` | `main` | SSAO depth only | ps_3_0 |
+| `SMAA_Edge.hlsl` | `main` | SMAA edge detection | ps_3_0 |
+| `SMAA_BlendWeight.hlsl` | `main` | SMAA blend weight | ps_3_0 |
+| `SMAA_BlendNeighbor.hlsl` | `main` | SMAA neighborhood blend | ps_3_0 |
+| `SMAA_Temporal.hlsl` | `main` | SMAA temporal | ps_3_0 |
+| `SMAA_EdgeNormal.hlsl` | `main` | SMAA normal-based edge | ps_3_0 |
+| `SMAA_EdgeDepth.hlsl` | `main` | SMAA depth-based edge | ps_3_0 |
+| `SMAA_EdgeCombined.hlsl` | `main` | SMAA combined edge | ps_3_0 |
+| `SMAA_EdgeMotionDepth.hlsl` | `main` | SMAA motion+depth edge | ps_3_0 |
+| `MotionBlur_Burnout.hlsl` | `main` | Burnout-style motion blur | ps_3_0 |
+| `ColorFilter_CrossMix.hlsl` | `main` | Color filter cross-mixing | ps_3_0 |
 | `SkinEnhance.hlsl` | `main` | Skin SSS enhancement | ps_3_0 |
 | `HairEnhance.hlsl` | `main` | Hair anisotropic highlights | ps_3_0 |
-| `NormalBuffer.hlsl` | `main` | Stereo disparity normals | ps_2_0 |
-| `PipeChain.hlsl` | `main` | 4-pass post-processing | ps_2_0 |
+| `NormalBuffer.hlsl` | `main` | Stereo disparity normals | ps_3_0 |
+| `PipeChain.hlsl` | `main` | 4-pass post-processing | ps_3_0 |
 | `SkinSSS.hlsl` | `main` | Skin subsurface scattering | ps_3_0 |
-| `SSS_Blur.hlsl` | `main` | SSS blur pass | ps_2_0 |
-| `vectorMotionBlur.hlsl` | `main` | Vector motion blur | ps_2_0 |
+| `SSS_Blur.hlsl` | `main` | SSS blur pass | ps_3_0 |
+| `vectorMotionBlur.hlsl` | `main` | Vector motion blur | ps_3_0 |
 | `Water_Parallax.hlsl` | `main` | Parallax water | ps_3_0 |
 | `DynamicSky.hlsl` | `main` | Dynamic sky rendering | ps_3_0 |
 | `IBL_SkyCloud.hlsl` | `main` | IBL sky/cloud rendering | ps_3_0 |
 | `PBR_Lighting.hlsl` | `main` | PBR lighting functions | ps_3_0 |
-| `ModernColorFilterPS.hlsl` | `main` | Modern color filter | ps_2_0 |
+| `ModernColorFilterPS.hlsl` | `main` | Modern color filter | ps_3_0 |
 | `GTA_SA_ModernColor.hlsl` | `main` | GTA SA modern color | ps_3_0 |
-| `Clamp.hlsl` | `main` | Color clamping | ps_2_0 |
+| `Clamp.hlsl` | `main` | Color clamping | ps_3_0 |
 
 ### Pixel Shaders — Effects / Grading
 
 | HLSL File | Entry Point | Feature | Target |
 |---|---|---|---|
-| `radiosityPS.hlsl` | `main` | Shader-based radiosity | ps_2_0 |
-| `blurPS.hlsl` | `main` | Blur filter | ps_2_0 |
-| `gradingPS.hlsl` | `main` | Color grading | ps_2_0 |
-| `contrastPS.hlsl` | `main` | Contrast adjustment | ps_2_0 |
-| `iiiTrailsPS.hlsl` | `main` | GTA III trails | ps_2_0 |
-| `vcTrailsPS.hlsl` | `main` | GTA VC trails | ps_2_0 |
-| `grassPS.hlsl` | `main` | Grass rendering | ps_2_0 |
+| `radiosityPS.hlsl` | `main` | Shader-based radiosity | ps_3_0 |
+| `blurPS.hlsl` | `main` | Blur filter | ps_3_0 |
+| `gradingPS.hlsl` | `main` | Color grading | ps_3_0 |
+| `contrastPS.hlsl` | `main` | Contrast adjustment | ps_3_0 |
+| `iiiTrailsPS.hlsl` | `main` | GTA III trails | ps_3_0 |
+| `vcTrailsPS.hlsl` | `main` | GTA VC trails | ps_3_0 |
+| `grassPS.hlsl` | `main` | Grass rendering | ps_3_0 |
 
 ### Unified Pipeline (WIP — not in Resource.rc)
 
@@ -304,7 +304,7 @@ fxc /E <entry> /T <profile> /Fo cso/<name>.cso <name>.hlsl
 | File | Purpose | Used By |
 |---|---|---|
 | `PBR_Common.hlsl` | GGX/Smith/Schlick, SchlickFresnelScalar, cloud FBM, sun contribution | VehiclePBR_Modern, Glass_Vehicle, CarPaint_Reflections, Rubber_Vehicle |
-| `StochasticSamplerPS.hlsl` | Hash-based stochastic texture sampling | stochasticBuildingPS, buildingPipePS |
+| `Noise.hlsl` | Packed Perlin/Worley/white/blue noise tile (s9) | buildingPipePS, noiseDetailBuildingPS, CloudsPS |
 | `colorSpace.hlsl` | YCbCr conversion, linear/gamma, grading, SSAO, edge detect | unifiedPipe, GTA_SA_ModernColor, ColorFilter_CrossMix |
 | `SubsurfaceScattering.hlsl` | SSS material IDs, wrap lighting, Crysis vegetation bending | SkinSSS, SkinEnhance, HairEnhance |
 | `CarPaintNoise.hlsl` | Paint noise functions | CarPaint_Reflections, VehiclePBR_Modern |

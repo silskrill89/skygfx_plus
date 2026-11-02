@@ -18,10 +18,10 @@ from collections import defaultdict
 # PATHS
 # ═══════════════════════════════════════════════════════════════
 
-PROJECT = Path(os.environ.get("SKYGFX_PROJECT", "E:/dev(dave)/skygfx_plus_expIV"))
+PROJECT = Path(os.environ.get("SKYGFX_PROJECT") or Path(__file__).resolve().parent.parent)
 CACHE = PROJECT / "memory-bank/.cache"
-OBSIDIAN = Path("E:/dev(dave)/SKYGFXPLUS_DOCS")
-WIKI = Path("H:/wikis/gtamods/rendering")
+OBSIDIAN = Path(os.environ.get("SKYGFX_OBSIDIAN") or "E:/dev(dave)/SKYGFXPLUS_DOCS")
+WIKI = Path(os.environ.get("SKYGFX_WIKI") or "H:/wikis/gtamods/rendering")
 SHADERS = PROJECT / "shaders"
 SRC = PROJECT / "src"
 RESEARCH = PROJECT / "docs/research"
@@ -53,12 +53,12 @@ CATEGORY_MAP = {
 
 def load_sync_index():
     if SYNC_INDEX.exists():
-        return json.loads(SYNC_INDEX.read_text())
+        return json.loads(SYNC_INDEX.read_text(encoding="utf-8"))
     return {"files": {}, "last_sync": None}
 
 def save_sync_index(index):
     index["last_sync"] = datetime.now().isoformat()
-    SYNC_INDEX.write_text(json.dumps(index, indent=2))
+    SYNC_INDEX.write_text(json.dumps(index, indent=2), encoding="utf-8")
 
 def file_hash(path):
     return hashlib.md5(path.read_bytes()).hexdigest()[:12]
@@ -266,7 +266,7 @@ def build_xref_index():
     output = {"concept_to_files": dict(concept_index), "file_to_concepts": dict(reverse),
               "stats": {"concepts": len(concept_index), "files_scanned": len(reverse), "total_links": sum(len(v) for v in concept_index.values())}}
     CACHE.mkdir(parents=True, exist_ok=True)
-    XREF_INDEX.write_text(json.dumps(output, indent=2))
+    XREF_INDEX.write_text(json.dumps(output, indent=2), encoding="utf-8")
     return output
 
 # ═══════════════════════════════════════════════════════════════
@@ -349,7 +349,7 @@ def get_all_chains():
 def build_graph_index():
     graph = {"relationships": RELATIONSHIPS, "implementations": IMPLEMENTATIONS, "chains": get_all_chains()}
     CACHE.mkdir(parents=True, exist_ok=True)
-    GRAPH_INDEX.write_text(json.dumps(graph, indent=2))
+    GRAPH_INDEX.write_text(json.dumps(graph, indent=2), encoding="utf-8")
     return graph
 
 # ═══════════════════════════════════════════════════════════════
@@ -403,8 +403,8 @@ def analyze_feature(feature_name, graph, xref):
 
 def push_to_obsidian():
     """Push knowledge graph + xref to Obsidian as structured notes."""
-    graph = json.loads(GRAPH_INDEX.read_text()) if GRAPH_INDEX.exists() else {}
-    xref = json.loads(XREF_INDEX.read_text()) if XREF_INDEX.exists() else {}
+    graph = json.loads(GRAPH_INDEX.read_text(encoding="utf-8")) if GRAPH_INDEX.exists() else {}
+    xref = json.loads(XREF_INDEX.read_text(encoding="utf-8")) if XREF_INDEX.exists() else {}
     
     # Create Knowledge/System note in Obsidian
     system_dir = OBSIDIAN / "Knowledge"
@@ -469,10 +469,10 @@ def show_status():
     research = sum(1 for k in idx.get("files", {}) if k.startswith("research:"))
     science = sum(1 for k in idx.get("files", {}) if k.startswith("science:"))
     print(f"\n1. INGESTION: {len(idx.get('files', {}))} files (wiki:{wiki} research:{research} science:{science})")
-    xref = json.loads(XREF_INDEX.read_text()) if XREF_INDEX.exists() else {}
+    xref = json.loads(XREF_INDEX.read_text(encoding="utf-8")) if XREF_INDEX.exists() else {}
     stats = xref.get("stats", {})
     print(f"\n2. CROSS-REFERENCES: {stats.get('concepts', 0)} concepts, {stats.get('files_scanned', 0)} files, {stats.get('total_links', 0)} links")
-    graph = json.loads(GRAPH_INDEX.read_text()) if GRAPH_INDEX.exists() else {}
+    graph = json.loads(GRAPH_INDEX.read_text(encoding="utf-8")) if GRAPH_INDEX.exists() else {}
     print(f"\n3. KNOWLEDGE GRAPH: {len(graph.get('relationships', {}))} concepts, {len(graph.get('chains', []))} chains")
     total = len(FEATURES)
     impl = sum(1 for f in FEATURES.values() if f.get("existing_implementation"))
@@ -529,7 +529,7 @@ def main():
         print(f"Synced: {w} wiki, {r} research, {s} science")
     elif args.command == "xref":
         if args.query:
-            xref = json.loads(XREF_INDEX.read_text()) if XREF_INDEX.exists() else {}
+            xref = json.loads(XREF_INDEX.read_text(encoding="utf-8")) if XREF_INDEX.exists() else {}
             files = xref.get("concept_to_files", {}).get(args.query, [])
             print(f"'{args.query}' found in {len(files)} files:")
             for f in files: print(f"  [{f['type']}] {f['file']}")
@@ -551,8 +551,8 @@ def main():
             graph = build_graph_index()
             print(f"Built: {len(graph['relationships'])} concepts, {len(graph['chains'])} chains")
     elif args.command == "gaps":
-        graph = json.loads(GRAPH_INDEX.read_text()) if GRAPH_INDEX.exists() else {}
-        xref = json.loads(XREF_INDEX.read_text()) if XREF_INDEX.exists() else {}
+        graph = json.loads(GRAPH_INDEX.read_text(encoding="utf-8")) if GRAPH_INDEX.exists() else {}
+        xref = json.loads(XREF_INDEX.read_text(encoding="utf-8")) if XREF_INDEX.exists() else {}
         if args.query:
             analysis = analyze_feature(args.query, graph, xref)
             if analysis:

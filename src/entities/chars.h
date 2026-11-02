@@ -45,22 +45,10 @@ struct AtomicCharInfo
 
 #define MAX_CHAR_ATOMICS 256
 
-void chars_init(void);
 void chars_shutdown(void);
+void chars_OnDeviceReset(void);
 void chars_drawSSSBlur(void);
 
-// RW-based classification: walks clump hierarchy, classifies atomics
-int chars_classifyAtomic(RpAtomic *atomic, RpAtomic **allAtomics, int numAtomics);
-int chars_classifyByFrameName(const char *frameName);
-int chars_classifyByTexture(RwTexture *tex);
-int chars_classifyByPosition(RpAtomic *atomic, RpAtomic **allAtomics, int numAtomics);
-
-PartSSSParams chars_getPartParams(int partType);
-
-// Build classification buffer from visible peds
-void chars_buildClassificationBuffer(void);
-
-extern void *SkinPBR;
 extern void *SSS_Blur;
 extern PartSSSParams g_partSSSParams[NUM_PARTTYPES];
 extern struct IDirect3DTexture9 *g_charsClassifyTex;

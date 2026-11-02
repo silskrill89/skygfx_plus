@@ -1,0 +1,16 @@
+{
+  "_comment": "Slot manifest for helper_tex.txd (directive m0061). Textures in 'textures' are packed when their file exists; 'reserved' slots are declared so --strict can fail until real art lands. Name = texture name inside the TXD = name the shader/C++ lookup will use (max 31 chars [A-Za-z0-9_]). Optional per-slot keys: file (override filename), mips (bool, generate box-filter mip chain), format (rgba8888|l8|a8l8), filter (nearest|linear|linearmip), addressing (wrap|mirror|clamp|border), tbd (bool, art is placeholder), note (free text).",
+  "textures": {
+    "cloud_layer0":   { "file": "cloud_layer0.png",   "mips": true,  "filter": "linearmip", "addressing": "clamp", "tbd": true, "note": "stacked cloud solution - layer card 0 (bottom). TBD art." },
+    "cloud_layer1":   { "file": "cloud_layer1.png",   "mips": true,  "filter": "linearmip", "addressing": "clamp", "tbd": true, "note": "stacked cloud solution - layer card 1 (mid). TBD art." },
+    "cloud_layer2":   { "file": "cloud_layer2.png",   "mips": true,  "filter": "linearmip", "addressing": "clamp", "tbd": true, "note": "stacked cloud solution - layer card 2 (top). TBD art." },
+    "cloud_noise":    { "file": "cloud_noise.png",    "mips": false, "filter": "linearmip", "addressing": "wrap",  "tbd": true, "note": "R=density G=thickness B=edge A=dither (effects-menu-overhaul.md sec 4). TBD art." },
+    "utility_noise":  { "file": "utility_noise.png",  "mips": false, "filter": "linearmip", "addressing": "wrap",  "tbd": true, "note": "R=tileable Perlin G=Worley F1 B=white A=Bayer dither. Functional placeholder." },
+    "blue_noise_64":  { "file": "blue_noise_64.png",  "mips": false, "filter": "nearest",   "addressing": "wrap",  "tbd": true, "note": "64x64 L8 blue-noise slice (FusionFix bluenoisevolumeL8.dds slice 0). Dither/TAA." }
+  },
+  "reserved": {
+    "ssr_brdf_lut":  { "source": "to be generated", "note": "reserved: split-sum GGX BRDF LUT for IBL/SSR (future lane)" },
+    "tbn_noise":     { "source": "to be generated", "note": "reserved: tangent perturbation noise (future lane)" },
+    "smaa_area_tex": { "source": "SMAA area/search", "note": "reserved: only if runtime SMAA lookup textures are ever externalised (currently embedded CSO/area)" }
+  }
+}

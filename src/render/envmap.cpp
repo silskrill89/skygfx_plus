@@ -1,5 +1,14 @@
 #include "skygfx.h"
-#include "neo.h"
+#include "neopipe.h"
+#include "profiler.h"	// PF_SCOPE/PfNote (renderlane profiler API — no-op until PfInit)
+
+// Naked thunk in main.cpp (EAXJMP 0x7FC200). Plain-C++ declaration, same
+// idiom as pipelinecommon.cpp:19 / buildingPipe.cpp:58 / waterPipe.cpp:75 —
+// rwcore.h's own declaration sits behind the inline-driver guard and is not
+// visible here. Needed by the park-and-set 3-layer restores below: the RW
+// driver-cache flush is applied[]-gated, so a raw L3 write must be preceded
+// by a committed pending[] block or a later pre-draw flush can overwrite it.
+void _rwD3D9RenderStateFlushCache(void);
 
 #ifdef DEBUG
 //#define DEBUGENVTEX
@@ -27,20 +36,86 @@ void ReleaseEnvMapResources(void)
 	envTemporalFrame = 0;
 }
 
+// ============================================================
+// W7-C — reflectionMsaaLevel: env-map SUPERsampling (the sanctioned
+// fallback for Reflection MSAA; FusionFix reflectionmsaa.ixx intent —
+// cleaner reflections on the reflection target). RW 3.6 rasters have
+// NO multisample API (RwRasterCreate takes no MSAA parameters and the
+// d3d9 driver hard-codes a single sample), and a raw D3D9-native MSAA
+// render-target swap would have to fight RW's camera/raster plumbing
+// for the whole sphere-reflection span — so the level scales the env
+// MAP raster resolution instead: size = envMapSize × level, capped at
+// kEnvMapSSMaxSize (2048² ≈ 16 MB colour + 16 MB Z — the same budget
+// the game's own 2048² front buffer already spends). level ∈ {0,2,4,8}
+// (INI-snapped in main.cpp readIniFile); 0 and anything unexpected
+// mean 1× (vanilla envMapSize). envMapSize is forced power-of-two by
+// readIniFile and the level is a power of two, so the product stays
+// power-of-two; the cap value is power-of-two too, keeping every
+// raster valid. MakeEnvmapRasters re-creates on any size mismatch, so
+// the in-game menu's env-map size slider and this key compose live.
+// ============================================================
+#define kEnvMapSSMaxSize 2048
+static int
+EnvMapRasterSize(void)
+{
+	int base = config ? config->envMapSize : 256;	// NULL-config floor
+	int level = config ? config->reflectionMsaaLevel : 0;
+	if(level != 2 && level != 4 && level != 8)
+		level = 1;
+	int size = base * level;
+	if(size > kEnvMapSSMaxSize)
+		size = kEnvMapSSMaxSize;
+	if(size < 4)	// menu slider floor for envMapSize
+		size = 4;
+	return size;
+}
+
 /* Create envmap rasters as we need them and attach them to cam */
 void
 MakeEnvmapRasters(void)
 {
-	if(envFB && envFB->width == config->envMapSize)
+	PF_SCOPE("EnvMap_MakeEnvmapRasters");
+
+	// Instrumentation (additive): which env-map target this frame, the
+	// effective raster size and the flags that shape it. Throttled per
+	// AGENTS.md; reads only — no state/logic touched.
+	if(dbglog_throttle("envmap_rasters"))
+		dbglog("[EnvMap] MakeEnvmapRasters: size=%d (envMapSize=%d reflectionMsaaLevel=%d mirrorDistortionFix=%d) "
+		       "target=envFB(%p %dx%d) envZB(%p) reflectionCam(%p raster=%p z=%p) reflectionTex(%p)",
+			EnvMapRasterSize(),
+			config ? config->envMapSize : -1,
+			config ? config->reflectionMsaaLevel : -1,
+			config ? (int)config->mirrorDistortionFix : -1,
+			(void*)envFB, envFB ? envFB->width : 0, envFB ? envFB->height : 0,
+			(void*)envZB, (void*)reflectionCam,
+			reflectionCam ? (void*)RwCameraGetRaster(reflectionCam) : NULL,
+			reflectionCam ? (void*)RwCameraGetZRaster(reflectionCam) : NULL,
+			(void*)reflectionTex);
+
+	int size = EnvMapRasterSize();
+	if(envFB && envFB->width == size)
 		return;
 	if(envFB) RwRasterDestroy(envFB);
 	if(envZB) RwRasterDestroy(envZB);
-	envFB = RwRasterCreate(config->envMapSize, config->envMapSize, 0, rwRASTERTYPECAMERATEXTURE);
-	envZB = RwRasterCreate(config->envMapSize, config->envMapSize, 0, rwRASTERTYPEZBUFFER);
+	envFB = RwRasterCreate(size, size, 0, rwRASTERTYPECAMERATEXTURE);
+	envZB = RwRasterCreate(size, size, 0, rwRASTERTYPEZBUFFER);
 	if(!envFB || !envZB){
 		// Symmetric cleanup: if either failed, release both and NULL the camera
 		if(envFB){ RwRasterDestroy(envFB); envFB = NULL; }
 		if(envZB){ RwRasterDestroy(envZB); envZB = NULL; }
+		// Detach the consumers of the rasters destroyed above: reflectionCam
+		// and reflectionTex still held the OLD rasters, which are now freed —
+		// a later RwCameraClear/BeginUpdate on reflectionCam (or a texture
+		// bind of reflectionTex) would be a use-after-free. Both call sites
+		// guard on RwCameraGetRaster/ZRaster(reflectionCam) == NULL, so NULL
+		// is the safe parked state (RwCameraSetRaster(cam, NULL) precedent:
+		// postfx_smaa.cpp:285).
+		if(reflectionCam){
+			RwCameraSetRaster(reflectionCam, NULL);
+			RwCameraSetZRaster(reflectionCam, NULL);
+		}
+		if(reflectionTex)
+			RwTextureSetRaster(reflectionTex, NULL);
 		return;
 	}
 	if(reflectionCam){
@@ -285,14 +360,91 @@ CVisibilityPlugins::RenderFadingBuildings(void)
 			i->V().callback(i->V().pObject, i->V().fCompareValue);
 }
 
+// ============================================================
+// Park-and-set 3-layer restore for one rw state with a D3D9 twin.
+//
+// Layers: (1) rw cache RwRenderStateSet, (2) RW D3D9 driver cache
+// RwD3D9SetRenderState (pending[]/applied[], flushed pre-draw by
+// _rwD3D9RenderStateFlushCache 0x7FC200 and ONLY when applied[] differs),
+// (3) the raw IDirect3DDevice9 state. (1)/(2) both skip on a cache-hit, so
+// a direct target write can be a double no-op against a device that a
+// foreign raw write moved during the span — the restore then never lands.
+// Write the OPPOSITE value first (a real transition on both caches is
+// guaranteed since neither holds it), then the target (a real transition
+// again), commit pending[] with ONE flush while it holds the restored
+// values, then pin layer (3) raw. Same discipline as
+// postfx_utils.cpp RestoreOneRawGeomState / pipelinecommon.cpp
+// pipeForceCullMode.
+//
+// rwState == rwRENDERSTATENARENDERSTATE marks a state with no rw-cache
+// twin (layer (1) leg skipped). rw and D3D domains may differ, so the
+// park/target are passed per layer (the caller owns the mapping).
+// ============================================================
+static void
+envParkSetState3L(RwRenderState rwState, D3DRENDERSTATETYPE d3dState,
+                  RwUInt32 rwPark, RwUInt32 rwTarget,
+                  RwUInt32 d3dPark, RwUInt32 d3dTarget)
+{
+	if(rwState != rwRENDERSTATENARENDERSTATE)
+		pipeRwParkSet(rwState, rwPark, rwTarget);		// (1) L1 park -> target
+	pipeL2ParkSet(d3dState, d3dPark, d3dTarget);			// (2) L2 park -> target
+	_rwD3D9RenderStateFlushCache();					// commit pending[]
+	pipeL3Set(d3dState, d3dTarget);					// (3) raw pin
+}
 
 void
 CRenderer::RenderRoadsAndBuildings(void)
 {
+	// Cull truth for the env-map pass: this runs MID-FRAME (the 512x512
+	// reflection raster) and force-sets BACK below. Capture the incoming
+	// rw-cache value and re-assert it through all three layers on the way
+	// out (pipeForceCullMode) so the next main-view draw cannot be
+	// cache-hit-skipped against a device left on BACK.
+	RwUInt32 savedCull = (RwUInt32)rwCULLMODECULLBACK;
+	RwRenderStateGet(rwRENDERSTATECULLMODE, &savedCull);
+	// Out-of-domain (failed/foreign Get) is NEVER pushed: BACK.
+	if(savedCull != rwCULLMODECULLNONE && savedCull != rwCULLMODECULLBACK &&
+	   savedCull != rwCULLMODECULLFRONT)
+		savedCull = (RwUInt32)rwCULLMODECULLBACK;
+
+	// STATE AUDIT — every write this function makes, and its disposal:
+	//   FOGENABLE=TRUE            WAS NOT saved/restored  -> leaked out of
+	//                             this mid-frame env pass into the peds /
+	//                             default-pipeline atomics drawn afterwards.
+	//                             Fixed: captured below, 3-layer restored.
+	//   VERTEXALPHAENABLE=TRUE    WAS NOT saved/restored  -> same leak class
+	//                             (blend-enable left ON for later draws).
+	//                             Fixed: captured below, 3-layer restored.
+	//   CULLMODE=BACK             saved + pipeForceCullMode(3 layers) — OK.
+	//   ALPHATESTFUNCTIONREF=140  saved + restored below, but L1-only until
+	//                             this audit: both caches no-op when they
+	//                             already hold the ref, so a raw D3DRS_ALPHAREF
+	//                             drift during the span survived. Now 3-layer.
+	// This function has NO early returns, so every restore is unconditional.
+	// Captures are pre-seeded: a failed/foreign RwRenderStateGet leaves a
+	// sane boolean (the RwBool domain is strictly 0/1).
+	RwUInt32 savedFog = (RwUInt32)TRUE;
+	RwRenderStateGet(rwRENDERSTATEFOGENABLE, &savedFog);
+	if(savedFog > TRUE) savedFog = (RwUInt32)TRUE;
+	RwUInt32 savedVtxAlpha = (RwUInt32)TRUE;
+	RwRenderStateGet(rwRENDERSTATEVERTEXALPHAENABLE, &savedVtxAlpha);
+	if(savedVtxAlpha > TRUE) savedVtxAlpha = (RwUInt32)TRUE;
+
 	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)TRUE);
 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
 	RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)rwCULLMODECULLBACK);
-	if(CGame__currArea == 0)
+	// Outdoor world cutout threshold. This function runs MID-FRAME from
+	// RenderReflectionScene (env-map pass), so ref=140 must NOT survive into
+	// the peds/default-pipeline atomics drawn afterwards: every alpha-tested
+	// texel with alpha < 140 is discarded, cutting ped skin/clothing into
+	// holes. Save the pre-entry ref and restore it on the way out (this
+	// function has no early returns).
+	int savedAlphaRef = 1;
+	RwRenderStateGet(rwRENDERSTATEALPHATESTFUNCTIONREF, (void*)&savedAlphaRef);
+	// Out-of-domain (failed/foreign Get, incl. a negative value that the
+	// 3-layer restore below would widen to 0xFFFFFFFF) is NEVER pushed: 1.
+	if(savedAlphaRef < 0 || savedAlphaRef > 255) savedAlphaRef = 1;
+	if(*CGame__currArea == 0)
 		RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTIONREF, (void*)140);
 	for(int i = 0; i < ms_nNoOfVisibleEntities; i++){
 		CEntity *e = ms_aVisibleEntityPtrs[i];
@@ -307,17 +459,78 @@ CRenderer::RenderRoadsAndBuildings(void)
 	// SA does something with the camera's z values here but that has no effect on d3d
 	for(int i = 0; i < ms_nNoOfVisibleLods; i++)
 		RenderOneNonRoad(ms_aVisibleLodPtrs[i]);
+	// Undo the outdoor cutout threshold: the 140 is a world-pass value, not a
+	// frame-global one (left behind it silently alpha-tests peds at 140).
+	// 3-layer restore (park -> target on L1/L2, one flush, raw L3 pin): the
+	// old L1-only set could not repair a raw ALPHAREF drift left during the
+	// span, because both caches already held the restored ref (double no-op).
+	envParkSetState3L(rwRENDERSTATEALPHATESTFUNCTIONREF, D3DRS_ALPHAREF,
+		(savedAlphaRef == 0) ? 1u : 0u, (RwUInt32)savedAlphaRef,
+		(savedAlphaRef == 0) ? 1u : 0u, (RwUInt32)savedAlphaRef);
+
+	// The two boolean forces above are handed back to the caller's pre-entry
+	// truth (park = opposite of target, so both caches always transition).
+	envParkSetState3L(rwRENDERSTATEVERTEXALPHAENABLE, D3DRS_ALPHABLENDENABLE,
+		savedVtxAlpha ? 0u : 1u, savedVtxAlpha,
+		savedVtxAlpha ? 0u : 1u, savedVtxAlpha);
+	envParkSetState3L(rwRENDERSTATEFOGENABLE, D3DRS_FOGENABLE,
+		savedFog ? 0u : 1u, savedFog,
+		savedFog ? 0u : 1u, savedFog);
+
+	// Re-sync cull through L1 -> L2 -> L3 from the captured entry truth:
+	// the forced BACK above was an rw-cache-only set and the entity/LOD
+	// callbacks ran inside the env raster, so L3 can disagree with L1.
+	// This function has no early returns, so the restore is unconditional.
+	pipeForceCullMode(savedCull);
+	if(dbglog_throttle("cull_resync"))
+		dbglog("[CullResync] env pass restored=%u", (unsigned)savedCull);
 }
 
 void
 CRenderer::RenderFadingInBuildings(void)
 {
+	// STATE AUDIT (prior-audit finding): this callback forced the world
+	// baseline with NO capture at all — the forced BACK cull, FOGENABLE and
+	// VERTEXALPHAENABLE all leaked out of the fading-building span (the cull
+	// one is the "next main-view draw renders inside-out" report). Capture
+	// the entry truth first, then force; the restore at the single exit
+	// below hands it back through the 3-layer park-and-set. Pre-seeded so a
+	// failed/invalid Get still restores a sane value.
+	// DeActivateDirectional/SetAmbientColours below are NOT render states
+	// (RW light globals, re-derived per entity by the world renderers) —
+	// deliberately not captured; vanilla does the same.
+	RwUInt32 savedFog = (RwUInt32)TRUE;
+	RwRenderStateGet(rwRENDERSTATEFOGENABLE, &savedFog);
+	if(savedFog > TRUE) savedFog = (RwUInt32)TRUE;
+	RwUInt32 savedVtxAlpha = (RwUInt32)TRUE;
+	RwRenderStateGet(rwRENDERSTATEVERTEXALPHAENABLE, &savedVtxAlpha);
+	if(savedVtxAlpha > TRUE) savedVtxAlpha = (RwUInt32)TRUE;
+	RwUInt32 savedCull = (RwUInt32)rwCULLMODECULLBACK;
+	RwRenderStateGet(rwRENDERSTATECULLMODE, &savedCull);
+	// Out-of-domain (failed/foreign Get) is NEVER pushed: BACK.
+	if(savedCull != rwCULLMODECULLNONE && savedCull != rwCULLMODECULLBACK &&
+	   savedCull != rwCULLMODECULLFRONT)
+		savedCull = (RwUInt32)rwCULLMODECULLBACK;
+
 	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)TRUE);
 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
 	RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)rwCULLMODECULLBACK);
 	DeActivateDirectional();
 	SetAmbientColours();
 	CVisibilityPlugins::RenderFadingBuildings();
+
+	// Restore the entry truth (no early returns above, so this is
+	// unconditional). Cull goes through pipeForceCullMode so all three
+	// layers — rw cache, RW driver cache, raw device — end on savedCull.
+	envParkSetState3L(rwRENDERSTATEVERTEXALPHAENABLE, D3DRS_ALPHABLENDENABLE,
+		savedVtxAlpha ? 0u : 1u, savedVtxAlpha,
+		savedVtxAlpha ? 0u : 1u, savedVtxAlpha);
+	envParkSetState3L(rwRENDERSTATEFOGENABLE, D3DRS_FOGENABLE,
+		savedFog ? 0u : 1u, savedFog,
+		savedFog ? 0u : 1u, savedFog);
+	pipeForceCullMode(savedCull);
+	if(dbglog_throttle("cull_resync"))
+		dbglog("[CullResync] env fading pass restored=%u", (unsigned)savedCull);
 }
 
 
@@ -331,14 +544,33 @@ RenderReflectionScene(void)
 	else
 		reflectionCamPos = FindPlayerPed(-1)->GetPosition();*/
 
+	// STATE AUDIT (caller-level): this wrapper disabled fog through the rw
+	// cache only and NEVER restored it — on the leeds path (CAR_LCS/CAR_VCS,
+	// RenderReflectionMap_leeds) the env pass handed FOGENABLE=0 back to the
+	// frame. Same leak class CarPipe::RenderReflectionScene fixed in
+	// neoCarpipe.cpp (FIX E). Capture the caller truth, disable on all three
+	// layers, hand it back 3-layer at the single exit below (this function
+	// has no early returns).
+	RwUInt32 savedFog = (RwUInt32)TRUE;
+	RwRenderStateGet(rwRENDERSTATEFOGENABLE, &savedFog);
+	if(savedFog > 1u) savedFog = (RwUInt32)TRUE;
+
 	DefinedState();
 	/* We do have fog for the sphere map but we have to calculate it ourselves  */
-	RwRenderStateSet(rwRENDERSTATEFOGENABLE, 0);
+	envParkSetState3L(rwRENDERSTATEFOGENABLE, D3DRS_FOGENABLE,
+		1u, 0u, 1u, 0u);			// fog OFF on L1/L2/L3
 
 	// Render the opaque world
 	CRenderer::RenderRoadsAndBuildings();
 	// and the transparent world
 	CRenderer::RenderFadingInBuildings();
+
+	// Fog back to the caller pre-pass truth. RenderRoadsAndBuildings and
+	// RenderFadingInBuildings captured the 0 above and restored 0, so this
+	// write is the one that actually ends the pass on the caller value.
+	envParkSetState3L(rwRENDERSTATEFOGENABLE, D3DRS_FOGENABLE,
+		savedFog ? 0u : 1u, savedFog,
+		savedFog ? 0u : 1u, savedFog);
 }
 
 RwTexture **gpCoronaTexture = (RwTexture**)0xC3E000;
@@ -422,23 +654,133 @@ DrawEnvMapCoronas(RwV3d at)
 	AddCorona(x, 12.0f, SMALL);	x += SMALL;
 	AddCorona(x, 0.0f, BIG);	x += BIG;
 
-	// Three-layer note: these are rw-cache level (RwRenderStateSet) writes;
-	// the driver pending / device layers are flushed by the Im2D draw below.
+	// STATE AUDIT (prior-audit finding): this additive Im2D corona pass runs
+	// inside the reflection scene, but blend state is DEVICE-global. The old
+	// code restored a HARDCODED SRCALPHA/INVSRCALPHA/FALSE pair through the
+	// rw cache only, so (a) any other pre-entry pair was overwritten on the
+	// way out and (b) the RW driver cache + raw device were left holding the
+	// corona's ONE/ONE — a later flush could re-emit it into the main pass
+	// against a device that no longer matched the rw cache. Captured at entry
+	// per layer, restored per layer:
+	//   L1 rw cache       RwRenderStateGet                  (src/dst/blend)
+	//   L2 driver cache   RwD3D9GetRenderState              (same three)
+	//   L3 raw device     IDirect3DDevice9::GetRenderState  (same three)
+	//   texture raster    RwRenderStateGet(rwRENDERSTATETEXTURERASTER)
+	// Pre-seeded with the canonical pair so a failed/foreign Get never pushes
+	// garbage.
+	RwUInt32 rwSrc = (RwUInt32)rwBLENDSRCALPHA;
+	RwUInt32 rwDst = (RwUInt32)rwBLENDINVSRCALPHA;
+	RwUInt32 rwVtxAlpha = (RwUInt32)FALSE;
+	RwUInt32 drvSrc = (RwUInt32)D3DBLEND_SRCALPHA;
+	RwUInt32 drvDst = (RwUInt32)D3DBLEND_INVSRCALPHA;
+	RwUInt32 drvBlend = (RwUInt32)FALSE;
+	DWORD devSrc = (DWORD)D3DBLEND_SRCALPHA;
+	DWORD devDst = (DWORD)D3DBLEND_INVSRCALPHA;
+	DWORD devBlend = (DWORD)FALSE;
+	void *savedTexRaster = NULL;
+	RwRenderStateGet(rwRENDERSTATESRCBLEND, &rwSrc);
+	RwRenderStateGet(rwRENDERSTATEDESTBLEND, &rwDst);
+	RwRenderStateGet(rwRENDERSTATEVERTEXALPHAENABLE, &rwVtxAlpha);
+	RwD3D9GetRenderState(D3DRS_SRCBLEND, &drvSrc);
+	RwD3D9GetRenderState(D3DRS_DESTBLEND, &drvDst);
+	RwD3D9GetRenderState(D3DRS_ALPHABLENDENABLE, &drvBlend);
+	if(d3d9device){
+		d3d9device->GetRenderState(D3DRS_SRCBLEND, &devSrc);
+		d3d9device->GetRenderState(D3DRS_DESTBLEND, &devDst);
+		d3d9device->GetRenderState(D3DRS_ALPHABLENDENABLE, &devBlend);
+	}
+	RwRenderStateGet(rwRENDERSTATETEXTURERASTER, &savedTexRaster);
+	// Domain guards, one per domain: rw blend factors are 1..11 (numerically
+	// identical to D3DBLEND 1..11); the raw device may legitimately hold a
+	// raw-only factor up to D3DBLEND_INVBLENDFACTOR(15) — restored verbatim,
+	// never widened.
+	if(rwSrc < (RwUInt32)rwBLENDZERO || rwSrc > (RwUInt32)rwBLENDSRCALPHASAT)
+		rwSrc = (RwUInt32)rwBLENDSRCALPHA;
+	if(rwDst < (RwUInt32)rwBLENDZERO || rwDst > (RwUInt32)rwBLENDSRCALPHASAT)
+		rwDst = (RwUInt32)rwBLENDINVSRCALPHA;
+	if(rwVtxAlpha > (RwUInt32)TRUE) rwVtxAlpha = (RwUInt32)FALSE;
+	if(drvSrc < (RwUInt32)D3DBLEND_ZERO || drvSrc > (RwUInt32)D3DBLEND_INVBLENDFACTOR)
+		drvSrc = (RwUInt32)D3DBLEND_SRCALPHA;
+	if(drvDst < (RwUInt32)D3DBLEND_ZERO || drvDst > (RwUInt32)D3DBLEND_INVBLENDFACTOR)
+		drvDst = (RwUInt32)D3DBLEND_INVSRCALPHA;
+	if(drvBlend > 1u) drvBlend = (RwUInt32)FALSE;
+	if(devSrc < (DWORD)D3DBLEND_ZERO || devSrc > (DWORD)D3DBLEND_INVBLENDFACTOR)
+		devSrc = (DWORD)D3DBLEND_SRCALPHA;
+	if(devDst < (DWORD)D3DBLEND_ZERO || devDst > (DWORD)D3DBLEND_INVBLENDFACTOR)
+		devDst = (DWORD)D3DBLEND_INVSRCALPHA;
+	if(devBlend > 1u) devBlend = (DWORD)FALSE;
+
 	// Fault-safe restore: a SEH fault inside RwIm2DRenderIndexedPrimitive
-	// used to skip the four restores and leak SRCBLEND=ONE / DESTBLEND=ONE /
+	// used to skip the restores and leak SRCBLEND=ONE / DESTBLEND=ONE /
 	// VERTEXALPHA / TEXTURERASTER=corona into the rest of the frame.
-	// __finally restores on EVERY exit (normal or fault).
+	// __finally restores on EVERY exit (normal or fault) — each layer from
+	// its OWN entry capture, never a hardcoded pair.
 	__try {
-		RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDONE);
-		RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDONE);
-		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
+		// Intended corona state: additive ONE/ONE + vertex alpha ON, pushed
+		// through L1/L2/L3. pipeForceAlphaBlock() is deliberately NOT used —
+		// it re-forces the canonical SRCALPHA/INVSRCALPHA alpha block, not
+		// this pair. envParkSetState3L's park leg guarantees a real transition
+		// on both caches (a cache-hit skip cannot leave a stale pending[] for
+		// a later flush), the flush commits pending[], and the raw write pins
+		// L3.
+		envParkSetState3L(rwRENDERSTATESRCBLEND, D3DRS_SRCBLEND,
+			(RwUInt32)rwBLENDZERO, (RwUInt32)rwBLENDONE,
+			(RwUInt32)D3DBLEND_ZERO, (RwUInt32)D3DBLEND_ONE);
+		envParkSetState3L(rwRENDERSTATEDESTBLEND, D3DRS_DESTBLEND,
+			(RwUInt32)rwBLENDZERO, (RwUInt32)rwBLENDONE,
+			(RwUInt32)D3DBLEND_ZERO, (RwUInt32)D3DBLEND_ONE);
+		envParkSetState3L(rwRENDERSTATEVERTEXALPHAENABLE, D3DRS_ALPHABLENDENABLE,
+			0u, (RwUInt32)TRUE, (RwUInt32)FALSE, (RwUInt32)TRUE);
 		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, gpCoronaTexture[0]->raster);
 		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, coronaVerts, numCoronaVerts, coronaIndices, numCoronaIndices);
 	} __finally {
-		RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
-		RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
-		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
-		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, NULL);
+		// L1 rw cache: park -> target. Park always differs from the target,
+		// so the target write is a real transition a cache-hit cannot skip.
+		RwRenderStateSet(rwRENDERSTATESRCBLEND,
+			(void*)((rwSrc == (RwUInt32)rwBLENDZERO) ? (RwUInt32)rwBLENDONE : (RwUInt32)rwBLENDZERO));
+		RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwSrc);
+		RwRenderStateSet(rwRENDERSTATEDESTBLEND,
+			(void*)((rwDst == (RwUInt32)rwBLENDZERO) ? (RwUInt32)rwBLENDONE : (RwUInt32)rwBLENDZERO));
+		RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwDst);
+		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE,
+			(void*)(rwVtxAlpha ? (RwUInt32)FALSE : (RwUInt32)TRUE));
+		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)rwVtxAlpha);
+		// L2 RW driver cache: its own capture on each leg, then ONE flush to
+		// commit pending[] while it holds the restored values.
+		RwD3D9SetRenderState(D3DRS_SRCBLEND,
+			(drvSrc == (RwUInt32)D3DBLEND_ZERO) ? (RwUInt32)D3DBLEND_ONE : (RwUInt32)D3DBLEND_ZERO);
+		RwD3D9SetRenderState(D3DRS_SRCBLEND, drvSrc);
+		RwD3D9SetRenderState(D3DRS_DESTBLEND,
+			(drvDst == (RwUInt32)D3DBLEND_ZERO) ? (RwUInt32)D3DBLEND_ONE : (RwUInt32)D3DBLEND_ZERO);
+		RwD3D9SetRenderState(D3DRS_DESTBLEND, drvDst);
+		RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, drvBlend ? 0u : 1u);
+		RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, drvBlend);
+		_rwD3D9RenderStateFlushCache();
+		// L3 raw device: each state to its own device capture. Unconditional —
+		// the flush is applied[]-gated and cannot repair raw drift.
+		if(d3d9device){
+			d3d9device->SetRenderState(D3DRS_SRCBLEND, devSrc);
+			d3d9device->SetRenderState(D3DRS_DESTBLEND, devDst);
+			d3d9device->SetRenderState(D3DRS_ALPHABLENDENABLE, devBlend ? TRUE : FALSE);
+		}
+		// Texture raster: back to the pre-entry binding (L1). The RW driver
+		// re-binds stage 0 on the next draw because the cache just changed
+		// (corona raster -> saved raster is always a transition).
+		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, savedTexRaster);
+		// Divergence receipt: only when the pre-entry capture differed from
+		// the canonical pair the old hardcoded restore assumed (SRCALPHA/
+		// INVSRCALPHA + blend OFF). `restored` is the blend-enable value
+		// handed back through L1 (0/1); rw/dev are the src/dst pairs.
+		if(rwSrc != (RwUInt32)rwBLENDSRCALPHA || rwDst != (RwUInt32)rwBLENDINVSRCALPHA ||
+		   rwVtxAlpha != (RwUInt32)FALSE ||
+		   drvSrc != (RwUInt32)D3DBLEND_SRCALPHA || drvDst != (RwUInt32)D3DBLEND_INVSRCALPHA ||
+		   drvBlend != (RwUInt32)FALSE ||
+		   devSrc != (DWORD)D3DBLEND_SRCALPHA || devDst != (DWORD)D3DBLEND_INVSRCALPHA ||
+		   devBlend != (DWORD)FALSE){
+			if(dbglog_throttle("env_corona"))
+				dbglog("[EnvCorona] restored=%d rw=%d/%d dev=%d/%d",
+					(int)rwVtxAlpha, (int)rwSrc, (int)rwDst, (int)devSrc, (int)devDst);
+		}
 	}
 }
 
@@ -450,6 +792,21 @@ RenderReflectionMap_leeds(void)
 	RwCamera *cam = Scene.camera;
 	if(!cam) return; // NULL camera → 0x7FAD4D-class fault
 	RwCameraEndUpdate(cam);
+
+	// Instrumentation (additive, throttled): the CAR_LCS/CAR_VCS (leeds)
+	// reflection path renders the scene into envFB through reflectionCam
+	// — a SEPARATE camera, not the main-camera raster swap
+	// RenderSphereReflections uses. C2712: this function carries nested
+	// SEH, so no PF_SCOPE object may live across the __try; the pass is
+	// tagged in the timeline via MakeEnvmapRasters' scope + this log.
+	if(dbglog_throttle("envmap_leeds"))
+		dbglog("[EnvMap] RenderReflectionMap_leeds: target=envFB(%p %dx%d) via reflectionCam(%p) "
+		       "EnvMapRasterSize=%d (envMapSize=%d reflectionMsaaLevel=%d) mirrorDistortionFix=%d",
+			(void*)envFB, envFB ? envFB->width : 0, envFB ? envFB->height : 0,
+			(void*)reflectionCam, EnvMapRasterSize(),
+			config ? config->envMapSize : -1,
+			config ? config->reflectionMsaaLevel : -1,
+			config ? (int)config->mirrorDistortionFix : -1);
 
 	// FIX (unpaired-EndUpdate family, mirror of neoCarpipe.cpp:396-410):
 	// this path swaps Scene.camera to reflectionCam and used to restore it
@@ -773,6 +1130,7 @@ RenderSphereReflectionsSwappedSpan(SphereReflectionGuard *g, RwCamera *cam)
 void
 RenderSphereReflections(void)
 {
+	PF_SCOPE("EnvMap_RenderSphereReflections");
 
 	if(iCanHasbuildingPipe && (config->vehiclePipe == CAR_MOBILE || config->vehiclePipe == CAR_ENV || config->vehiclePipe == CAR_MODERN)){
 		MakeEnvmapRasters();
@@ -781,6 +1139,19 @@ RenderSphereReflections(void)
 		RwCamera *cam = Scene.camera; // NULL curCamera faults (same class as 0x7FAD4D)
 		if(!cam) return;
 
+		// Instrumentation (additive, throttled): this path swaps the MAIN
+		// camera's rasters onto the reflection target (envFB, via
+		// reflectionCam) for the span — SphereReflectionGuard restores
+		// them deterministically. Reads only.
+		if(dbglog_throttle("envmap_sphere"))
+			dbglog("[EnvMap] RenderSphereReflections: vehiclePipe=%d swapTarget=envFB(%p %dx%d) via reflectionCam(%p) "
+			       "envMapSize=%d msaaLevel=%d distortionFix=%d",
+				(int)config->vehiclePipe,
+				(void*)envFB, envFB ? envFB->width : 0, envFB ? envFB->height : 0,
+				(void*)reflectionCam,
+				config->envMapSize, config->reflectionMsaaLevel,
+				(int)config->mirrorDistortionFix);
+
 		// Deterministic restore: capture the main camera's rasters/planes
 		// BEFORE the swap. The guard restores them at scope exit on every
 		// path, so a downstream geometry-phase reader never observes the
@@ -788,6 +1159,14 @@ RenderSphereReflections(void)
 		SphereReflectionGuard guard(cam);
 		guard.fb = RwCameraGetRaster(cam);
 		guard.zb = RwCameraGetZRaster(cam);
+		// EXIT AUDIT (raster swap): the swap is applied only inside
+		// RenderSphereReflectionsSwappedSpan, whose outer __finally calls
+		// Disarm() on EVERY path (normal, __leave bail, swallowed fault).
+		// The two early returns above this point run before any swap; the
+		// bail below (and the destructor on any later exit) runs with
+		// armed==false, so no raster/clip restore is owed but the span
+		// globals are still cleared. No path past this line can return with
+		// the main camera left on the reflection raster.
 		// FIX 2 audit: this bail is safe — armed is still false, so the
 		// destructor performs NO raster/clip restore (none was applied yet),
 		// but it still clears lods/gRenderingSpheremap/bFudgeNow/sphereRadius.

@@ -10,6 +10,7 @@ Usage:
   python tools/fast_build.py --rebuild    # Clean + full rebuild + deploy
   python tools/fast_build.py --shaders    # Only compile shaders
   python tools/fast_build.py --deploy     # Only deploy existing DLL
+  python tools/fast_build.py --helper-tex # Only pack assets/helper_tex -> helper_tex.txd (m0061)
   python tools/fast_build.py --launch     # Build + launch game
   python tools/fast_build.py --watch      # Auto-rebuild on file changes
   python tools/fast_build.py --clean      # Clean build (delete outputs, full rebuild)
@@ -18,6 +19,7 @@ Usage:
   python tools/fast_build.py --no-deploy  # Build without deploying
   python tools/fast_build.py --check-shaders  # Validate all shaders without building DLL
   python tools/fast_build.py --check      # Build: abort before MSBuild if any shader fails validate
+  python tools/fast_build.py --verify-embed  # Read-only resource.h/Resource.rc/CSO cross-check
 
 Build Tiers:
   --fastest  : No detection. Compile shaders + MSBuild incremental + deploy. Fastest iteration.
@@ -42,6 +44,7 @@ import shutil
 import subprocess
 import hashlib
 import json
+import textwrap
 from pathlib import Path
 from multiprocessing import Pool, cpu_count
 from datetime import datetime
@@ -50,11 +53,13 @@ from datetime import datetime
 # Paths
 # ============================================================
 
-PROJECT_DIR = Path(r'E:\dev(dave)\skygfx_plus_expIV')
+PROJECT_DIR = Path(os.environ.get('SKYGFX_PROJECT') or Path(__file__).resolve().parent.parent)
 BUILD_DIR = PROJECT_DIR / 'build'
-GAME_DIR = Path(r'E:\games\gtasa_skygfx_plus')
+GAME_DIR = Path(os.environ.get('SKYGFX_GAME') or r'E:\games\gtasa_skygfx_plus')
 SHADERS_DIR = PROJECT_DIR / 'shaders'
 CSO_DIR = PROJECT_DIR / 'resources' / 'cso'
+RESOURCE_H = PROJECT_DIR / 'resources' / 'resource.h'
+RC_FILE = PROJECT_DIR / 'resources' / 'Resource.rc'
 CACHE_DIR = PROJECT_DIR / '.cache'
 CACHE_DIR.mkdir(exist_ok=True)
 
@@ -136,9 +141,10 @@ def get_source_mtimes():
     return fingerprint
 
 def get_shader_mtimes():
-    """Get mtime fingerprint of all shader source files."""
+    """Get mtime fingerprint of all shader source files, including shared
+    headers under shaders/include/ (editing one changes every dependent CSO)."""
     fingerprint = {}
-    for subdir in ['ps', 'vs']:
+    for subdir in ['ps', 'vs', 'include']:
         shader_dir = SHADERS_DIR / subdir
         if not shader_dir.exists():
             continue
@@ -148,6 +154,18 @@ def get_shader_mtimes():
             fingerprint[str(rel)] = (stat.st_mtime, stat.st_size)
     # Also check root shaders dir
     for f in SHADERS_DIR.glob('*.hlsl'):
+        rel = f.relative_to(PROJECT_DIR)
+        stat = f.stat()
+        fingerprint[str(rel)] = (stat.st_mtime, stat.st_size)
+    return fingerprint
+
+def get_all_shader_mtimes():
+    """mtime+size for every .hlsl under shaders/, including include headers.
+    Used by the census, which (unlike the build) must see include edits."""
+    fingerprint = {}
+    if not SHADERS_DIR.is_dir():
+        return fingerprint
+    for f in SHADERS_DIR.rglob('*.hlsl'):
         rel = f.relative_to(PROJECT_DIR)
         stat = f.stat()
         fingerprint[str(rel)] = (stat.st_mtime, stat.st_size)
@@ -181,7 +199,7 @@ def check_changes():
     if not cache_file.exists():
         return True, True, True
 
-    with open(cache_file, 'r') as f:
+    with open(cache_file, 'r', encoding='utf-8') as f:
         saved = json.load(f)
 
     src_changed = current['sources'] != saved.get('sources', '')
@@ -202,7 +220,7 @@ def commit_hash():
         'shaders': compute_fingerprint(shader_fp) if shader_fp else '',
     }
 
-    with open(cache_file, 'w') as f:
+    with open(cache_file, 'w', encoding='utf-8') as f:
         json.dump(current, f, indent=2)
 
 def sources_changed():
@@ -226,7 +244,7 @@ def get_vs_env_cached(force_refresh=False):
     if cache_file.exists():
         age = time.time() - cache_file.stat().st_mtime
         if age < 3600:
-            with open(cache_file, 'r') as f:
+            with open(cache_file, 'r', encoding='utf-8') as f:
                 return json.load(f)
 
     # Run vcvarsall.bat and cache result
@@ -247,7 +265,7 @@ def get_vs_env_cached(force_refresh=False):
             seen_keys.add(key_lower)
             env[key] = value
 
-    with open(cache_file, 'w') as f:
+    with open(cache_file, 'w', encoding='utf-8') as f:
         json.dump(env, f)
     return env
 
@@ -272,21 +290,87 @@ def _file_md5(path):
             h.update(chunk)
     return h.hexdigest()
 
+# HLSL include directive: #include "..." (relative to the file or shaders/)
+_HLSL_INCLUDE_RE = re.compile(r'^[ \t]*#[ \t]*include[ \t]+"([^"]+)"',
+                              re.MULTILINE)
+
+
+def _resolve_hlsl_include(name, from_dir):
+    """Resolve an #include target relative to the including file and shaders/."""
+    for base in (from_dir, SHADERS_DIR):
+        try:
+            cand = (base / name).resolve()
+        except OSError:
+            continue
+        if cand.is_file():
+            return cand
+    return None
+
+
+def _hlsl_include_closure(path, seen=None):
+    """Set of resolved files reachable from `path` via transitive #include."""
+    path = Path(path).resolve()
+    if seen is None:
+        seen = set()
+    if path in seen:
+        return seen
+    seen.add(path)
+    try:
+        text = path.read_text(encoding='utf-8', errors='replace')
+    except OSError:
+        return seen
+    for m in _HLSL_INCLUDE_RE.finditer(text):
+        inc = _resolve_hlsl_include(m.group(1), path.parent)
+        if inc is not None:
+            _hlsl_include_closure(inc, seen)
+    return seen
+
+
+def shader_source_hash(path):
+    """MD5 over the entry file's transitive #include closure (path + content).
+
+    Editing shaders/include/*.hlsl therefore invalidates every dependent CSO,
+    not just the entry file that names it."""
+    h = hashlib.md5()
+    for f in sorted(_hlsl_include_closure(path),
+                    key=lambda p: p.as_posix()):
+        try:
+            rel = f.relative_to(PROJECT_DIR).as_posix()
+        except ValueError:
+            rel = f.as_posix()
+        h.update(rel.encode())
+        h.update(b'\0')
+        try:
+            h.update(f.read_bytes())
+        except OSError:
+            pass
+        h.update(b'\0')
+    return h.hexdigest()
+
 def _read_shader_hash_cache():
-    """Load the shader content hash cache (md5 of HLSL source)."""
+    """Load the shader content hash cache (md5 of HLSL source), pruning
+    entries whose source file no longer exists. Silent — a stale key must
+    never block a build."""
     cache_file = CACHE_DIR / 'shader_hashes.json'
     if cache_file.exists():
         try:
-            with open(cache_file, 'r') as f:
-                return json.load(f)
+            with open(cache_file, 'r', encoding='utf-8') as f:
+                cache = json.load(f)
         except Exception:
-            pass
+            return {}
+        pruned = {}
+        for key, value in cache.items():
+            # Key format: "<absolute hlsl path>:<entry point>"
+            src = key.rsplit(':', 1)[0]
+            if os.path.isfile(src):
+                pruned[key] = value
+        return pruned
     return {}
 
 def _write_shader_hash_cache(cache):
     """Write shader content hash cache."""
     cache_file = CACHE_DIR / 'shader_hashes.json'
-    with open(cache_file, 'w') as f:
+    with open(cache_file, 'w', encoding='utf-8') as f:
         json.dump(cache, f, indent=2)
 
 # Module-level cache (loaded once per process in Pool)
@@ -304,8 +388,10 @@ def compile_single_shader(args):
     if _shader_hash_cache is None:
         _shader_hash_cache = _read_shader_hash_cache()
 
-    # Skip if HLSL content hasn't changed (content hash, not mtime)
-    hlsl_hash = _file_md5(hlsl_path)
+    # Skip if HLSL content hasn't changed (content hash, not mtime).
+    # The hash covers the entry file's transitive #include closure, so a
+    # shaders/include/*.hlsl edit invalidates every dependent CSO.
+    hlsl_hash = shader_source_hash(hlsl_path)
     cache_key = f"{hlsl_path}:{entry}"
     if os.path.exists(cso_path) and cache_key in _shader_hash_cache:
         if _shader_hash_cache[cache_key] == hlsl_hash:
@@ -369,10 +455,17 @@ def get_shader_list():
             # uploads, so it must be rebuilt into resources/cso/.
             if 'GTAIV' in f.name and subdir == 'vs' and f.name != 'GTAIVBuilding_vs.hlsl':
                 continue
-            # Skip files handled by multi_entry (dedicated entry points)
-            if f.name in ('VehiclePBR_Modern.hlsl', 'normMapVehiclePS.hlsl',
-                           'mobileVehiclePS.hlsl', 'mobileVehicleVS.hlsl',
-                           'Water_Parallax.hlsl'):
+            # Skip files handled by multi_entry (dedicated entry points).
+            # Includes the legacy standalone building-PS sources: their CSO
+            # names are emitted from the consolidated ROOT files
+            # (shaders/buildingPipePS.hlsl, shaders/noiseDetailBuildingPS.hlsl)
+            # via the multi_entry list below. One producer per CSO — otherwise
+            # two pool workers race on the same output file.
+            if f.name in ('VehiclePBR_Modern.hlsl', 'mobileVehicleVS.hlsl',
+                           'Water_Parallax.hlsl',
+                           # buildingPipePS.hlsl main_normMapBuilding emits
+                           # normMapBuildingPS.cso (legacy source kept)
+                           'normMapBuildingPS.hlsl'):
                 continue
             # Skip subdirectrory files whose stem collides with a root file
             # (root file takes priority; multi_entry handles redirects)
@@ -390,8 +483,11 @@ def get_shader_list():
         ('vs_3_0', 'vehiclePipeVS.hlsl', 'main_xboxCar', 'xboxCarVS.cso'),
         ('vs_3_0', 'vehiclePipeVS.hlsl', 'main_leedsCarFx', 'leedsCarFxVS.cso'),
         ('vs_3_0', 'vehiclePipeVS.hlsl', 'main_mobileVehicle', 'mobileVehicleVS.cso'),
-        ('vs_3_0', 'vehiclePipeVS.hlsl', 'main_neoPass1', 'neoVehiclePass1VS.cso'),
-        ('vs_3_0', 'vehiclePipeVS.hlsl', 'main_neoPass2', 'neoVehiclePass2VS.cso'),
+        # neoVehiclePass1VS / neoVehiclePass2VS rows REMOVED — dead build
+        # entries: CarPipe::vertexShaderPass1/2 are permanently NULL
+        # (neoCarpipe.cpp CreateShaders), nothing loads those CSOs and the
+        # VS passes no longer exist. See neoCarpipe.cpp "dead: VS passes
+        # removed, see fast_build".
         # VehiclePBR_Modern.hlsl — all 7 entry points from one file
         ('ps_3_0', 'VehiclePBR_Modern.hlsl', 'main', 'VehiclePBR_Modern.cso'),
         ('ps_3_0', 'VehiclePBR_Modern.hlsl', 'main_normMapVehicle', 'normMapVehiclePS.cso'),
@@ -404,6 +500,35 @@ def get_shader_list():
         ('ps_3_0', 'Water_Parallax.hlsl', 'main_xbox', 'Water_Parallax.cso'),
         ('ps_3_0', 'Water_Parallax.hlsl', 'main_iv', 'Water_IV.cso'),
         ('ps_3_0', 'Water_Parallax.hlsl', 'main_v', 'Water_V.cso'),
+        # ---- Root-level consolidated shaders (shaders/*.hlsl) ----
+        # buildingPipePS.hlsl — 5 entry points (docs/Building Pipeline.md).
+        # CSO names = the legacy per-file names ("Original File" column) that
+        # Resource.rc embeds, so no RC changes are needed for these.
+        ('ps_3_0', 'buildingPipePS.hlsl', 'main_simple', 'simplePS.cso'),
+        ('ps_3_0', 'buildingPipePS.hlsl', 'main_simpleDetail', 'simpleDetailPS.cso'),
+        ('ps_3_0', 'buildingPipePS.hlsl', 'main_simpleFog', 'simpleFogPS.cso'),
+        ('ps_3_0', 'buildingPipePS.hlsl', 'main_xboxBuilding', 'xboxBuildingPS.cso'),
+        ('ps_3_0', 'buildingPipePS.hlsl', 'main_normMapBuilding', 'normMapBuildingPS.cso'),
+        # noiseDetailBuildingPS.hlsl — 3 entry points (docs/Building Pipeline.md)
+        ('ps_3_0', 'noiseDetailBuildingPS.hlsl', 'main_simpleNoiseDetail', 'simpleNoiseDetailPS.cso'),
+        ('ps_3_0', 'noiseDetailBuildingPS.hlsl', 'main_simpleDetailNoiseDetail', 'simpleDetailNoiseDetailPS.cso'),
+        ('ps_3_0', 'noiseDetailBuildingPS.hlsl', 'main_xboxBuildingNoiseDetail', 'xboxBuildingNoiseDetailPS.cso'),
+        # unifiedPipe.hlsl — all 5 entry functions (WIP forward+ chain, NOT in
+        # Resource.rc yet). main is the documented alias of main_pre (/E main =
+        # pre-pass); it gets its own CSO so every entry in the file has exactly
+        # one output. (Source header suggests pre.cso/occl.cso/post.cso/ibl.cso;
+        # prefixed names avoid generic-name collisions in resources/cso/ and
+        # give clean names for the future RC wiring.)
+        ('ps_3_0', 'unifiedPipe.hlsl', 'main', 'unifiedPipe.cso'),
+        ('ps_3_0', 'unifiedPipe.hlsl', 'main_pre', 'unifiedPipePre.cso'),
+        ('ps_3_0', 'unifiedPipe.hlsl', 'main_occlusion', 'unifiedPipeOcclusion.cso'),
+        ('ps_3_0', 'unifiedPipe.hlsl', 'main_post', 'unifiedPipePost.cso'),
+        ('ps_3_0', 'unifiedPipe.hlsl', 'main_ibl', 'unifiedPipeIBL.cso'),
+        # CloudsPS.hlsl — the sprite/quad pass needs no row: the single-entry
+        # rglob rule above already compiles it with /E main -> CloudsPS.cso
+        # (main is a deliberate thin alias of main_clouds). Only the full-screen
+        # sky entry needs an explicit row here.
+        ('ps_3_0', 'CloudsPS.hlsl', 'main_cloudsSky', 'cloudsSkyPS.cso'),
     ]
 
     for profile, src_file, entry, out_cso in multi_entry:
@@ -418,15 +543,262 @@ def get_shader_list():
 
     return shaders
 
+
+def copy_prebuilt_csos():
+    """Seed resources/cso/ with prebuilt CSOs shipped under shaders/.
+
+    .gitignore excludes *.cso, so a fresh clone has no GTAIV CSOs even though
+    Resource.rc embeds five of them (rc.exe would fail). Copy any GTAIV*.cso
+    and any other prebuilt CSO with no compiler producer when the destination
+    is missing. Never overwrites an existing (compiled) CSO."""
+    if not SHADERS_DIR.is_dir():
+        return 0
+    CSO_DIR.mkdir(exist_ok=True)
+    produced = {Path(str(e[2])).name for e in get_shader_list()}
+    copied = 0
+    for src in sorted(SHADERS_DIR.rglob('*.cso'), key=lambda p: p.as_posix()):
+        name = src.name
+        if 'GTAIV' not in name and name in produced:
+            continue  # compiled from source; never seed a stale binary
+        dst = CSO_DIR / name
+        if dst.exists():
+            continue
+        try:
+            shutil.copy2(src, dst)
+            print(f"  COPY: {name} (prebuilt from shaders/{src.parent.name}/)")
+            copied += 1
+        except OSError as exc:
+            print(f"  WARNING: could not copy prebuilt {name} ({exc})")
+    return copied
+
+# ============================================================
+# Shader Census
+# ============================================================
+
+# HLSL sources that intentionally emit no CSO. Each entry mirrors a skip in
+# get_shader_list(); a file that is neither a producer nor listed here is
+# reported as unexplained.
+_CONSOLIDATED_LEGACY_SOURCES = {
+    # buildingPipePS.hlsl main_normMapBuilding emits normMapBuildingPS.cso.
+    'normMapBuildingPS.hlsl',
+    # vehiclePipeVS.hlsl main_mobileVehicle emits mobileVehicleVS.cso.
+    'mobileVehicleVS.hlsl',
+}
+
+
+def _no_output_reason(path):
+    """Why this HLSL legitimately has no CSO producer, else None."""
+    rel = path.relative_to(SHADERS_DIR)
+    parts = rel.parts
+    if 'include' in parts[:-1]:
+        return 'include header'
+    name = path.name
+    if len(parts) == 3 and parts[0] in ('ps', 'vs') and \
+            (SHADERS_DIR / parts[0] / name).exists():
+        return 'duplicate of root-level source'
+    if name in _CONSOLIDATED_LEGACY_SOURCES:
+        return 'legacy source; CSO emitted by consolidated entry'
+    if parts[0] == 'vs' and 'GTAIV' in name:
+        return 'prebuilt GTAIV binary (no source producer)'
+    return None
+
+
+def shader_census():
+    """Static, read-only picture of HLSL sources -> CSO producers."""
+    entries = get_shader_list()
+    producer_paths = {Path(str(e[1])).resolve() for e in entries}
+    outputs = sorted({Path(str(e[2])).name for e in entries})
+    all_hlsl = sorted(SHADERS_DIR.rglob('*.hlsl'),
+                      key=lambda p: p.as_posix())
+
+    intentional = {}
+    unexplained = []
+    for p in all_hlsl:
+        if p.resolve() in producer_paths:
+            continue
+        reason = _no_output_reason(p)
+        rel = p.relative_to(PROJECT_DIR).as_posix()
+        if reason:
+            intentional[rel] = reason
+        else:
+            unexplained.append(rel)
+
+    disk_csos = (sorted(p.name for p in CSO_DIR.glob('*.cso'))
+                 if CSO_DIR.is_dir() else [])
+    output_set = set(outputs)
+    return {
+        'entries': len(entries),
+        'producer_sources': len(producer_paths),
+        'outputs': outputs,
+        'all_hlsl': len(all_hlsl),
+        'intentional': intentional,
+        'unexplained': sorted(unexplained),
+        'missing_outputs': sorted(n for n in outputs
+                                  if not (CSO_DIR / n).is_file()),
+        'orphans': [n for n in disk_csos if n not in output_set],
+    }
+
+
+def _format_names(names, limit=None, width=104, indent='      '):
+    """Deterministic, wrapped list. `limit` caps the display (None = all)."""
+    names = [str(n) for n in names]
+    shown = ', '.join(names if limit is None else names[:limit])
+    if limit is not None and len(names) > limit:
+        shown += f', +{len(names) - limit} more'
+    return textwrap.fill(shown, width=width, subsequent_indent=indent)
+
+
+def print_shader_census(stats=None):
+    """Compact post-compile census. `stats` = {'ok','skip','fail'} for this run."""
+    try:
+        c = shader_census()
+    except Exception as exc:  # noqa: BLE001 - never break a build on the census
+        print(f"  Census: unavailable ({type(exc).__name__}: {exc})")
+        return None
+
+    stats = stats or {}
+    print(f"  Census: {c['entries']} entries | {stats.get('ok', 0)} compiled | "
+          f"{stats.get('skip', 0)} up-to-date | {stats.get('fail', 0)} failed")
+    print(f"  Census: {c['producer_sources']}/{c['all_hlsl']} HLSL produce a CSO | "
+          f"{len(c['intentional'])} intentional skips | "
+          f"{len(c['unexplained'])} unexplained")
+    if c['unexplained']:
+        print(f"  Census: UNEXPLAINED no-CSO HLSL: "
+              f"{_format_names(c['unexplained'])}")
+    if c['missing_outputs']:
+        print(f"  Census: expected CSO missing: "
+              f"{_format_names(c['missing_outputs'])}")
+    line = f"  Census: {len(c['orphans'])} CSO(s) without producer"
+    if c['orphans']:
+        line += f": {_format_names(c['orphans'])}"
+    print(line)
+    return c
+
+
+def _write_shader_census(stats, census):
+    """Persist the last compile result for tools/doctor.py."""
+    cache_file = CACHE_DIR / 'shader_census.json'
+    payload = {
+        'shader_fingerprint': compute_fingerprint(get_all_shader_mtimes()),
+        'entries': census['entries'],
+        'compiled': stats.get('ok', 0),
+        'up_to_date': stats.get('skip', 0),
+        'failed': stats.get('fail', 0),
+        'unexplained': census['unexplained'],
+        'missing_outputs': census['missing_outputs'],
+        'orphans': census['orphans'],
+    }
+    try:
+        with open(cache_file, 'w', encoding='utf-8', newline='\n') as f:
+            json.dump(payload, f, indent=2, sort_keys=True)
+    except OSError as exc:
+        print(f"  Census: could not write {cache_file.name}: {exc}")
+
+# ============================================================
+# Embedded Resource Verification
+# ============================================================
+
+_IDR_DEFINE_RE = re.compile(
+    r'^[ \t]*#define[ \t]+(IDR_\w+)[ \t]+(\d+)\b', re.MULTILINE)
+_RCDATA_ROW_RE = re.compile(
+    r'^[ \t]*(IDR_\w+)[ \t]+RCDATA[ \t]+"([^"]+)"', re.MULTILINE)
+_IDR_TOKEN_RE = re.compile(r'\bIDR_[A-Za-z0-9_]+\b')
+
+
+def _read_text(path):
+    return path.read_text(encoding='utf-8-sig', errors='replace')
+
+
+def verify_embedded_resources():
+    """Cross-check resource.h, Resource.rc, resources/cso and src/ references.
+    Read-only. The two hard gates are `missing_rows` and `missing_files`."""
+    defines = {}
+    if RESOURCE_H.is_file():
+        for m in _IDR_DEFINE_RE.finditer(_read_text(RESOURCE_H)):
+            defines[m.group(1)] = int(m.group(2))
+
+    rows = {}
+    if RC_FILE.is_file():
+        for m in _RCDATA_ROW_RE.finditer(_read_text(RC_FILE)):
+            rows[m.group(1)] = m.group(2)
+
+    cso_files = (sorted(p.name for p in CSO_DIR.glob('*.cso'))
+                 if CSO_DIR.is_dir() else [])
+    rc_basenames = {Path(ref).name for ref in rows.values()}
+
+    # A CSO has a "producer" if a compile entry emits it or it ships prebuilt
+    # under shaders/ (e.g. GTAIV binaries). Only produced-but-unembedded CSOs
+    # are actionable; no-producer leftovers are a separate category.
+    producer_names = {Path(str(e[2])).name for e in get_shader_list()}
+    if SHADERS_DIR.is_dir():
+        producer_names.update(p.name for p in SHADERS_DIR.rglob('*.cso'))
+    unembedded = [n for n in cso_files if n not in rc_basenames]
+
+    code_refs = set()
+    src_dir = PROJECT_DIR / 'src'
+    if src_dir.is_dir():
+        for ext in ('*.cpp', '*.h', '*.hpp'):
+            for p in src_dir.rglob(ext):
+                code_refs.update(_IDR_TOKEN_RE.findall(_read_text(p)))
+
+    return {
+        'defines': len(defines),
+        'rows': len(rows),
+        'cso_files': len(cso_files),
+        # hard failures (exit code gates)
+        'missing_rows': sorted(set(defines) - set(rows)),
+        'missing_files': sorted(f'{sym} -> {ref}' for sym, ref in rows.items()
+                                if not (PROJECT_DIR / 'resources' / ref).is_file()),
+        # soft reports
+        'undefined_rows': sorted(set(rows) - set(defines)),
+        'no_idr': [n for n in unembedded if n in producer_names],
+        'no_producer': [n for n in unembedded if n not in producer_names],
+        'no_code': sorted(set(defines) - code_refs),
+    }
+
+
+def print_embed_report(r):
+    """Compact embed report. Exit gates: missing_rows / missing_files only."""
+    print(f"  embed: {r['defines']} IDR defines | {r['rows']} RCDATA rows | "
+          f"{r['cso_files']} CSOs on disk")
+    line = f"  defines without RC row: {len(r['missing_rows'])}"
+    if r['missing_rows']:
+        line += f" ({_format_names(r['missing_rows'])})"
+    print(line)
+    line = f"  RC rows without file: {len(r['missing_files'])}"
+    if r['missing_files']:
+        line += f" ({_format_names(r['missing_files'])})"
+    print(line)
+    line = f"  CSOs produced but not embedded: {len(r['no_idr'])}"
+    if r['no_idr']:
+        line += f" ({_format_names(r['no_idr'])})"
+    print(line)
+    line = f"  CSOs with no producer: {len(r['no_producer'])}"
+    if r['no_producer']:
+        line += f" ({_format_names(r['no_producer'])})"
+    print(line)
+    line = f"  IDRs with no code ref: {len(r['no_code'])}"
+    if r['no_code']:
+        line += f" ({_format_names(r['no_code'])})"
+    print(line)
+    if r['undefined_rows']:
+        print(f"  note: {len(r['undefined_rows'])} RC row(s) without a define: "
+              f"{_format_names(r['undefined_rows'])}")
+    gate = bool(r['missing_rows'] or r['missing_files'])
+    print(f"  RESULT: {'FAIL' if gate else 'OK'} "
+          f"(exit gate: defines-without-row, rows-without-file)")
+
 def compile_shaders_parallel():
     """Compile all shaders in parallel using multiprocessing."""
     timer.begin("Shader Compilation")
 
     CSO_DIR.mkdir(exist_ok=True)
+    copy_prebuilt_csos()
     shaders = get_shader_list()
 
     if not shaders:
         print("  No shaders found")
+        print_shader_census({'ok': 0, 'skip': 0, 'fail': 0})
         timer.end()
         return True
 
@@ -461,6 +833,12 @@ def compile_shaders_parallel():
 
     # Write updated cache once after all workers finish
     _write_shader_hash_cache(updated_cache)
+
+    # Compact census of the source -> CSO graph, then persist the result so
+    # tools/doctor.py can report the last compile without recompiling.
+    census = print_shader_census(results)
+    if census is not None:
+        _write_shader_census(results, census)
 
     print(f"  {results['ok']} compiled, {results['skip']} up-to-date, {results['fail']} failed")
     if results['fail'] > 0:
@@ -547,6 +925,9 @@ def build(clean=False):
         timer.end()
         return False
 
+    # Ensure rc.exe has every embedded CSO even on a clean clone (no *.cso in git)
+    copy_prebuilt_csos()
+
     vs_env = get_vs_env_cached()
     # Only use VS env — do NOT merge os.environ (Git Bash has PROGRAMW6432,
     # VS has ProgramW6432, case-different keys break CL.exe MSB6001).
@@ -571,6 +952,33 @@ def build(clean=False):
 
     result = subprocess.run(cmd, capture_output=True, text=True,
                            cwd=str(PROJECT_DIR), env=build_env)
+
+    # Persist the full MSBuild output so a "GREEN" claim is provable from disk
+    # afterwards. Previously stdout was captured and discarded, which made every
+    # build assertion unverifiable (see the 2026-10-26 verification wave).
+    try:
+        _cachedir = PROJECT_DIR / '.cache'
+        _cachedir.mkdir(exist_ok=True)
+        _msblog = _cachedir / 'msbuild_last.log'
+        with open(_msblog, 'w', encoding='utf-8', errors='replace') as _lf:
+            _lf.write('# cmd: %s\n' % ' '.join(cmd))
+            _lf.write('# returncode: %d\n' % result.returncode)
+            _lf.write(result.stdout or '')
+            if result.stderr:
+                _lf.write('\n# ---- stderr ----\n')
+                _lf.write(result.stderr)
+        import re as _re
+        _mw = _re.search(r'(\d+)\s+Warning\(s\)', result.stdout or '')
+        _me = _re.search(r'(\d+)\s+Error\(s\)', result.stdout or '')
+        _wn = _mw.group(1) if _mw else '?'
+        _en = _me.group(1) if _me else '?'
+        print('  MSBuild: %s warning(s), %s error(s)  [.cache/msbuild_last.log]' % (_wn, _en))
+        if _en not in ('?', '0'):
+            print('  ERROR: MSBuild reported %s error(s) -- see .cache/msbuild_last.log' % _en)
+            timer.end()
+            return False
+    except Exception as _ex:
+        print('  WARNING: could not persist MSBuild log (%s)' % _ex)
 
     # Check for compile/link errors (ignore post-build copy failures —
     # the DLL was already produced, deploy() handles the copy)
@@ -610,11 +1018,78 @@ def build(clean=False):
 # Deploy
 # ============================================================
 
+# ------------------------------------------------------------
+# Duplicate-ASI quarantine
+# ------------------------------------------------------------
+# The ASI loader loads EVERY "*.asi" in the game root. A second copy of
+# skygfx (e.g. a reference/backup build left behind) double-loads the
+# module, double-hooks the exe and fights the live build's state contracts
+# (black world, stray legacy DebugMenu, random feature loss).
+# Any loadable skygfx*.asi other than skygfx.asi is renamed to
+# "<name>.disabled" before deploy. Reversible - nothing is deleted.
+ASI_DIRS = ['', 'scripts', 'modloader', 'CLEO']
+
+def quarantine_duplicate_asis(verbose=True):
+    """Disable every loadable skygfx*.asi except the canonical skygfx.asi."""
+    disabled = []
+    for sub in ASI_DIRS:
+        d = (GAME_DIR / sub) if sub else GAME_DIR
+        if not d.is_dir():
+            continue
+        for p in sorted(d.glob('skygfx*.asi')):
+            if sub == '' and p.name.lower() == 'skygfx.asi':
+                continue
+            dst = p.with_name(p.name + '.disabled')
+            n = 1
+            while dst.exists():
+                dst = p.with_name('%s.disabled%d' % (p.name, n))
+                n += 1
+            try:
+                p.rename(dst)
+                disabled.append((str(p.relative_to(GAME_DIR)), dst.name))
+            except OSError as e:
+                print('  WARNING: could not disable %s (%s)' % (p.name, e))
+    if disabled and verbose:
+        print('  *** DUPLICATE SKYGFX ASI DISABLED (would double-load) ***')
+        for src, dst in disabled:
+            print('    %s  ->  %s' % (src, dst))
+    elif verbose:
+        print('  duplicate-ASI guard: game root clean (only skygfx.asi)')
+    # report, never touch, archived copies living in subfolders the loader ignores
+    if verbose:
+        arch = [str(p.relative_to(GAME_DIR)) for p in GAME_DIR.rglob('skygfx*.asi')
+                if p.is_file() and p.parent != GAME_DIR]
+        for a in arch:
+            print('  note: archived copy (subfolder, not loaded): %s' % a)
+
+    # The game launcher deploys launcher_data/dlc/<id> payloads with
+    # deploy_mode "root" - a packaged skygfx.asi there would overwrite the
+    # live build (and its skygfx.ini would wipe every setting). Refuse loudly.
+    lz = GAME_DIR / 'launcher_data' / 'dlc'
+    if lz.is_dir():
+        for man in sorted(lz.glob('*/manifest.json')):
+            try:
+                import json as _json
+                meta = _json.load(open(man, 'r', encoding='utf-8'))
+            except Exception:
+                continue
+            files = [f.get('path', '') for f in meta.get('files', []) or []]
+            if not any(f.lower().startswith('skygfx') and f.lower().endswith('.asi') for f in files):
+                continue
+            tag = 'ENABLED' if meta.get('default_enabled') else 'disabled'
+            print('  WARNING: launcher DLC "%s" (%s, deploy_mode=%s) packages a skygfx ASI: %s'
+                  % (meta.get('id', man.parent.name), tag, meta.get('deploy_mode'), files))
+            if meta.get('default_enabled'):
+                print('           -> the launcher would REPLACE the live build; disable it before launching')
+    return disabled
+
+
 def deploy(force=False):
     """Copy ASI + INI to game directory. If force=True, skip backups and just replace."""
     timer.begin("Deploy")
 
     kill_game_process()
+    quarantine_duplicate_asis()
 
     # Find DLL — post-build copies DLL directly to game dir as .asi
     dll_src = None
@@ -625,6 +1100,17 @@ def deploy(force=False):
         if p.exists():
             dll_src = p
             break
+
+    # Seed the INI before the early return: on a first install post-build may
+    # already have dropped skygfx.asi, and the INI would never be copied.
+    ini_dst = GAME_DIR / 'skygfx.ini'
+    if not ini_dst.exists():
+        ini_src = PROJECT_DIR / 'bin' / 'Release' / 'skygfx.ini'
+        if ini_src.exists():
+            shutil.copy2(ini_src, ini_dst)
+            print(f"  INI deployed (new)")
+    else:
+        print(f"  INI preserved (exists)")
 
     # If post-build already placed the ASI in game dir, consider it deployed
     if not dll_src and asi_dst.exists():
@@ -654,15 +1140,6 @@ def deploy(force=False):
             print(f"  ASI deployed ({asi_dst.stat().st_size:,} bytes)")
     else:
         print("  No DLL found to deploy")
-
-    ini_dst = GAME_DIR / 'skygfx.ini'
-    if not ini_dst.exists():
-        ini_src = PROJECT_DIR / 'bin' / 'Release' / 'skygfx.ini'
-        if ini_src.exists():
-            shutil.copy2(ini_src, ini_dst)
-            print(f"  INI deployed (new)")
-    else:
-        print(f"  INI preserved (exists)")
 
     timer.end()
 
@@ -730,6 +1207,9 @@ def watch_mode():
 
 def main():
     args = sys.argv[1:]
+    if any(a in ('-h', '--help') for a in args):
+        print(__doc__)
+        return 0
     fastest = '--fastest' in args
     fast = '--fast' in args
     rebuild = '--rebuild' in args or '--clean' in args
@@ -743,6 +1223,8 @@ def main():
     no_deploy = '--no-deploy' in args
     check_shaders = '--check-shaders' in args
     check_before_build = '--check' in args
+    verify_embed = '--verify-embed' in args
+    helper_tex = '--helper-tex' in args
 
     print("=" * 50)
     print("  SkyGFX Plus - Fast Build")
@@ -750,9 +1232,19 @@ def main():
 
     if reset_env:
         reset_env_cache()
-        if not any([fastest, fast, rebuild, shaders_only, deploy_only, watch, check_shaders]):
+        if not any([fastest, fast, rebuild, shaders_only, deploy_only, watch,
+                    check_shaders, verify_embed]):
             timer.summary()
             return
+
+    # Read-only embedded-resource cross-check (resource.h / Resource.rc / CSO / src).
+    # Exit nonzero only for a define without an RC row or an RC row without a file.
+    if verify_embed:
+        report = verify_embedded_resources()
+        print_embed_report(report)
+        if report['missing_rows'] or report['missing_files']:
+            sys.exit(1)
+        return
 
     # Check-shaders-only mode: validate all shaders without building
     if check_shaders:
@@ -762,6 +1254,27 @@ def main():
             print("\n  SHADER VALIDATION FAILED")
             sys.exit(1)
         print("\n  All shaders valid")
+        return
+
+    # Helper-texture packaging mode (directive m0061): stage PNG/DDS ->
+    # assets/helper_tex/helper_tex.txd. Standalone early-return like --shaders:
+    # never touches FXC, MSBuild or deploy. Extra flags (e.g. --verify, --list,
+    # --strict) are forwarded to tools/pack_helper_tex.py.
+    if helper_tex:
+        fast_build_flags = {
+            '--fastest', '--fast', '--rebuild', '--clean', '--shaders',
+            '--deploy', '--launch', '--watch', '--force', '--reset-env',
+            '--open', '--no-deploy', '--check-shaders', '--check',
+            '--verify-embed', '--helper-tex',
+        }
+        forwarded = [a for a in args if a not in fast_build_flags]
+        packer = PROJECT_DIR / 'tools' / 'pack_helper_tex.py'
+        rc = subprocess.call([sys.executable, str(packer)] + forwarded)
+        timer.summary()
+        if rc != 0:
+            print("\n  HELPER TEXTURE PACKING FAILED")
+            sys.exit(rc)
+        print("\n  helper_tex packer finished OK (assets/helper_tex/helper_tex.txd)")
         return
 
     # Deploy-only mode

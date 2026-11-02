@@ -25,7 +25,7 @@ from urllib.parse import quote
 from html.parser import HTMLParser
 
 # Paths
-PROJECT = Path(os.environ.get("SKYGFX_PROJECT", "E:/dev(dave)/skygfx_plus_expIV"))
+PROJECT = Path(os.environ.get("SKYGFX_PROJECT") or Path(__file__).resolve().parent.parent)
 RESEARCH_DIR = PROJECT / "docs/research"
 DOCS_DIR = PROJECT / "docs"
 MEMORY_CACHE = PROJECT / "memory-bank/.cache/research-pillars"
@@ -242,10 +242,10 @@ def ingest_url(url, tags=None, verbose=True):
     # Update index
     idx = {}
     if INDEX_FILE.exists():
-        idx = json.loads(INDEX_FILE.read_text())
+        idx = json.loads(INDEX_FILE.read_text(encoding="utf-8"))
     idx[url] = {"title": data.get("title", ""), "type": source_type, "file": str(filepath), "ingested": data["ingested"]}
     MEMORY_CACHE.mkdir(parents=True, exist_ok=True)
-    INDEX_FILE.write_text(json.dumps(idx, indent=2))
+    INDEX_FILE.write_text(json.dumps(idx, indent=2), encoding="utf-8")
     
     if verbose:
         print(f"Ingested [{source_type}]: {data.get('title', url)}")

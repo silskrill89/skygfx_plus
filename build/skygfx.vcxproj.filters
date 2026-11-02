@@ -24,9 +24,6 @@
     <ClInclude Include="..\resources\resource.h">
       <Filter>resources</Filter>
     </ClInclude>
-    <ClInclude Include="..\src\HLSL_hook.h">
-      <Filter>src</Filter>
-    </ClInclude>
     <ClInclude Include="..\src\LinkList.h">
       <Filter>src</Filter>
     </ClInclude>
@@ -39,16 +36,10 @@
     <ClInclude Include="..\src\Pools.h">
       <Filter>src</Filter>
     </ClInclude>
-    <ClInclude Include="..\src\SMAA.h">
-      <Filter>src</Filter>
-    </ClInclude>
-    <ClInclude Include="..\src\debugmenu_public.h">
-      <Filter>src</Filter>
-    </ClInclude>
     <ClInclude Include="..\src\gta.h">
       <Filter>src</Filter>
     </ClInclude>
-    <ClInclude Include="..\src\neo.h">
+    <ClInclude Include="..\src\render\neopipe.h">
       <Filter>src</Filter>
     </ClInclude>
     <ClInclude Include="..\src\postfx.h">
@@ -57,24 +48,54 @@
     <ClInclude Include="..\src\skygfx.h">
       <Filter>src</Filter>
     </ClInclude>
+    <ClInclude Include="..\src\texdefs.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <!-- sftbdyphsx: merged ragdoll + dismemberment types -->
+    <ClInclude Include="..\src\entities\sftbdyphsx.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <!-- softbody: native RW-physics ragdoll core -->
+    <ClInclude Include="..\src\entities\softbody.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\core\modeManager.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <!-- physicscfg: dedicated sky_physics.ini service (m0971) -->
+    <ClInclude Include="..\src\core\physicscfg.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\core\debugmenu_theme.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <!-- W8-3: plant island (explicit entries — never glob) -->
+    <ClInclude Include="..\src\render\grasssys.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <!-- profiler: pass/frame profiler API (PF_SCOPE) + imgui snapshot surface -->
+    <ClInclude Include="..\src\render\profiler.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <!-- render-state monitor: L1 rw cache / L2 driver cache / L3 raw device divergence probe -->
+    <ClInclude Include="..\src\render\renderstate_monitor.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\render\noise.h">
+      <Filter>src</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\src\HLSL_hook.cpp">
-      <Filter>src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\src\SMAA.cpp">
-      <Filter>src</Filter>
-    </ClCompile>
     <ClCompile Include="..\src\buildingPipe.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\defaultFuncs.cpp">
+    <ClCompile Include="..\src\render\treeWind.cpp">
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\src\envmap.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\extendedplg.cpp">
+    <ClCompile Include="..\src\render\mirrorPass.cpp">
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\src\gta.cpp">
@@ -83,13 +104,18 @@
     <ClCompile Include="..\src\main.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\neo.cpp">
+    <ClCompile Include="..\src\core\modeManager.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\neoCarpipe.cpp">
+    <!-- physicscfg: sky_physics.ini service (m0971) -->
+    <ClCompile Include="..\src\core\physicscfg.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\neoWaterdrops.cpp">
+    <ClCompile Include="..\src\core\debugmenu_theme.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <!-- neopipe: merged neo + neoCarpipe + neoWaterdrops -->
+    <ClCompile Include="..\src\render\neopipe.cpp">
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\src\pipelinecommon.cpp">
@@ -101,16 +127,62 @@
     <ClCompile Include="..\src\postfx.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\test.cpp">
+    <ClCompile Include="..\src\render\postfx_colourfilter.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\texdb.cpp">
+    <ClCompile Include="..\src\render\postfx_luminance.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\render\utilitynoise.cpp">
+    <ClCompile Include="..\src\render\postfx_motionblur.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\render\postfx_newfx.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\render\postfx_smaa.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\render\postfx_ssao.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\render\postfx_utils.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <!-- W7-D staged Diff 3b (applied by W8-3 as sole build-file owner — do NOT re-apply) -->
+    <ClCompile Include="..\src\render\postfx_underwater.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\texdefs.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\entities\sftbdyphsx.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <!-- softbody: native RW-physics ragdoll core -->
+    <ClCompile Include="..\src\entities\softbody.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\render\noise.cpp">
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\src\vehiclePipe.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <!-- Per-texture alpha classification (solid vs cutout/faded) -->
+    <ClCompile Include="..\src\render\texalpha.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <!-- render-state monitor: three-layer rw/driver/device divergence probe -->
+    <ClCompile Include="..\src\render\renderstate_monitor.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <!-- W8-3: plant island + instancer (explicit entries — never glob) -->
+    <!-- grasssys: merged PC_GrassRenderer + PC_GrassInstancer -->
+    <ClCompile Include="..\src\render\grasssys.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <!-- profiler: QPC scope timings + D3D9 TIMESTAMP/DISJOINT GPU timers -->
+    <ClCompile Include="..\src\render\profiler.cpp">
       <Filter>src</Filter>
     </ClCompile>
   </ItemGroup>

@@ -18,28 +18,6 @@ static WheelEntry g_wheels[MAX_WHEELS];
 static int g_wheelCount = 0;
 static bool g_wheelsInitialized = false;
 
-// Wheel class weights for randomizer (same pattern as paint weights)
-// Each row: probability of selecting each class for a vehicle class
-static const float wheelClassWeights[][NUM_WHEEL_CLASSES] = {
-	//                    sport  muscle  suv   sedan  bike  truck  lowrider tuner
-	/* VGROUP_STANDARD */ { 0.05f, 0.10f, 0.10f, 0.50f, 0.00f, 0.10f, 0.05f, 0.10f },
-	/* VGROUP_SPORT    */ { 0.50f, 0.15f, 0.00f, 0.05f, 0.00f, 0.00f, 0.00f, 0.30f },
-	/* VGROUP_MUSCLE   */ { 0.10f, 0.50f, 0.05f, 0.10f, 0.00f, 0.05f, 0.10f, 0.10f },
-	/* VGROUP_LOWRIDER */ { 0.00f, 0.05f, 0.00f, 0.10f, 0.00f, 0.00f, 0.75f, 0.10f },
-	/* VGROUP_TRUCK    */ { 0.00f, 0.05f, 0.40f, 0.10f, 0.00f, 0.40f, 0.00f, 0.05f },
-	/* VGROUP_VAN      */ { 0.00f, 0.05f, 0.15f, 0.40f, 0.00f, 0.30f, 0.00f, 0.10f },
-	/* VGROUP_LUXURY   */ { 0.30f, 0.05f, 0.05f, 0.30f, 0.00f, 0.00f, 0.00f, 0.30f },
-	/* VGROUP_CLASSIC  */ { 0.05f, 0.30f, 0.05f, 0.20f, 0.00f, 0.05f, 0.25f, 0.10f },
-	/* VGROUP_BIKE     */ { 0.00f, 0.00f, 0.00f, 0.00f, 1.00f, 0.00f, 0.00f, 0.00f },
-	/* VGROUP_EMERGENCY*/ { 0.00f, 0.10f, 0.30f, 0.30f, 0.00f, 0.30f, 0.00f, 0.00f },
-};
-
-// ============================================================
-// Vehicle group lookup (external)
-// ============================================================
-
-extern int GetVehicleGroup(int modelID); // from veh_shaders.cpp
-
 // ============================================================
 // Init — load wheel metadata and classify
 // ============================================================
@@ -66,7 +44,7 @@ void Wheels_Init(const char *gameDir){
 		// Look for wheel entries
 		int index;
 		char filename[32], vehicle[64], frameName[64];
-		if(sscanf(line, "    {\"index\": %d, \"file\": \"%[^\"]\", \"vehicle\": \"%[^\"]\", \"frame\": \"%[^\"]\"}",
+		if(sscanf(line, "    {\"index\": %d, \"file\": \"%31[^\"]\", \"vehicle\": \"%63[^\"]\", \"frame\": \"%63[^\"]\"}",
 		          &index, filename, vehicle, frameName) == 4){
 
 			WheelEntry *w = &g_wheels[g_wheelCount];
@@ -74,6 +52,9 @@ void Wheels_Init(const char *gameDir){
 			strncpy(w->filename, filename, 31);
 			strncpy(w->vehicle, vehicle, 63);
 			strncpy(w->frameName, frameName, 63);
+			w->filename[31] = '\0';		// strncpy does not NUL-terminate on truncation
+			w->vehicle[63] = '\0';
+			w->frameName[63] = '\0';
 			w->atomic = NULL;
 			w->loaded = false;
 
@@ -102,68 +83,4 @@ void Wheels_Init(const char *gameDir){
 
 	fclose(f);
 	dbglog("Wheels_Init: loaded %d wheel entries", g_wheelCount);
-}
-
-// ============================================================
-// Hash-based wheel selection (same pattern as paint/tire)
-// ============================================================
-
-int Wheels_SelectForVehicle(int modelID, unsigned int hash){
-	if(g_wheelCount == 0) return -1; // no custom wheels
-
-	int group = GetVehicleGroup(modelID);
-	if(group < 0 || group >= 10) group = 0;
-
-	// Get class weights for this vehicle group
-	const float *weights = wheelClassWeights[group];
-
-	// Hash-based random selection
-	float r = (float)(hash & 0xFFFF) / 65535.0f;
-	float cum = 0.0f;
-	WheelClass selectedClass = WHEEL_CLASS_SEDAN;
-
-	for(int i = 0; i < NUM_WHEEL_CLASSES; i++){
-		cum += weights[i];
-		if(r <= cum){
-			selectedClass = (WheelClass)i;
-			break;
-		}
-	}
-
-	// Find wheels of the selected class
-	int candidates[MAX_WHEELS];
-	int numCandidates = 0;
-	for(int i = 0; i < g_wheelCount; i++){
-		if(g_wheels[i].wheelClass == selectedClass){
-			candidates[numCandidates++] = i;
-		}
-	}
-
-	if(numCandidates == 0){
-		// Fallback: select from all wheels
-		return (hash % g_wheelCount);
-	}
-
-	// Select from candidates using secondary hash
-	unsigned int hash2 = hash * 2654435761u;
-	int selected = candidates[hash2 % numCandidates];
-	return selected;
-}
-
-// ============================================================
-// Wheel queries
-// ============================================================
-
-WheelEntry *Wheels_GetEntry(int index){
-	if(index < 0 || index >= g_wheelCount) return NULL;
-	return &g_wheels[index];
-}
-
-WheelClass Wheels_GetClassForModel(int modelID){
-	// This would need the vehicle database — for now return standard
-	return WHEEL_CLASS_SEDAN;
-}
-
-int Wheels_GetCount(void){
-	return g_wheelCount;
 }

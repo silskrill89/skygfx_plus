@@ -7,11 +7,12 @@ Creates condensed reference documents for SkyGFX Plus and openSA projects.
 import PyPDF2
 import os
 import re
+import sys
 from pathlib import Path
 
-MANUALS_DIR = Path("E:/manuals")
-OUTPUT_DIR = Path("E:/dev(dave)/skygfx_plus_expIV/docs/obsidian-vault/Architecture")
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+PROJECT_DIR = Path(os.environ.get("SKYGFX_PROJECT") or Path(__file__).resolve().parent.parent)
+MANUALS_DIR = Path(os.environ.get("SKYGFX_MANUALS") or "E:/manuals")
+OUTPUT_DIR = PROJECT_DIR / "docs" / "obsidian-vault" / "Architecture"
 
 # Keywords to search for in PDFs
 KEYWORDS_64BIT = [
@@ -292,6 +293,7 @@ printf("Pointer: 0x%p\n", ptr);  // Portable
 **Projects:** SkyGFX Plus, openSA
 """
     
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     output_path = OUTPUT_DIR / "32_to_64_Bit_Transition_Reference.md"
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write(doc)
@@ -305,4 +307,12 @@ printf("Pointer: 0x%p\n", ptr);  // Portable
     return output_path
 
 if __name__ == "__main__":
+    if any(a in ('-h', '--help') for a in sys.argv[1:]):
+        try:
+            from _toolutil import setup_console
+            setup_console()
+        except ImportError:
+            pass
+        print(__doc__)
+        sys.exit(0)
     create_condensed_doc()

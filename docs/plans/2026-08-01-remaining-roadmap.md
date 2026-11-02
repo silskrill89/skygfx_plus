@@ -1,3 +1,5 @@
+> SUPERSEDED by 2026-10-08-iv-v-graphics-physics-port.md (kept for history)
+
 # Remaining Roadmap — Implementation Plan
 
 > Created: 2026-08-01

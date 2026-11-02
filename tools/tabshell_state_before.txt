@@ -1,0 +1,8 @@
+﻿=== TABSHELL STATE BEFORE ===
+Timestamp : 2026-09-29 16:31:45
+Hive      : HKEY_CURRENT_USER
+Path      : HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\CloudStore\Store\Cache\DefaultAccount\$$windows.data.tabshell\Current
+ValueCount: 1
+--- VALUES (Name | Kind | Hex | Text) ---
+Data | Binary | 02-00-00-00-51-1A-48-FB-C1-CD-D3-01-00-00-00-00-43-42-01-00-00 | <21 bytes>
+--- END VALUES ---

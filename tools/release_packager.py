@@ -28,9 +28,9 @@ from datetime import datetime
 # Paths
 # ============================================================
 
-PROJECT_DIR = Path(r'E:\dev(dave)\skygfx_plus_expIV')
+PROJECT_DIR = Path(os.environ.get('SKYGFX_PROJECT') or Path(__file__).resolve().parent.parent)
 BIN_DIR = PROJECT_DIR / 'bin' / 'Release'
-GAME_DIR = Path(r'E:\games\gtasa_skygfx_plus')
+GAME_DIR = Path(os.environ.get('SKYGFX_GAME') or r'E:\games\gtasa_skygfx_plus')
 RELEASE_DIR = PROJECT_DIR / 'release'
 WHEELS_SOURCE_DIR = GAME_DIR / 'models' / 'wheels'
 RESOURCES_DIR = PROJECT_DIR / 'resources'
@@ -45,7 +45,7 @@ def get_version():
     """Read version from premake5.lua"""
     premake = PROJECT_DIR / 'premake5.lua'
     if premake.exists():
-        with open(premake, 'r') as f:
+        with open(premake, 'r', encoding='utf-8') as f:
             content = f.read()
         # Find rsc_FileVersion("X.X.X.X")
         import re
@@ -165,7 +165,7 @@ Edit `skygfx.ini`:
 
 GitHub: https://github.com/aap/skygfx
 """
-    (release_path / 'README.md').write_text(readme)
+    (release_path / 'README.md').write_text(readme, encoding='utf-8')
 
 def build_release(version=None, include_wheels=False, include_bridge=False, 
                  wheels_only=False, clean=False):
@@ -248,7 +248,7 @@ def build_release(version=None, include_wheels=False, include_bridge=False,
         },
     }
     info_path = RELEASE_DIR / f"{release_name}.json"
-    with open(info_path, 'w') as f:
+    with open(info_path, 'w', encoding='utf-8') as f:
         json.dump(info, f, indent=2)
     
     print(f"\n{'='*60}")
@@ -290,7 +290,7 @@ def list_releases():
     for zp in zips:
         jp = zp.with_suffix('.json')
         if jp.exists():
-            with open(jp) as f:
+            with open(jp, encoding='utf-8') as f:
                 info = json.load(f)
             print(f"  v{info['version']} | {info['date']} | {info['size_kb']} KB | {zp.name}")
         else:
@@ -302,7 +302,10 @@ def list_releases():
 
 def main():
     args = sys.argv[1:]
-    
+    if any(a in ('-h', '--help') for a in args):
+        print(__doc__)
+        return 0
+
     if '--clean' in args:
         clean_old_releases()
         return
@@ -330,4 +333,4 @@ def main():
     )
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main() or 0)

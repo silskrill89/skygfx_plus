@@ -7,7 +7,7 @@
 ## SkyGFX Plus Extensions
 
 - **GTASAS 1987 Team** — Extended configuration, unified pipeline, GTA IV mode, SSAO, SMAA, SSS
-  - Lead: babamohammed2022
+  - Lead: babamohammed2022 (UNVERIFIED — recorded in project docs, not independently checked)
   - See CREDITS.md in the project root for full team
 
 ## Community

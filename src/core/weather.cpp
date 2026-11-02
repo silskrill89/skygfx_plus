@@ -101,39 +101,64 @@ static bool ParseTimecycFile(const char *path){
 			int r, g, b;
 			int ambObjR, ambObjG, ambObjB;
 			int dirR, dirG, dirB;
+			int skyTopR, skyTopG, skyTopB;
+			int skyBotR, skyBotG, skyBotB;
+			int sunCoreR, sunCoreG, sunCoreB;
+			int sunCoronaR, sunCoronaG, sunCoronaB;
+			// Float temps — the game's own parser (CTimeCycle::Initialise,
+			// gta-reversed TimeCycle.cpp 0x5BBAC0) reads these columns as
+			// FLOATS. The old format read them with %hhd/%hd, which stops
+			// dead on "2.20" (parses '2', fails at '.') — sscanf returned 22
+			// of 52 fields and everything after sunSz stayed 0 (fogStart
+			// blended to 0.0 every frame by Weather_Update).
+			float sunSzF, sprSzF, sprBghtF;
+			int shdwI, lightShdI, poleShdI;
+			float farClpF, fogStF, lightOnGroundF;
+			int lowR, lowG, lowB, botR, botG, botB;
+			float watR, watG, watB, watA;
+			float fx1A, fx1R, fx1G, fx1B;
+			float fx2A, fx2R, fx2G, fx2B;
+			float cloudAlphaF;
+			int highLightI, waterFogI;
+			float dirMultF;
 
-			// Parse: Amb\tAmbObj\tDir\tSkyTop\tSkyBot\tSunCore\tSunCorona\tSunSz SprSz SprBght\tShdw LightShd PoleShd\tFarClp FogSt LightOnGround\tLowCloudsRGB\tBottomCloudRGB\tWaterRGBA\tAlpha1 RGB1\tAlpha2 RGB2\tCloudAlpha Illumination
+			// Column order mirrors CTimeCycle::Initialise exactly (52 fields):
+			// Amb AmbObj Dir SkyTop SkyBot SunCore SunCorona (RGB)
+			// SunSz SprSz SprBght (floats) Shdw LightShd PoleShd (ints)
+			// FarClp FogSt LightOnGround (floats) LowClouds BottomCloud (RGB)
+			// Water RGBA PostFx1 ARGB PostFx2 ARGB (floats)
+			// CloudAlpha HighLightMinIntensity WaterFogAlpha (ints) DirMult (float)
 			int n = sscanf(line,
-				"%d %d %d\t%d %d %d\t%d %d %d\t"
-				"%hhu %hhu %hhu\t%hhu %hhu %hhu\t%hhu %hhu %hhu\t"
-				"%hhu %hhu %hhu\t%hhd %hhd %hhd\t%hhu %hhu %hhu\t"
-				"%hd %hd %hhu\t%hhu %hhu %hhu\t%hhu %hhu %hhu\t"
-				"%hhu %hhu %hhu %hhu\t"
-				"%hhu %hhu %hhu %hhu\t"
-				"%hhu %hhu %hhu %hhu\t"
-				"%hhu\t%u\t%hu\t%f",
+				"%d %d %d %d %d %d %d %d %d "		// amb ambObj dir (9)
+				"%d %d %d %d %d %d %d %d %d %d %d %d "	// skyTop skyBot sunCore sunCorona (12)
+				"%f %f %f "				// sunSz sprSz sprBght (floats, as the game reads them)
+				"%d %d %d "				// shdw lightShd poleShd
+				"%f %f %f "				// farClp fogSt lightOnGround (floats)
+				"%d %d %d %d %d %d "			// lowClouds bottomCloud RGB
+				"%f %f %f %f "				// water RGBA
+				"%f %f %f %f "				// postFx1 A RGB
+				"%f %f %f %f "				// postFx2 A RGB
+				"%f %d %d %f",				// cloudAlpha highLight waterFog dirMult
 				&r, &g, &b,
 				&ambObjR, &ambObjG, &ambObjB,
 				&dirR, &dirG, &dirB,
-				&e->skyTopR, &e->skyTopG, &e->skyTopB,
-				&e->skyBotR, &e->skyBotG, &e->skyBotB,
-				&e->sunCoreR, &e->sunCoreG, &e->sunCoreB,
-				&e->sunCoronaR, &e->sunCoronaG, &e->sunCoronaB,
-				&e->sunSz, &e->sprSz, &e->sprBght,
-				&e->shdw, &e->lightShd, &e->poleShd,
-				&e->farClp, &e->fogSt, &e->lightOnGround,
-				&e->lowCloudsR, &e->lowCloudsG, &e->lowCloudsB,
-				&e->fluffyCloudR, &e->fluffyCloudG, &e->fluffyCloudB,
-				&e->waterR, &e->waterG, &e->waterB, &e->waterA,
-				&e->postFx1R, &e->postFx1G, &e->postFx1B, &e->postFx1A,
-				&e->postFx2R, &e->postFx2G, &e->postFx2B, &e->postFx2A,
-				&e->cloudAlpha,
-				&e->highLightMinIntensity,
-				&e->waterFogAlpha,
-				&e->illumination
+				&skyTopR, &skyTopG, &skyTopB,
+				&skyBotR, &skyBotG, &skyBotB,
+				&sunCoreR, &sunCoreG, &sunCoreB,
+				&sunCoronaR, &sunCoronaG, &sunCoronaB,
+				&sunSzF, &sprSzF, &sprBghtF,
+				&shdwI, &lightShdI, &poleShdI,
+				&farClpF, &fogStF, &lightOnGroundF,
+				&lowR, &lowG, &lowB, &botR, &botG, &botB,
+				&watR, &watG, &watB, &watA,
+				&fx1A, &fx1R, &fx1G, &fx1B,
+				&fx2A, &fx2R, &fx2G, &fx2B,
+				&cloudAlphaF, &highLightI, &waterFogI, &dirMultF
 			);
 
-			if(n >= 20){
+			// Game warns at n<51 (R* line-320 typo); we require the same so a
+			// truncated parse can never silently zero the tail columns.
+			if(n >= 51){
 				e->ambR = (unsigned char)r;
 				e->ambG = (unsigned char)g;
 				e->ambB = (unsigned char)b;
@@ -143,6 +168,50 @@ static bool ParseTimecycFile(const char *path){
 				e->dirR = (unsigned char)dirR;
 				e->dirG = (unsigned char)dirG;
 				e->dirB = (unsigned char)dirB;
+				e->skyTopR = (unsigned char)skyTopR;
+				e->skyTopG = (unsigned char)skyTopG;
+				e->skyTopB = (unsigned char)skyTopB;
+				e->skyBotR = (unsigned char)skyBotR;
+				e->skyBotG = (unsigned char)skyBotG;
+				e->skyBotB = (unsigned char)skyBotB;
+				e->sunCoreR = (unsigned char)sunCoreR;
+				e->sunCoreG = (unsigned char)sunCoreG;
+				e->sunCoreB = (unsigned char)sunCoreB;
+				e->sunCoronaR = (unsigned char)sunCoronaR;
+				e->sunCoronaG = (unsigned char)sunCoronaG;
+				e->sunCoronaB = (unsigned char)sunCoronaB;
+				// Same quantization the game applies to its static arrays
+				e->sunSz = (signed char)(sunSzF * 10.0f + 0.5f);
+				e->sprSz = (signed char)(sprSzF * 10.0f + 0.5f);
+				e->sprBght = (signed char)(sprBghtF * 10.0f + 0.5f);
+				e->shdw = (unsigned char)shdwI;
+				e->lightShd = (unsigned char)lightShdI;
+				e->poleShd = (unsigned char)poleShdI;
+				e->farClp = (signed short)farClpF;
+				e->fogSt = (signed short)fogStF;
+				e->lightOnGround = (unsigned char)(lightOnGroundF * 10.0f + 0.5f);
+				e->lowCloudsR = (unsigned char)lowR;
+				e->lowCloudsG = (unsigned char)lowG;
+				e->lowCloudsB = (unsigned char)lowB;
+				e->fluffyCloudR = (unsigned char)botR;
+				e->fluffyCloudG = (unsigned char)botG;
+				e->fluffyCloudB = (unsigned char)botB;
+				e->waterR = (unsigned char)watR;
+				e->waterG = (unsigned char)watG;
+				e->waterB = (unsigned char)watB;
+				e->waterA = (unsigned char)watA;
+				e->postFx1A = (unsigned char)(fx1A * 2.0f);
+				e->postFx1R = (unsigned char)fx1R;
+				e->postFx1G = (unsigned char)fx1G;
+				e->postFx1B = (unsigned char)fx1B;
+				e->postFx2A = (unsigned char)(fx2A * 2.0f);
+				e->postFx2R = (unsigned char)fx2R;
+				e->postFx2G = (unsigned char)fx2G;
+				e->postFx2B = (unsigned char)fx2B;
+				e->cloudAlpha = (unsigned char)cloudAlphaF;
+				e->highLightMinIntensity = (unsigned int)highLightI;
+				e->waterFogAlpha = (unsigned short)waterFogI;
+				e->illumination = dirMultF;
 				entryIdx++;
 			}
 		}
@@ -215,6 +284,19 @@ void Weather_ApplySunConfig(void){
 
 void Weather_Update(void){
 	if(!g_altLoaded) return;
+
+	// altTimecycEnable=0 (default): vanilla behavior. The weathers2.dat
+	// set-2 overwrite below forces g_currentBlend=1.0 and replaces the
+	// game's CColourSet ambient (near-black daytime) — skip the entire
+	// overwrite block so the game's own ambient/direct values flow through.
+	if(!config->altTimecycEnable){
+		static bool s_loggedDisabled = false;
+		if(!s_loggedDisabled){
+			s_loggedDisabled = true;
+			dbglog("[wx_amb] alt timecyc DISABLED (altTimecycEnable=0) - vanilla ambient in use");
+		}
+		return;
+	}
 
 	// Get current weather state from game
 	extern int16 &CWeather__OldWeatherType;
@@ -301,9 +383,11 @@ void Weather_Update(void){
 	if(tc.skyTopB < 0) tc.skyTopB = 0; if(tc.skyTopB > 255) tc.skyTopB = 255;
 
 	// Ambient
+	float preAmbR = tc.ambientR, preAmbG = tc.ambientG, preAmbB = tc.ambientB;
 	altR = altOld->ambR * (1.0f - wInterp) + altNew->ambR * wInterp;
 	altG = altOld->ambG * (1.0f - wInterp) + altNew->ambG * wInterp;
 	altB = altOld->ambB * (1.0f - wInterp) + altNew->ambB * wInterp;
+	float altAmbR = altR, altAmbG = altG, altAmbB = altB;
 	tc.ambientR   = tc.ambientR   * (1.0f - t) + (altR / 255.0f) * t;
 	tc.ambientG = tc.ambientG * (1.0f - t) + (altG / 255.0f) * t;
 	tc.ambientB  = tc.ambientB  * (1.0f - t) + (altB / 255.0f) * t;
@@ -323,6 +407,17 @@ void Weather_Update(void){
 	if(tc.directionalR < 0.0f) tc.directionalR = 0.0f; if(tc.directionalR > 1.0f) tc.directionalR = 1.0f;
 	if(tc.directionalG < 0.0f) tc.directionalG = 0.0f; if(tc.directionalG > 1.0f) tc.directionalG = 1.0f;
 	if(tc.directionalB < 0.0f) tc.directionalB = 0.0f; if(tc.directionalB > 1.0f) tc.directionalB = 1.0f;
+
+	// Discriminating log for the "outdoor cutscene dark" dig: what the
+	// overwrite did to ambient/directional this frame (2s throttle).
+	if(dbglog_throttle("wx_amb"))
+		dbglog("[wx_amb] h=%d:%02d slot=%d w=%d/%d t=%.2f pre=(%.3f,%.3f,%.3f) "
+		       "post=(%.3f,%.3f,%.3f) alt=(%.3f,%.3f,%.3f) dir post=(%.3f,%.3f,%.3f)",
+		       hour, minute, curSlot, oldW, newW, t,
+		       preAmbR, preAmbG, preAmbB,
+		       tc.ambientR, tc.ambientG, tc.ambientB,
+		       altAmbR / 255.0f, altAmbG / 255.0f, altAmbB / 255.0f,
+		       tc.directionalR, tc.directionalG, tc.directionalB);
 
 	// Sun core
 	altR = altOld->sunCoreR * (1.0f - wInterp) + altNew->sunCoreR * wInterp;
@@ -346,36 +441,12 @@ void Weather_Update(void){
 	if(tc.sunCoronaG < 0) tc.sunCoronaG = 0; if(tc.sunCoronaG > 255) tc.sunCoronaG = 255;
 	if(tc.sunCoronaB < 0) tc.sunCoronaB = 0; if(tc.sunCoronaB > 255) tc.sunCoronaB = 255;
 
-	// === PS2→PC conversion fix: scale sun corona/core by config multipliers ===
-	// On PS2, GS modulation (A×B)/128 ≈ MODULATE2X made sun sprites look correct.
-	// On PC, D3D9 (A×B)/255 is dimmer, but R* kept the same timecycle values.
-	// The PBR tonemap amplifies these values further, causing massive flare blowout.
-	// Scale after interpolation so the game engine uses the corrected values.
-	if(config->sunCoronaIntensity != 1.0f){
-		tc.sunCoronaR = (short)(tc.sunCoronaR * config->sunCoronaIntensity);
-		tc.sunCoronaG = (short)(tc.sunCoronaG * config->sunCoronaIntensity);
-		tc.sunCoronaB = (short)(tc.sunCoronaB * config->sunCoronaIntensity);
-		if(tc.sunCoronaR > 255) tc.sunCoronaR = 255;
-		if(tc.sunCoronaG > 255) tc.sunCoronaG = 255;
-		if(tc.sunCoronaB > 255) tc.sunCoronaB = 255;
-	}
-	if(config->sunCoreIntensity != 1.0f){
-		tc.sunCoreR = (short)(tc.sunCoreR * config->sunCoreIntensity);
-		tc.sunCoreG = (short)(tc.sunCoreG * config->sunCoreIntensity);
-		tc.sunCoreB = (short)(tc.sunCoreB * config->sunCoreIntensity);
-		if(tc.sunCoreR > 255) tc.sunCoreR = 255;
-		if(tc.sunCoreG > 255) tc.sunCoreG = 255;
-		if(tc.sunCoreB > 255) tc.sunCoreB = 255;
-	}
-
-	// Scale lens flare streak intensity and size (spriteBrightness / spriteSize)
-	// These control the horizontal streak quads and lens flare sprites drawn by CCoronas::DoSunCorona
-	if(config->sunStreakIntensity != 1.0f){
-		tc.spriteBrightness *= config->sunStreakIntensity;
-	}
-	if(config->sunStreakSize != 1.0f){
-		tc.spriteSize *= config->sunStreakSize;
-	}
+	// === Config multipliers (corona/core/streaks) are NOT applied here ===
+	// Weather_ApplySunConfig() runs unconditionally right after this
+	// (main.cpp: Weather_Update(); Weather_ApplySunConfig();) and owns all
+	// of them. Multiplying in BOTH functions double-applied every field
+	// per frame (spriteBrightness, spriteSize, sunCore, sunCorona each
+	// squared by config->sunStreakIntensity etc.).
 
 	// Fog — clamp fogStart to valid range
 	float altFog = altOld->fogSt * (1.0f - wInterp) + altNew->fogSt * wInterp;

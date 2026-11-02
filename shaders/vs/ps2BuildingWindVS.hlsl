@@ -4,6 +4,16 @@ float4		matCol		: register(c19);
 float3		surfProps	: register(c20);
 float2		windPos		: register(c21);
 float		windIntensity : register(c22);
+// W8-2 tree sway extension (VS c23 — TreeWind_UploadWindExt, called from
+// buildingPipe setWindParams BEFORE every wind-VS bind; VS constant space,
+// unrelated to PS c22/c23 owned by pipeUploadPBR):
+//   .x heightScale  1/treeHeight: saturate(z*.x) anchors the sway at the
+//                   trunk (0 at the model origin, 1 at the canopy)
+//   .y gustPhase    radians, slow global gust (windPos-derived)
+//   .z gustAmp      gust amplitude in the same units as `dist`
+//   .w enable       0 => legacy behaviour, byte-for-byte (a stale or
+//                   never-uploaded c23 can never kill/change sway)
+float4		windExt		: register(c23);
 
 float4		shaderParams	: register(c29);
 float4		dayparam	: register(c30);
@@ -57,6 +67,12 @@ VS_OUTPUT main(in VS_INPUT IN)
 	float4 PositionEdited = IN.Position;
 
 	float dist = ((noise(windPos + PositionEdited) - 0.5) * windIntensity * intensityMask);
+
+	// W8-2: height mask + global gust, gated by windExt.w (see c23 above).
+	// w==0 -> hmask==1 and gust==0 -> exactly the legacy `dist` below.
+	float hmask = lerp(1.0f, saturate(PositionEdited.z * windExt.x), windExt.w);
+	float gust = windExt.w * windExt.z * sin(windExt.y);
+	dist = (dist + gust) * hmask;
 
 	PositionEdited.x = (PositionEdited.x + dist);
 	PositionEdited.y = (PositionEdited.y + dist);

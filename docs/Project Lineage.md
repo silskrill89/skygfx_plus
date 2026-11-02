@@ -1,8 +1,17 @@
 # Project Lineage
 
+## Current state (2026-10-25)
+
+> Everything below this section is history. Counts and feature lists in the historical sections describe the tree when they were written and are not current.
+
+- **Modes**: one active mode at a time, selected via `[Modes] active=` in `skygfx.ini` or the always-visible chip row in the F4 menu. Six canonical switchable modes (PS2, Xbox, Legacy PC, GTA IV, GTA V, Modern) plus `Custom` (snapshot-only bookmark) and `Mobile` (legacy alias). All go through `ModeManager`; `ApplyMode()` is the only writer of mode-owned fields. Authority: `docs/modes.md`.
+- **Retired preset writers**: `ps2_mode.cpp`, `xbox_mode.cpp`, `iv_mode.cpp`, `mobile.cpp`, `pc_patched_mode.cpp`, and `custom_mode.cpp` still exist as stubs, but their `*_ApplyDefaults()` functions are retired no-ops with no call sites. `ModeManager` owns mode application.
+- **Naming**: `noiseDetail` is the canonical INI key and config field for blue-noise detail-texture jitter. `stochastic` and `stochasticTexturing` are deprecated aliases (still parsed, logged at load). The old stochastic shader family is gone; current shaders are `shaders/noiseDetailBuildingPS.hlsl` (entries `main_simpleNoiseDetail`, `main_simpleDetailNoiseDetail`, `main_xboxBuildingNoiseDetail`) plus `shaders/include/Noise.hlsl`.
+- **Build/deploy**: `python tools/fast_build.py` is the default smart incremental build. It compiles HLSL → CSO with FXC, builds with MSBuild, and deploys `build/Release/skygfx.dll` as `E:\games\gtasa_skygfx_plus\skygfx.asi`. `--rebuild`, `--shaders`, and `--launch` are the other entry points.
+
 ## Version Evolution
 ```
-aap (original) → junior_dr (fork) → skygfx_plus (expIV, current)
+aap (original) → junior_dr (fork) → skygfx_plus (expIV)
 ```
 
 This document traces the complete lineage of the skygfx mod across three major codebases: the original by aap, the junior_dr fork that extended it, and the skygfx_plus rewrite that merged and expanded both into a modern architecture.
@@ -41,7 +50,9 @@ The original aap release established the core architecture: a hook-based DLL inj
 
 The junior_dr fork tripled the codebase size and introduced several technologies that would become foundational: stochastic texturing for grain-free detail, wind animation for buildings, and a texdb system for per-texture material overrides. The EDED plugin allowed per-atomic shader assignment — a significant step toward per-object rendering control.
 
-## skygfx_plus (current, expIV rewrite)
+## skygfx_plus (expIV rewrite — historical snapshot)
+
+> Historical snapshot, not a current inventory. File/shader/config counts below are from the time this section was written; see "Current state (2026-10-25)" above for current facts.
 
 - 67 source files organized in `src/{Core,entities,extras,render,rw}/` + `src/skygfx.h` at root
 - ~18K LOC (.cpp), ~36K total (including headers)
@@ -69,7 +80,7 @@ skygfx_plus is a ground-up rewrite that merges the aap and junior_dr foundations
 | HLSL Shaders | 30 | 38 | **69 (+ 8 CSO)** |
 | Post-FX Effects | 3 | 5 | **15+** |
 | Config Fields | ~40 | ~80 | **239+** |
-| Stochastic Texturing | — | Yes | Yes |
+| Stochastic Texturing | — | Yes | Superseded by `noiseDetail` |
 | Wind Animation | — | Yes | Yes |
 | SSAO | — | — | **Yes** |
 | SMAA | — | — | **Yes (4 levels)** |

@@ -85,13 +85,15 @@ All shaders are compiled as HLSL to CSO (Compiled Shader Object) files:
 shaders/
 ├── vs/           # Vertex shaders (.hlsl → .cso)
 ├── ps/           # Pixel shaders (.hlsl → .cso)
-│   ├── 2_a/      # Stochastic variants
-│   └── include/  # Shared includes
-└── resources/
-    └── cso/      # Compiled CSO binaries
+│   └── xbox/     # Xbox building variants
+├── include/      # Shared includes (Noise.hlsl, PBR_Common.hlsl, ...)
+└── noiseDetailBuildingPS.hlsl  # Root-level multi-entry building PS
+
+resources/
+└── cso/          # Compiled CSO binaries (embedded via resources/resource.rc)
 ```
 
-**Compilation targets**: vs_3_0, ps_3_0 (baseline), ps_2_0 (fallback)
+**Compilation targets**: vs_3_0, ps_3_0 only (the current build has no ps_2_0 fallback)
 
 ### Register Layout
 
@@ -129,6 +131,9 @@ shaders/
 | c20-c23 | SSAO params | SSAO PS |
 | c24 | SMAA params | SMAA PS |
 | c25-c31 | GTA IV postFX params | GTAIV PS |
+
+> [!warning] Register contract (current)
+> The PS table above is a historical/generic sketch, not the live PBR layout. Current contract: `c22`/`c23` are the PBR parameter blocks and MUST be written only through `pipeUploadPBR()` (never uploaded manually); `s9` + `c49-c52` are reserved for the packed noise system (`shaders/include/Noise.hlsl`); the next free PS constant is `c53` and the next free sampler is `s10`.
 
 ### Key Shader Implementations
 

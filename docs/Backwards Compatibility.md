@@ -66,7 +66,7 @@ Every `vehiclePipe=` and `buildingPipe=` INI value from the original skygfx and 
 |---------|--------|-----------|-------|
 | `envMapUseLODs` | Active | main.cpp | Use LODs for env map |
 | `envMapFarClipMult` | Active | main.cpp | Far clip multiplier |
-| `stochasticTexturing` | Active | main.cpp | Stochastic sampling |
+| `stochasticTexturing` | Deprecated alias | main.cpp | Legacy alias for `noiseDetail`; still accepted when `noiseDetail` is absent (main.cpp:5613-5625) |
 | `grassFixPlacement` | Active | config.cpp | Grass placement fix |
 | `neoBloodDrops` | Active | config.cpp | Neo blood drops |
 | `coronaZtest` | Active | config.cpp | Corona Z-test |

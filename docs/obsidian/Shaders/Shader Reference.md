@@ -39,6 +39,9 @@ SkyGFX Plus shaders follow a consistent register layout across all pipeline vari
 | c24 | SMAA params (threshold, corner, search steps) | SMAA PS |
 | c25-c31 | GTA IV postFX (desat, gamma, vignette, bloom, exposure) | GTAIV PS |
 
+> [!warning] Historical sketch vs. current PBR contract
+> The c0-c31 table above is a generic/historical SM3.0 sketch, not the live PBR layout. Current PBR contract: `c22`/`c23` carry the material parameter blocks and MUST be written only through `pipeUploadPBR()` (`src/render/pipelinecommon.cpp`), never uploaded manually. `s9` + `c49-c52` are reserved for the packed noise system. The next free PS constant is `c53`; the next free sampler is `s10`. See the "Noise-Detail Building Variants" section below.
+
 ## Shader Compilation Targets
 
 | Profile | Max Instructions | Interpolators | Temp Regs | Flow Control | Samples |
@@ -47,7 +50,7 @@ SkyGFX Plus shaders follow a consistent register layout across all pipeline vari
 | ps_3_0 | 512+ | 10 | 32 | Dynamic | 16 |
 | ps_2_0 | 96 (64 ALU + 32 TEX) | 8 | 12 | Static only | 16 |
 
-SkyGFX Plus targets **ps_3_0 / vs_3_0** as baseline. Fallback to ps_2_0 for SSAO and SMAA on legacy hardware.
+SkyGFX Plus targets **ps_3_0 / vs_3_0** only — the current build has no ps_2_0 fallback path.
 
 ## Key Shader Implementations
 
@@ -137,14 +140,21 @@ Preset quality levels:
 | HIGH (2) | 16 | On | 50 |
 | ULTRA (3) | 32 | On | 100 |
 
-### Stochastic Sampling Variants
+### Noise-Detail Building Variants (noiseDetailBuildingPS.hlsl)
 
-Located in `ps/2_a/` — stochastic variants of standard shaders:
+`shaders/noiseDetailBuildingPS.hlsl` compiles three `ps_3_0` entries (multi-entry list in `tools/fast_build.py`):
 
-- Uses hash-based noise per-pixel to jitter texture coordinates
-- Multiple bilinear samples blended with noise-weighted lerp
-- Effectively hides repeating texture patterns at moderate cost
-- Requires `stochasticTexturing=1` in config
+| Entry point | CSO | Resource ID |
+|-------------|-----|-------------|
+| `main_simpleNoiseDetail` | `simpleNoiseDetailPS.cso` | `IDR_SIMPLENOISEDETAILPS` (278) |
+| `main_simpleDetailNoiseDetail` | `simpleDetailNoiseDetailPS.cso` | `IDR_SIMPLEDETAILNOISEDETAILPS` (231) |
+| `main_xboxBuildingNoiseDetail` | `xboxBuildingNoiseDetailPS.cso` | `IDR_XBOXBUILDINGNOISEDETAILPS` (227) |
+
+- `shaders/include/Noise.hlsl` provides the packed noise tile, bound at `s9` with WRAP / LINEAR / no mips. Channel packing: `.r` Perlin fBm, `.g` Worley F1, `.b` white-noise hash, `.a` blue noise.
+- The jitter samples the blue-noise channel through `NoiseBlue()` at `uv * 100` (second axis swizzled and offset by `0.37`), converts each channel to a zero-mean offset `(n - 0.5) * c52.x`, and adds that offset to the UV before the diffuse tap. `main_simpleDetailNoiseDetail` reuses one jitter for both taps so the detail map cannot slide against the base; the Xbox entry jitters only the diffuse tap and leaves the env tap unjittered.
+- Register contract: `s9` + `c49-c52` are reserved for the noise system. `c49 {noiseScale, worleyScale, coverage, erosion}`, `c50 {whiteScale, blueScale, timeSeconds, frameIndex}`, `c51 {cloudScaleA, cloudScaleB, cloudScaleC, cloudDensity}`, `c52 {jitterAmount, ditherAmount, detailStrength, unused}`. Next free PS constant is `c53`; next free sampler is `s10`.
+- Fallback: an unbound `s9` and/or `c52.x == 0` collapses the jitter to zero, so the shader degrades to a deterministic single tap matching the non-noise-detail shader. No branch is needed.
+- Gated by `noiseDetail=1` (canonical INI key; `stochastic` / `stochasticTexturing` are deprecated aliases) and by the per-texture `noiseDetail=1` flag in `texdb.txt`.
 
 ### Subsurface Scattering (SubsurfaceScattering.hlsl)
 
@@ -170,6 +180,9 @@ result = lerp(diffuse, sss, scatterWidth);
 | envSampler | s4 | Environment cube map | Vehicle, Env PS |
 | shadowSampler | s5 | Shadow depth map | GTAIV PS |
 | SSAOSampler | s6 | SSAO occlusion buffer | PostFX PS |
+
+> [!warning] Historical sampler sketch
+> The table above mixes several generations of shaders. Live material-pipe bindings: s0 diffuse, s1 environment map, s2 mask, s3 IBL cubemap, s4 screen-space normal buffer, s8 normal map (NM lane), s9 packed noise tile (`shaders/include/Noise.hlsl`). Next free sampler: `s10`.
 
 ## See Also
 

@@ -10,7 +10,8 @@ PBR build bug notes (add new ones here as we hit them):
      That path is a stale leftover; .lib/.exp should go to OutDir/IntDir.
   2. rpnormmap.lib needs /SAFESEH:NO via <ImageHasSafeExceptionHandlers>false>,
      otherwise LNK2026/LNK1281 fails the link.
-  3. src/normalmap.cpp must be compiled in vcxproj (normalmap_plugin.cpp stays off).
+  3. src/texdefs.cpp must be compiled in vcxproj (unified texdb.txt + NM pairing +
+     DK22Pac external lane; the old texdb.cpp / normalmap.cpp TUs are gone).
   4. src/normmap_stubs.cpp must ALSO be compiled; it provides the RW SDK symbols that
      rpnormmap.lib needs without linking rwcore.lib/rpworld.lib (which duplicate symbols
      already defined in gta.cpp/pipelinecommon.cpp).
@@ -36,9 +37,9 @@ import hashlib
 from pathlib import Path
 from multiprocessing import Pool, cpu_count
 
-PROJECT_DIR = r'E:\dev(dave)\skygfx_plus_expIV'
+PROJECT_DIR = str(Path(__file__).resolve().parent.parent)
 BUILD_DIR = os.path.join(PROJECT_DIR, 'build')
-GAME_DIR = r'E:\games\gtasa_skygfx_plus'
+GAME_DIR = os.environ.get('SKYGFX_GAME') or r'E:\games\gtasa_skygfx_plus'
 CACHE_DIR = os.path.join(PROJECT_DIR, '.cache')
 os.makedirs(CACHE_DIR, exist_ok=True)
 
@@ -76,10 +77,12 @@ def find_latest_msvc():
     for v in versions:
         path = os.path.join(msvc_root, v, 'bin', 'HostX86', 'x86', 'cl.exe')
         if os.path.exists(path):
-            print(f"  MSVC: {v}")
+            if __name__ == '__main__':
+                print(f"  MSVC: {v}")
             return os.path.join(msvc_root, v)
     if versions:
-        print(f"  MSVC: {versions[0]} (fallback)")
+        if __name__ == '__main__':
+            print(f"  MSVC: {versions[0]} (fallback)")
         return os.path.join(msvc_root, versions[0])
     return None
 
@@ -92,10 +95,12 @@ def find_latest_winsdk():
     versions = sorted(os.listdir(sdk_root), reverse=True)
     for v in versions:
         if os.path.exists(os.path.join(sdk_root, v, 'um', 'd3d9helper.h')):
-            print(f"  Windows SDK: {v}")
+            if __name__ == '__main__':
+                print(f"  Windows SDK: {v}")
             return v
     if versions:
-        print(f"  Windows SDK: {versions[0]} (fallback, no d3d9helper.h)")
+        if __name__ == '__main__':
+            print(f"  Windows SDK: {versions[0]} (fallback, no d3d9helper.h)")
         return versions[0]
     return None
 
@@ -161,7 +166,7 @@ def check_merge_conflicts():
         for f in files:
             if f.endswith(('.cpp', '.h', '.rc')):
                 path = os.path.join(root, f)
-                with open(path, 'r', errors='ignore') as fh:
+                with open(path, 'r', encoding='utf-8', errors='replace') as fh:
                     content = fh.read()
                     if '<<<<<<< HEAD' in content or '>>>>>>>' in content:
                         conflicts.append(path)
@@ -203,7 +208,7 @@ def check_pbr_build_integrity():
     proj_path = os.path.join(BUILD_DIR, 'skygfx.vcxproj')
 
     if os.path.exists(proj_path):
-        with open(proj_path, 'r', errors='ignore') as fh:
+        with open(proj_path, 'r', encoding='utf-8', errors='replace') as fh:
             proj_lines = fh.readlines()
         proj_text = ''.join(proj_lines)
 
@@ -215,40 +220,48 @@ def check_pbr_build_integrity():
         if 'ImageHasSafeExceptionHandlers>false' not in proj_text:
             issues.append("vcxproj missing <ImageHasSafeExceptionHandlers>false> (rpnormmap.lib SAFESEH LNK2026)")
 
-        # 3. normalmap.cpp + normmap_stubs.cpp must be compiled
-        def _is_active_cpp(name):
+        # 3. texdefs.cpp + rw/normmap_stubs.cpp must be compiled
+        def _is_active_cpp(rel_name):
+            needle = f'..\\src\\{rel_name}"'
             for line in proj_lines:
-                if name in line and f'<ClCompile Include="..\\src\\{name}"' in line:
+                if '<ClCompile Include=' in line and needle in line:
                     return not line.strip().startswith('<!--')
             return False
 
-        if not _is_active_cpp('normalmap.cpp'):
-            issues.append("normalmap.cpp is not compiled in vcxproj")
-        if not _is_active_cpp('normmap_stubs.cpp'):
-            issues.append("normmap_stubs.cpp is not compiled in vcxproj (rpnormmap.lib needs it)")
+        if not _is_active_cpp('texdefs.cpp'):
+            issues.append("src/texdefs.cpp is not compiled in vcxproj")
+        if not _is_active_cpp('rw\\normmap_stubs.cpp'):
+            issues.append("rw/normmap_stubs.cpp is not compiled in vcxproj (rpnormmap.lib needs it)")
+        if not _is_active_cpp('core\\debug_handl.cpp'):
+            issues.append("src/core/debug_handl.cpp is not compiled in vcxproj (merged diagnostics+crash+menu)")
+        if not _is_active_cpp('entities\\sftbdyphsx.cpp'):
+            issues.append("src/entities/sftbdyphsx.cpp is not compiled in vcxproj (merged ragdoll+dismember)")
+        if not _is_active_cpp('render\\neopipe.cpp'):
+            issues.append("src/render/neopipe.cpp is not compiled in vcxproj (merged neo+neoCarpipe+neoWaterdrops)")
+        if not _is_active_cpp('render\\grasssys.cpp'):
+            issues.append("src/render/grasssys.cpp is not compiled in vcxproj (merged PC_GrassRenderer+PC_GrassInstancer)")
 
         # 4. do NOT link rwcore/rpworld - they duplicate symbols from gta.cpp
         if 'rwcore.lib' in proj_text or 'rpworld.lib' in proj_text:
             issues.append("vcxproj links rwcore.lib/rpworld.lib; use normmap_stubs.cpp instead")
 
         # 5. both pipes must use pipeUploadPBR, not manual c22/c23 upload
-        vpipe = os.path.join(PROJECT_DIR, 'src', 'vehiclePipe.cpp')
-        bpipe = os.path.join(PROJECT_DIR, 'src', 'buildingPipe.cpp')
+        vpipe = os.path.join(PROJECT_DIR, 'src', 'render', 'vehiclePipe.cpp')
+        bpipe = os.path.join(PROJECT_DIR, 'src', 'render', 'buildingPipe.cpp')
         for ppath, pname in [(vpipe, 'vehiclePipe'), (bpipe, 'buildingPipe')]:
             if os.path.exists(ppath):
-                src = open(ppath, 'r', errors='ignore').read()
+                src = open(ppath, 'r', encoding='utf-8', errors='replace').read()
                 if 'pipeUploadPBR' not in src:
                     issues.append(f"{pname}.cpp does not use pipeUploadPBR (manual c22/c23 upload risks param-order bug)")
 
         # 6. config.cpp must be commented out (main.cpp owns INI now)
-        for line in proj_lines:
-            if 'config.cpp' in line and '<ClCompile Include="..\\src\\config.cpp"' in line:
-                if not line.strip().startswith('<!--'):
-                    issues.append("config.cpp is active in vcxproj; comment it out so main.cpp reads INI")
+        if _is_active_cpp('core\\config.cpp'):
+            issues.append("config.cpp is active in vcxproj; comment it out so main.cpp reads INI")
 
         # 6. required PBR source files
-        for f in ['brdfLibrary.h', 'vehiclePipe.cpp', 'buildingPipe.cpp',
-                  'veh_shaders.cpp', 'main.cpp']:
+        for f in [r'extras\brdfLibrary.h', r'render\vehiclePipe.cpp',
+                  r'render\buildingPipe.cpp', r'extras\veh_shaders.cpp',
+                  r'core\main.cpp']:
             p = os.path.join(PROJECT_DIR, 'src', f)
             if not os.path.exists(p):
                 issues.append(f"Missing {p}")
@@ -304,29 +317,78 @@ def _get_shader_list():
                 if subdir == 'vs' and 'GTAIV' in f:
                     continue
                 hlsl_path = os.path.join(root, f)
+                # Skip sources whose CSOs are emitted by the multi_entry table
+                # below, plus dead legacy sources (mirrors fast_build.py
+                # get_shader_list). One producer per CSO — otherwise two pool
+                # workers race on the same output file and the loser silently
+                # overwrites a correct CSO with a wrong-entry compile.
+                if f in ('VehiclePBR_Modern.hlsl', 'normMapVehiclePS.hlsl',
+                         'mobileVehiclePS.hlsl', 'mobileVehicleVS.hlsl',
+                         'Water_Parallax.hlsl',
+                         # buildingPipePS.hlsl entries take over these CSOs
+                         'simplePS.hlsl', 'simpleDetailPS.hlsl',
+                         'simpleFogPS.hlsl', 'xboxBuildingPS.hlsl',
+                         'normMapBuildingPS.hlsl',
+                         # dead: VS passes removed, nothing loads these CSOs
+                         'neoVehiclePass1VS.hlsl', 'neoVehiclePass2VS.hlsl'):
+                    continue
+                # Skip legacy duplicate copies living in shader SUBDIRECTORIES
+                # (shaders/ps/xbox/, shaders/vs/xbox/): the consolidated root
+                # files produce those CSOs (fast_build.py multi_entry), so
+                # compiling the subdir copies would silently overwrite
+                # xboxBuildingPS.cso with the pre-parity *0.5/*10 form.
+                if os.path.dirname(os.path.abspath(hlsl_path)) != os.path.abspath(shader_dir):
+                    continue
                 cso_path = os.path.join(cso_dir, os.path.splitext(f)[0] + '.cso')
                 shaders.append((fxc, hlsl_path, cso_path, profile, 'main'))
 
-    # Multi-entry consolidated shaders
+    # Multi-entry consolidated shaders (kept in sync with fast_build.py)
     multi_entry = [
-        ('vs_3_0', 'vehiclePipeVS.hlsl', 'main_vehiclePBR', 'vehiclePBRVS.cso', True),
-        ('vs_3_0', 'vehiclePipeVS.hlsl', 'main_ps2CarFx', 'ps2CarFxVS.cso', True),
-        ('vs_3_0', 'vehiclePipeVS.hlsl', 'main_specCarFx', 'specCarFxVS.cso', True),
-        ('vs_3_0', 'vehiclePipeVS.hlsl', 'main_xboxCar', 'xboxCarVS.cso', True),
-        ('vs_3_0', 'vehiclePipeVS.hlsl', 'main_leedsCarFx', 'leedsCarFxVS.cso', True),
-        ('vs_3_0', 'vehiclePipeVS.hlsl', 'main_mobileVehicle', 'mobileVehicleVS.cso', True),
-        ('vs_3_0', 'vehiclePipeVS.hlsl', 'main_neoPass1', 'neoVehiclePass1VS.cso', True),
-        ('vs_3_0', 'vehiclePipeVS.hlsl', 'main_neoPass2', 'neoVehiclePass2VS.cso', True),
-        ('ps_3_0', 'VehiclePBR_Modern.hlsl', 'main_specCarFx', 'specCarFxPS.cso', False),
-        ('ps_3_0', 'VehiclePBR_Modern.hlsl', 'main_mobileVehicle', 'mobileVehiclePS.cso', False),
-        ('ps_3_0', 'VehiclePBR_Modern.hlsl', 'main_rubber', 'Rubber_Vehicle_Modern.cso', False),
-        ('ps_3_0', 'VehiclePBR_Modern.hlsl', 'main_building', 'BuildingPBRPS.cso', False),
+        ('vs_3_0', 'vehiclePipeVS.hlsl', 'main_vehiclePBR', 'vehiclePBRVS.cso'),
+        ('vs_3_0', 'vehiclePipeVS.hlsl', 'main_ps2CarFx', 'ps2CarFxVS.cso'),
+        ('vs_3_0', 'vehiclePipeVS.hlsl', 'main_specCarFx', 'specCarFxVS.cso'),
+        ('vs_3_0', 'vehiclePipeVS.hlsl', 'main_xboxCar', 'xboxCarVS.cso'),
+        ('vs_3_0', 'vehiclePipeVS.hlsl', 'main_leedsCarFx', 'leedsCarFxVS.cso'),
+        ('vs_3_0', 'vehiclePipeVS.hlsl', 'main_mobileVehicle', 'mobileVehicleVS.cso'),
+        # VehiclePBR_Modern.hlsl — all 7 entry points from one file
+        ('ps_3_0', 'VehiclePBR_Modern.hlsl', 'main', 'VehiclePBR_Modern.cso'),
+        ('ps_3_0', 'VehiclePBR_Modern.hlsl', 'main_normMapVehicle', 'normMapVehiclePS.cso'),
+        ('ps_3_0', 'VehiclePBR_Modern.hlsl', 'main_mobileVehicle', 'mobileVehiclePS.cso'),
+        ('ps_3_0', 'VehiclePBR_Modern.hlsl', 'main_specCarFx', 'specCarFxPS.cso'),
+        ('ps_3_0', 'VehiclePBR_Modern.hlsl', 'main_building', 'BuildingPBRPS.cso'),
+        ('ps_3_0', 'VehiclePBR_Modern.hlsl', 'main_rubber', 'Rubber_Vehicle_Modern.cso'),
+        ('ps_3_0', 'VehiclePBR_Modern.hlsl', 'main_ps2EnvSpecFx', 'ps2EnvSpecFxPS.cso'),
+        # Water_Parallax.hlsl — water style entries (waterStyle INI selector)
+        ('ps_3_0', 'Water_Parallax.hlsl', 'main_xbox', 'Water_Parallax.cso'),
+        ('ps_3_0', 'Water_Parallax.hlsl', 'main_iv', 'Water_IV.cso'),
+        ('ps_3_0', 'Water_Parallax.hlsl', 'main_v', 'Water_V.cso'),
+        # buildingPipePS.hlsl — 5 entry points (CSO names match Resource.rc)
+        ('ps_3_0', 'buildingPipePS.hlsl', 'main_simple', 'simplePS.cso'),
+        ('ps_3_0', 'buildingPipePS.hlsl', 'main_simpleDetail', 'simpleDetailPS.cso'),
+        ('ps_3_0', 'buildingPipePS.hlsl', 'main_simpleFog', 'simpleFogPS.cso'),
+        ('ps_3_0', 'buildingPipePS.hlsl', 'main_xboxBuilding', 'xboxBuildingPS.cso'),
+        ('ps_3_0', 'buildingPipePS.hlsl', 'main_normMapBuilding', 'normMapBuildingPS.cso'),
+        # noiseDetailBuildingPS.hlsl — 3 entry points
+        ('ps_3_0', 'noiseDetailBuildingPS.hlsl', 'main_simpleNoiseDetail', 'simpleNoiseDetailPS.cso'),
+        ('ps_3_0', 'noiseDetailBuildingPS.hlsl', 'main_simpleDetailNoiseDetail', 'simpleDetailNoiseDetailPS.cso'),
+        ('ps_3_0', 'noiseDetailBuildingPS.hlsl', 'main_xboxBuildingNoiseDetail', 'xboxBuildingNoiseDetailPS.cso'),
+        # unifiedPipe.hlsl — all 5 entry functions (WIP forward+ chain, NOT in RC yet)
+        ('ps_3_0', 'unifiedPipe.hlsl', 'main', 'unifiedPipe.cso'),
+        ('ps_3_0', 'unifiedPipe.hlsl', 'main_pre', 'unifiedPipePre.cso'),
+        ('ps_3_0', 'unifiedPipe.hlsl', 'main_occlusion', 'unifiedPipeOcclusion.cso'),
+        ('ps_3_0', 'unifiedPipe.hlsl', 'main_post', 'unifiedPipePost.cso'),
+        ('ps_3_0', 'unifiedPipe.hlsl', 'main_ibl', 'unifiedPipeIBL.cso'),
+        # CloudsPS.hlsl — main is compiled by the single-entry pass above
+        ('ps_3_0', 'CloudsPS.hlsl', 'main_cloudsSky', 'cloudsSkyPS.cso'),
     ]
-    for profile, src_file, entry, out_cso, in_root in multi_entry:
-        hlsl_path = os.path.join(shaders_dir, src_file) if in_root else os.path.join(shaders_dir, 'ps', src_file)
+    for profile, src_file, entry, out_cso in multi_entry:
+        hlsl_path = os.path.join(shaders_dir, src_file)
         if not os.path.exists(hlsl_path):
-            continue
-        shaders.append((fxc, hlsl_path, os.path.join(cso_dir, out_cso), profile, entry))
+            hlsl_path = os.path.join(shaders_dir, 'ps', src_file)
+            if not os.path.exists(hlsl_path):
+                hlsl_path = os.path.join(shaders_dir, 'vs', src_file)
+        if os.path.exists(hlsl_path):
+            shaders.append((fxc, hlsl_path, os.path.join(cso_dir, out_cso), profile, entry))
     return shaders
 
 def compile_shaders():
@@ -361,7 +423,8 @@ def compile_shaders():
 
     # Copy pre-compiled GTAIV CSOs
     for cso_name in ['GTAIVVehicle_vs.cso', 'GTAIVVehicle_ps.cso',
-                     'GTAIVBuilding_vs.cso', 'GTAIVBuilding_ps.cso']:
+                     'GTAIVBuilding_vs.cso', 'GTAIVBuilding_ps.cso',
+                     'GTAIVForwardPlus_vs.cso', 'GTAIVForwardPlus_ps.cso']:
         for subdir in ['vs', 'ps']:
             src = os.path.join(PROJECT_DIR, 'shaders', subdir, cso_name)
             dst = os.path.join(cso_dir, cso_name)
@@ -384,7 +447,7 @@ def get_vs_env():
     if os.path.exists(cache_file):
         age = time.time() - os.path.getmtime(cache_file)
         if age < 3600:
-            with open(cache_file, 'r') as f:
+            with open(cache_file, 'r', encoding='utf-8') as f:
                 return json.load(f)
 
     vcvarsall = r'C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat'
@@ -402,7 +465,7 @@ def get_vs_env():
         if '=' in line:
             key, _, value = line.partition('=')
             env[key.upper()] = value
-    with open(cache_file, 'w') as f:
+    with open(cache_file, 'w', encoding='utf-8') as f:
         json.dump(env, f)
     return env
 
@@ -487,12 +550,56 @@ def build():
         return False
 
 # ============================================================
+# Duplicate-ASI quarantine
+# ============================================================
+# The ASI loader loads EVERY "*.asi" in the game root. A stray second
+# skygfx build double-loads the module and double-hooks the exe. Any
+# loadable skygfx*.asi other than skygfx.asi is renamed to ".disabled"
+# before deploy (reversible; nothing is deleted). Mirrors
+# fast_build.py quarantine_duplicate_asis().
+_ASI_DIRS = ['', 'scripts', 'modloader', 'CLEO']
+
+def quarantine_duplicate_asis(verbose=True):
+    """Disable every loadable skygfx*.asi except the canonical skygfx.asi."""
+    game_dir = Path(GAME_DIR)
+    disabled = []
+    for sub in _ASI_DIRS:
+        d = (game_dir / sub) if sub else game_dir
+        if not d.is_dir():
+            continue
+        for p in sorted(d.glob('skygfx*.asi')):
+            if sub == '' and p.name.lower() == 'skygfx.asi':
+                continue
+            dst = p.with_name(p.name + '.disabled')
+            n = 1
+            while dst.exists():
+                dst = p.with_name('%s.disabled%d' % (p.name, n))
+                n += 1
+            try:
+                p.rename(dst)
+                disabled.append((str(p.relative_to(game_dir)), dst.name))
+            except OSError as e:
+                print('  WARNING: could not disable %s (%s)' % (p.name, e))
+    if disabled and verbose:
+        print('  *** DUPLICATE SKYGFX ASI DISABLED (would double-load) ***')
+        for src, dst in disabled:
+            print('    %s  ->  %s' % (src, dst))
+    elif verbose:
+        print('  duplicate-ASI guard: game root clean (only skygfx.asi)')
+    return disabled
+
+# ============================================================
 # Deploy
 # ============================================================
 
 def deploy():
     """Copy ASI + INI to game directory. Always overwrites ASI."""
     _t_begin("Deploy")
+
+    try:
+        quarantine_duplicate_asis()
+    except Exception as e:
+        print(f"  WARNING: duplicate-ASI quarantine failed: {e}")
 
     dll_candidates = [
         os.path.join(GAME_DIR, 'skygfx.dll'),
@@ -545,6 +652,9 @@ def deploy():
 # ============================================================
 
 def main():
+    if any(a in ('-h', '--help') for a in sys.argv[1:]):
+        print(__doc__)
+        return 0
     print("=" * 60)
     print("  SkyGFX Plus - Build Script")
     print("=" * 60)
@@ -578,4 +688,4 @@ def main():
         sys.exit(1)
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())

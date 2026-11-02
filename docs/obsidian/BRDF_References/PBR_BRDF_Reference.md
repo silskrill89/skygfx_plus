@@ -47,9 +47,9 @@ Total energy <= 1 (energy conserving)
 ```
 
 ## ps_3_0 Constraints
-- Max 64 arithmetic instructions, 32 texture instructions
-- No dynamic branching (use if/else carefully)
-- 4 texture stages max in our setup (s0=diffuse, s1=env, s2=mask, s3=IBL)
+- 512+ instruction slots, dynamic flow control available
+- Up to 16 samplers in the PS slot space; the current scan uses `s0-s9`
+- Current sampler use: s0=diffuse, s1=env, s2=mask, s3=IBL, s4=screen-space normal buffer, s9=packed noise tile. Next free sampler: `s10`
 
 ## Key Registers (VehiclePBR_Modern)
 ```
@@ -63,8 +63,16 @@ c6-c11 = lightCol[6] (DO NOT OVERWRITE)
 c12 = directDir (DO NOT OVERWRITE)
 c13-c18 = lightDir[6] (DO NOT OVERWRITE)
 c19 = matCol (DO NOT OVERWRITE)
-c22 = pbrParams {roughness, metalness, reflectance, envFresnel}
+c22 = pbrParams, vehicle {glossiness, specular, specTint, metallicness}
+                building {glossiness, specular, clearcoat, subsurface}
+c23 = paintNoise, vehicle {wheelFlag, noiseScale, edgeBlend, 0}
+                  building {specTintR, specTintG, specTintB, 0}
+c24 = ambientColor (vehicle and building)
+c48 = nmParams (normal-map flag/intensity)
+s9  + c49-c52 = packed noise system (reserved); next free PS constant c53
 ```
+
+**Upload rule**: `c22`/`c23` MUST be written only through `pipeUploadPBR()` (`src/render/pipelinecommon.cpp`). A manual `RwD3D9SetPixelShaderConstant(22/23, ...)` bypasses the single source of truth and produces the flat/dark regression class.
 
 ## GTA V Rendering Insights (from Courreges study)
 - Environment cubemap: low-poly scene, no characters/cars

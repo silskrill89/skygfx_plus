@@ -157,9 +157,23 @@ WRAPPER RpAtomic *CCustomCarEnvMapPipeline__CustomPipeAtomicSetup(RpAtomic *atom
 WRAPPER char *GetFrameNodeName(RwFrame *frame) { EAXJMP(0x72FB30); }
 WRAPPER int gtaGetPipelineID(RpAtomic* atomic) { EAXJMP(0x72FC40); }
 WRAPPER RpAtomic *AtomicDefaultRenderCallBack(RpAtomic*) { EAXJMP(0x7491C0); };
-WRAPPER RpClump *RpClumpStreamRead(RwStream *stream) { EAXJMP(0x748A10); }
-WRAPPER RwBool RpClumpDestroy(RpClump *clump) { EAXJMP(0x748C50); }
-WRAPPER RpClump *RpClumpForAllAtomics(RpClump *clump, RpAtomicCallBack callBack, void *pData) { EAXJMP(0x748E90); }
+WRAPPER RpClump *RpClumpStreamRead(RwStream *stream) { EAXJMP(0x74B420); }
+WRAPPER RwBool RpClumpDestroy(RpClump *clump) { EAXJMP(0x74A310); }
+WRAPPER RpClump *RpClumpForAllAtomics(RpClump *clump, RpAtomicCallBack callBack, void *pData) { EAXJMP(0x749B70); }
+
+// ---- RpClump / RpAtomic / RpGeometry / RpMaterial ----
+// Addresses byte-verified 2026-11-02 (exe prologues + plugin-sdk RenderWare.cpp +
+// RE vault [[Tools and SDKs/plugin-sdk Reference]]). The old 0x748xxx block was
+// mid-function game code, not RW entries. Signatures match rpworld.h decls
+// (extern "C" linkage inherited from the SDK header).
+WRAPPER RpClump *RpClumpAddAtomic(RpClump *clump, RpAtomic *atomic) { EAXJMP(0x74A490); }
+WRAPPER RpClump *RpClumpRemoveAtomic(RpClump *clump, RpAtomic *atomic) { EAXJMP(0x74A4C0); }
+WRAPPER RpAtomic *RpAtomicCreate(void) { EAXJMP(0x749C50); }
+WRAPPER RwBool RpAtomicDestroy(RpAtomic *atomic) { EAXJMP(0x749DC0); }
+WRAPPER RpAtomic *RpAtomicSetGeometry(RpAtomic *atomic, RpGeometry *geometry, RwUInt32 flags) { EAXJMP(0x749D40); }
+WRAPPER RpGeometry *RpGeometryCreate(RwInt32 numVert, RwInt32 numTriangles, RwUInt32 format) { EAXJMP(0x74CA90); }
+WRAPPER RwBool RpGeometryDestroy(RpGeometry *geometry) { EAXJMP(0x74CCC0); }
+WRAPPER RpMaterial *RpMaterialCreate(void) { EAXJMP(0x74D990); }
 WRAPPER void CCustomCarEnvMapPipeline__CustomPipeRenderCB_exe(RwResEntry *repEntry, void *object, RwUInt8 type, RwUInt32 flags) { EAXJMP(0x5D9900) };
 WRAPPER void GTAfree(void *data) { EAXJMP(0x82413F); }
 

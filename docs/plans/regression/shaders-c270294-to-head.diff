@@ -1,0 +1,3908 @@
+diff --git a/shaders/include/CommonMath.hlsl b/shaders/include/CommonMath.hlsl
+new file mode 100644
+index 0000000..ec1c8f9
+--- /dev/null
++++ b/shaders/include/CommonMath.hlsl
+@@ -0,0 +1,112 @@
++// CommonMath.hlsl - Consolidated math helpers
++//
++// Audit of shaders/ found ~15 helper types duplicated 50+ times inline.
++// This header is the single home for those helpers.
++//
++// SM3.0 constraint: all helpers are inline, no dynamic loops, no discard,
++// no SM4+ intrinsics, no texture sampling, no dynamic branching.
++//
++// NOTE: This header is NOT yet included by any file. Migration of call sites
++// is a separate task. This file is purely additive.
++
++#ifndef COMMONMATH_INCLUDED
++#define COMMONMATH_INCLUDED
++
++// --- Safe Divide ---
++// was duplicated across SMAA_Temporal.hlsl, ColorFilter_CrossMix.hlsl,
++// MotionBlur_Burnout.hlsl, HairEnhance.hlsl, SkinEnhance.hlsl,
++// SMAA_EdgeCombined.hlsl, SMAA_EdgeMotionDepth.hlsl, LuminanceReduce.hlsl
++inline float SafeDivide(float num, float den, float eps = 1e-7)
++{
++    return num / max(den, eps);
++}
++
++// --- Safe Normalize (float3) ---
++// Guard magnitude, not components. Adding epsilon inside the
++// argument to the normalize intrinsic is WRONG — see SafeNormalize above.
++// was duplicated across SMAA_Temporal.hlsl, PerlinNoise.hlsl,
++// ColorFilter_CrossMix.hlsl, MotionBlur_Burnout.hlsl, HairEnhance.hlsl,
++// SkinEnhance.hlsl, SMAA_EdgeCombined.hlsl, SMAA_EdgeMotionDepth.hlsl
++inline float3 SafeNormalize(float3 v, float3 fallback = float3(0, 1, 0))
++{
++    float len = length(v);
++    return len > 1e-6 ? v / len : fallback;
++}
++
++// --- Safe Normalize (float2) ---
++// Guard magnitude, not components.
++inline float2 SafeNormalize(float2 v, float2 fallback = float2(1, 0))
++{
++    float len = length(v);
++    return len > 1e-6 ? v / len : fallback;
++}
++
++// --- Rec.709 Luma ---
++// was duplicated in SMAA_Temporal.hlsl:34, ColorFilter_CrossMix.hlsl,
++// MotionBlur_Burnout.hlsl, HairEnhance.hlsl, SkinEnhance.hlsl,
++// SMAA_EdgeCombined.hlsl, SMAA_EdgeMotionDepth.hlsl, LuminanceReduce.hlsl:17
++inline float LumaRec709(float3 c)
++{
++    return dot(c, float3(0.2126, 0.7152, 0.0722));
++}
++
++// --- SMPTE-C Luma ---
++// was duplicated inline 6 times across various shader files
++inline float LumaSMPTE(float3 c)
++{
++    return dot(c, float3(0.299, 0.587, 0.114));
++}
++
++// --- Unpack Normal (RGB -> XYZ) ---
++// was duplicated ~25 times across the shader tree
++inline float3 UnpackNormal(float3 encoded)
++{
++    return encoded * 2.0 - 1.0;
++}
++
++// --- Unpack RG (RG -> XY) ---
++inline float2 UnpackRG(float2 encoded)
++{
++    return encoded * 2.0 - 1.0;
++}
++
++// --- UV to NDC ---
++inline float2 UVToNDC(float2 uv)
++{
++    return uv * 2.0 - 1.0;
++}
++
++// --- 2D Hash (value noise) ---
++inline float Hash2D(float2 p)
++{
++    return frac(sin(dot(p, float2(12.9898, 78.233))) * 43758.5453);
++}
++
++// --- 2D Hash with seed ---
++inline float Hash2DSeed(float2 p, float seed)
++{
++    return frac(sin(dot(p, float2(12.9898, 78.233)) + seed) * 43758.5453);
++}
++
++// --- Linear Depth (projInfo variant) ---
++// projInfo = (rxw, ryw, -nf/(f-n), f/(f-n))
++// used by SSAO / height-fog family
++inline float LinearDepthProjInfo(float depth, float4 projInfo)
++{
++    return projInfo.z / SafeDivide(depth - projInfo.w);
++}
++
++// --- Linear Depth (near/far variant) ---
++// used by NormalBuffer.hlsl and MotionBlur_Burnout.hlsl
++inline float LinearDepthNearFar(float depth, float near, float far)
++{
++    return near * far / SafeDivide(far - depth * (far - near));
++}
++
++// --- Linear to sRGB ---
++inline float3 LinearToSRGB(float3 c)
++{
++    return pow(saturate(c), 1.0 / 2.2);
++}
++
++#endif
+diff --git a/shaders/include/PerlinNoise.hlsl b/shaders/include/PerlinNoise.hlsl
+index 9a1680d..a2a16e1 100644
+--- a/shaders/include/PerlinNoise.hlsl
++++ b/shaders/include/PerlinNoise.hlsl
+@@ -255,7 +255,7 @@ float SurfaceTypeToHeight(int surfaceType)
+ }
+ 
+ // --- Water Height Field ---
+-// Procedural water height from perlin - used for POM and tessellation displacement
++// Procedural water height from perlin - used for POM
+ float WaterHeight(float2 worldUV, float time, float waveScale)
+ {
+ 	// Three octaves of traveling waves at different angles
+diff --git a/shaders/ps/CarPaint_Reflections.hlsl b/shaders/ps/CarPaint_Reflections.hlsl
+index c8c8905..78dfdf8 100644
+--- a/shaders/ps/CarPaint_Reflections.hlsl
++++ b/shaders/ps/CarPaint_Reflections.hlsl
+@@ -34,6 +34,9 @@ uniform float4 baseColor   : register(c1);
+ uniform float4 paintParams : register(c2);
+ uniform float4 envParams   : register(c3);
+ uniform float4 screenSize  : register(c4);
++float3 viewRight    : register(c25); // view matrix row 0 (world→view rotation)
++float3 viewUp       : register(c26); // view matrix row 1
++float3 viewFwd      : register(c27); // view matrix row 2
+ 
+ struct PS_INPUT
+ {
+@@ -77,10 +80,10 @@ float4 main(PS_INPUT IN) : COLOR
+ {
+     float2 tex = IN.texCoord;
+ 
+-    float3 N = normalize(IN.normal);
+-    float3 V = normalize(IN.viewDir);
+-    float3 L = normalize(IN.lightDir);
+-    float3 H = normalize(V + L);
++    float3 N = length(IN.normal) > 1e-6 ? normalize(IN.normal) : float3(0, 1, 0);
++    float3 V = length(IN.viewDir) > 1e-6 ? normalize(IN.viewDir) : float3(0, 0, 1);
++    float3 L = length(IN.lightDir) > 1e-6 ? normalize(IN.lightDir) : float3(0, 0, -1);
++    float3 H = length(V + L) > 1e-6 ? normalize(V + L) : float3(0, 1, 0);
+ 
+     float NdotL = saturate(dot(N, L));
+     float NdotV = saturate(dot(N, V));
+@@ -125,11 +128,13 @@ float4 main(PS_INPUT IN) : COLOR
+     float3 specular2 = spec2D * spec2V * specParams.w * NdotL;
+ 
+     // ===== Environment Reflection =====
+-    float3 R = reflect(-V, N);
+-    float2 envUV = SphereEnvMapUV(R, V);
++    float3 R_world = reflect(-V, N);
++    float3 R_view = float3(dot(R_world, viewRight), dot(R_world, viewUp), dot(R_world, viewFwd));
++    float3 V_view = float3(dot(V, viewRight), dot(V, viewUp), dot(V, viewFwd));
++    float2 envUV = SphereEnvMapUV(R_view, V_view);
+     float3 envReflection = tex2D(envMapTex, envUV).rgb;
+ 
+-    float2 ssrUV = tex + R.xy * 0.03;
++    float2 ssrUV = tex + R_world.xy * 0.03;
+     float3 ssrColor = tex2D(sceneTex, ssrUV).rgb;
+     float ssrBlend = metallic * 0.3;
+     envReflection = lerp(envReflection, ssrColor, ssrBlend);
+diff --git a/shaders/ps/Glass_Vehicle.hlsl b/shaders/ps/Glass_Vehicle.hlsl
+index fcedc2e..32c068c 100644
+--- a/shaders/ps/Glass_Vehicle.hlsl
++++ b/shaders/ps/Glass_Vehicle.hlsl
+@@ -25,9 +25,12 @@ sampler2D diffuseTex : register(s0);
+ sampler2D envMapTex  : register(s1);
+ 
+ float4 surfProps   : register(c0);
+-float4 fxParams    : register(c1);
++float4 fxParams    : register(c1);  // .xy = tanHalfFovX/Y (env perspective projection), .z = lightmult
+ float4 glassParams : register(c22);  // { tintR, tintG, tintB, opacity }
+ float4 lightParams : register(c23);  // { isLight, lightBoost, tintStrength, 0 }
++float3 viewRight    : register(c25); // view matrix row 0 (world→view rotation)
++float3 viewUp       : register(c26); // view matrix row 1
++float3 viewFwd      : register(c27); // view matrix row 2
+ 
+ struct PS_INPUT{
+     float2 texcoord0 : TEXCOORD0;
+@@ -52,14 +55,24 @@ float4 main(PS_INPUT IN) : COLOR
+     float3 F0 = float3(0.04, 0.04, 0.04);
+     float fresnel = SchlickFresnelScalar(NdotV, 0.04);
+ 
+-    // Env map reflection — stable sphere map (NO viewDir offset to prevent warping)
+-    float3 R = reflect(-V, N);
+-    float m = 2.0 * sqrt(dot(R.xy, R.xy) + (R.z + 1.0) * (R.z + 1.0));
+-    float2 envUV = R.xy / m + 0.5;
++    // Env map reflection — the env texture is a PERSPECTIVE render from the
++    // camera's viewpoint (main camera view window — same projection the body
++    // path uses in VehiclePBR_Modern.main). SphereEnvMapUV assumed a classic
++    // sphere map and produced arbitrary patches on this texture; project the
++    // view-space reflection vector instead. tanHalfFov comes from PS c1.xy
++    // (uploaded per glass mesh by the Env cb).
++    float3 R_world = reflect(-V, N);
++    float3 R_view = float3(dot(R_world, viewRight), dot(R_world, viewUp), dot(R_world, viewFwd));
++    float rz = max(R_view.z, 0.05);
++    float tanX = max(fxParams.x, 1e-7);
++    float tanY = max(fxParams.y, 1e-7);
++    float2 envUV = saturate(float2(
++        0.5 + 0.5 * clamp(R_view.x / (rz * tanX), -1.2, 1.2),
++        0.5 - 0.5 * clamp(R_view.y / (rz * tanY), -1.2, 1.2)));
+     float4 env = tex2D(envMapTex, envUV);
+-    // Glass env reflection: boosted from 8% to 18% to make windows less opaque.
+-    // Balance between subtle reflections and visible tint.
+-    float envIntensity = max(IN.envColor.a, 0.1) * 0.18;
++    // Clamp guards against a mis-scaled VS shininess (envPower in the .w slot)
++    // blowing the gloss to white — the env sample would otherwise be ×20.
++    float envIntensity = clamp(IN.envColor.a, 0.1, 1.5);
+     float3 envCol = env.rgb * envIntensity;
+ 
+     // Sun contribution
+@@ -92,12 +105,13 @@ float4 main(PS_INPUT IN) : COLOR
+         // so alpha MUST be 1.0 to prevent see-through/culling bug
+         float3 interior = diff.rgb * lightBoost * lightTint;
+ 
+-        // LAYER 2: Glossy glass cover ON TOP of the opaque lens
+-        // Subtle env reflection: face-on = 0%, grazing = 15%
+-        float3 glossLayer = envCol * fresnel * 0.15;
++        // LAYER 2: Glossy cover glass ON TOP of the opaque lens.
++        // Tinted by the lens colour — untinted white env/sun gloss washed the
++        // lens (and the whole light) toward white; the cover must stay in hue.
++        float3 glossLayer = envCol * lightTint * fresnel * 0.15;
+ 
+-        // LAYER 3: Sun specular highlight on the glass cover
+-        float3 glossSpec = sunContrib * 0.20;
++        // LAYER 3: Sun specular highlight on the cover glass (lens-tinted too)
++        float3 glossSpec = sunContrib * lightTint * 0.20;
+ 
+         // Composite: opaque interior + gloss overlay on top
+         float3 color = interior + glossLayer + glossSpec;
+@@ -120,9 +134,9 @@ float4 main(PS_INPUT IN) : COLOR
+     float3 glassBase = diff.rgb * IN.color.rgb * diffConservation;
+ 
+     // LAYER 2: Env reflection — glossy glass surface on top of texture
+-    // Fresnel-driven: face-on = 5% reflection, grazing = 20% reflection
+-    // Real car windows are noticeably reflective at oblique angles
+-    float envStrength = lerp(0.05, 0.20, fresnel);
++    // Fresnel-driven: face-on ≈ 15% reflection, grazing ≈ 45% reflection.
++    // This is the ONLY attenuation on the env sample (see envCol above).
++    float envStrength = lerp(0.15, 0.45, fresnel);
+     float3 reflLayer = envCol * envStrength;
+ 
+     // Combine: glass texture + subtle reflection (car body shows through via alpha)
+diff --git a/shaders/ps/GodRays.hlsl b/shaders/ps/GodRays.hlsl
+index 4d0d272..92d4754 100644
+--- a/shaders/ps/GodRays.hlsl
++++ b/shaders/ps/GodRays.hlsl
+@@ -1,5 +1,10 @@
+ // GodRays.hlsl - Screen-space god rays / crepuscular rays (ps_3_0)
+-// Radial blur toward sun position for volumetric light ray effect
++// Radial blur toward sun position for volumetric light ray effect.
++//
++// IMPORTANT: this pass is drawn with ADDITIVE blending (src=ONE, dst=ONE).
++// It must therefore output ONLY the ray contribution. The scene colour is
++// already preserved by the blend (dst += src); returning scene + rays here
++// would add the whole frame onto itself and blow out every scene.
+ 
+ sampler2D sceneTex : register(s0);
+ 
+@@ -18,7 +23,7 @@ float4 main(PS_INPUT IN) : COLOR
+     float2 sunScreenPos = sunPos.xy;
+ 
+     // Parameters
+-    float exposure = rayParams.x;     // brightness per sample (default 0.0034)
++    float exposure = rayParams.x;     // brightness per sample (e.g. 0.0034)
+     float decay = rayParams.y;        // falloff per sample (default 1.0)
+     float density = rayParams.z;      // ray density (default 0.84)
+     float weight = rayParams.w;       // ray weight (default 1.0)
+@@ -28,18 +33,21 @@ float4 main(PS_INPUT IN) : COLOR
+     numSamples = max(numSamples, 1);
+     density = max(density, 0.0);
+ 
++    // No exposure => no contribution (do not emit scene colour: additive pass).
++    if(exposure <= 0.0)
++        return float4(0, 0, 0, 0);
++
+     // Direction from current pixel to sun
+     float2 deltaTexCoord = (texCoord - sunScreenPos) * density / (float)numSamples;
+ 
+-    // Reduce effect when sun is far outside [0,1] (behind camera)
++    // Reduce effect when sun is far outside the viewport
+     float sunVis = 1.0 - saturate(max(
+         abs(sunScreenPos.x - 0.5) - 0.5,
+         abs(sunScreenPos.y - 0.5) - 0.5) * 2.0);
++    if(sunVis <= 0.0)
++        return float4(0, 0, 0, 0);
+ 
+-    // Original scene color
+-    float3 color = tex2D(sceneTex, texCoord).rgb;
+-
+-    // Radial blur accumulation
++    // Radial blur accumulation (rays only)
+     float3 result = float3(0, 0, 0);
+     float illuminationDecay = 1.0;
+     float2 sampleCoord = texCoord;
+@@ -51,20 +59,19 @@ float4 main(PS_INPUT IN) : COLOR
+ 
+         sampleCoord -= deltaTexCoord;
+ 
+-        // Clamp sample coord to valid UV range
+-        float2 clampedCoord = clamp(sampleCoord, 0.0, 1.0);
++        // Fade toward screen edges instead of clamping. Hard-clamping the
++        // sample coord smeared the border texel into long bright streaks.
++        float2 edge = saturate(min(sampleCoord, 1.0 - sampleCoord) * 12.0);
++        float edgeFade = edge.x * edge.y;
+ 
++        float2 clampedCoord = clamp(sampleCoord, 0.0, 1.0);
+         float3 samp = tex2D(sceneTex, clampedCoord).rgb;
+-        samp *= illuminationDecay * weight;
+-        result += samp;
++        result += samp * (illuminationDecay * weight * edgeFade);
+         illuminationDecay *= decay;
+     }
+ 
+-    // Scale by exposure and sun visibility
+     result *= exposure * sunVis;
+ 
+-    // Additive blend with original scene
+-    float3 finalColor = color + result;
+-
+-    return float4(finalColor, 1.0);
++    // Additive blend: emit the ray contribution only (no scene colour).
++    return float4(result, 1.0);
+ }
+diff --git a/shaders/ps/HeightFog.hlsl b/shaders/ps/HeightFog.hlsl
+index 3f4b7c3..9d497f7 100644
+--- a/shaders/ps/HeightFog.hlsl
++++ b/shaders/ps/HeightFog.hlsl
+@@ -1,15 +1,17 @@
+ // HeightFog.hlsl - Crytek exponential height fog (ps_3_0)
+-// Fullscreen post-process: reads depth, reconstructs world height, blends fog
++// Fullscreen post-process: reads depth, reconstructs world height, blends fog.
++// Drawn with s_ffQuad (screen UV 0..1): s0 = padded 2048² front buffer
++// (fetch × fbParams.xy), s1 = screen-sized INTZ depth (raw UV).
+ 
+ sampler2D sceneTex : register(s0);
+ sampler2D depthTex : register(s1);
+ 
+-uniform float4 fogParams   : register(c0);
+-uniform float4 fogColor    : register(c1);
+-uniform float4 projInfo    : register(c2);
+-uniform float4 screenSize  : register(c3);
+-uniform float4 camPos      : register(c4);
+-uniform float4 camAxisZ    : register(c5);
++uniform float4 fogParams   : register(c0); // (density, falloff, startH, maxFog)
++uniform float4 fogColor    : register(c1); // fog RGB (config or timecycle horizon)
++uniform float4 projInfo    : register(c2); // (recipVW.x, recipVW.y, -nf/(f-n), f/(f-n))
++uniform float4 fbParams    : register(c3); // (frontBufferU, frontBufferV, 0, 0)
++uniform float4 camPos      : register(c4); // camera world position
++uniform float4 camAxisZ    : register(c5); // (right.z, up.z, at.z, 0)
+ 
+ struct PS_INPUT
+ {
+@@ -19,40 +21,49 @@ struct PS_INPUT
+ float4 main(PS_INPUT IN) : COLOR
+ {
+     float2 tex = IN.texCoord;
+-    
+-    // Sample depth and scene
++
++    // Sample depth (screen-sized: raw UV) and scene (padded 2048² fb: scaled UV)
+     float depth = tex2D(depthTex, tex).r;
+-    float3 scene = tex2D(sceneTex, tex).rgb;
+-    
++    float3 scene = tex2D(sceneTex, tex * fbParams.xy).rgb;
++
+     // Skip sky (depth at far plane)
+     if(depth >= 0.999)
+         return float4(scene, 1.0);
+-    
+-    // Linearize depth
+-    float linearDepth = projInfo.z / (depth - projInfo.w);
+-    
+-    // Reconstruct view-space position
++
++    // Linearize depth — guard the divide (degenerate depth == projInfo.w
++    // produced +/-INF/NaN, which SM3.0 turns into a black full-screen quad)
++    float denom = depth - projInfo.w;
++    if(abs(denom) < 1e-9)
++        return float4(scene, 1.0);
++    float linearDepth = projInfo.z / denom;
++    if(!(linearDepth > 0.0))
++        return float4(scene, 1.0);
++
++    // Reconstruct view-space position (same convention as SSAO's GetViewPos)
+     float2 ndc = tex * 2.0 - 1.0;
+     ndc.y = -ndc.y;
+     float3 viewPos = float3(ndc * projInfo.xy * linearDepth, linearDepth);
+-    
+-    // Approximate world height from camera orientation
+-    float worldZ = camPos.z + viewPos.x * camAxisZ.x 
+-                 + viewPos.y * camAxisZ.y 
+-                 - viewPos.z * camAxisZ.z;
+-    
++
++    // Approximate world height from camera orientation:
++    // worldOffset = vx*right + vy*up + linearDepth*forward (camera at-axis).
++    // (Sign was '-' before: that produced 2*linearDepth*|at.z| worldZ error
++    // on any tilted/aerial camera — fog ignored camera pitch.)
++    float worldZ = camPos.z + viewPos.x * camAxisZ.x
++                 + viewPos.y * camAxisZ.y
++                 + viewPos.z * camAxisZ.z;
++
+     // Unpack fog parameters
+     float fogDensity = fogParams.x;
+     float heightFalloff = fogParams.y;
+     float startHeight = fogParams.z;
+     float maxFog = fogParams.w;
+-    
++
+     // Crytek exponential height fog
+     float heightFactor = exp(-heightFalloff * max(worldZ - startHeight, 0.0));
+     float distFactor = 1.0 - exp(-fogDensity * linearDepth);
+     float totalFog = saturate(heightFactor * distFactor);
+     totalFog = min(totalFog, maxFog);
+-    
++
+     // Blend fog with scene
+     float3 result = lerp(scene, fogColor.rgb, totalFog);
+     return float4(result, 1.0);
+diff --git a/shaders/ps/LuminanceAdapt.hlsl b/shaders/ps/LuminanceAdapt.hlsl
+new file mode 100644
+index 0000000..5c79146
+--- /dev/null
++++ b/shaders/ps/LuminanceAdapt.hlsl
+@@ -0,0 +1,44 @@
++// LuminanceAdapt.hlsl - temporal eye adaptation (ps_3_0)
++// Reduces the 8x8 measured luminance to a 1x1 adapted value and smooths it
++// across frames (CryEngine-style eye adaptation: prev + speed*(measured-prev)).
++//
++// s0 = measured luminance (8x8, .r)
++// s1 = previous adapted luminance (1x1, .r)
++// c0 = { adaptSpeed (0-1), 0, 0, 0 }
++// Output: 1x1, .r = adapted luminance (linear)
++
++uniform sampler2D measTex : register(s0);
++uniform sampler2D prevTex : register(s1);
++uniform float4 adaptParams : register(c0);
++
++struct PS_INPUT
++{
++	float2 texCoord : TEXCOORD0;
++};
++
++float4 main(PS_INPUT IN) : COLOR
++{
++	// Average the 8x8 measured texture with a 4x4 tap grid.
++	float acc = 0.0;
++	[unroll]
++	for (int j = 0; j < 4; j++)
++	{
++		[unroll]
++		for (int i = 0; i < 4; i++)
++		{
++			float2 uv = float2((i + 0.5) / 4.0, (j + 0.5) / 4.0);
++			acc += tex2D(measTex, uv).r;
++		}
++	}
++
++	float measured = max(acc * (1.0 / 16.0), 1e-4);
++	float prev = tex2D(prevTex, float2(0.5, 0.5)).r;
++
++	// First frame (or reset): adopt the measurement immediately.
++	if (prev <= 0.0)
++		prev = measured;
++
++	float s = saturate(adaptParams.x);
++	float adapted = prev + s * (measured - prev);
++	return float4(adapted, adapted, adapted, 1.0);
++}
+diff --git a/shaders/ps/LuminanceReduce.hlsl b/shaders/ps/LuminanceReduce.hlsl
+new file mode 100644
+index 0000000..7862078
+--- /dev/null
++++ b/shaders/ps/LuminanceReduce.hlsl
+@@ -0,0 +1,45 @@
++// LuminanceReduce.hlsl - GPU luminance measure (ps_3_0)
++// Renders the full-res scene into a tiny luminance RT (8x8).
++// Each output pixel averages a 1/8 x 1/8 tile of the screen using 4x4 = 16 taps.
++// No CPU readback: the small RT is consumed by LuminanceAdapt.hlsl (eye adaptation)
++// and then by TonemapPass.hlsl for frame-adaptive exposure.
++//
++// s0 = scene (pRasterFrontBuffer)
++// Output: .r = tile luminance (linear)
++
++uniform sampler2D tex : register(s0);
++
++struct PS_INPUT
++{
++	float2 texCoord : TEXCOORD0;
++};
++
++float Lum(float3 c)
++{
++	return dot(c, float3(0.2126, 0.7152, 0.0722));
++}
++
++float4 main(PS_INPUT IN) : COLOR
++{
++	// Luminance RT is 8x8 -> each output texel owns a 1/8 screen tile.
++	const float TILE = 0.125;
++	const float STEP = TILE / 4.0;   // 4 samples across the tile
++
++	// Tile centre for this output pixel (quantise incoming uv to the 1/8 grid).
++	float2 tileCentre = (floor(IN.texCoord * 8.0) + 0.5) * TILE;
++
++	float acc = 0.0;
++	[unroll]
++	for (int j = 0; j < 4; j++)
++	{
++		[unroll]
++		for (int i = 0; i < 4; i++)
++		{
++			float2 off = float2((i - 1.5) * STEP, (j - 1.5) * STEP);
++			acc += Lum(tex2D(tex, tileCentre + off).rgb);
++		}
++	}
++
++	float l = acc * (1.0 / 16.0);
++	return float4(l, l, l, 1.0);
++}
+diff --git a/shaders/ps/MotionBlur_Burnout.hlsl b/shaders/ps/MotionBlur_Burnout.hlsl
+index d7fd31f..ca9dd10 100644
+--- a/shaders/ps/MotionBlur_Burnout.hlsl
++++ b/shaders/ps/MotionBlur_Burnout.hlsl
+@@ -4,18 +4,28 @@
+ // Constants:
+ //   c0 = (blurStrength, radialStrength, maxSamples, speedFactor)
+ //   c1 = (screenW, screenH, 1/screenW, 1/screenH)
+-//   c2 = (cameraVelocity, cameraRotation, deltaTime, 0)
++//   c2 = (cameraTerm, fullFrameW, fbScaleU, fbScaleV)
++//        cameraTerm  = camera movement x strength x speed-ramp (C++ smoothstep)
++//        fullFrameW  = 0 edge-only lens blur (running) .. 1 full frame (vehicle)
++//        fbScaleU/V  = (screenW/frontBufferW, screenH/frontBufferH): the front
++//                      buffer holds the frame 1:1 at its top-left of a larger
++//                      (e.g. 2048x2048) raster, so s0 fetches scale into the
++//                      content region. s1/s2 are screen-sized -> UV 0..1 direct.
++//   c3 = (near, far, tanFovX, maxBlurPx) — depth-aware blur scaling
+ //
+ // Textures:
+-//   s0 = current frame
++//   s0 = current frame (front buffer — fetched at tex*fbScale)
+ //   s1 = motion buffer (RG=motion XY, B=motion magnitude, A=depth)
++//   s2 = depth buffer (INTZ, sampled while depth hook is suspended)
+ 
+ sampler2D currentTex : register(s0);
+ sampler2D motionTex  : register(s1);
++sampler2D depthTex   : register(s2);
+ 
+ uniform float4 blurParams    : register(c0);
+ uniform float4 screenSize    : register(c1);
+ uniform float4 cameraParams  : register(c2);
++uniform float4 depthFov      : register(c3); // x=near, y=far, z=tanFovX, w=maxBlurPx
+ 
+ struct PS_INPUT
+ {
+@@ -44,8 +54,8 @@ float4 main(PS_INPUT IN) : COLOR
+     float2 pixel = screenSize.zw;
+     float2 center = float2(0.5, 0.5);
+     
+-    // Sample current pixel
+-    float3 color = tex2D(currentTex, tex).rgb;
++    // Sample current pixel (front buffer content region — see fbScale above)
++    float3 color = tex2D(currentTex, tex * cameraParams.zw).rgb;
+     
+     // Sample motion buffer
+     float4 motionData = tex2D(motionTex, tex);
+@@ -65,18 +75,41 @@ float4 main(PS_INPUT IN) : COLOR
+     
+     // Calculate blur amount based on:
+     // 1. Motion magnitude from buffer
+-    // 2. Camera velocity (global movement)
++    // 2. Camera velocity (global movement, already speed-ramped on the C++ side)
+     // 3. Speed factor from config
+     float blurAmount = motionMagnitude * blurParams.x;
+     blurAmount += cameraParams.x * blurParams.w; // Camera velocity contribution
++
++    // Lens weight: fullFrameW (cameraParams.y) ramps 0->1 with speed on the
++    // C++ side. 0 = edge-only "running" blur (centre stays sharp, radial
++    // falloff to the frame edges), 1 = uniform full-frame blur (bicycle and
++    // vehicles). radialDist is 0 at centre .. ~0.707 at corners, so the
++    // 1.41421356 factor normalises corner weight to 1.
++    float radialW = saturate(radialDist * 1.41421356);
++    float lensW = lerp(radialW, 1.0, saturate(cameraParams.y));
++    blurAmount *= lensW;
++
+     blurAmount = min(blurAmount, blurParams.z * 0.01); // Clamp to max blur
++
++    // Depth-aware blur scaling: linear eye-space depth from the INTZ buffer
++    // (NormalBuffer.hlsl pattern). Far surfaces keep full blur; near surfaces
++    // (lin -> near) fade toward 0 so the global camera-velocity term doesn't
++    // smear close geometry.
++    float z = tex2D(depthTex, tex).r;
++    float lin = depthFov.x * depthFov.y / max(depthFov.y - z * (depthFov.y - depthFov.x), 1e-7);
++    float depthW = saturate(lin / depthFov.y * 1.5);
++    blurAmount *= depthW;
++
++    // Clamp to max blur in pixels (c3.w), converted to UV units via 1/screenW
++    blurAmount = min(blurAmount, depthFov.w * pixel.x);
+     
+     // Early exit if no blur needed (GTA V technique: discard when velocity near zero)
+     if(blurAmount < 0.001)
+         return float4(color, 1.0);
+     
+-    // Normalize blur direction
+-    float2 blurStep = normalize(blurDir) * blurAmount * pixel;
++    // Normalize blur direction (NaN-safe: guard against zero-length when motionVector cancels radialDir)
++    float blurLen = max(length(blurDir), 1e-7);
++    float2 blurStep = (blurDir / blurLen) * blurAmount;
+     
+     // Apply jitter to reduce banding (GTA V technique)
+     float2 jitterOffset = Jitter(tex, color.rg);
+@@ -97,11 +130,13 @@ float4 main(PS_INPUT IN) : COLOR
+         float t = (float)i / 8.0;
+         float2 offset = blurStep * t;
+         
+-        // Sample with slight RGB separation for chromatic aberration
+-        float2 sampleCoordR = tex + offset * 1.0;
+-        float2 sampleCoordG = tex + offset * 0.98;
+-        float2 sampleCoordB = tex + offset * 0.96;
+-        
++        // Sample with slight RGB separation for chromatic aberration.
++        // Scale into the front-buffer content region AFTER combining screen
++        // UV + offset (fbScale, see header) so taps stay screen-aligned.
++        float2 sampleCoordR = (tex + offset * 1.0) * cameraParams.zw;
++        float2 sampleCoordG = (tex + offset * 0.98) * cameraParams.zw;
++        float2 sampleCoordB = (tex + offset * 0.96) * cameraParams.zw;
++
+         float3 sampleR = tex2D(currentTex, sampleCoordR).rgb;
+         float3 sampleG = tex2D(currentTex, sampleCoordG).rgb;
+         float3 sampleB = tex2D(currentTex, sampleCoordB).rgb;
+@@ -120,9 +155,5 @@ float4 main(PS_INPUT IN) : COLOR
+     // Normalize
+     result /= totalWeight;
+     
+-    // Add slight brightness boost for high-speed (Burnout style)
+-    float speedBoost = saturate(blurAmount * 10.0);
+-    result *= (1.0 + speedBoost * 0.1);
+-    
+     return float4(result, 1.0);
+ }
+diff --git a/shaders/ps/PipeChain.hlsl b/shaders/ps/PipeChain.hlsl
+index 46ace05..9631f83 100644
+--- a/shaders/ps/PipeChain.hlsl
++++ b/shaders/ps/PipeChain.hlsl
+@@ -1,16 +1,27 @@
+-// PipeChain.hlsl - 4-pass post-processing chain
+-// ps_3_0
+-// Uses pipeParams.x to select pass: 0=input, 1=mid_a, 2=mid_b, 3=output
+-// Middle two passes (1,2) act in tandem - split from what would be a single pass
++// PipeChain.hlsl - 4-pass post chain + classify pack mode (ps_3_0)
++//
++// pipeParams.x pass select:
++//   0 = input, 1 = mid_a, 2 = mid_b, 3 = output (chain)
++//   9 = classify pack mode — forced as PS by the building/vehicle pipes
++//       around a second draw of their mesh (see PipeChain_ClassifyBegin).
++//
++// UV domains: the chain is drawn with s_ffQuad (screen UV 0..1).
++//   s0 scene      = padded 2048² front buffer  -> fetch × fbParams.xy
++//   s1 normal     = half-res screen buffer     -> raw UV
++//   s2 depth      = screen-sized INTZ          -> raw UV
++//   s3/s4/A,B     = screen-sized RTs           -> raw UV
+ 
+ sampler2D sceneTex    : register(s0); // scene color (front buffer)
+ sampler2D normalTex   : register(s1); // normal buffer (stereo-derived)
+ sampler2D depthTex    : register(s2); // depth buffer (INTZ)
+ sampler2D intermediate: register(s3); // intermediate A or B (ping-pong)
++sampler2D classifyTex : register(s4); // BRDF pack (R=class G=gloss B=spec A=metal)
+ 
+ float4 pipeParams  : register(c0); // (passIdx, time, intensity, unused)
+-float4 projInfo    : register(c1); // projection info for depth reconstruction
++float4 packParams  : register(c1); // pass 9: (class/255, gloss, spec, metal)
+ float4 screenSize  : register(c2); // (width, height, 1/width, 1/height)
++float4 fbParams    : register(c3); // (frontBufferU, frontBufferV, 0, 0)
++float4 projInfo    : register(c4); // (recipVW.x, recipVW.y, -nf/(f-n), f/(f-n))
+ 
+ struct PS_INPUT {
+     float4 Position : POSITION;
+@@ -25,7 +36,7 @@ struct PS_OUTPUT {
+ PS_OUTPUT pass_input(PS_INPUT IN)
+ {
+     PS_OUTPUT OUT;
+-    float3 scene = tex2D(sceneTex, IN.TexCoord).rgb;
++    float3 scene = tex2D(sceneTex, IN.TexCoord * fbParams.xy).rgb;
+     float3 normal = tex2D(normalTex, IN.TexCoord).rgb;
+     // Store scene in RGB, edge indicator from normal in A
+     float edge = 1.0 - saturate(abs(normal.x - 0.5) + abs(normal.y - 0.5));
+@@ -38,7 +49,7 @@ PS_OUTPUT pass_mid_a(PS_INPUT IN)
+ {
+     PS_OUTPUT OUT;
+     float2 px = screenSize.zw;
+-    float3 c = tex2D(sceneTex, IN.TexCoord).rgb;
++    float3 c = tex2D(sceneTex, IN.TexCoord * fbParams.xy).rgb;
+     float3 n = tex2D(normalTex, IN.TexCoord).rgb;
+ 
+     // Sample normal neighbors for edge detection
+@@ -72,7 +83,7 @@ PS_OUTPUT pass_mid_b(PS_INPUT IN)
+ {
+     PS_OUTPUT OUT;
+     float2 px = screenSize.zw;
+-    float4 center = tex2D(sceneTex, IN.TexCoord);
++    float4 center = tex2D(sceneTex, IN.TexCoord * fbParams.xy);
+     float centerEdge = tex2D(intermediate, IN.TexCoord).a;
+ 
+     // Bilateral blur - sharp at edges, smooth in flat areas
+@@ -83,7 +94,7 @@ PS_OUTPUT pass_mid_b(PS_INPUT IN)
+         for(int y = -2; y <= 2; y++){
+             if(x == 0 && y == 0) continue;
+             float2 off = float2(x, y) * px;
+-            float4 s = tex2D(sceneTex, IN.TexCoord + off);
++            float4 s = tex2D(sceneTex, (IN.TexCoord + off) * fbParams.xy);
+             float sEdge = tex2D(intermediate, IN.TexCoord + off).a;
+ 
+             // Weight: spatial + edge-aware
+@@ -100,23 +111,94 @@ PS_OUTPUT pass_mid_b(PS_INPUT IN)
+     return OUT;
+ }
+ 
+-// ---- Pass 4: Output - final composite ----
++// ---- Pass 4: Output - BRDF-weighted screen-space reflection composite ----
+ PS_OUTPUT pass_output(PS_INPUT IN)
+ {
+     PS_OUTPUT OUT;
+-    float3 scene = tex2D(sceneTex, IN.TexCoord).rgb;
+-    float3 processed = tex2D(intermediate, IN.TexCoord).rgb;
+-    float edge = tex2D(intermediate, IN.TexCoord).a;
++    float2 uv = IN.TexCoord;
++    float3 scene = tex2D(sceneTex, uv * fbParams.xy).rgb;
++    float3 processed = tex2D(intermediate, uv).rgb;
++    float edge = tex2D(intermediate, uv).a;
++
++    // Original edge-aware blend (kept: subtle contrast/AA at intensity).
++    // x0.5 decouples the blur/contrast lerp from the reflection weight below
++    // so the default intensity (0.3) doesn't over-blur the frame — reflections
++    // keep their own BRDF-weighted blendFactor.
++    float blendFactor = pipeParams.z * 0.5 * (1.0 - edge * 0.8);
++    float3 result = lerp(scene, processed, blendFactor);
++
++    // --- BRDF material-classified reflection --------------------------------
++    // pack = (surfaceType/255, glossiness, specular/F0, metallicness) written
++    // by the geometry pipes; pack == 0 means never drawn (sky/background) =>
++    // weight 0. Weights come from the SAME brdfLibrary values the pipes feed
++    // into pipeUploadPBR: dull wood/road (spec 0.04, gloss 0.3) ~ invisible,
++    // chrome (0.56/0.9) strong, car paint (0.04/0.85) a clearcoat hint.
++    float4 pack = tex2D(classifyTex, uv);
++    if(pack.y > 0.001 || pack.z > 0.001){
++        float3 n = tex2D(normalTex, uv).rgb * 2.0 - 1.0;
++        float nlen = length(n);
++        float d = tex2D(depthTex, uv).r;
++        if(nlen > 0.5 && d < 0.999){
++            n /= nlen;
++            float denom = d - projInfo.w;
++            if(abs(denom) > 1e-9){
++                float lin = projInfo.z / denom;
++                if(lin > 0.01 && projInfo.x > 1e-7 && projInfo.y > 1e-7){
++                    // View-space position (SSAO/HeightFog convention)
++                    float2 ndc = uv * 2.0 - 1.0;
++                    ndc.y = -ndc.y;
++                    float3 vp = float3(ndc * projInfo.xy * lin, lin);
++                    float3 V = normalize(vp);       // eye -> surface
++                    float3 R = reflect(V, n);       // reflected dir (view space)
++
++                    // March a fixed 2m along the reflection and re-project:
++                    // ndc = view.xy / (view.z * recipVW)
++                    float3 pr = vp + R * 2.0;
++                    if(pr.z > 0.01){
++                        float2 ndc2 = pr.xy / (pr.z * projInfo.xy);
++                        float2 envUV = float2(ndc2.x * 0.5 + 0.5,
++                                               0.5 - ndc2.y * 0.5);
++                        // Off-screen reflection ray: REJECT instead of the old
++                        // saturate(), which smeared the clamped edge texel
++                        // across every silhouette that reflected off-screen.
++                        if(envUV.x > 0.0 && envUV.x < 1.0 &&
++                           envUV.y > 0.0 && envUV.y < 1.0){
++                            float3 env = tex2D(sceneTex, envUV * fbParams.xy).rgb;
++
++                            float NdV = saturate(dot(n, -V));
++                            float fres = 0.25 + 0.75 * pow(1.0 - NdV, 3.0);
++                            float brdfW = saturate(pack.z * 1.6) * pack.y;
++                            float reflBlend = saturate(pipeParams.z * brdfW * fres
++                                                       * (1.0 - edge * 0.8));
++                            result = lerp(result, env, reflBlend);
++                        }
++                    }
++                }
++            }
++        }
++    }
+ 
+-    // Blend processed result with original, stronger in flat areas
+-    float blendFactor = pipeParams.z * (1.0 - edge * 0.8);
+-    OUT.Color = float4(lerp(scene, processed, blendFactor), 1.0);
++    OUT.Color = float4(result, 1.0);
+     return OUT;
+ }
+ 
+ // ---- Main entry - dispatch by pass index ----
+ PS_OUTPUT main(PS_INPUT IN)
+ {
++    // Classify pack mode: the geometry pipes force this PS with c0.x = 9 and
++    // c1 = pack floats; RGB = BRDF pack, A = the mesh's diffuse-texture alpha
++    // (s0 is still the mesh diffuse during the classify re-draw). The pipes
++    // run with alpha-test ON (pipelinecommon forces
++    // D3DRS_ALPHATESTENABLE=TRUE); packParams.a — metallicness, ~0 on
++    // buildings — failed the test and DISCARDED every solid pixel, so the
++    // classify buffer never filled. Echoing diffuse alpha reproduces the main
++    // draw's cutout silhouette exactly (PBR_Lighting returns albedo.a,
++    // VehiclePBR returns diff.a).
++    if(pipeParams.x > 8.5){
++        PS_OUTPUT OUT;
++        OUT.Color = float4(packParams.rgb, tex2D(sceneTex, IN.TexCoord).a);
++        return OUT;
++    }
+     int passIdx = (int)pipeParams.x;
+     if(passIdx == 0) return pass_input(IN);
+     if(passIdx == 1) return pass_mid_a(IN);
+diff --git a/shaders/ps/Rubber_Vehicle.hlsl b/shaders/ps/Rubber_Vehicle.hlsl
+index 6497a66..e1588f9 100644
+--- a/shaders/ps/Rubber_Vehicle.hlsl
++++ b/shaders/ps/Rubber_Vehicle.hlsl
+@@ -44,9 +44,9 @@ struct PS_INPUT{
+ 
+ float4 main(PS_INPUT IN) : COLOR
+ {
+-    float3 N = normalize(IN.WorldNormal);
+-    float3 V = normalize(IN.ViewDir);
+-    float3 L = normalize(IN.SunDir);
++    float3 N = length(IN.WorldNormal) > 1e-6 ? IN.WorldNormal / length(IN.WorldNormal) : float3(0, 1, 0);
++    float3 V = length(IN.ViewDir) > 1e-6 ? IN.ViewDir / length(IN.ViewDir) : float3(0, 0, 1);
++    float3 L = length(IN.SunDir) > 1e-6 ? IN.SunDir / length(IN.SunDir) : float3(0, 0, -1);
+ 
+     float4 diff = tex2D(diffuseTex, IN.texcoord0);
+     float3 baseColor = diff.rgb * IN.color.rgb * matCol.rgb;
+diff --git a/shaders/ps/SMAA_Temporal.hlsl b/shaders/ps/SMAA_Temporal.hlsl
+index c6e4fa3..1a89c76 100644
+--- a/shaders/ps/SMAA_Temporal.hlsl
++++ b/shaders/ps/SMAA_Temporal.hlsl
+@@ -2,19 +2,29 @@
+ // Blends current frame with previous frame based on motion detection
+ // Moving edges get more blur for temporal stability
+ //
++// Smooth motion-speed-weighted blending: never fully discards history,
++// even at abrupt scene transitions (portals, interiors).
++// History accumulates gradually; fast motion adapts faster but still smoothly.
++//
+ // Constants:
+ //   c0   = (blendStrength, motionScale, 0, 0)
+ //   c1   = (screenW, screenH, 1/screenW, 1/screenH)
++//   c2   = (velocity, rotation, tanFovX, tanFovY) — velocity-driven temporal weight
++//   c3   = (near, far, maxHistClamp, velToPx) — history reprojection params
+ //
+ // Textures:
+ //   s0 = current frame (after SMAA)
+ //   s1 = previous frame
++//   s2 = velocity buffer (RG=velocity XY packed to [0,1])
+ 
+ sampler2D currentTex : register(s0);
+ sampler2D prevTex    : register(s1);
++sampler2D velocityTex : register(s2);
+ 
+ uniform float4 params : register(c0); // x=blendStrength, y=motionScale
+ uniform float4 screenSize : register(c1);
++uniform float4 motionParams : register(c2); // x=velocity, y=rotation, z=tanFovX, w=tanFovY
++uniform float4 histParams : register(c3); // x=near, y=far, z=maxHistClamp, w=velToPx
+ 
+ struct PS_INPUT
+ {
+@@ -35,10 +45,16 @@ float4 main(PS_INPUT IN) : COLOR
+     float3 current = tex2D(currentTex, tex).rgb;
+     float3 prev = tex2D(prevTex, tex).rgb;
+     
++    // Sample velocity buffer for velocity-magnitude-driven motion signal
++    float2 velVec = tex2D(velocityTex, tex).rg * 2.0 - 1.0;
++    float velMag = length(velVec);
++    bool hasVel = histParams.w > 0.0;
++    
+     // Calculate motion based on luminance difference
+     float lumaCurrent = Luma(current);
+     float lumaPrev = Luma(prev);
+-    float motion = abs(lumaCurrent - lumaPrev) * params.y;
++    float lumaDiff = abs(lumaCurrent - lumaPrev) * params.y;
++    float motion = hasVel ? max(lumaDiff, saturate(velMag * 8.0) * params.y) : lumaDiff;
+     
+     // Clamp motion to [0, 1]
+     motion = saturate(motion);
+@@ -55,21 +71,74 @@ float4 main(PS_INPUT IN) : COLOR
+     float3 prevW = tex2D(prevTex, tex + float2(-pixel.x, 0)).rgb;
+     
+     // Calculate motion at neighbors
+-    float motionN = abs(Luma(currentN) - Luma(prevN)) * params.y;
+-    float motionS = abs(Luma(currentS) - Luma(prevS)) * params.y;
+-    float motionE = abs(Luma(currentE) - Luma(prevE)) * params.y;
+-    float motionW = abs(Luma(currentW) - Luma(prevW)) * params.y;
++    float lumaDiffN = abs(Luma(currentN) - Luma(prevN)) * params.y;
++    float lumaDiffS = abs(Luma(currentS) - Luma(prevS)) * params.y;
++    float lumaDiffE = abs(Luma(currentE) - Luma(prevE)) * params.y;
++    float lumaDiffW = abs(Luma(currentW) - Luma(prevW)) * params.y;
++    
++    float motionN = lumaDiffN;
++    float motionS = lumaDiffS;
++    float motionE = lumaDiffE;
++    float motionW = lumaDiffW;
++    
++    if (hasVel)
++    {
++        float2 velVecN = tex2D(velocityTex, tex + float2(0, -pixel.y)).rg * 2.0 - 1.0;
++        float2 velVecS = tex2D(velocityTex, tex + float2(0, pixel.y)).rg * 2.0 - 1.0;
++        float2 velVecE = tex2D(velocityTex, tex + float2(pixel.x, 0)).rg * 2.0 - 1.0;
++        float2 velVecW = tex2D(velocityTex, tex + float2(-pixel.x, 0)).rg * 2.0 - 1.0;
++        
++        motionN = max(lumaDiffN, saturate(length(velVecN) * 8.0) * params.y);
++        motionS = max(lumaDiffS, saturate(length(velVecS) * 8.0) * params.y);
++        motionE = max(lumaDiffE, saturate(length(velVecE) * 8.0) * params.y);
++        motionW = max(lumaDiffW, saturate(length(velVecW) * 8.0) * params.y);
++    }
+     
+     // Average motion in neighborhood
+     float avgMotion = (motion + motionN + motionS + motionE + motionW) * 0.2;
+     avgMotion = saturate(avgMotion);
+     
+-    // Blend factor: more motion = more current frame (less ghosting)
+-    // Less motion = more previous frame (temporal stability)
+-    float blendFactor = lerp(params.x, 1.0, avgMotion);
++    // ---- Cloud-shadow-style exponential accumulation ----
++    // Linear blend factor from params.x (high history) up to (1.0 - params.x)
++    // When avgMotion=0: blendFactor = params.x (e.g. 0.1 = 90% history, slow accumulation)
++    // When avgMotion=1: blendFactor = 1.0 - params.x (e.g. 0.9 = 10% history, still smooth)
++    // NEVER fully discards history at any motion value.
++    float blendFactor = params.x + avgMotion * (1.0 - 2.0 * params.x);
+     
+-    // Blend current and previous frame
+-    float3 result = lerp(prev, current, blendFactor);
++    // Soft power curve: biases toward more history when motion is moderate
++    // Low motion: barely moves from params.x (long accumulation)
++    // High motion: gently pushes up but never reaches 1.0 (no hard cut)
++    blendFactor = max(blendFactor, params.x);
++    blendFactor = 1.0 - pow(1.0 - blendFactor, 1.5);
++    
++    // Clamp: always keep at least params.x fraction of current, and at most
++    // histParams.z (maxHistClamp, 0.9) — never below 10% history even at max motion.
++    float minBlend = params.x;
++    float maxBlend = histParams.z;
++    blendFactor = clamp(blendFactor, minBlend, maxBlend);
++
++    // ---- Velocity-driven temporal weight (c2 = velocity, rotation, tanFovX, tanFovY) ----
++    // Real-lens-style motion softness: camera motion raises the current-frame
++    // fraction (less ghosting) while screen edges keep more history (softer,
++    // like lens edge softness). FOV-normalized via tanFov so the radial
++    // falloff is angular, not resolution-dependent. No luminance change,
++    // no vignette darkening.
++    float vel = saturate(motionParams.x + motionParams.y);
++    float2 ndc = (tex - 0.5) * 2.0;
++    float2 ang = ndc * float2(motionParams.z, motionParams.w);
++    float radial = saturate(length(ang));
++    float velScale = 1.0 + 0.6 * vel;             // more current when moving
++    float edgeScale = 1.0 - 0.35 * radial * vel;  // edges keep more history
++    blendFactor = clamp(blendFactor * velScale * edgeScale, minBlend, maxBlend);
++
++    // Reproject history using the velocity buffer (s2): sample the previous
++    // frame at the position this pixel occupied last frame. velToPx (c3.w) is
++    // 0 when no velocity buffer is bound, so the sample stays unshifted.
++    float2 velUV = (tex2D(velocityTex, tex).rg * 2.0 - 1.0) * histParams.w;
++    float3 hist = tex2D(prevTex, tex - velUV);
++
++    // Blend current and reprojected history
++    float3 result = lerp(hist, current, blendFactor);
+     
+     return float4(result, 1.0);
+-}
++}
+\ No newline at end of file
+diff --git a/shaders/ps/SSAO.hlsl b/shaders/ps/SSAO.hlsl
+index d2702d9..e994de7 100644
+--- a/shaders/ps/SSAO.hlsl
++++ b/shaders/ps/SSAO.hlsl
+@@ -2,6 +2,18 @@
+ // Compiled via /E main -> SSAO.cso
+ // Uses depth buffer + normal buffer for hemisphere-oriented ambient occlusion
+ // Based on Alex Tardif's SSAO (https://alextardif.com/SSAO.html)
++//
++// Output contract (black-SSAO fixes):
++//   Greyscale AO, WHITE = no occlusion. The C++ composite multiplies the
++//   scene by this texture (Photoshop multiply: final = scene * ao). Every
++//   invalid input fails OPEN to white — SSAO must degrade to "off", never
++//   black:
++//     - depth >= 1.0 (sky) or <= 1e-6 (never-written INTZ) -> white
++//     - garbage/missing normal buffer -> depth-derivative fallback
++//     - degenerate fallback (zero-length cross) -> white
++//     - occlusion saturate()d before pow(): pow(negative) = NaN in SM3.0,
++//       NaN renders as black through the multiply composite (was the
++//       primary cause of the fully-black SSAO buffer)
+ 
+ uniform sampler2D depthTexture : register(s0);
+ uniform sampler2D randomTexture : register(s1);
+@@ -25,11 +37,18 @@ float3 GetViewPos(float2 texCoord, float depth)
+     return float3(viewXY, viewZ);
+ }
+ 
+-float3 GetNormal(float2 texCoord)
++// Exact inverse of GetViewPos: view-space position -> screen UV.
++// GetViewPos does: ndc = uv*2-1; ndc.y = -ndc.y; viewXY = ndc * viewZ * projInfo.xy
++// so the reverse must divide by projInfo.xy AND un-flip y. The old code did
++// neither (plain samplePos.xy / samplePos.z), so every occlusion sample was
++// fetched from a mirrored, projection-scaled wrong texel — garbage occlusion
++// everywhere (the other primary cause of the black AO buffer).
++float2 ProjectToUV(float3 viewPos)
+ {
+-    float3 normal = tex2D(normalTexture, texCoord).rgb;
+-    // Decode from [0,1] back to [-1,1]
+-    return normal * 2.0 - 1.0;
++    float invZ = 1.0 / max(viewPos.z, 1e-7);
++    float nx = viewPos.x * invZ / max(projInfo.x, 1e-7);
++    float ny = viewPos.y * invZ / max(projInfo.y, 1e-7);
++    return float2(nx * 0.5 + 0.5, 0.5 - ny * 0.5);
+ }
+ 
+ float3x3 BuildTBN(float3 normal, float2 texCoord, float2 noiseScale)
+@@ -44,17 +63,32 @@ float4 main(PS_INPUT IN) : COLOR
+ {
+     float centerDepth = tex2D(depthTexture, IN.texCoord).r;
+ 
+-    if (centerDepth >= 1.0)
++    // Fail-open: sky (>=1.0) and never-written depth (<=1e-6, garbage INTZ
++    // rows below/around the real Z) both return white instead of feeding
++    // GetViewPos bad values that produced wild occlusion.
++    if (centerDepth >= 1.0 || centerDepth <= 1e-6)
+         return float4(1, 1, 1, 1);
+ 
+     float3 centerPos = GetViewPos(IN.texCoord, centerDepth);
+ 
+-    // Get normal from buffer (oriented hemisphere)
+-    float3 normal = GetNormal(IN.texCoord);
++    // Normal from buffer, decoded from [0,1] to [-1,1]. Valid data is
++    // unit-length (NormalBuffer.hlsl writes n*0.5+0.5 of a normalized
++    // view-space normal; sky = (0,0,1)). A NULL/unbound texture samples as
++    // black -> decodes to (-1,-1,-1), length 1.73 — the old `len < 0.5`
++    // check PASSED that garbage, and the un-normalized dot product let
++    // occlusion go negative -> pow(negative) = NaN -> black frame. Accept
++    // only a sane unit-length window (normalize), else reconstruct from
++    // depth derivatives.
++    float3 normal = tex2D(normalTexture, IN.texCoord).rgb * 2.0 - 1.0;
+     float normalLen = length(normal);
+-    if(normalLen < 0.5){
+-        // Normal buffer not available — decode D3D9 NULL texture (0,0,0,0) gives (-1,-1,-1)
+-        // or genuinely small normal. Reconstruct from depth as fallback.
++    if (normalLen >= 0.5 && normalLen <= 1.5)
++    {
++        normal /= normalLen;
++    }
++    else
++    {
++        // Normal buffer not available — reconstruct from depth (5-tap cross,
++        // same bilateral pair selection as NormalBuffer.hlsl).
+         float2 texel = screenSize.zw;
+         float dc = centerDepth;
+         float dl = tex2D(depthTexture, IN.texCoord - float2(texel.x, 0)).r;
+@@ -72,7 +106,12 @@ float4 main(PS_INPUT IN) : COLOR
+         float3 dy2 = pc - pu;
+         float3 dx = (abs(dx1.z) < abs(dx2.z)) ? dx1 : dx2;
+         float3 dy = (abs(dy1.z) < abs(dy2.z)) ? dy1 : dy2;
+-        normal = normalize(cross(dx, dy) + 1e-7);
++        float3 fn = cross(dx, dy);
++        float flen = length(fn);
++        // Degenerate (flat surface / equal taps) — fail open white
++        if (flen < 1e-7)
++            return float4(1, 1, 1, 1);
++        normal = fn / flen;
+     }
+ 
+     float2 noiseScale = ssaoParams.z * screenSize.xy;
+@@ -102,27 +141,42 @@ float4 main(PS_INPUT IN) : COLOR
+     for (int i = 0; i < 16; ++i)
+     {
+         float3 samplePos = centerPos + kernel[i];
++        if (samplePos.z <= 1e-7)
++            continue;
+ 
+-        // Project sample position to screen space
+-        float2 sampleCoord = samplePos.xy / samplePos.z;
+-        sampleCoord = (sampleCoord + 1.0) * 0.5;
++        // Project the kernel-lifted sample to screen space (exact GetViewPos
++        // inverse — see ProjectToUV)
++        float2 sampleCoord = ProjectToUV(samplePos);
+ 
+         if (sampleCoord.x >= 0.0 && sampleCoord.x <= 1.0 &&
+             sampleCoord.y >= 0.0 && sampleCoord.y <= 1.0)
+         {
+             float sampleDepth = tex2D(depthTexture, sampleCoord).r;
++            // Invalid/sky depth is not an occluder — skip it (old code let
++            // depth=0 garbage occlude whole screen regions)
++            if (sampleDepth <= 1e-6 || sampleDepth >= 1.0)
++                continue;
+             float3 sampleViewPos = GetViewPos(sampleCoord, sampleDepth);
+ 
+             // Range check and angle-aware occlusion
+             float diff = length(sampleViewPos - centerPos);
+             float rangeCheck = smoothstep(radius, 0.0, diff);
+-            float nDotS = max(dot(normal, normalize(samplePos - centerPos)), 0.0);
+-            occlusion += rangeCheck * step(sampleViewPos.z, centerPos.z) * nDotS;
++            float3 sdir = samplePos - centerPos;
++            float slen = length(sdir);
++            // Guard normalize(): a zero-length kernel direction is NaN in SM3.0
++            float nDotS = slen > 1e-7 ? max(dot(normal, sdir / slen), 0.0) : 0.0;
++            // Compare against the kernel-LIFTED point (hemisphere test), not the
++            // surface point: kernel[i] lifts the sample along the normal, so
++            // using centerPos.z over-occluded on tilted surfaces.
++            occlusion += rangeCheck * step(sampleViewPos.z, samplePos.z) * nDotS;
+         }
+     }
+ 
+-    occlusion = 1.0 - (occlusion / 16.0);
+-    occlusion = pow(occlusion, power);
++    // Each term is in [0,1] (rangeCheck, step, nDotS), but saturate anyway —
++    // a negative base makes pow() NaN in SM3.0 and NaN reads black through
++    // the multiply composite.
++    occlusion = saturate(1.0 - (occlusion / 16.0));
++    occlusion = pow(occlusion, max(power, 1e-3));
+ 
+     return float4(occlusion, occlusion, occlusion, 1.0);
+ }
+diff --git a/shaders/ps/SSAO_Temporal.hlsl b/shaders/ps/SSAO_Temporal.hlsl
+index 3a9452f..26644b3 100644
+--- a/shaders/ps/SSAO_Temporal.hlsl
++++ b/shaders/ps/SSAO_Temporal.hlsl
+@@ -21,10 +21,13 @@ uniform sampler2D noiseTexture   : register(s1);
+ uniform sampler2D normalTexture  : register(s2);
+ uniform sampler2D velocityTexture : register(s3);
+ uniform sampler2D historyTexture : register(s4);
++uniform sampler2D prevDepthTexture : register(s5);
++uniform sampler2D prevNormalTexture : register(s6);
+ 
+ uniform float4 ssaoParams : register(c0);  // x=radius, y=power, z=noiseScale, w=temporalBlend
+ uniform float4 screenSize : register(c1);  // x=quarterW, y=quarterH, z=1/quarterW, w=1/quarterH
+ uniform float4 projInfo   : register(c2);  // recipViewWindow, -n*f/(f-n), f/(f-n)
++uniform float4 histFlags  : register(c4);  // x=prevDepthAvail, y=disocclusionThreshold, z=prevNormalAvail, w=0
+ 
+ struct PS_INPUT
+ {
+@@ -38,11 +41,29 @@ float3 GetViewPos(float2 texCoord, float depth)
+ {
+     float2 ndc = texCoord * 2.0 - 1.0;
+     ndc.y = -ndc.y;
+-    float viewZ = projInfo.z / (depth - projInfo.w);
++    // denom = depth - f/(f-n) is ALWAYS negative for on-screen depths (see
++    // SSAO.hlsl). The old max(denom, 1e-7) clamped it to +eps and produced
++    // viewZ ~ -1e9 garbage everywhere -> broken/blank temporal AO. Guard by
++    // MAGNITUDE only, preserving the sign.
++    float denom = depth - projInfo.w;
++    if(abs(denom) < 1e-9)
++        denom = denom < 0.0 ? -1e-9 : 1e-9;
++    float viewZ = projInfo.z / denom;
+     float2 viewXY = ndc * viewZ * projInfo.xy;
+     return float3(viewXY, viewZ);
+ }
+ 
++// Exact inverse of GetViewPos (same corrected math as SSAO.hlsl): divide by
++// projInfo.xy AND un-flip y. The old samplePos.xy/samplePos.z here fetched
++// every occlusion sample from a mirrored, projection-scaled wrong texel.
++float2 ProjectToUV(float3 viewPos)
++{
++    float invZ = 1.0 / max(viewPos.z, 1e-7);
++    float nx = viewPos.x * invZ / max(projInfo.x, 1e-7);
++    float ny = viewPos.y * invZ / max(projInfo.y, 1e-7);
++    return float2(nx * 0.5 + 0.5, 0.5 - ny * 0.5);
++}
++
+ // ---------------------------------------------------------------------------
+ // Decode normal from [0,1] -> [-1,1]
+ // ---------------------------------------------------------------------------
+@@ -87,7 +108,11 @@ float3 ReconstructNormalFromDepth(float2 texCoord)
+ // ---------------------------------------------------------------------------
+ float3x3 BuildTBN(float3 normal, float2 texCoord)
+ {
+-    float noiseScale = ssaoParams.z;
++    // Must tile like SSAO.hlsl: ssaoParams.z = 4/w, needs * screenSize.xy
++    // to become ~4 tiles across the screen. The old scalar multiply sampled
++    // a 0.002-wide UV window = ONE noise texel for the whole frame ->
++    // constant TBN orientation everywhere (bias/blank AO).
++    float2 noiseScale = ssaoParams.z * screenSize.xy;
+     float3 randVec = tex2D(noiseTexture, texCoord * noiseScale).rgb * 2.0 - 1.0;
+     float3 tangent = normalize(randVec - normal * dot(randVec, normal));
+     float3 bitangent = cross(normal, tangent);
+@@ -101,8 +126,8 @@ float4 main(PS_INPUT IN) : COLOR
+ {
+     float centerDepth = tex2D(depthTexture, IN.texCoord).r;
+ 
+-    // Sky pixel — output fully unoccluded
+-    if (centerDepth >= 0.999)
++    // Sky pixel / never-written INTZ (garbage rows) — output unoccluded white
++    if (centerDepth >= 0.999 || centerDepth <= 1e-6)
+         return float4(1.0, 1.0, 0.0, 1.0);
+ 
+     float3 centerPos = GetViewPos(IN.texCoord, centerDepth);
+@@ -120,7 +145,7 @@ float4 main(PS_INPUT IN) : COLOR
+     float occlusion = 0.0;
+     float radius = ssaoParams.x;
+     float power = ssaoParams.y;
+-    float noiseScale = ssaoParams.z;
++    float2 noiseScale = ssaoParams.z * screenSize.xy; // same tiling as BuildTBN
+ 
+     // --- 16-sample hemisphere kernel ---
+     float3 rand = tex2D(noiseTexture, IN.texCoord * noiseScale).rgb * 2.0 - 1.0;
+@@ -138,29 +163,39 @@ float4 main(PS_INPUT IN) : COLOR
+ 
+         float3 samplePos = centerPos + kernelSample;
+ 
+-        // Project to screen space
+-        float2 sampleCoord = samplePos.xy / samplePos.z;
+-        sampleCoord = (sampleCoord + 1.0) * 0.5;
++        // Project to screen space (exact GetViewPos inverse — see ProjectToUV)
++        float2 sampleCoord = ProjectToUV(samplePos);
+ 
+         if (sampleCoord.x >= 0.0 && sampleCoord.x <= 1.0 &&
+             sampleCoord.y >= 0.0 && sampleCoord.y <= 1.0)
+         {
+             float sampleDepth = tex2D(depthTexture, sampleCoord).r;
++            // Invalid/sky depth is not an occluder (parity with SSAO.hlsl)
++            if (sampleDepth <= 1e-6 || sampleDepth >= 1.0)
++                continue;
+             float3 sampleViewPos = GetViewPos(sampleCoord, sampleDepth);
+ 
+             // Range check and angle-aware occlusion
+             float diff = length(sampleViewPos - centerPos);
+             float rangeCheck = smoothstep(radius, 0.0, diff);  // FIXED: inverted
+-            float nDotS = max(dot(normal, normalize(samplePos - centerPos)), 0.0);
+-            occlusion += rangeCheck * step(sampleViewPos.z, centerPos.z) * nDotS;
++            // Guard normalize(): zero-length kernel direction = NaN in SM3.0
++            // (NaN propagates black through the multiply composite).
++            float3 sdir = samplePos - centerPos;
++            float slen = length(sdir);
++            float nDotS = slen > 1e-7 ? max(dot(normal, sdir / slen), 0.0) : 0.0;
++            // Compare against the kernel-LIFTED point (hemisphere test),
++            // matching SSAO.hlsl — centerPos over-occludes on tilted surfaces.
++            occlusion += rangeCheck * step(sampleViewPos.z, samplePos.z) * nDotS;
+         }
+ 
+         // Advance noise for next sample
+         rand = tex2D(noiseTexture, float2(i * 0.1, 0.0)).rgb * 2.0 - 1.0;
+     }
+ 
+-    occlusion = 1.0 - (occlusion / 16.0);
+-    occlusion = pow(occlusion, power);
++    // saturate BEFORE pow: a negative/NaN base makes pow() NaN in SM3.0 and
++    // NaN reads black through the multiply composite.
++    occlusion = saturate(1.0 - (occlusion / 16.0));
++    occlusion = pow(occlusion, max(power, 1e-3));
+ 
+     // --- Temporal reprojection ---
+     float2 velocity = tex2D(velocityTexture, IN.texCoord).rg;
+@@ -189,8 +224,50 @@ float4 main(PS_INPUT IN) : COLOR
+         confidence = 1.0 - smoothstep(0.001, 0.05, depthDiff);
+         confidence *= history.a;  // multiply by history confidence
+ 
++        // ---- T5: Depth-aware disocclusion using previous-frame depth (s5) ----
++        // Gate on histFlags.x (prevDepthAvail)
++        if (histFlags.x > 0.5)
++        {
++            float prevFrameDepth = tex2D(prevDepthTexture, prevUV).r;
++            // Linearize both depths with the signed denominator guard
++            // (the old max(denom, 1e-7) inverted the sign -> garbage delta
++            // -> confidence killed everywhere -> history behaved randomly).
++            float dcDenom = centerDepth - projInfo.w;
++            if(abs(dcDenom) < 1e-9) dcDenom = dcDenom < 0.0 ? -1e-9 : 1e-9;
++            float pvDenom = prevFrameDepth - projInfo.w;
++            if(abs(pvDenom) < 1e-9) pvDenom = pvDenom < 0.0 ? -1e-9 : 1e-9;
++            float curViewZ  = projInfo.z / dcDenom;
++            float prevViewZ = projInfo.z / pvDenom;
++            float depthDelta = abs(curViewZ - prevViewZ);
++            // Normalize by current viewZ with epsilon guard
++            float normDepthDelta = depthDelta / max(abs(curViewZ), 1e-7);
++            // If disoccluded (depth jump exceeds threshold), push blend toward current frame
++            if (normDepthDelta > histFlags.y)
++            {
++                confidence = 0.0;
++            }
++        }
++
++        // ---- T7: Normal history rejection using previous-frame normal (s6) ----
++        // Gate on histFlags.z (prevNormalAvail)
++        if (histFlags.z > 0.5)
++        {
++            float3 prevNormal = tex2D(prevNormalTexture, prevUV).rgb * 2.0 - 1.0;
++            float normalDiff = 1.0 - saturate(dot(normal, prevNormal));
++            if (normalDiff > 0.5)
++            {
++                confidence *= 0.25;  // heavily reduce history weight
++            }
++        }
++
++        // ---- Cloud-shadow-style exponential history blend ----
++        // NO confidence floor: confidence must be able to reach 0 on hard
++        // disocclusion (helicopter blades, camera whipping past geometry).
++        // The old max(confidence, 0.1) kept ~10% stale history every frame
++        // and left ghost trails behind moving cutouts.
+         float temporalBlend = ssaoParams.w;
+-        occlusion = lerp(occlusion, historyOcclusion, temporalBlend * confidence);
++        float confidenceWeight = confidence;
++        occlusion = lerp(occlusion, historyOcclusion, temporalBlend * confidenceWeight);
+     }
+ 
+     // Clamp output
+diff --git a/shaders/ps/SSAO_Upsample.hlsl b/shaders/ps/SSAO_Upsample.hlsl
+index 559295e..3c63c78 100644
+--- a/shaders/ps/SSAO_Upsample.hlsl
++++ b/shaders/ps/SSAO_Upsample.hlsl
+@@ -88,5 +88,13 @@ float4 main(PS_INPUT IN) : COLOR
+     float upsampledOcclusion = totalOcclusion / max(totalWeight, 1e-7);
+     float upsampledConfidence = totalConfidence / max(totalWeight, 1e-7);
+ 
+-    return float4(upsampledOcclusion, upsampledConfidence, 0.0, 1.0);
++    // GRAYSCALE RGB — the C++ composite multiplies scene RGB by this texture
++    // (Photoshop multiply). The old (occ, conf, 0.0, 1.0) output zeroed the
++    // blue channel of the whole frame on every composite and dimmed green by
++    // confidence — that was the "full black screen with SSAO on" on the
++    // Overhaul path (ValidateSSAOOutput only checks R, so the fail-open gate
++    // passed). Confidence goes to alpha (unread downstream); any consumer of
++    // G before this stage (the blur) is already done.
++    return float4(upsampledOcclusion, upsampledOcclusion, upsampledOcclusion,
++                  upsampledConfidence);
+ }
+diff --git a/shaders/ps/TonemapPass.hlsl b/shaders/ps/TonemapPass.hlsl
+index 5aac046..5dd74d5 100644
+--- a/shaders/ps/TonemapPass.hlsl
++++ b/shaders/ps/TonemapPass.hlsl
+@@ -7,21 +7,35 @@
+ //
+ // Reads graded linear HDR from pRasterFrontBuffer, outputs gamma-corrected LDR.
+ //
+-// c5 = tonemapParams (timecycle-driven):
+-//   x = exposure (brightness slider × sceneLuma × carcols × sun dampening)
+-//   y = toeStrength (0.05-0.25, driven by sceneLuma + timecycle shadowStrength)
+-//   z = sceneLuma (ambient + directional luminance from timecycle, 0-1)
+-//   w = flags (bit0=isInterior, bit1=isCutscene)
++// c5 = tonemapParams (timecycle COLOUR + exposure bias):
++//   x = exposure bias (brightness slider × carcols × sun dampening × garage dampen)
++//   y = toeStrength (0.06-0.30, night~0.10 for shadow lift, midday~0.17 solid blacks)
++//   z = timecycle sceneLuma (fallback when auto-exposure is off)
++//   w = flags (1.0 = auto-exposure ON -> brightness taken from the rendered frame)
+ //
+ // c6 = gradeParams (fully timecycle-driven from CColourSet):
+ //   x = brightness (0.03-0.07, from timecycle lightsOnGroundBrightness)
+ //   y = contrast (1.15-1.40, from timecycle shadowStrength × fogStart)
+ //   z = lift (0.00-0.025, from timecycle cloudAlpha + fogStart)
+ //   w = curves blend (0.25-0.50, from timecycle sceneLuma)
++//
++// c7 = blackLiftParams:
++//   x = blackLift (0.0-0.05, sRGB black-level lift to preserve shadow detail)
++//   y = minExposure (auto-exposure clamp low, [-0.5..0.5]; negative = darkening)
++//   z = maxExposure (auto-exposure clamp high, [-0.5..1.0])
++//   w = keyStrength (0 = pure timecycle exposure, 1 = full frame-adaptive)
++//
++// c8 = curveParams (user pivot curve, applied at the OUTPUT):
++//   x = Curve Intensity Lows  [-1..1], default 0 (0 = identity)
++//   y = Curve Intensity Highs [-1..1], default 0 (0 = identity)
++//   z = Curve Mid Point       [0..1],  default 0.5 (pivot)
+ 
+ uniform sampler2D tex : register(s0);
++uniform sampler2D lumTex : register(s1);
+ uniform float4 tonemapParams : register(c5);
+ uniform float4 gradeParams : register(c6);
++uniform float4 blackLiftParams : register(c7);
++uniform float4 curveParams : register(c8);
+ 
+ struct PS_INPUT
+ {
+@@ -140,18 +154,78 @@ float3 FilmicGrading(float3 c, float sceneLuma)
+ 	return saturate(c);
+ }
+ 
++// === User pivot curve (c8) — applied at the output, Photoshop-style ===
++// Region below the mid pivot is driven by Curve Intensity Lows (negative
++// darkens shadows, positive lifts them); region above mid by Curve Intensity
++// Highs (negative pulls highlights down, positive boosts). The pivot itself
++// anchors at gain 1.0 from BOTH sides (continuity: x/m == 1 and
++// (x-m)/(x-m)==0 evaluate exactly at the pivot).
++// Implemented as a per-channel gain ramp:  out = x * gain(x).
++// Both intensities 0 => early-out in PivotCurve BEFORE any math on c, so
++// the disabled path is bit-exact passthrough (existing tuning unaffected).
++// Guarded at the mid extremes (m~0 / m~1) so the region divisions never
++// divide by zero (AGENTS division-safety rule).
++float PivotCurve1(float x)
++{
++	float lows  = curveParams.x;
++	float highs = curveParams.y;
++	float m     = saturate(curveParams.z);
++
++	// Guarded pivots: mid <= 0 => empty low region (all high region);
++	// mid >= 1 => empty high region (all low region). Division-safe forms:
++	// m~0:  gain ramps 1 -> (1+highs) across [0,1]
++	// m~1:  gain ramps (1+lows) -> 1 across [0,1]
++	if (m <= 1e-5)
++		return x * (1.0 + highs * x);
++	if (m >= 1.0 - 1e-5)
++		return x * (1.0 + lows * (1.0 - x));
++
++	if (x <= m)
++		return x * (1.0 + lows * (1.0 - x / m));       // gain: (1+lows)@0 -> 1@m
++	return x * (1.0 + highs * (x - m) / (1.0 - m));    // gain: 1@m -> (1+highs)@1
++}
++
++float3 PivotCurve(float3 c)
++{
++	// CRITICAL bit-exact identity: both intensities exactly 0.0 (the CPU
++	// clamps/defaults write exact 0.0f) => return c untouched, zero
++	// arithmetic — output is bit-identical to the pre-curve shader.
++	if (curveParams.x == 0.0 && curveParams.y == 0.0)
++		return c;
++	return float3(PivotCurve1(c.r), PivotCurve1(c.g), PivotCurve1(c.b));
++}
++
+ float4 main(PS_INPUT IN) : COLOR
+ {
+ 	float3 c = tex2D(tex, IN.texcoord0.xy);
+ 
+-	// Adaptive exposure from timecycle scene luminance
+-	c *= tonemapParams.x;
++	// === Unified exposure: timecycle supplies COLOUR, the frame supplies BRIGHTNESS ===
++	// Base bias always applies (menu brightness, carcols adapt, sun/garage dampening).
++	float exposure = tonemapParams.x;
++	float sceneLuma = tonemapParams.z;
++	if (tonemapParams.w >= 0.5)
++	{
++		// CryEngine-style auto-exposure (mode 2): scene key from measured luminance.
++		float lum = max(tex2D(lumTex, float2(0.5, 0.5)).r, 1e-4);
++		float key = 1.03 - 2.0 / (2.0 + log2(lum + 1.0));
++		float autoExp = clamp(key / lum, blackLiftParams.y, blackLiftParams.z);
++		exposure *= lerp(1.0, autoExp, saturate(blackLiftParams.w));
++		// Grading intensity follows the measured frame, keeping day/night consistent.
++		sceneLuma = saturate(lum * 2.0);
++	}
++
++	c *= exposure;
+ 
+ 	// Pre-compress extreme highlights so filmic tonemap can spread them
+ 	c = SoftKnee(c);
+ 
+-	// Adaptive Hable/Uncharted 2 filmic tonemap (time-of-day toe strength)
+-	c = FilmicTonemap(c, tonemapParams.y);
++	// Division-safety guard for NEGATIVE exposure (min/max exposure ranges
++	// now allow -0.5 for deliberate darkening): c*exposure < 0 would hit the
++	// Hable denominator's real roots (x ≈ -0.21 / -1.15 for D in [0.18,0.55])
++	// => Inf/NaN pixels. Clamping negatives to 0 maps them cleanly to black
++	// (deliberate darkening). max(x,0) is bit-exact for all x >= 0, so the
++	// normal (non-negative) path is provably unchanged.
++	c = FilmicTonemap(max(c, 0.0), tonemapParams.y);
+ 
+ 	// Exact sRGB gamma encode
+ 	c = saturate(LinearToSRGB(c));
+@@ -164,5 +238,13 @@ float4 main(PS_INPUT IN) : COLOR
+ 	// highlight desaturation — matches Xbox SA press kit rendering intent
+ 	c = FilmicGrading(c, tonemapParams.z);
+ 
++	// Black-level lift: preserve deep shadow detail without a gray veil.
++	// Small constant (0.015-0.02) only affects near-black; midtones untouched.
++	c = c * (1.0f - blackLiftParams.x) + blackLiftParams.x;
++
++	// User pivot curve — final OUTPUT stage (after black lift). Identity
++	// (bit-exact passthrough) when both intensities are 0 (the default).
++	c = PivotCurve(c);
++
+ 	return float4(c, 1.0f);
+ }
+diff --git a/shaders/ps/VehiclePBR_Modern.hlsl b/shaders/ps/VehiclePBR_Modern.hlsl
+index b938215..4c7c3a7 100644
+--- a/shaders/ps/VehiclePBR_Modern.hlsl
++++ b/shaders/ps/VehiclePBR_Modern.hlsl
+@@ -31,24 +31,76 @@ float4 lightCol[6] : register(c6);
+ float3 directDir   : register(c12);
+ float3 lightDir[6] : register(c13);
+ float4 matCol      : register(c19);
+-float4 pbrParams   : register(c22); // {glossiness, specular, specTint, envFresnel}
++float4 pbrParams   : register(c22); // {glossiness, specular, specTint, metallicness}
+ float4 paintNoise  : register(c23); // x=wheel, y=noiseScale, z=edgeBlend
+ float4 ambientColor : register(c24); // xyz=ambient rgb from timecycle, w=normalBuf enable (0/1)
+ float3 viewRight    : register(c25); // view matrix row 0 (world→view rotation)
+ float3 viewUp       : register(c26); // view matrix row 1
+ float3 viewFwd      : register(c27); // view matrix row 2
+ float4 skyParams    : register(c28); // xyz=skyTop color (0-1), w=skyReflect strength
++float4 screenSize   : register(c29); // (screenW, screenH, 1/screenW, 1/screenH) — screen UV for normal-buffer sampling
+ 
+ // Forward+ clustered lights
+ sampler2D clusterTex : register(s5);   // 128x128 RGBA8 tile light index texture
+-float4 clusterParams : register(c45);  // (gridOffsetX, gridOffsetZ, tileSize, lightCount)
+-float4 clusterLightPos[8] : register(c29);  // (pos.x, pos.y, pos.z, radius) per light
+-float4 clusterLightCol[8] : register(c37);  // (col.r*intensity, col.g*intensity, col.b*intensity, 0) per light
++float4 clusterParams : register(c45);  // (tileSize, gridW, gridH, lightCount)
++float4 layerCfg   : register(c46);  // x = vehPBRLayers layer bitmask
++// PBR BUILDING env — uploaded per mesh by the PBR cb (buildingPipe.cpp).
++// {x = enable, y = material env-map weight, z = sky reflect strength, w = 0}
++// See the env block at the end of main_building().
++float4 bldEnv     : register(c47);
++// Part A3/B: {chromeClearcoat (0.6=legacy identity), envSpecularityMult (1=identity), z, w}
++// — uploaded ONCE per CustomPipeRenderCB_Env invocation before the mesh loop
++// (vehiclePipe.cpp). c44 was VS-only (campos) repo-wide; free in every PS.
++//   .z = vehEnvStrengthMode (0/1)   .w = vehEnvGlint strength (0..1)
++// REFLECTION REGISTER CONTRACT: c44.{x,y,z,w} and c20.{y,z,w} are the only
++// vehicle-reflection config inputs of main(); the rest ride iblParams (c3),
++// fxParams (c1), layerCfg (c46) and skyParams (c28).
++float4 chromeParams : register(c44);
++float4 clusterLightPos[32] : register(c48);  // (pos.x, pos.y, pos.z, radius) per light
++float4 clusterLightCol[32] : register(c80);  // (col.r*intensity, col.g*intensity, col.b*intensity, 0) per light
++// x = sky hemisphere ambient weight (config->pbrIblAmbientWeight)
++// y = vehEnvFallback (0/1)   z = WetRoads 0..1 (CPU-gated by config->vehWetEnv)
++// w = vehEnvMask (0/1)
++// Uploaded once per Env cb; main_building only reads .x (buildingPipe.cpp:1074
++// writes a 1-float upload, so .y/.z/.w are stale-but-unread on that path).
++float4 iblAmbient : register(c20);
++
++// Universal dynamic-sky hemisphere ambient tint, shared by the vehicle and building
++// PBR paths so both sit on one ambient/IBL timeline. Samples the per-frame DynamicSky
++// capture (s3) by ELEVATION only (zenith top, horizon bottom; azimuth ignored so the
++// sun disc can't smear) and returns a MULTIPLICATIVE ratio skyCol/ambientColor centered
++// at 1.0. Modulating the surface preserves shadows (near-black stays near-black) and
++// can never lift blacks the way an additive deviation did. sky==ambient -> 1.0 -> no
++// double-ambient. iblAmbient.x (config pbrIblAmbientWeight) is the tuning knob.
++float3 SkyHemisphereTint(float3 N){
++    float2 uv = float2(0.5, saturate(N.y * 0.5 + 0.5));
++    float3 skyCol = tex2D(iblTex, uv).rgb;
++    if(dot(skyCol, skyCol) <= 1e-6) return float3(1.0, 1.0, 1.0); // guard: no-op
++    // CHROMATIC ratio only: normalize sky and ambient to UNIT LUMINANCE before dividing
++    // so a dark / near-zero timecycle ambient can never explode the magnitude (this was
++    // the bug that turned the whole frame mega-blue when ambient was ~0). Magnitude is
++    // intentionally dropped here - this is a hue tie between sky and ambient, centered
++    // at 1.0, and the clamp bounds any residual excursion. Multiplicative, never lifts
++    // blacks; sky==ambient -> 1.0.
++    const float3 LUMA = float3(0.299, 0.587, 0.114);
++    float skyL = max(dot(skyCol, LUMA), 1e-4);
++    float ambL = max(dot(ambientColor.rgb, LUMA), 1e-4);
++    float3 ratio = (skyCol / skyL) / max(ambientColor.rgb / ambL, 1e-4);
++    ratio = clamp(ratio, 0.6, 1.5);
++    return lerp(float3(1.0, 1.0, 1.0), ratio, iblAmbient.x * 0.15);
++}
+ 
+ float whiteNoise(float2 p){
+     return frac(sin(dot(p, float2(12.9898, 78.233))) * 43758.5453);
+ }
+ 
++// PBR layer toggle decode: 1 when the given bit is set in c46.x, else 0.
++// bit0=base,1=env,2=spec,3=rim,4=ibl,5=sky,6=clearcoat,7=normalbuf
++float LF(float bit){
++    float v = floor(layerCfg.x / exp2(bit));
++    return frac(v * 0.5) * 2.0;
++}
++
+ 
+ // Burley Diffuse (Disney/Crytek) — returns BRDF × NdotL (energy-conserved cosine weighting)
+ // Matches CryEngine shadeLib.cfi BurleyBRDF exactly.
+@@ -70,7 +122,7 @@ struct PS_INPUT{
+     float4 envColor    : COLOR1;
+ };
+ 
+-float4 main(PS_INPUT IN) : COLOR
++float4 main(PS_INPUT IN, float4 vpos : VPOS) : COLOR
+ {
+     float3 N = length(IN.WorldNormal) > 1e-6 ? IN.WorldNormal / length(IN.WorldNormal) : float3(0, 1, 0);
+     float3 V = length(IN.ViewDir) > 1e-6 ? IN.ViewDir / length(IN.ViewDir) : float3(0, 0, 1);
+@@ -87,18 +139,37 @@ float4 main(PS_INPUT IN) : COLOR
+ 
+     // Blend with screen-space normal (if available)
+     // ambientColor.w > 0 means normal buffer is bound and valid
+-    if(ambientColor.w > 0.5){
+-        float3 ssNormal = tex2D(normalBufTex, IN.texcoord0).rgb * 2.0 - 1.0;
+-        if(dot(ssNormal, ssNormal) > 0.25)
+-            N = normalize(lerp(N, ssNormal, 0.3));
++    if(LF(7) > 0.5 && ambientColor.w > 0.5){
++        // Sample with SCREEN UV (derived from VPOS), not diffuse UV — the normal
++        // buffer is a fullscreen half-res texture; diffuse UVs smear wrong texels
++        // across the paint.
++        float2 screenUV = vpos.xy * screenSize.zw;
++        float4 ssSample = tex2D(normalBufTex, screenUV);
++        float3 ssNormal = ssSample.rgb * 2.0 - 1.0;
++        float ssLen = length(ssNormal);
++        // Validity gate — hardened, backported verbatim from main_building
++        // (:560+), which needed exactly this fix. The old test here was
++        //   if(dot(ssNormal, ssNormal) > 0.25)
++        // which only rejects an all-zero texel: a never-cleared / stale /
++        // resolution-changed D3DPOOL_DEFAULT RT decodes to an ARBITRARY length
++        // (and the (0.5,0.5,1.0) sky marker is unit-length but is sky, not
++        // geometry) — those tilted N and drove GGX blowout + glints on the
++        // paint. NormalBuffer writes normalized normals, so valid texels decode
++        // to unit length; .a carries depth/far, so reject the sky marker there.
++        // Lerp the weight OUT instead of a binary accept.
++        float ssValid = smoothstep(0.55, 0.85, ssLen)
++                      * (1.0 - smoothstep(1.15, 1.45, ssLen))
++                      * (1.0 - step(0.99, ssSample.a));
++        if(ssValid > 0.001)
++            N = normalize(lerp(N, ssNormal / max(ssLen, 1e-7), 0.3 * ssValid));
+     }
+ 
+     // ---- PBR material properties (KHR_materials_pbrSpecularGlossiness workflow) ----
+-    // Everything is dielectric. No metalness.
++    // Everything is dielectric. No metallicness.
+     // pbrParams.x = glossiness (1=smooth/shiny, 0=rough) — PRIMARY variable
+     // pbrParams.y = specular reflectance (F0 at normal incidence, ~0.04 for dielectrics)
+     // pbrParams.z = specular color tint (0=white, 1=tinted by paint)
+-    // pbrParams.w = envFresnel
++    // pbrParams.w = metallicness (0=dielectric paint, 1=chrome/metal)
+     // glTF KHR_materials_pbrSpecularGlossiness:
+     //   α = (1 - glossiness)^2  — our D_GGX/V_SmithCorrelated square internally,
+     //   so we pass (1 - glossiness) as σ, giving α² correctly.
+@@ -106,13 +177,28 @@ float4 main(PS_INPUT IN) : COLOR
+     float glossiness  = pbrParams.x;
+     float specularF0  = pbrParams.y;
+     float specTint    = pbrParams.z;
+-    float envFresnel  = pbrParams.w;
++    // Metalness drives the env-reflection Fresnel F0 and the neutral reflection
++    // tint. 0 = paint (dielectric, F0~0.04, paint-tinted reflections); >0 = chrome
++    // / wheel metal (high F0, white mirror reflections). Set in vehiclePipe.cpp
++    // from the BRDF surface type so metallic trim reads as metal, not tinted paint.
++    float metallicness   = saturate(pbrParams.w);
+ 
+     // Wheel roughness override: reduce glossiness for wheels (tires are rough)
+     float isWheel = paintNoise.x;
+     float wheelNoise = whiteNoise(IN.texcoord0 * 47.0);
+     glossiness = lerp(glossiness, 0.85, isWheel * wheelNoise * 0.5);
+ 
++    // ---- WET ROADS (ported from main_building :550-565) ----
++    // [missing term] main_building damps the base and sharpens the surface in
++    // the rain; main() had NO wet response at all, so cars stayed dry-looking
++    // beside wet buildings. CPU folds config->vehWetEnv into PS c20.z, so this
++    // block is a no-op (c20.z == 0) whenever the toggle is off.
++    float wetRoadsVeh = saturate(iblAmbient.z);
++    if(wetRoadsVeh > 0.01){
++        baseColor *= lerp(1.0, 0.85, wetRoadsVeh);   // water absorption
++        glossiness  = lerp(glossiness, 0.9, wetRoadsVeh);
++    }
++
+     // (paintNoise.y/z = noiseScale/edgeBlend, reserved for future reflection breakup)
+ 
+     // ---- Paint tint from carcols ----
+@@ -129,14 +215,29 @@ float4 main(PS_INPUT IN) : COLOR
+     // Applying it to vertex-lit color would darken/wash out the paint.
+     float metallicFactor = saturate((specularF0 - 0.5) * 2.0);
+ 
+-    // Fresnel for specular energy split (kD not used — diffuse comes from VS vertex color)
++    // Fresnel for specular energy split (kD not used for the VS-baked directional
++    // diffuse — that is already energy-managed by the game). It IS used for the
++    // new cluster-light diffuse term further down.
+     float3 F_atNdotV = F_Schlick(NdotV, F0);
++    float3 kDv = saturate(1.0 - F_atNdotV);
++
++    // ---- Daylight sky-lift (vehicle diffuse only) ----
++    // The timecycle ambient reaching car materials is near-zero (live log:
++    // raw=(0,0,0), final=0.034), so non-sunlit faces were lit almost entirely by
++    // the baked prelight. Sample the dynamic-sky capture by elevation and apply a
++    // small MULTIPLICATIVE lift: it scales the existing paint colour, so it can
++    // never grey/wash the paint (the additive version pushed saturated colours
++    // into the tonemap's desaturating top end) and never lifts true blacks.
++    // Self-extinguishes at night, stronger on sky-facing surfaces.
++    float3 skyFill = tex2D(iblTex, float2(0.5, saturate(N.y * 0.5 + 0.5))).rgb;
++    float skyFillLuma = dot(skyFill, float3(0.299, 0.587, 0.114));
++    baseColor *= 1.0 + skyFillLuma * 0.22 * LF(4) * saturate(N.y * 0.5 + 0.5);
+ 
+     // ---- Diffuse: VS vertex color already has full game lighting ----
+     // Ambient + 7 directional lights baked into IN.color.rgb by the VS.
+     // PBR specular and env reflection layer ON TOP of game-lit base.
+     // Matches building pipe approach (main_building line 366).
+-    float3 layer1 = baseColor;
++    float3 layer1 = baseColor * LF(0);
+ 
+     // Sun direction for specular (from PS c12, same as buildings)
+     float3 sunContrib = directCol.rgb;
+@@ -145,38 +246,149 @@ float4 main(PS_INPUT IN) : COLOR
+     // ---- Environment Reflection: clearcoat Fresnel drives visibility ----
+     // Car paint has a clearcoat — env reflections visible at all angles, stronger at grazing
+     float3 R_world = reflect(-V, N);
+-    // Transform R from world space to view space — the sphere map was rendered
+-    // from the camera's viewpoint, so UVs must be computed in camera space.
++    // Env reflection strength knob. iblParams.x was the (dead) specular slot;
++    // it is now repurposed so reflection tuning needs no extra register.
++    float envIntensity = max(iblParams.x, 0.0);
++    // Strength placement [energy-consistent composite].
++    // Legacy scaled the env CONTENT by envIntensity while kr still REMOVED kr
++    // of the body, so turning the strength slider down darkened the paint by
++    // kr instead of weakening the reflection (lerp(body, dim*env, kr) =
++    // body*(1-kr) + dim*env*kr). Energy mode keeps the content at full scale
++    // and puts the knob on the Fresnel COVERAGE (kr *= intensity): bit-
++    // identical at intensity 1.0, body fully intact at low intensity.
++    // chromeParams.z carries the mode (0 = legacy). See config->vehEnvStrengthMode.
++    float envContent  = 1.2;
++    float envCoverage = 1.0;
++    if(chromeParams.z > 0.5)
++        envCoverage = saturate(envIntensity);
++    else
++        envContent = 1.2 * envIntensity;
++    // Wet roads widen the reflection band (a glassy film mirrors more of the
++    // hemisphere at every angle) — kr is saturate()'d at the composite below.
++    envCoverage *= lerp(1.0, 2.0, wetRoadsVeh);
++    // The env map is a PERSPECTIVE render from the camera's viewpoint (60m clip),
++    // so sample it by projecting the world-space reflection vector with the main
++    // camera's view window (c3.zw = tanHalfFovX/Y). Upward faces now reflect the
++    // sky (top half of the env render) and side faces reflect the world, instead
++    // of the geometrically-arbitrary patches the sphere-map formula produced.
+     float3 R_view = float3(dot(R_world, viewRight), dot(R_world, viewUp), dot(R_world, viewFwd));
+-    float3 V_view = float3(dot(V, viewRight), dot(V, viewUp), dot(V, viewFwd));
+-    float2 envReflUV = SphereEnvMapUV(R_view, V_view);
++    float rz = max(R_view.z, 0.05);
++    float2 envReflUV = saturate(float2(
++        0.5 + 0.5 * clamp(R_view.x / (rz * max(iblParams.z, 1e-7)), -1.2, 1.2),
++        0.5 - 0.5 * clamp(R_view.y / (rz * max(iblParams.w, 1e-7)), -1.2, 1.2)));
+     float3 envRefl = tex2D(envMapTex, envReflUV).rgb;
+     float3 iblSample = tex2D(iblTex, envReflUV).rgb;
++    // Content of the reflection TEXTURE, decided BEFORE the mask so a
++    // masked-to-black region reads as "the mask says no reflection here" and
++    // not as "reflectionTex failed to render".
++    float rawEnvHasContent = (dot(envRefl, envRefl) > 1e-6) ? 1.0 : 0.0;
++
++    // [missing term: reflection MASK — PS2 / Specular / Neo parity]
++    // main_ps2EnvSpecFx and main_specCarFx both modulate by maskTex (s2), and
++    // CarPipe::RenderEnvTex bakes CarReflectionMask into reflectionTex with a
++    // 0..1 screen quad (SRCBLEND=ZERO/DESTBLEND=SRCCOLOR) — but the
++    // RenderSphereReflections path that CAR_MOBILE/CAR_ENV/CAR_MODERN use never
++    // bakes it, and this cb bound s2 without ever reading it. The mask is
++    // authored in reflection-RT UV space, which is exactly envReflUV, so
++    // sampling it at the same UV reproduces the baked result (Mobile lerps
++    // against that baked RT, so this is bit-comparable to the reference path).
++    // CPU sends 0 when config->vehEnvMask is off OR reflectionMask failed to load.
++    if(iblAmbient.w > 0.5 && rawEnvHasContent > 0.5)
++        envRefl *= tex2D(maskTex, envReflUV).rgb;
++
++    // [missing term: env-source VALIDITY FALLBACK]
++    // layer2 = lerp(body, envTerm, kr) against an EMPTY reflectionTex replaced
++    // up to kr of the paint with black — the single biggest reason Modern read
++    // darker than Mobile. Only a texture with no content runs the chain
++    // env -> ibl -> sky (a masked-to-black region deliberately does NOT: that
++    // fade must stay a fade). envUsable is then measured on the FINAL source,
++    // so kr is forced to 0 wherever there is nothing to reflect — no lerp
++    // toward an empty environment, no double-darkening. Better than Mobile
++    // here, which lerps body*(1-k) against the masked black. Toggle
++    // config->vehEnvFallback: off skips the chain AND pins envUsable = 1,
++    // i.e. the exact legacy behaviour.
++    float3 envSrc = envRefl;
++    if(iblAmbient.y > 0.5 && rawEnvHasContent < 0.5){
++        envSrc = iblSample;
++        if(dot(envSrc, envSrc) <= 1e-6) envSrc = skyParams.rgb;
++    }
++    float envUsable = 1.0;
++    if(iblAmbient.y > 0.5)
++        envUsable = (dot(envSrc, envSrc) > 1e-6) ? 1.0 : 0.0;
+     // Blend env with subtle IBL tint for depth
+-    float3 iblBlend = lerp(envRefl, envRefl + iblSample * 0.08, 0.4);
++    float3 iblBlend = lerp(envSrc, envSrc + iblSample * 0.08 * LF(4), 0.4);
+     // Sky contribution: upward-facing surfaces reflect sky color from the top of the sphere map
+     float skyBlend = saturate(N.y) * skyParams.w;
+-    iblBlend = lerp(iblBlend, skyParams.rgb, skyBlend * 0.5);
+-    // Clearcoat Fresnel: carcols shininess drives roughness→env intensity mapping
+-    // High shininess (shiny paint) = strong reflections at all angles
+-    // Low shininess (matte) = roughness kills reflections faster
+-    // Replaces split-sum LUT — carcols data IS the LUT
+-    // fxParams.y = envData->GetShininess() * 8 * envShininessMult (from carcols)
+-    float clearcoatFresnel = SchlickFresnelScalar(NdotV, 0.04);
+-    float carcolsShine = saturate(fxParams.y);  // 0..1 normalized carcols shininess
+-    float roughnessResponse = lerp(1.0, 0.05, (1.0 - carcolsShine) * (1.0 - glossiness));
+-    float envMask = lerp(0.15, 0.50, clearcoatFresnel) * roughnessResponse;
+-    // Metallic paints boost env reflection — metals are inherently reflective
+-    envMask = lerp(envMask, envMask * 1.5, metallicFactor);
++    iblBlend = lerp(iblBlend, skyParams.rgb, skyBlend * 0.3 * LF(5));
++    // Universal sky tint folded into the REFLECTION/cloud layer (not the global
++    // composite): it MODULATES what the surface mirrors — cloud/sky — so it can tint
++    // without lifting blacks. (Multiplicative; shadows preserved.)
++    iblBlend *= SkyHemisphereTint(N);
++    // Clearcoat Fresnel: carcols shininess drives env gloss intensity
++    // fxParams.w = envData->GetShininess() * 8 * envShininessMult — the same carcols
++    // value the VS bakes into IN.envColor.a (which the glass shader reads).
++    // fxParams.y is envPower (≈20 default) — it now drives the SUN-GLINT
++    // exponent below (envGlint), NOT paint glossiness (c22.x) — this comment
++    // is preserved: .y must not drive gloss. It must not saturate to a flat
++    // 1.0 either: min-guarded and used only as a pow() exponent.
++    // Fresnel F0 rises from dielectric (0.04) toward the material F0 for metals,
++    // so chrome/wheel gain a strong grazing-to-normal mirror band.
++    float clearcoatFresnel = SchlickFresnelScalar(NdotV, lerp(0.04, max(specularF0, 0.04), metallicness));
++    // Part A2: widened from saturate() (which clamped every mult>1 back to 1.0
++    // — the "envShininessMult doesn't work" bug). cap 4.0 honors mult>1 while
++    // keeping ≤1 values bit-identical to the old saturate (CPU also clamps
++    // shininess to 1.0 whenever the shaped mult ≤ 1).
++    float carcolsShine = min(fxParams.w, 4.0f);  // 0..4 carcols shininess (1.0 = legacy normalized)
++    // Part B (chromeClearcoat, PS c44.x): strength of the dielectric clearcoat
++    // highlight band. Default 0.6 = legacy hardcode (identity when chromeClearcoat
++    // = 0.6). Blend by metallicness: chrome (metallicness≈1) gets the full config
++    // knob, paint stays on the legacy 0.6 so the slider at default changes nothing.
++    float ccStr = lerp(0.6, chromeParams.x, metallicness);
++    // Gloss strength: visible env reflection at all angles (0.45 base), stronger
++    // at grazing. v3 (0.10 base × 1.5 boost × 0.15 grazing weight) put face-on
++    // env at ~2% — invisible. v1 (0.25-0.8 × 2.0 × 0.5) white-washed dark paint.
++    // This sits between: ~0.2 added face-on on a 0.3 paint, ~0.6 at grazing.
+     // Paint tinting: reflection tinted by paint color at normal incidence, white at grazing.
+-    // Real paint: light passes through clearcoat, reflects off base paint, gets tinted on exit.
+-    // At grazing angles Fresnel dominates and reflection becomes white (like a mirror).
+-    float3 reflTint = lerp(matCol.rgb, float3(1,1,1), envMask * 0.6);
+-    // Multiply env by diffuse texture — preserves baked AO, dirt, panel lines.
+-    // Dark areas in texture (shadows, dirt) dim the reflection naturally.
+-    // Small floor keeps clearcoat visible even on dark/black paint.
+-    float3 envTexMod = max(diff.rgb, float3(0.05, 0.05, 0.05));
+-    float3 layer2 = iblBlend * envMask * reflTint * envTexMod;
++    // Metals reflect neutrally (white); paint reflections stay paint-tinted.
++    float3 reflTint = lerp(matCol.rgb, float3(1,1,1), max(clearcoatFresnel, metallicness));
++    // Part A1 (envPower): fxParams.y as the SUN-GLINT exponent — the reflection
++    // brightens where the mirror direction lines up with the sun; higher power =
++    // tighter/more pinpoint glint, lower = broader. Never touches paint gloss
++    // (c22.x) or carcolsShine, min-guarded ≥1 so 0 can't wash the term, and the
++    // blend only ADDS (default power≈20 → a small hot spot on sun-facing
++    // reflections; no darkening anywhere, so default output stays ~parity).
++    float envPow = max(fxParams.y, 1.0f);
++    float envGlint = pow(saturate(dot(R_world, L)), envPow);
++    float3 envTerm = iblBlend * reflTint * envContent * (1.0 + 0.5 * envGlint);
++    // Energy-conserving clearcoat blend (carcols-shade safe):
++    // paint dominates face-on (kr ~0.15), world mirrors at grazing (kr -> ~0.7+).
++    // carcols shininess widens the reflection band for shiny paints.
++    // Pure additive env (previous versions) always lifted/washed the paint.
++    float kr = saturate(clearcoatFresnel * (1.0 + 2.0 * carcolsShine) + 0.05) * LF(1);
++    kr = lerp(kr, saturate(kr * 1.5), metallicFactor);
++    // Chrome/wheel: guarantee a visible mirror band regardless of paint carcols,
++    // so metallic trim reads as metal instead of dark tinted paint.
++    kr = saturate(max(kr, metallicness * 0.55));
++    // Energy-consistent composite  F*env + (1-F)*body:
++    //   * envCoverage — the strength knob scales the FRACTION OF THE BODY the
++    //     env may replace, never the env content (chromeParams.z note above);
++    //   * envUsable   — an environment with no content replaces nothing.
++    // Toggle off (config->vehEnvFallback=0) => envUsable stays 1 => legacy.
++    kr = saturate(kr * envCoverage * envUsable);
++    float3 layer2 = lerp(layer1, envTerm, kr);
++
++    // [missing term: standalone MOBILE sun glint]
++    // main_mobileVehicle adds pow(dot(reflectV, sunDir), 10) * strength * 2
++    // * sunColor directly on top of its env lerp — texture-INDEPENDENT, so the
++    // highlight survives a dead reflectionTex (Modern's envGlint is multiplied
++    // by the env source and dies with it). Off by default
++    // (config->vehEnvGlint = 0) because Modern already carries the GGX sun lobe
++    // and envGlint; also gated by LF(2) (sun/spec layer) so the existing layer
++    // bitmask can switch it off independently.
++    if(chromeParams.w > 0.0){
++        float mobileGlint = pow(saturate(dot(R_world, L)), 10.0);
++        layer2 += reflTint * sunContrib * (mobileGlint * chromeParams.w * 2.0) * LF(2);
++    }
+ 
+     // ---- Specular: GGX/Smith for direct sun highlight ----
+     // glTF KHR_materials_pbrSpecularGlossiness: D_GGX and V_SmithCorrelated
+@@ -191,10 +403,10 @@ float4 main(PS_INPUT IN) : COLOR
+         float3 F = F_SchlickLH(LdotH, F0);
+         specTotal += D * F * Vis * NdotL_sun * sunContrib;
+         // Clearcoat specular: white dielectric highlight on top of paint
+-        float D_cc = D_GGX(NdotH, 0.05);  // very smooth clearcoat
+-        float Vis_cc = V_SmithCorrelated(NdotV, NdotL_sun, 0.05);
++        float D_cc = D_GGX(NdotH, 0.25);  // very smooth clearcoat
++        float Vis_cc = V_SmithCorrelated(NdotV, NdotL_sun, 0.25);
+         float3 F_cc = F_SchlickLH(LdotH, float3(0.04, 0.04, 0.04));  // clearcoat F0
+-        specTotal += D_cc * F_cc * Vis_cc * NdotL_sun * sunContrib * 0.6;
++        specTotal += D_cc * F_cc * Vis_cc * NdotL_sun * sunContrib * ccStr * LF(6);
+     }
+     for(int i = 0; i < 6; i++){
+         float3 Ll = -lightDir[i];
+@@ -208,17 +420,20 @@ float4 main(PS_INPUT IN) : COLOR
+             float3 F = F_SchlickLH(LdotH, F0);
+             specTotal += D * F * Vis * NdotL * lightCol[i].rgb;
+             // Clearcoat per-light
+-            float D_cc_l = D_GGX(NdotH, 0.05);
+-            float Vis_cc_l = V_SmithCorrelated(NdotV, NdotL, 0.05);
++            float D_cc_l = D_GGX(NdotH, 0.25);
++            float Vis_cc_l = V_SmithCorrelated(NdotV, NdotL, 0.25);
+             float3 F_cc_l = F_SchlickLH(LdotH, float3(0.04, 0.04, 0.04));
+-            specTotal += D_cc_l * F_cc_l * Vis_cc_l * NdotL * lightCol[i].rgb * 0.6;
++            specTotal += D_cc_l * F_cc_l * Vis_cc_l * NdotL * lightCol[i].rgb * ccStr * LF(6);
+         }
+     }
+ 
+     // ---- Clustered Point Lights (Forward+) ----
++    float3 clusterDiffuse = float3(0, 0, 0);
+     if(clusterParams.w > 0.0) {  // lightCount > 0
+-        float2 tileUV = (IN.WorldPos.xz - clusterParams.xy) / clusterParams.z;
+-        tileUV = clamp(tileUV, 0.0, 1.0);
++        // Screen-space tile: the CPU culler bins lights into a 16px screen tile
++        // grid (CullLightsToTiles). VPOS gives the current pixel; derive the
++        // same tile the CPU filled (old code used world XZ -> always corner).
++        float2 tileUV = (floor(vpos.xy / clusterParams.x) + 0.5) / float2(clusterParams.y, clusterParams.z);
+         float4 clusterSample = tex2D(clusterTex, tileUV);
+         
+         int indices[4];
+@@ -230,7 +445,7 @@ float4 main(PS_INPUT IN) : COLOR
+         [unroll] for(int ci = 0; ci < 4; ci++) {
+             if(indices[ci] <= 0) continue;
+             int li = indices[ci] - 1;  // 0-based index (0 in texture = no light)
+-            if(li < 0 || li >= 8) continue;
++            if(li < 0 || li >= 32) continue;
+             
+             float4 clPos = clusterLightPos[li];
+             float4 clCol = clusterLightCol[li];
+@@ -255,7 +470,13 @@ float4 main(PS_INPUT IN) : COLOR
+                     float Dc_cc = D_GGX(NdotHc, 0.05);
+                     float Visc_cc = V_SmithCorrelated(NdotV, NdotLc, 0.05);
+                     float3 Fc_cc = F_SchlickLH(LdotHc, float3(0.04, 0.04, 0.04));
+-                    specTotal += Dc_cc * Fc_cc * Visc_cc * NdotLc * clCol.rgb * atten * 0.6;
++                    specTotal += Dc_cc * Fc_cc * Visc_cc * NdotLc * clCol.rgb * atten * ccStr;
++                    // Diffuse from cluster lights. Vehicles accumulated ONLY specular
++                    // before this, so street lamps lit the road but left car bodies as
++                    // black silhouettes at night. Mirrors main_building's clusterDiffuse.
++                    float VdotHc = max(dot(V, Hc), 0.0);
++                    float diffc = BurleyDiffuse(NdotLc, NdotV, VdotHc, 1.0 - glossiness);
++                    clusterDiffuse += baseColor * diffc * clCol.rgb * atten * kDv / 3.14159;
+                 }
+             }
+         }
+@@ -264,14 +485,23 @@ float4 main(PS_INPUT IN) : COLOR
+     // Edge highlight: subtle Fresnel rim catches sun at grazing angles.
+     // Reduced from 0.45 — game lighting already has edge detail from VS.
+     float rimFresnel = pow(1.0 - saturate(NdotV), 2.0);
+-    float3 rimLight = sunContrib * rimFresnel * 0.10;
++    float3 rimLight = sunContrib * rimFresnel * 0.18 * LF(3);
++
++    specTotal *= 1.5 * LF(2);  // visible sun glints
++    // Part A3 (envSpecularityMult, PS c44.y): the CPU surfProps.specular mult was
++    // dead (main() never reads surfProps.y / c0.z), so the slider did nothing.
++    // Scale the final spec combine here instead — c44.y default 1.0 = identity.
++    // (Global specular scale approximation; chromeEnvBoost rides c3.x separately.)
++    specTotal *= max(chromeParams.y, 0.0f);
+ 
+     // ---- COMPOSITE ----
+     // layer1 = VS game lighting (ambient + 7 directional × matCol, matches building pipe)
+-    // layer2 = clearcoat Fresnel-driven env reflection
+-    float3 color = layer1 + layer2;
++    // layer2 = layer1 + additive env gloss (glass-style: env × intensity, added on top)
++    // specTotal and rimLight are additive on top
++    float3 color = layer2;
+     color += specTotal;                                // specular highlights (base + clearcoat)
+     color += rimLight;                                 // Fresnel rim on top of clearcoat
++    color += clusterDiffuse;                           // street-lamp diffuse (was missing)
+ 
+     // Output linear HDR — PostFX TonemapPass handles everything
+     return float4(max(color, 0.0), diff.a);
+@@ -339,7 +569,7 @@ float4 main_mobileVehicle(PS_INPUT_MOBILE IN) : COLOR
+ {
+     float4 col = tex2D(diffuseTex, IN.texcoord0) * IN.color;
+ 
+-    float2 ReflPos = normalize(IN.texcoord1.xy) * (IN.texcoord1.z * 0.5 + 0.5);
++    float2 ReflPos = (length(IN.texcoord1.xy) > 1e-6 ? normalize(IN.texcoord1.xy) : float2(0, 0)) * (IN.texcoord1.z * 0.5 + 0.5);
+     ReflPos = ReflPos * float2(0.5, -0.5) + float2(0.5, 0.5);
+     float4 ReflCol = tex2D(envMapTex, ReflPos);
+     col.rgb = lerp(col.rgb, ReflCol.rgb, fxParams.y);
+@@ -365,11 +595,18 @@ struct PS_INPUT_NORMMAP {
+ float4 main_normMapVehicle(PS_INPUT_NORMMAP IN) : COLOR
+ {
+     float4 diff = tex2D(diffuseTex, IN.texcoord0) * IN.color;
+-    float4 env = tex2D(envMapTex, IN.texcoord0);
+-    float4 color = lerp(diff, env * IN.envColor, IN.envColor.a) + diff;
++    // Compute view-space reflection vector for camera-rendered sphere map
++    float3 N = length(IN.WorldNormal) > 1e-6 ? IN.WorldNormal / length(IN.WorldNormal) : float3(0, 1, 0);
++    float3 V = float3(0, 0, 1);  // approximate view dir in view space
++    float3 R_world = reflect(-V, N);
++    float3 R_view = float3(dot(R_world, viewRight), dot(R_world, viewUp), dot(R_world, viewFwd));
++    float2 envUV = SphereEnvMapUV(R_view, V);
++    float4 env = tex2D(envMapTex, envUV);
++    // Lerp-replace: env replaces diffuse at grazing angles (clearcoat behavior)
++    float envBlend = saturate(IN.envColor.a * 0.8);
++    float3 color = lerp(diff.rgb, env.rgb * IN.envColor.rgb, envBlend);
+     color.rgb = saturate(color.rgb);
+-    color.a = diff.a;
+-    return color;
++    return float4(color.rgb, diff.a);
+ }
+ 
+ // ============================================================
+@@ -389,11 +626,15 @@ struct PS_INPUT_BUILDING {
+     float3 WorldPos    : TEXCOORD2;
+     float3 ViewDir     : TEXCOORD3;
+     float3 SunDir      : TEXCOORD4;
++    // Camera-space normal from buildingPBRVS (TEXCOORD5) — MUST match the VS
++    // output list or the halves drift and the env UV reads an undefined
++    // interpolator. Ported from GTAIVBuilding_vs' Texcoord1.
++    float3 CamNormal   : TEXCOORD5;
+     float4 color       : COLOR0;  // vertex color (day/night blend in alpha)
+     float4 dayNight    : COLOR1;  // day/night parameters
+ };
+ 
+-float4 main_building(PS_INPUT_BUILDING IN) : COLOR
++float4 main_building(PS_INPUT_BUILDING IN, float4 vpos : VPOS) : COLOR
+ {
+     // Base color from texture * vertex color
+     float4 diff = tex2D(diffuseTex, IN.texcoord0);
+@@ -429,6 +670,29 @@ float4 main_building(PS_INPUT_BUILDING IN) : COLOR
+     float3 V = length(IN.ViewDir) > 1e-6 ? IN.ViewDir / length(IN.ViewDir) : float3(0, 0, 1);
+     float3 L = length(IN.SunDir) > 1e-6 ? IN.SunDir / length(IN.SunDir) : float3(0, 0, -1);
+ 
++    // Blend with screen-space normal (if available) — mirrors vehicle main().
++    // ambientColor.w > 0.5 means the half-res normal buffer is bound and valid
++    // (buildingPipe uploads c24.w=1.0 when s4 is set). Screen UV from VPOS.
++    if(ambientColor.w > 0.5){
++        float2 screenUV = vpos.xy * screenSize.zw;
++        float4 ssSample = tex2D(normalBufTex, screenUV);
++        float3 ssNormal = ssSample.rgb * 2.0 - 1.0;
++        float ssLen = length(ssNormal);
++        // Validity gate (strengthened): NormalBuffer encodes normalized
++        // normals, so valid texels decode to unit length; stale/garbage texels
++        // (never-cleared RT, skipped refresh, resolution-change remnants)
++        // decode to arbitrary length and must NOT tilt N (GGX blowout — the
++        // "white ground patches"). The sky marker (0.5,0.5,1.0) is unit-length
++        // but carries depth-alpha 1.0 (NormalBuffer writes depth/far in alpha),
++        // so reject it too — one-frame-stale sky must not blend where geometry
++        // now is. Lerp-OUT invalid (weight -> 0) instead of a binary accept.
++        float ssValid = smoothstep(0.55, 0.85, ssLen)
++                      * (1.0 - smoothstep(1.15, 1.45, ssLen))
++                      * (1.0 - step(0.99, ssSample.a));
++        if(ssValid > 0.001)
++            N = normalize(lerp(N, ssNormal / max(ssLen, 1e-7), 0.3 * ssValid));
++    }
++
+     // Core PBR vectors
+     float NdotV = max(dot(N, V), 0.0);
+     float NdotL = max(dot(N, L), 0.0);
+@@ -452,7 +716,7 @@ float4 main_building(PS_INPUT_BUILDING IN) : COLOR
+     float3 sunContrib = directCol.rgb;
+ 
+     // Diffuse lighting (Burley)
+-    float3 H = normalize(V + L);
++    float3 H = length(V + L) > 1e-6 ? normalize(V + L) : float3(0, 0, 1);
+     float VdotH = max(dot(V, H), 0.0);
+     float diffuse = BurleyDiffuse(NdotL, NdotV, VdotH, roughness);
+ 
+@@ -469,7 +733,7 @@ float4 main_building(PS_INPUT_BUILDING IN) : COLOR
+         float3 Ll = -lightDir[i];
+         float NdotL_l = max(dot(N, Ll), 0.0);
+         if(NdotL_l > 0.0){
+-            float3 Hl = normalize(V + Ll);
++            float3 Hl = length(V + Ll) > 1e-6 ? normalize(V + Ll) : float3(0, 0, 1);
+             float NdotH_l = max(dot(N, Hl), 0.0);
+             float Dl = D_GGX(NdotH_l, roughness);
+             float Visl = V_SmithCorrelated(NdotV, NdotL_l, roughness);
+@@ -481,8 +745,10 @@ float4 main_building(PS_INPUT_BUILDING IN) : COLOR
+     // ---- Clustered Point Lights (Forward+) ----
+     float3 clusterDiffuse = float3(0, 0, 0);
+     if(clusterParams.w > 0.0) {
+-        float2 tileUV = (IN.WorldPos.xz - clusterParams.xy) / clusterParams.z;
+-        tileUV = clamp(tileUV, 0.0, 1.0);
++        // Screen-space tile: the CPU culler bins lights into a 16px screen tile
++        // grid (CullLightsToTiles). VPOS gives the current pixel; derive the
++        // same tile the CPU filled (old code used world XZ -> always corner).
++        float2 tileUV = (floor(vpos.xy / clusterParams.x) + 0.5) / float2(clusterParams.y, clusterParams.z);
+         float4 clusterSample = tex2D(clusterTex, tileUV);
+         
+         int indices[4];
+@@ -494,7 +760,7 @@ float4 main_building(PS_INPUT_BUILDING IN) : COLOR
+         [unroll] for(int ci = 0; ci < 4; ci++) {
+             if(indices[ci] <= 0) continue;
+             int li = indices[ci] - 1;
+-            if(li < 0 || li >= 8) continue;
++            if(li < 0 || li >= 32) continue;
+             
+             float4 clPos = clusterLightPos[li];
+             float4 clCol = clusterLightCol[li];
+@@ -508,7 +774,7 @@ float4 main_building(PS_INPUT_BUILDING IN) : COLOR
+                 atten *= atten;
+                 float NdotLc = max(dot(N, Lc), 0.0);
+                 if(NdotLc > 0.0) {
+-                    float3 Hc = normalize(V + Lc);
++                    float3 Hc = length(V + Lc) > 1e-6 ? normalize(V + Lc) : float3(0, 0, 1);
+                     float NdotHc = max(dot(N, Hc), 0.0);
+                     float LdotHc = max(dot(Lc, Hc), 0.0);
+                     float Dc = D_GGX(NdotHc, roughness);
+@@ -524,23 +790,79 @@ float4 main_building(PS_INPUT_BUILDING IN) : COLOR
+         }
+     }
+ 
+-    // IBL (ambient) — fallback to flat ambient when iblTex not bound
+-    float2 iblUV = N.xy * 0.5 + 0.5;
+-    float3 iblSample = tex2D(iblTex, iblUV).rgb;
+-    // SM3.0 returns black for unbound textures — use ambient as fill
+-    float3 ibl = (dot(iblSample, iblSample) > 1e-6) ? iblSample * 0.15 : baseColor * surfProps.x * 0.5;
+-
+-    // Composite: vertex color AS diffuse (VS already baked ambient + directional),
+-    // plus PBR specular and IBL for per-pixel detail.
+-    // Xbox pipe: tex * vertexColor * 10.0 — vertex color IS the lighting.
+-    // Same approach: baseColor contains full lit result from VS, don't attenuate it.
+-    float3 color = baseColor;
++    // Universal dynamic-sky ambient tint — MULTIPLICATIVE (see SkyHemisphereTint):
++    // modulates the surface so black stays black and shadows are preserved.
++    float3 ibl = SkyHemisphereTint(N);
++
++    // Composite: modulate the VS-lit base by the sky tint (multiplicative => shadows
++    // preserved), then add PBR specular and cluster lights.
++    float3 color = baseColor * ibl;
+     color += specTotal;
+-    color += ibl;
+     color += clusterDiffuse;
+ 
+-    // Output linear HDR — PostFX TonemapPass handles tonemapping uniformly
+-    return float4(max(color, 0.0), diff.a);
++    // ==== ENVIRONMENT REFLECTION — PORTED FROM THE GTA IV BUILDING PATH ====
++    // [the gap this closes] IV, PS2 and Xbox ALL give materials flagged with
++    // the envmap bit (`*(int*)&material->surfaceProps.specular & 1`) a
++    // reflection: their callbacks bind CustomEnvMapPipeMaterialData::texture
++    // to s1 and run a second additive Envcolor = 192/128 * shininess pass
++    // (buildingPipe.cpp PS2 :683 / Xbox :809). The PBR cb had no equivalent
++    // branch at all, so under Building=PBR those materials rendered FLAT —
++    // PBR's reflection path was strictly WEAKER than IV's, which is what this
++    // ports (plus a superset term IV does not have).
++    //
++    // c47 = {enable, materialEnvWeight, skyReflectStrength, 0}:
++    //   .x  config->bldEnvReflect   — 0 disables the whole block
++    //   .y  1.5 * envData->GetShininess() for an env-mapped material, else 0
++    //       (192/128 == 1.5 is the exact Envcolor scale the IV/PS2 FX pass
++    //       uses; the CPU only fills it when s1 really holds an env map)
++    //   .z  config->bldSkyReflect   — Fresnel-weighted sky reflection from the
++    //       already-bound IBL capture, for materials with NO env map
++    //   UV  TEXCOORD5 = camera-space normal, `n.xy * 0.5 + 0.5` — IV's model
++    //       (GTAIVBuilding_ps does exactly this remap; its c0 = {0.5,0,0,0}
++    //       is the same affine map, folded into the expression here).
++    if(bldEnv.x > 0.0){
++        if(bldEnv.y > 0.0){
++            float2 envUV = saturate(IN.CamNormal.xy * 0.5 + 0.5);
++            float3 envSample = tex2D(envMapTex, envUV).rgb;
++            // Never let a dead/empty sample touch the body: an unbound or
++            // black s1 would ADD nothing anyway, but a NaN would poison it
++            // (NaN * w is still NaN and renders black) — the same defined-
++            // sample rule the IV callback applies by binding the diffuse to s1.
++            //
++            // ENERGY MODEL: weight the additive env term by the Schlick
++            // Fresnel F(NdotV) (PBR_Common F_Schlick) instead of adding a FLAT
++            // envSample * bldEnv.y. The PBR base above is already fully lit, so
++            // a flat add saturated env-mapped glass/metal facades to white.
++            // F is the physically correct reflectance lobe: face-on dielectrics
++            // barely add (F -> F0 ~= 0.04) while only grazing views approach a
++            // mirror (F -> 1); tinted F0 also keeps metals colour-correct.
++            // bldEnv.y remains the CPU-supplied intensity input — it is now
++            // gated by F, so a high shininess (1.5 * shininess) no longer
++            // blows out. F_atNdotV is guaranteed finite (F0 in [0,1], NdotV in
++            // [0,1]) so no NaN can reach the additive.
++            if(dot(envSample, envSample) > 1e-6)
++                color += envSample * F_atNdotV * bldEnv.y;
++        }else if(bldEnv.z > 0.0){
++            // Superset term (NOT in IV): reflect the sky capture along the
++            // mirrored view vector. s3 is already bound by the cb, and y is
++            // sampled as ELEVATION — the same convention skyFill and
++            // SkyHemisphereTint already use, so no new sampler or UV scheme.
++            float3 R = reflect(-V, N);
++            float3 skyEnv = tex2D(iblTex, float2(0.5, saturate(R.y * 0.5 + 0.5))).rgb;
++            float skyValid = (dot(skyEnv, skyEnv) > 1e-6) ? 1.0 : 0.0;
++            // Energy-consistent F*env + (1-F)*body (same rule the vehicle
++            // lane uses): an environment with no content replaces NOTHING, so
++            // a dead IBL can never darken a wall the way a raw lerp would.
++            float envW = saturate(bldEnv.z * saturate(F_atNdotV.r) * skyValid);
++            color = lerp(color, skyEnv, envW);
++        }
++    }
++
++    // Output linear HDR — PostFX TonemapPass handles tonemapping uniformly.
++    // Alpha must match PS2 simplePS (tex * IN.color * colorscale → a = tex.a
++    // * color.a): vertex/material alpha (WIND fade, decal vertex fade) was
++    // dropped → alpha-blended road decals rendered opaque → black marks.
++    return float4(max(color, 0.0), saturate(diff.a * IN.color.a));
+ }
+ 
+ // ============================================================
+@@ -550,7 +872,7 @@ float4 main_building(PS_INPUT_BUILDING IN) : COLOR
+ // c22 = {roughness, F0, tintR, tintG}  (tireParams)
+ // c23 = {tintB, dirtLevel, wearFactor, 0}  (tireParams2)
+ // ============================================================
+-float4 main_rubber(PS_INPUT IN) : COLOR
++float4 main_rubber(PS_INPUT IN, float4 vpos : VPOS) : COLOR
+ {
+     float3 N = length(IN.WorldNormal) > 1e-6 ? IN.WorldNormal / length(IN.WorldNormal) : float3(0, 1, 0);
+     float3 V = length(IN.ViewDir) > 1e-6 ? IN.ViewDir / length(IN.ViewDir) : float3(0, 0, 1);
+@@ -569,6 +891,11 @@ float4 main_rubber(PS_INPUT IN) : COLOR
+     baseColor = lerp(baseColor, wetMud, dirtLevel * 0.5);    // wet mud darkens
+     baseColor = lerp(baseColor, dryDust * baseColor, wearFactor * 0.15);  // dry dust lightens slightly
+ 
++    // Rubber sky-lift: MULTIPLICATIVE, so tyres keep their dark hue instead of
++    // gaining a grey additive wash (matches the body path). Fades out at night.
++    float3 rubberSky = tex2D(iblTex, float2(0.5, saturate(N.y * 0.5 + 0.5))).rgb;
++    baseColor *= 1.0 + dot(rubberSky, float3(0.299, 0.587, 0.114)) * 0.12 * LF(4);
++
+     float NdotV = max(dot(N, V), 0.0);
+     float NdotL_sun = max(dot(N, L), 0.0);
+ 
+@@ -589,5 +916,39 @@ float4 main_rubber(PS_INPUT IN) : COLOR
+         color += baseColor * wrap * lightCol[i].rgb * 0.08;
+     }
+ 
++    // Cluster (street) lights — tyres were lit ONLY by the 6 directional lobes,
++    // so at night they went pure black while the body received cluster diffuse.
++    // Matching the body keeps wheel shading in step with the paint.
++    if(clusterParams.w > 0.0) {
++        // Screen-space tile (same 16px binning as the body): VPOS -> tile UV.
++        float2 tireTileUV = (floor(vpos.xy / clusterParams.x) + 0.5) / float2(clusterParams.y, clusterParams.z);
++        float4 tireCluster = tex2D(clusterTex, tireTileUV);
++        int tireIdx[4];
++        tireIdx[0] = (int)(tireCluster.r * 255.0 + 0.5);
++        tireIdx[1] = (int)(tireCluster.g * 255.0 + 0.5);
++        tireIdx[2] = (int)(tireCluster.b * 255.0 + 0.5);
++        tireIdx[3] = (int)(tireCluster.a * 255.0 + 0.5);
++        [unroll] for(int tci = 0; tci < 4; tci++) {
++            if(tireIdx[tci] <= 0) continue;
++            int tli = tireIdx[tci] - 1;
++            if(tli < 0 || tli >= 32) continue;
++            float4 clPos = clusterLightPos[tli];
++            float4 clCol = clusterLightCol[tli];
++            float3 ToLight = clPos.xyz - IN.WorldPos.xyz;
++            float dist = length(ToLight);
++            float radius = clPos.w;
++            if(dist < radius && dist > 1e-6) {
++                float3 Lc = ToLight / dist;
++                float atten = saturate(1.0 - dist / radius);
++                atten *= atten;
++                float NdotLc = max(dot(N, Lc), 0.0);
++                if(NdotLc > 0.0) {
++                    float diffc = BurleyDiffuse(NdotLc, NdotV, max(dot(V, normalize(V + Lc)), 0.0), roughness);
++                    color += baseColor * diffc * clCol.rgb * atten * 0.5 / 3.14159;
++                }
++            }
++        }
++    }
++
+     return float4(color, diff.a);
+ }
+diff --git a/shaders/ps/VelocityReconstruct.hlsl b/shaders/ps/VelocityReconstruct.hlsl
+index c3bed7c..cd85a9f 100644
+--- a/shaders/ps/VelocityReconstruct.hlsl
++++ b/shaders/ps/VelocityReconstruct.hlsl
+@@ -3,10 +3,12 @@
+ // into previous frame's clip space to derive screen-space motion vectors.
+ 
+ sampler2D depthTex : register(s0);
++sampler2D prevDepthTex : register(s1);
+ 
+ uniform float4x4 invCurrentVP : register(c0); // inverse(currentView * currentProj)
+ uniform float4x4 prevVP       : register(c4); // previousView * previousProj
+ uniform float4   screenParams : register(c8);  // (W, H, 1/W, 1/H)
++uniform float4   prevDepthInfo : register(c9); // (prevDepthAvail, farPlane, 0, 0)
+ 
+ struct PS_INPUT
+ {
+@@ -46,5 +48,17 @@ float4 main(PS_INPUT IN) : COLOR
+     float2 packedVelocity = velocity * 0.5 + 0.5;
+     float motionMagnitude = length(velocity);
+ 
+-    return float4(packedVelocity.x, packedVelocity.y, motionMagnitude, 1.0);
++    // Depth-delta encoding into alpha channel
++    // prevDepthInfo.x > 0.5 means previous depth is available
++    float alpha;
++    if (prevDepthInfo.x > 0.5) {
++        float prevZ = tex2D(prevDepthTex, prevUV).r;
++        float depthDelta = abs(currentDepth - prevZ);
++        // Scale chosen: 10.0 — depth in [0,1], |delta| of 0.1 saturates alpha
++        alpha = saturate(depthDelta * 10.0);
++    } else {
++        alpha = 0.0;
++    }
++
++    return float4(packedVelocity.x, packedVelocity.y, motionMagnitude, alpha);
+ }
+diff --git a/shaders/ps/Water_Parallax.hlsl b/shaders/ps/Water_Parallax.hlsl
+index baf0c16..800660e 100644
+--- a/shaders/ps/Water_Parallax.hlsl
++++ b/shaders/ps/Water_Parallax.hlsl
+@@ -1,33 +1,123 @@
+-// Water_Parallax.hlsl - Procedural PBR water (ps_3_0)
+-// Fully procedural — no texture normal maps needed.
+-// Noise-based normals, depth refraction, PBR specular.
+-// Tied to sky system via constants.
++// Water_Parallax.hlsl - Water surface shading (ps_3_0)
+ //
+-// c0 = (time, waveSpeed, foamThreshold, foamSoftness)
+-// c1 = (normalStrength, parallaxScale, fresnelPower, 0)
+-// c2 = (specularPower, specularIntensity, absorptionDensity, 0)
+-// c3 = (shallowR, shallowG, shallowB, 0)
+-// c4 = (deepR, deepG, deepB, 0)
+-// c5 = (screenW, screenH, 1/screenW, 1/screenH)
+-// c6 = (sunDirX, sunDirY, sunDirZ, sunBrightness)
+-// c7 = (camPosX, camPosY, camPosZ, 0)
+-// c8 = (nearClip, farClip, 0, 0)
++// THREE STYLE ENTRY POINTS (compiled via tools/fast_build.py multi_entry,
++// one CSO per style — selecting waterStyle in the INI switches the shader
++// entry + constant preset in waterPipe.cpp, NOT a separate draw path):
++//   main_xbox -> Water_Parallax.cso   (Xbox/PS2-style core — the rewritten base)
++//   main_iv   -> Water_IV.cso         (GTA IV look, water-refs.md IV recipe)
++//   main_v    -> Water_V.cso          (GTA V / RAGE look, water-refs.md V recipe)
++// One shared VS (Water_VS.hlsl) for all styles.
+ //
+-// s0 = scene color (refraction capture)
+-
+-sampler2D sceneTex : register(s0);
++// SHARED CORE (all styles, the rewritten base):
++//  * Flat geometry (no vertex displacement; wave motion = scrolling normal
++//    detail sampled from a real mip-mapped detail texture — kills the
++//    sub-pixel sparkle of the old procedural hash noise at distance).
++//  * Distance-based blend to a calm/smooth far look (normal strength,
++//    specular power and refraction offset all fade with view distance).
++//  * Fresnel-weighted reflection: sky(timecycle) tint, reflectivity < 1 —
++//    NEVER a chrome mirror (V damps its reflection normal, IV caps fresnel).
++//  * Depth-based shallow->deep colour + translucency + soft shore blending
++//    from the scene depth copy (thickness = sceneZ - waterZ).
++//
++// TIMECYCLE LIGHTING (defect "night water glows white"):
++//  the body colour is lit by the timecycle ambient/directional (c12/c13) like
++//  every other lighting model in the project, instead of a hardcoded
++//  brightness ramp. Daylight frames reproduce the authored timecyc water
++//  colour ~1:1; night frames collapse to ambient + a sky-luminance share, and
++//  every white additive term (sun spec, foam, sun pierce, underwater shimmer)
++//  is gated by a day factor derived from the timecycle sky luminance — ambient
++//  is pinned near 0 and directional is 255 in EVERY slot of this install's
++//  timecycle, so neither can tell day from night, the sky can (same signal
++//  pipelinecommon's night ceiling uses).
++//
++// VANILLA COLOUR + GENTLE FAR BLEND (defect "turquoise + dark horizon band"):
++//  the body colour comes straight from the timecycle WaterRGBA (C++ side
++//  applies SA's own x*0.65+0.27 quirk) and converges over the far half of the
++//  distance ramp toward deep colour + timecycle horizon colour — a ramp, not
++//  the old hard shallow->deep step; distant reflections ride the horizon
++//  colour instead of collapsing to flat grey (the murky band).
++//
++// FRESNEL SPLIT (defects "one-sided water" + "day transparency not great
++// enough at steep angles"): the composite is
++//   result = F * envReflect + (1-F) * [ bodyT * waterBody + (1-bodyT) * scene ]
++// instead of the old lerp(scene, surf, bodyOpacity) — which multiplied the
++// reflection lobe by a DEPTH-driven opacity and so could never show both at
++// once (shallow water: scene through everywhere incl. grazing; deep water:
++// opaque at every angle incl. a noon view of the bottom). F is each style's
++// fresnel (floored with Schlick where a style curve is face-on-biased, capped
++// < 1 so it can never go chrome; from below it is the TIR curve); bodyT is the
++// water volume along the VIEW PATH (WaterBodyOpacity: steep/short path = clear
++// bottom in shallows, grazing/long path = opaque, deep = timecyc alpha), so
++// noon-shallow water now reads through while deep water stays tinted.
++// INI `waterFresnelSplit` (c11.w) = 0 rolls the whole composite back to the
++// legacy lerp(scene, surf, opacity) form without touching anything else.
++// Tier 0/1 have no scene copy: WaterSplitBlend hands the same split to the
++// hardware SRCALPHA blend (reflection live, the framebuffer behind shows
++// through the alpha) so the refraction term degrades instead of killing
++// reflection and vice versa.
++//
++// QUALITY TIERS (INI waterQuality 0-3, uniform branch on c11.x — no dynamic
++// loops, no dependent reads; the tier ONLY removes cost, every tier renders
++// correctly):
++//   0 = 1 normal layer + timecyc colour + vertex-alpha translucency only
++//       (no scene/depth copies, no s0/s2 fetches; output alpha hardware
++//        blends against the framebuffer = live translucency at zero cost)
++//   1 = + dual scrolling normals + shallow->deep depth ramp
++//   2 = + refraction/scene copy + depth copy sampling + foam + shore blend
++//   3 = + sun pierce + extra fine normal layer x3.7 + wide 5-tap shore depth
++// The depth copy (PostFX_CopyDepthToTexture) only runs on the C++ side when
++// tier >= 2; when it is unavailable the shader falls back to a distance
++// driven column estimate so the ramp stays monotonic and artifact-free.
++//
++// VIEW FROM BELOW (defects "underwater refraction/caustics wrong at some
++// angles", "ped through water not refracted", "seams from underwater"):
++//  SurfBase.below flags the camera being under the (flat, Z-up) surface. That
++//  one flag drives: camera-facing normal flip (otherwise NdotV/fresnel collapse
++//  to 0 and the underside renders as a solid mirror), the refraction offset
++//  direction (the depth delta sign reverses when looking up), the opacity
++//  (near-clear face-on, mirror at grazing = TIR) and the underwater shimmer
++//  sampled along the refracted view ray (angle-correct, not screen-locked).
++//  Refraction itself is gated on "there is scene behind this pixel"
++//  (thickness ramp) rather than the 2 m shore fade, so ANY geometry under the
++//  surface — a swimmer 0.5 m down included — gets distorted, not just seabed.
++//
++// c0  = (time, waveSpeed, foamThreshold, foamSoftness)
++// c1  = (normalStrength, tileScale, fresnelPower, reflectionStrength)
++// c2  = (specularPower, specularIntensity, translucency, shoreFadeRange)
++// c3  = (shallowR, shallowG, shallowB, deepRange)
++// c4  = (deepR, deepG, deepB, waterAlpha)
++// c5  = (screenW, screenH, 1/screenW, 1/screenH)
++// c6  = (sunDirX, sunDirY, sunDirZ, sunBrightness)
++// c7  = (camPosX, camPosY, camPosZ, 0)
++// c8  = (nearClip, farClip, depthValid, refractScale)
++// c9  = (skyTopR, skyTopG, skyTopB, 0)      <- timecycle sky reflection tint
++// c10 = (skyBotR, skyBotG, skyBotB, 0)      <- timecycle horizon tint/fog colour
++// c11 = (qualityTier, distFadeK, sunPierceScale, fresnelSplitFlag)
++// c12 = (ambientR, ambientG, ambientB, skyLuma)   <- timecycle ambient + sky
++// c13 = (dirR, dirG, dirB, dayFactor 0..1)        <- timecycle directional + day
++//
++// s0 = scene colour (refraction capture)            [tier >= 2]
++// s1 = water detail normal map (RGB=normal, A=height; mip-mapped)
++// s2 = scene depth copy (raw window-space z, R32F)  [tier >= 2]
+ 
+-uniform float4 timeParams     : register(c0);
+-uniform float4 waterParams    : register(c1);
+-uniform float4 specParams     : register(c2);
+-uniform float4 shallowColor   : register(c3);
+-uniform float4 deepColor      : register(c4);
+-uniform float4 screenSize     : register(c5);
+-uniform float4 sunDir         : register(c6);
+-uniform float4 camPos         : register(c7);
+-uniform float4 clipPlanes     : register(c8);
++sampler2D sceneTex   : register(s0);
++sampler2D detailTex  : register(s1);
++sampler2D depthTex   : register(s2);
+ 
+-static const float PI = 3.14159265;
++uniform float4 timeParams   : register(c0);
++uniform float4 waterParams  : register(c1);
++uniform float4 specParams   : register(c2);
++uniform float4 shallowColor : register(c3);
++uniform float4 deepColor    : register(c4);
++uniform float4 screenSize   : register(c5);
++uniform float4 sunDir       : register(c6);
++uniform float4 camPos       : register(c7);
++uniform float4 clipPlanes   : register(c8);
++uniform float4 skyTopColor  : register(c9);
++uniform float4 skyBotColor  : register(c10);
++uniform float4 qualityParams : register(c11);   // (tier, distFadeK, pierceScale, fresnelSplit)
++uniform float4 timeLight0    : register(c12);   // (ambient rgb, skyLuma)
++uniform float4 timeLight1    : register(c13);   // (directional rgb, dayFactor)
+ 
+ struct VS_OUTPUT {
+     float4 position  : POSITION;
+@@ -36,146 +126,790 @@ struct VS_OUTPUT {
+     float3 viewDir   : TEXCOORD2;
+     float3 lightDir  : TEXCOORD3;
+     float4 screenPos : TEXCOORD4;
+-    float4 waveParams: TEXCOORD5;
++    float4 vtxColor  : COLOR0;
+ };
+ 
+-// Hash-based noise — no texture dependency
+-float hash(float2 p)
++// D3D9 window-space z -> view-space z (LH):  z = n*f / (f - d*(f-n))
++float LinearizeDepth(float depth, float near, float far)
+ {
+-    return frac(sin(dot(p, float2(127.1, 311.7))) * 43758.5453);
++    float denom = far - depth * (far - near);
++    return (near * far) / max(denom, 1e-3);
+ }
+ 
+-float noise2d(float2 p)
++// Per-pixel setup shared by all styles. V points surface -> camera.
++struct SurfBase {
++    float3 V, L, H;
++    float2 screenUV;
++    float  viewZ;      // clip w = view-space depth of the water surface
++    float  dist;
++    float  distFactor; // 0 = near/detailed, 1 = far/calm
++    float  vtxA;
++    float  below;      // 1 = camera under the surface (V.z < 0, flat Z-up plane)
++};
++
++SurfBase WaterSetup(VS_OUTPUT IN)
+ {
+-    float2 i = floor(p);
+-    float2 f = frac(p);
+-    f = f * f * (3.0 - 2.0 * f);
+-    float a = hash(i);
+-    float b = hash(i + float2(1.0, 0.0));
+-    float c = hash(i + float2(0.0, 1.0));
+-    float d = hash(i + float2(1.0, 1.0));
+-    return lerp(lerp(a, b, f.x), lerp(c, d, f.x), f.y);
++    SurfBase S;
++    // ---- Vectors (guard zero-length: NaN renders black in SM3.0) ----
++    float vLen = max(length(IN.viewDir), 1e-7);
++    float lLen = max(length(IN.lightDir), 1e-7);
++    S.dist = vLen;
++    S.V = -IN.viewDir / vLen;
++    S.L = IN.lightDir / lLen;
++    float3 hv = S.V + S.L;
++    S.H = hv / max(length(hv), 1e-7);
++
++    // ---- Screen UV: clip -> NDC [-1,1] -> texture [0,1] (v=0 = top row) ----
++    float ndcW = max(IN.screenPos.w, 1e-7);
++    float2 ndc = IN.screenPos.xy / ndcW;
++    S.screenUV = float2(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5);
++    S.viewZ = ndcW;
++
++    // ---- Distance factor: near = detailed, far = calm/smooth ----
++    // Smooth-out range ~12% of the far clip plane.
++    float smoothRange = max(clipPlanes.y * 0.12, 10.0);
++    S.distFactor = saturate(vLen / smoothRange);
++
++    // Vertex alpha: SA buffers carry a per-quad fade — treat exact 0 as
++    // "no fade" so an unpopulated alpha can never erase the whole water.
++    float a = saturate(IN.vtxColor.a);
++    S.vtxA = a > 0.001 ? a : 1.0;
++
++    // Which side of the surface the camera is on: V points surface->camera on
++    // a flat Z-up plane, so its Z sign is exact for every water quad height.
++    S.below = S.V.z < 0.0 ? 1.0 : 0.0;
++    return S;
+ }
+ 
+-float fbm(float2 p)
++// ============================================================================
++// Timecycle lighting gates (defect 1: night water glowed white)
++// ============================================================================
++
++// Day/night factor from the timecycle sky luminance (c12.w / c13.w). 0 = full
++// night, 1 = day. Same "sky the player sees" signal the project's other
++// lighting models gate night brightness with.
++float WaterDay(void)
+ {
+-    float f = 0.0;
+-    f += 0.5000 * noise2d(p); p *= 2.03;
+-    f += 0.2500 * noise2d(p); p *= 2.01;
+-    f += 0.1250 * noise2d(p); p *= 2.02;
+-    f += 0.0625 * noise2d(p);
+-    return f;
++    return saturate(timeLight1.w);
+ }
+ 
+-// Compute normal from procedural heightfield
+-float3 computeWaterNormal(float2 uv, float time, float strength)
++// Body lighting: ambient*waterColor + daylight*waterColor + directional tint —
++// the shape every other lighting model uses. Normalised so a daylight frame
++// reproduces the authored timecyc colour ~1:1 (vanilla match), while a night
++// frame collapses to ambient + a sky-luminance share (dark, never a glow).
++// Replaces the old unlit body + hardcoded brightness multipliers.
++float3 WaterBodyLight(float3 waterCol, float NdotL)
+ {
+-    float eps = 0.005;
+-    float t0 = time * 0.4;
+-    float t1 = time * 0.25;
++    float dayF = saturate(timeLight1.w);
++    float skyL = timeLight0.w;
++    float3 lit = timeLight0.xyz * 1.5                    // ambient * colour
++               + dayF * (0.74 + 0.16 * NdotL)            // daylight restore
++               + (1.0 - dayF) * skyL * 3.0               // night: sky share
++               + timeLight1.xyz * (dayF * NdotL * 0.10); // directional tint
++    return waterCol * lit;
++}
+ 
+-    float h0 = fbm(uv * 8.0 + float2(t0, t1));
+-    float hx = fbm((uv + float2(eps, 0)) * 8.0 + float2(t0, t1));
+-    float hy = fbm((uv + float2(0, eps)) * 8.0 + float2(t0, t1));
++// Sun specular tint: timecycle directional colour gated by the day factor —
++// an unlit white sun sheen can never be pumped into a night frame.
++float3 WaterSpecTint(void)
++{
++    return timeLight1.xyz * lerp(0.12, 1.0, saturate(timeLight1.w));
++}
+ 
+-    float3 n = float3((h0 - hx) / eps, (h0 - hy) / eps, 1.0);
+-    n.xy *= strength;
+-    return normalize(n);
++// Foam is a white highlight too — same night gate, gentler (shore foam must
++// stay readable at night, just not glow).
++float WaterFoamGate(void)
++{
++    return lerp(0.40, 1.0, saturate(timeLight1.w));
+ }
+ 
+-// Second noise layer at different scale
+-float3 computeWaterNormal2(float2 uv, float time, float strength)
++// ============================================================================
++// Detail-normal mip-amplitude restore (defect: one normal layer "turns
++// transparent" and the effect is lost)
++// ============================================================================
++// Hardware mips average the normal map's XY toward 0, and the higher-frequency
++// layer reaches a coarser mip level first — it used to fade out alone while
++// the base layer was still live, taking the wave detail with it (worst in the
++// IV preset, where that layer carries 5x the amplitude). Measure the fetch's
++// own footprint in texels/pixel with ddx/ddy (ps_3_0, no dependent reads, no
++// loops) and hand back a bounded amplitude boost: it only applies where the
++// fetch is already smooth (>= 1 texel/pixel), so it cannot re-alias, and both
++// layers keep contributing instead of one vanishing.
++float LayerAmpRestore(float2 uv)
+ {
+-    float eps = 0.008;
+-    float t0 = time * -0.3;
+-    float t1 = time * 0.18;
++    float2 fp = float2(length(ddx(uv)), length(ddy(uv))) * 256.0; // 256px tile
++    float blur = saturate(max(fp.x, fp.y) - 1.0);
++    return 1.0 + 1.5 * blur;
++}
+ 
+-    float h0 = fbm(uv * 4.0 + float2(t0, t1));
+-    float hx = fbm((uv + float2(eps, 0)) * 4.0 + float2(t0, t1));
+-    float hy = fbm((uv + float2(0, eps)) * 4.0 + float2(t0, t1));
++// Gentle far blend (defect: hard shallow->deep / near->far seam, dark band at
++// the horizon). Converge the body colour toward the authored deep colour mixed
++// with the timecycle horizon colour (the fog colour distant water fades into)
++// over the FAR HALF of the distance ramp — a ramp, not a step, endpoint =
++// vanilla water colour + horizon.
++float3 FarBlendWater(float3 waterCol, float distFactor)
++{
++    float farT = smoothstep(0.40, 1.0, distFactor);
++    float3 farCol = lerp(deepColor.rgb, skyBotColor.rgb, 0.22);
++    return lerp(waterCol, farCol, farT * 0.85);
++}
+ 
+-    float3 n = float3((h0 - hx) / eps, (h0 - hy) / eps, 1.0);
+-    n.xy *= strength * 0.5;
+-    return normalize(n);
++// Opacity of the sheet seen from UNDER the surface: near-clear face-on (you
++// look straight up through it) and a mirror at grazing angles (total internal
++// reflection). This is the BELOW-side reflectance of the fresnel split below —
++// it is what hands the grazing angles to the reflection lobe while the steep
++// angles stay transmissive, so refraction AND reflection are both live.
++float WaterBelowOpacity(float NdotV)
++{
++    float fres = 0.02 + 0.98 * pow(saturate(1.0 - NdotV), 5.0);
++    return saturate(0.12 + 0.88 * fres);
+ }
+ 
+-float LinearizeDepth(float depth, float near, float far)
++// ============================================================================
++// Fresnel split composite (defect: "reflection and refraction work one at a
++// time — but not both ways!")
++// ============================================================================
++// The old composite was  lerp(sceneBehind, surf, bodyOpacity)  with the
++// reflection weight living INSIDE surf — so the depth-driven body opacity
++// multiplied the reflection too, and the two lobes could never both be live:
++//   * shallow/medium water: bodyOpacity ~0.4 => the scene behind showed through
++//     at EVERY angle (grazing included, where it should be a mirror) and the
++//     reflection read as ~40% of its intended strength;
++//   * deep water: bodyOpacity ~0.94 at every angle => a steep noon view of the
++//     bottom stayed opaque ("day transparency not great enough").
++// Split instead (energy-conserving, both lobes live at every view direction,
++// above AND below the surface):
++//   result = F * reflectedEnv + (1-F) * [ bodyT * waterBody + (1-bodyT) * scene ]
++//   F     = the style's fresnel reflectance (capped < 1: never chrome)
++//   bodyT = how much water sits along the VIEW path (depth x view angle)
++// ============================================================================
++float3 WaterSplitOpaque(float3 behind, float3 reflectC, float3 bodyC,
++                        float F, float bodyT, float3 highlights)
+ {
+-    return (2.0 * near) / (far + near - depth * (far - near));
++    float bt = saturate(bodyT);
++    float3 transmit = lerp(behind, bodyC, bt);
++    return reflectC * F + transmit * (1.0 - F) + highlights;
+ }
+ 
+-float4 main(VS_OUTPUT IN) : COLOR
++// Tier 0/1 have no scene copy, so the hardware SRCALPHA blend has to
++// approximate the same split against the framebuffer. Weight w = F+(1-F)*bodyT
++// and the source carries the rest, so src*w + dst*(1-w) is algebraically the
++// opaque formula (highlights ride w so they cannot blow up in a near-clear
++// pixel, where dividing by a tiny w would turn foam into a white line).
++float4 WaterSplitBlend(float3 reflectC, float3 bodyC, float F, float bodyT,
++                       float3 highlights)
++{
++    float bt = saturate(bodyT);
++    float w = saturate(F + (1.0 - F) * bt);
++    float3 A = reflectC * F + bodyC * (1.0 - F) * bt + highlights * saturate(w * 4.0);
++    float invW = 1.0 / max(w, 1e-4);
++    return float4(saturate(A * invW), w);
++}
++
++// Water-volume opacity along the VIEW path through the water. This is the
++// "day transparency" curve: a steep (noon) view takes a short path through the
++// volume => the bottom reads clearly in the shallows; a grazing view takes a
++// long path => the sheet goes opaque; deep water saturates to the authored
++// timecyc alpha (vanilla-like). deepRange/2 (c3.w) is the half-opacity column.
++// Under water there is no layer between the eye and the surface (we are inside
++// it), so the body lobe is 0 there — fresnel alone decides, which is what makes
++// the above-water world refract cleanly while the grazing TIR mirrors.
++float WaterBodyOpacity(float thickness, float NdotV, float frontFade,
++                       float vtxA, float below)
++{
++    float pathLen = thickness / max(NdotV, 0.12);   // guarded: grazing clamp
++    float halfCol = max(shallowColor.w * 0.5, 0.5);
++    float t = 1.0 - exp2(-pathLen / halfCol);       // 2^-x, x>=0 -> (0,1]
++    t *= deepColor.w * specParams.z;                // timecyc alpha x translucency
++    t *= saturate(1.0 - frontFade * 0.85);          // junction: reproduce the scene
++    t *= saturate(vtxA);
++    t *= (1.0 - saturate(below));
++    return saturate(t);
++}
++
++// Water-column thickness (metres of water below this pixel) + the near-
++// junction fade where ANOTHER surface (land or water drawn in an earlier
++// buffer flush) meets this one. Only fetches depth when tier >= 2 AND the
++// depth copy is live (clipPlanes.z); otherwise a distance-driven estimate
++// keeps the shallow->deep ramp monotonic (no artifacts, zero fetches).
++// Returns (thickness, frontFade).
++float2 SampleWaterColumn(float2 screenUV, float waterViewZ, int tier)
++{
++    if(clipPlanes.z < 0.5)
++        return float2(saturate(waterViewZ * 0.02) * max(shallowColor.w * 2.0, 1.0), 0.0);
++
++    float2 px = screenSize.zw;
++    float z0 = tex2D(depthTex, screenUV).x;
++    float zmin = z0;
++    if(tier >= 3){
++        // Centre + 4-tap cross min (tier 3 "wider shore sampling"): the
++        // closer neighbour depth pulls the fade in and blends the junction
++        // instead of leaving a hard pop line.
++        float z1 = tex2D(depthTex, screenUV + float2( px.x, 0)).x;
++        float z2 = tex2D(depthTex, screenUV + float2(-px.x, 0)).x;
++        float z3 = tex2D(depthTex, screenUV + float2(0,  px.y)).x;
++        float z4 = tex2D(depthTex, screenUV + float2(0, -px.y)).x;
++        zmin = min(min(min(z0, z1), min(z2, z3)), z4);
++    }
++
++    float sceneZ = LinearizeDepth(z0, clipPlanes.x, clipPlanes.y);
++    float thickness = max(sceneZ - waterViewZ, 0.0);
++    float frontFade = saturate((waterViewZ - LinearizeDepth(zmin, clipPlanes.x, clipPlanes.y))
++                               / max(specParams.w, 1e-3));
++    return float2(thickness, frontFade);
++}
++
++// Timecycle sky reflection tint along reflect(-V, N). World is Z-up so the
++// horizon->zenith blend rides the reflected ray's Z component. From below the
++// reflected ray points down into the water, so the environment it sees is the
++// underwater volume (timecycle deep colour), not the sky. Distant reflections
++// converge on the HORIZON colour (timecycle sky bottom = the fog colour the
++// far field fades into) instead of collapsing to flat grey — the grey collapse
++// is what turned the horizon band murky green.
++float3 SkyReflection(float3 N, float3 V, float distFactor, float below)
+ {
+-    float time = timeParams.x * timeParams.y;
+-    float2 worldUV = IN.worldPos.xy * 0.015;
+-
+-    // ---- Procedural normals (dual layer) ----
+-    float3 N1 = computeWaterNormal(worldUV, time, waterParams.x);
+-    float3 N2 = computeWaterNormal2(worldUV, time, waterParams.x);
+-    float3 N = normalize(float3(
+-        N1.xy + N2.xy,
+-        N1.z * N2.z
+-    ));
+-
+-    // ---- Vectors ----
+-    float3 V = normalize(IN.viewDir);
+-    float3 L = normalize(IN.lightDir);
+-    float3 H = normalize(V + L);
+-
+-    float NdotV = max(dot(N, V), 0.0);
+-    float NdotL = max(dot(N, L), 0.0);
+-    float NdotH = max(dot(N, H), 0.0);
+-
+-    // ---- Screen UV ----
+-    float2 screenUV = IN.screenPos.xy / IN.screenPos.w;
+-    screenUV.y = 1.0 - screenUV.y;
+-
+-    // ---- Refraction ----
+-    float2 refractOffset = N.xy * 0.02;
+-    float2 refractUV = screenUV + refractOffset;
+-    refractUV = clamp(refractUV, float2(0.001, 0.001), float2(0.999, 0.999));
+-    float3 sceneColor = tex2D(sceneTex, refractUV).rgb;
+-
+-    // ---- Water color blend ----
+-    // Approximate depth from screen position (brighter = deeper)
+-    float approxDepth = saturate(1.0 - screenUV.y * 0.3);
+-    float3 waterColor = lerp(shallowColor.rgb, deepColor.rgb, approxDepth);
+-
+-    // Mix scene refraction with water color
+-    float3 refracted = lerp(sceneColor, waterColor, 0.5);
+-
+-    // ---- Fresnel (Schlick, IOR 1.333, F0=0.02) ----
+-    float fresnel = 0.02 + 0.98 * pow(1.0 - NdotV, 5.0);
+-
+-    // ---- Sky reflection ----
+     float3 R = reflect(-V, N);
+-    float skyBlend = saturate(R.y * 0.5 + 0.5);
+-    float3 skyReflect = lerp(float3(0.5, 0.6, 0.8), float3(0.2, 0.4, 0.7), skyBlend);
++    float skyBlend = saturate(R.z);
++    float3 skyReflect = lerp(skyBotColor.rgb, skyTopColor.rgb, skyBlend);
++    float3 underEnv = lerp(deepColor.rgb, skyBotColor.rgb, 0.35);
++    skyReflect = lerp(skyReflect, underEnv, below);
++    return lerp(skyReflect, skyBotColor.rgb, distFactor * 0.45);
++}
++
++// Refraction gate: 0 exactly at the waterline (reproduce the scene behind, no
++// smear onto land), 1 by ~0.33 m of water. Deliberately NOT the 2 m shore fade
++// — any geometry under the surface (a swimmer, a rock 0.5 m down) must refract,
++// not only the seabed.
++float RefractGate(float thickness)
++{
++    return saturate(thickness * 3.0);
++}
++
++// Underwater shimmer (camera below the surface) — the "caustics" path. The
++// pattern is sampled where the eye's REFRACTED ray crosses the surface, so it
++// tracks the view angle at every incidence instead of sticking to a fixed
++// screen position; day-gated (there is no light to focus at night) and
++// deliberately subtle. refract() returns 0 on TIR — guarded, no NaN.
++float WaterUnderShimmer(float3 V, float3 N, float2 wuv, float time, float below)
++{
++    float dayF = saturate(timeLight1.w);
++    float3 r = refract(-V, N, 1.5);   // water -> air (0 on TIR -> dir below)
++    float rl = max(length(r), 1e-4);
++    float2 cuv = wuv * 0.6 + (r.xy / rl) * 0.35 + float2(0.017, -0.011) * time;
++    // The fetch runs unconditionally: `below` is per-pixel, and a tex2D inside
++    // a divergent branch has undefined gradients (wrong mip at the waterline).
++    float h = tex2D(detailTex, cuv).w;
++    return pow(saturate(h), 5.0) * 0.20 * dayF * below;
++}
++
++// Tier-3 sun pierce (V recipe: pow(saturate(dot(refract(V,lerp(N,N0,.5),
++// 1/1.5),-Sun)),2) * saturate(depth/10)) — the view ray continued into the
++// water aligned with the sun's underwater propagation direction. Zero on
++// total internal reflection (refract returns a zero vector).
++float SunPierce(float3 V, float3 N, float3 L, float thickness)
++{
++    float3 Nmid = normalize(lerp(N, float3(0.0, 0.0, 1.0), 0.5));
++    float3 rd = refract(-V, Nmid, 1.0 / 1.5);
++    float rdLen = length(rd);
++    if(rdLen < 1e-4)
++        return 0.0;
++    float a = saturate(dot(rd / rdLen, -L));
++    return a * a * saturate(thickness * 0.1);
++}
++
++// ============================================================================
++// main_xbox — Xbox/PS2-style core (the rewritten base, tier-gated)
++// ============================================================================
++
++float4 WaterXbox(VS_OUTPUT IN)
++{
++    SurfBase S = WaterSetup(IN);
++    int tier = (int)qualityParams.x;
++    float time = timeParams.x * timeParams.y;
++    float distFactor = S.distFactor;
++    float below = S.below;
++    float dayF = saturate(timeLight1.w);
++    float split = saturate(qualityParams.w);   // 1 = fresnel split, 0 = legacy
++
++    // ---- Water column (shore blending + shallow->deep ramp) ----
++    float thickness = 0.0;
++    float frontFade = 0.0;
++    float deepFactor = 0.65;   // tier 0: flat timecyc colour mix
++    if(tier >= 2){
++        float2 col = SampleWaterColumn(S.screenUV, S.viewZ, tier);
++        thickness = col.x;
++        frontFade = col.y;
++        // Zero-slope approach to full depth: a plain saturate() hit 1.0 with a
++        // kink at deepRange and showed as a hard seam where the shallow band
++        // met the deep water.
++        deepFactor = smoothstep(0.0, 1.0, thickness / max(shallowColor.w, 1e-3));
++    }else{
++        // Tiers 0/1: zero-fetch column estimate. The colour ramp and the
++        // body-opacity path both still need a thickness without the depth
++        // copy, so the composite degrades (no scene fetch, hardware alpha
++        // blend) instead of a whole term dying.
++        thickness = saturate(S.viewZ * 0.02) * max(shallowColor.w * 2.0, 1.0);
++        if(tier >= 1)
++            deepFactor = smoothstep(0.0, 1.0, thickness / max(shallowColor.w, 1e-3));
++    }
++    float shoreFade = saturate(thickness / max(specParams.w, 1e-3));
++    if(tier < 2) shoreFade = 1.0;
++
++    // ---- Scrolling detail normals (mip-mapped texture -> mip-correct LOD
++    //      from screen-space derivatives; no sub-pixel sparkle). One fetch
++    //      per layer; tier 3 adds the fine x3.7 layer. Both live layers get
++    //      the mip-amplitude restore so neither can fade out alone. ----
++    float2 uv = IN.texCoord * waterParams.y;
++    float2 flow1 = float2( 0.021, 0.013) * time;
++    float2 flow2 = float2(-0.016, 0.027) * time;
++    float2 tuv1 = uv * 1.00 + flow1;
++    float2 tuv2 = uv * 2.37 + flow2;
++    float amp1 = LayerAmpRestore(tuv1);
++    float amp2 = LayerAmpRestore(tuv2);
++
++    float4 t1 = tex2D(detailTex, tuv1);
++    float3 n1 = t1.xyz * 2.0 - 1.0;
++    n1.xy *= amp1;
++    float3 n2 = float3(0.0, 0.0, 0.0);
++    float h2 = 0.0;
++    if(tier >= 1){
++        float4 t2 = tex2D(detailTex, tuv2);
++        n2 = t2.xyz * 2.0 - 1.0;
++        n2.xy *= amp2;
++        h2 = t2.w;
++    }
++    if(tier >= 3){
++        float4 t3 = tex2D(detailTex, uv * (2.37 * 3.7) - flow1 * 1.7);
++        n2 += (t3.xyz * 2.0 - 1.0) * 0.35;
++    }
+ 
+-    // ---- Specular (GGX) ----
+-    float roughness = 0.02;
+-    float a = roughness * roughness;
+-    float a2 = a * a;
+-    float d = NdotH * NdotH * (a2 - 1.0) + 1.0;
+-    float D = a2 / (PI * d * d);
+-    float Vis = NdotL * 0.25;
+-    float3 specular = D * Vis * specParams.y * float3(1, 1, 1);
++    // Strength fades with distance -> far water goes calm/smooth.
++    float strength = waterParams.x * (1.0 - 0.85 * distFactor);
++    // Flat XY water plane: tangent space == world space (z up).
++    float3 N = normalize(float3((n1.xy + n2.xy * 0.7) * strength, 1.0));
+ 
+-    // ---- Sun hotspot ----
+-    float sunSpec = pow(max(dot(reflect(-V, N), L), 0.0), 512.0) * 2.0;
++    // ---- View from below: the shading normal points up, away from an
++    // underwater camera — flip it to face the viewer or NdotV/fresnel collapse
++    // to 0 and the underside renders as one solid mirror with no refraction.
++    // The flipped XY also reverses the refraction offset direction, which is
++    // what the depth delta does when you look up through the surface. ----
++    if(below > 0.5)
++        N = -N;
+ 
+-    // ---- Composite ----
+-    float3 output = lerp(refracted, skyReflect, fresnel * 0.7);
+-    output += specular;
+-    output += float3(1.0, 0.95, 0.9) * sunSpec;
++    float NdotV = max(dot(N, S.V), 0.0);
++    float NdotL = max(dot(N, S.L), 0.0);
++    float NdotH = max(dot(N, S.H), 0.0);
+ 
+-    // Foam at wave peaks
+-    float waveFoam = saturate(IN.waveParams.w);
+-    float foamNoise = fbm(worldUV * 12.0 + time * 0.5);
+-    float foam = smoothstep(0.6, 0.8, foamNoise) * waveFoam * 0.3;
+-    output += float3(0.9, 0.95, 1.0) * foam;
++    // ---- Fresnel (Schlick, F0 = 0.02 water) ----
++    // Weak face-on, moderate at grazing; reflectionStrength is the
++    // reflectivity cap (< 1) so it can never read as chrome. reflAmt is the
++    // RAW style reflectance (used by the legacy composite); F below is the
++    // split's reflection lobe with the below/junction gates applied.
++    float fresnel = 0.02 + 0.98 * pow(saturate(1.0 - NdotV), max(waterParams.z, 1.0));
++    float reflAmt = saturate(fresnel * waterParams.w);
+ 
+-    output = saturate(output);
++    // ---- Sky reflection (timecycle sky top/horizon colours) ----
++    float3 skyReflect = SkyReflection(N, S.V, distFactor, below);
+ 
+-    return float4(output, 0.8);
++    // ---- Water body colour: depth ramp + gentle far blend + timecycle light --
++    float3 waterCol = lerp(shallowColor.rgb, deepColor.rgb, deepFactor);
++    waterCol = FarBlendWater(waterCol, distFactor);
++    waterCol = WaterBodyLight(waterCol, NdotL);
++
++    // ---- Sun specular (roughness grows with distance -> no sparkle) ----
++    float specPow = max(specParams.x * (1.0 - 0.85 * distFactor), 8.0);
++    float spec = pow(NdotH, specPow) * specParams.y * (1.0 - 0.6 * distFactor);
++
++    // ---- Shore foam band (foamThreshold/softness knobs, tier >= 2) ----
++    float foam = 0.0;
++    if(tier >= 2){
++        float h = (t1.w + h2) * 0.5;
++        float band = smoothstep(0.02, 0.02 + max(timeParams.w, 0.01), shoreFade)
++                   * (1.0 - smoothstep(max(timeParams.z, 0.05) * 0.5, max(timeParams.z, 0.1), shoreFade));
++        foam = band * smoothstep(0.55, 0.85, h) * 0.25 * WaterFoamGate();
++    }
++
++    // ---- Sun pierce (tier 3, subtle; day-gated, above-water only) ----
++    float pierce = 0.0;
++    if(tier >= 3 && below < 0.5)
++        pierce = SunPierce(S.V, N, S.L, thickness) * qualityParams.z * dayF;
++
++    // ---- Composite -------------------------------------------------------
++    // Both lobes of the fresnel split, plus the night-gated white highlights.
++    float3 highlights = spec * float3(1.0, 0.97, 0.9) * WaterSpecTint()
++                      + float3(0.85, 0.9, 0.95) * foam
++                      + float3(1.0, 0.97, 0.85) * pierce
++                      + float3(0.85, 0.92, 1.0) * WaterUnderShimmer(S.V, N, tuv1, time, below);
++
++    // Reflection lobe: raw style fresnel, TIR curve from below, and zeroed at
++    // the junction where ANOTHER surface sits in front of this pixel (so the
++    // waterline stays pixel-identical to the scene behind — the old seam fix).
++    float F = (below > 0.5) ? WaterBelowOpacity(NdotV) : reflAmt;
++    F *= RefractGate(thickness) * saturate(1.0 - frontFade * lerp(0.85, 0.5, below));
++
++    // Transmission lobe: how much water is along the view path (defect 2:
++    // steep/noon views clear, long grazing paths opaque, deep water at the
++    // authored timecyc alpha).
++    float bodyT = WaterBodyOpacity(thickness, NdotV, frontFade, S.vtxA, below);
++
++    // Legacy composite (INI waterFresnelSplit = 0): the pre-split
++    // lerp(scene, surf, bodyOpacity) form, kept as a per-user rollback.
++    float3 legacySurf = waterCol * (1.0 - reflAmt) + skyReflect * reflAmt + highlights;
++    float legacyOp = saturate(deepColor.w * specParams.z * lerp(0.35, 1.0, deepFactor)
++                              * shoreFade * S.vtxA) * saturate(1.0 - frontFade * 0.85);
++    if(below > 0.5)
++        legacyOp = saturate(WaterBelowOpacity(NdotV) * saturate(1.0 - frontFade * 0.5));
++
++    if(tier >= 2){
++        float2 refractOffset = N.xy * clipPlanes.w * RefractGate(thickness)
++                             * (1.0 - 0.7 * distFactor);
++        float2 refractUV = clamp(S.screenUV + refractOffset, float2(0.001, 0.001), float2(0.999, 0.999));
++        float3 behind = tex2D(sceneTex, refractUV).rgb;
++        if(split < 0.5)
++            return float4(saturate(lerp(behind, legacySurf, legacyOp)), 1.0);
++        // Reflection AND refraction in the same pixel: F of the env, the rest
++        // split between the water body and the refracted scene behind it.
++        return float4(saturate(WaterSplitOpaque(behind, skyReflect, waterCol,
++                                                 F, bodyT, highlights)), 1.0);
++    }
++    // Tier 0/1: no scene/depth copies — hardware SRCALPHA blend approximates
++    // the same split against the framebuffer (reflection still live, the
++    // scene behind shows through the alpha instead of being fetched).
++    if(split < 0.5)
++        return float4(saturate(legacySurf), legacyOp);
++    return WaterSplitBlend(skyReflect, waterCol, F, bodyT, highlights);
++}
++
++// ============================================================================
++// main_iv — GTA IV look (water-refs.md IV section)
++//   * 2 scrolling normal layers at IV scales/amps (0.002/0.0512 + 0.01/0.256
++//     rescaled x10 for SA world units: 0.02 / 0.1 per metre, world XY mapping)
++//   * fresnel mix = 0.2 + 0.6*(NdotV)^5 (c4=0.6/0.2 asm constants)
++//   * shore alpha saturate(opacity^0.25 + 0.125), opacity = depthDiff*alpha
++//   * distance normal fade 1 - dist^2*4e-4 (floored so the detail never
++//     disappears completely — that was the "effect lost" defect)
++// ============================================================================
++
++float4 WaterIV(VS_OUTPUT IN)
++{
++    SurfBase S = WaterSetup(IN);
++    int tier = (int)qualityParams.x;
++    float time = timeParams.x * timeParams.y;
++    float below = S.below;
++    float dayF = saturate(timeLight1.w);
++    float split = saturate(qualityParams.w);   // 1 = fresnel split, 0 = legacy
++
++    // ---- Water column ----
++    float thickness = 0.0;
++    float frontFade = 0.0;
++    float deepFactor = 0.65;
++    if(tier >= 2){
++        float2 col = SampleWaterColumn(S.screenUV, S.viewZ, tier);
++        thickness = col.x;
++        frontFade = col.y;
++        deepFactor = smoothstep(0.0, 1.0, thickness / max(shallowColor.w, 1e-3));
++    }else{
++        // Tiers 0/1: zero-fetch column estimate (see WaterXbox) — the ramp
++        // and the body-opacity path stay alive without the depth copy.
++        thickness = saturate(S.viewZ * 0.02) * max(shallowColor.w * 2.0, 1.0);
++        if(tier >= 1)
++            deepFactor = smoothstep(0.0, 1.0, thickness / max(shallowColor.w, 1e-3));
++    }
++    float shoreFade = saturate(thickness / max(specParams.w, 1e-3));
++    if(tier < 2) shoreFade = 1.0;
++
++    // ---- IV normal layers: world-space XZ mapping (SA: water plane spans
++    //      world XY), layer scales 0.002/0.01 x10 rescale, amps 0.0512/0.256
++    //      + mip-amplitude restore on BOTH layers ----
++    float2 wuv = IN.worldPos.xy * waterParams.y;
++    float2 uv1 = wuv * 0.02 + float2( 0.011, 0.007) * time;
++    float2 uv2 = wuv * 0.10 + float2(-0.014, 0.019) * time;
++    float amp1 = LayerAmpRestore(uv1);
++    float amp2 = LayerAmpRestore(uv2);
++
++    float4 t1 = tex2D(detailTex, uv1);
++    float3 n1 = t1.xyz * 2.0 - 1.0;
++    n1.xy *= amp1;
++    float3 n2 = float3(0.0, 0.0, 0.0);
++    float h2 = 0.0;
++    if(tier >= 1){
++        float4 t2 = tex2D(detailTex, uv2);
++        n2 = t2.xyz * 2.0 - 1.0;
++        n2.xy *= amp2;
++        h2 = t2.w;
++    }
++    if(tier >= 3){
++        float4 t3 = tex2D(detailTex, uv1 * 3.7 + float2(0.023, -0.017) * time);
++        n2 += (t3.xyz * 2.0 - 1.0) * 0.35;
++    }
++
++    // IV: N = (dx, dy, 1.00001) with per-layer amplitudes 0.0512 / 0.256.
++    // Distance normal fade: 1 - dist^2 * distFadeK (IV: 4e-4) — FLOORED at
++    // 0.25: the raw curve hit zero at ~50 m and both layers vanished together
++    // ("the effect is lost" well inside the view).
++    float nFade = 0.25 + 0.75 * saturate(1.0 - S.dist * S.dist * max(qualityParams.y, 0.0));
++    float2 dN = (n1.xy * 0.0512 + n2.xy * 0.256) * waterParams.x;
++    float3 N = normalize(float3(dN * nFade, 1.00001));
++
++    // View from below: face the camera (see WaterXbox for the full note).
++    if(below > 0.5)
++        N = -N;
++
++    float NdotV = max(dot(N, S.V), 0.0);
++    float NdotL = max(dot(N, S.L), 0.0);
++    float NdotH = max(dot(N, S.H), 0.0);
++
++    // ---- IV fresnel: mix = 0.2 + 0.6*(NdotV)^5 — planar-style reflection,
++    //      strong face-on, deliberately DImmed at grazing (anti-chrome).
++    //      Taken alone that curve is face-on-only: at grazing it stays at
++    //      ~0.11 and the split would hand those angles entirely to the
++    //      transmission lobe ("reflection missing from above at most angles").
++    //      Floor it with the physical Schlick curve so grazing still reflects —
++    //      the cap (waterParams.w < 1) still guarantees never-chrome. ----
++    float ivAmt = saturate((0.2 + 0.6 * pow(NdotV, 5.0)) * waterParams.w);
++    float ivSchlick = 0.02 + 0.98 * pow(saturate(1.0 - NdotV), 5.0);
++    float reflAmt = saturate(max(ivAmt, ivSchlick * waterParams.w));
++    float3 skyReflect = SkyReflection(N, S.V, S.distFactor, below);
++
++    // ---- Water body colour: depth ramp + gentle far blend + timecycle light --
++    float3 waterCol = lerp(shallowColor.rgb, deepColor.rgb, deepFactor);
++    waterCol = FarBlendWater(waterCol, S.distFactor);
++    waterCol = WaterBodyLight(waterCol, NdotL);
++
++    // ---- Sun specular (Blinn, preset power from the IV constant set) ----
++    float specPow = max(specParams.x, 8.0);
++    float spec = pow(NdotH, specPow) * specParams.y;
++
++    // ---- Foam band (tier >= 2) ----
++    float foam = 0.0;
++    if(tier >= 2){
++        float h = (t1.w + h2) * 0.5;
++        float band = smoothstep(0.02, 0.02 + max(timeParams.w, 0.01), shoreFade)
++                   * (1.0 - smoothstep(max(timeParams.z, 0.05) * 0.5, max(timeParams.z, 0.1), shoreFade));
++        foam = band * smoothstep(0.55, 0.85, h) * 0.25 * WaterFoamGate();
++    }
++
++    float pierce = 0.0;
++    if(tier >= 3 && below < 0.5)
++        pierce = SunPierce(S.V, N, S.L, thickness) * qualityParams.z * dayF;
++
++    // ---- Composite (fresnel split — see the block comment by WaterSplitOpaque)
++    float3 highlights = spec * float3(1.0, 0.97, 0.9) * WaterSpecTint()
++                      + float3(0.85, 0.9, 0.95) * foam
++                      + float3(1.0, 0.97, 0.85) * pierce
++                      + float3(0.85, 0.92, 1.0) * WaterUnderShimmer(S.V, N, uv1, time, below);
++
++    float F = (below > 0.5) ? WaterBelowOpacity(NdotV) : reflAmt;
++    F *= RefractGate(thickness) * saturate(1.0 - frontFade * lerp(0.85, 0.5, below));
++    float bodyT = WaterBodyOpacity(thickness, NdotV, frontFade, S.vtxA, below);
++
++    // Legacy composite (INI waterFresnelSplit = 0) — IV's own
++    // depthDiff x alpha / shore alpha = opacity^0.25 + 0.125 curve.
++    float3 legacySurf = waterCol * (1.0 - reflAmt) + skyReflect * reflAmt + highlights;
++    float lop = deepFactor * deepColor.w * specParams.z;
++    float legacyOp = saturate(pow(saturate(lop), 0.25) + 0.125);
++    legacyOp = saturate(legacyOp * shoreFade * S.vtxA * saturate(1.0 - frontFade * 0.85));
++    if(below > 0.5)
++        legacyOp = saturate(WaterBelowOpacity(NdotV) * S.vtxA * saturate(1.0 - frontFade * 0.5));
++
++    if(tier >= 2){
++        float2 refractOffset = N.xy * clipPlanes.w * RefractGate(thickness)
++                             * (1.0 - 0.7 * S.distFactor);
++        float2 refractUV = clamp(S.screenUV + refractOffset, float2(0.001, 0.001), float2(0.999, 0.999));
++        float3 behind = tex2D(sceneTex, refractUV).rgb;
++        if(split < 0.5)
++            return float4(saturate(lerp(behind, legacySurf, legacyOp)), 1.0);
++        return float4(saturate(WaterSplitOpaque(behind, skyReflect, waterCol,
++                                                 F, bodyT, highlights)), 1.0);
++    }
++    if(split < 0.5)
++        return float4(saturate(legacySurf), legacyOp);
++    return WaterSplitBlend(skyReflect, waterCol, F, bodyT, highlights);
+ }
++
++// ============================================================================
++// main_v — GTA V / RAGE look (water-refs.md V section)
++//   * damped reflection normal lerp(N, (0,0,1), 5/6) (anti-chrome)
++//   * fresnel = lerp(NdotV, 1, 0.3) (flattened curve)
++//   * exp depth colour blend (2*WaterColor*refr <-> refr), e = RefractionExponent 0.25
++//   * cell-mask pow(...,32) anti-tiling
++//   * foam band FoamMask*(len(flatN.xy)*0.27+0.44), foamWeight 0.65
++//   * Blinn spec power ~1118 (watertune SpecularFalloff) low intensity
++//   * sun pierce (tier 3), fine layer x3.7 + crossed low-freq layers (tier 3)
++// ============================================================================
++
++float4 WaterV(VS_OUTPUT IN)
++{
++    SurfBase S = WaterSetup(IN);
++    int tier = (int)qualityParams.x;
++    float time = timeParams.x * timeParams.y;
++    float below = S.below;
++    float dayF = saturate(timeLight1.w);
++    float split = saturate(qualityParams.w);   // 1 = fresnel split, 0 = legacy
++
++    // ---- Water column ----
++    float thickness = 0.0;
++    float frontFade = 0.0;
++    float deepFactor = 0.65;
++    if(tier >= 2){
++        float2 col = SampleWaterColumn(S.screenUV, S.viewZ, tier);
++        thickness = col.x;
++        frontFade = col.y;
++        deepFactor = smoothstep(0.0, 1.0, thickness / max(shallowColor.w, 1e-3));
++    }else{
++        // Tiers 0/1: zero-fetch column estimate (see WaterXbox) — the ramp
++        // and the body-opacity path stay alive without the depth copy.
++        thickness = saturate(S.viewZ * 0.02) * max(shallowColor.w * 2.0, 1.0);
++        if(tier >= 1)
++            deepFactor = smoothstep(0.0, 1.0, thickness / max(shallowColor.w, 1e-3));
++    }
++    float shoreFade = saturate(thickness / max(specParams.w, 1e-3));
++    if(tier < 2) shoreFade = 1.0;
++
++    // ---- GetOceanBump stack (V recipe): 2 main taps at worldXZ*scale +
++    //      crossed low-freq layers scrolling at time/10 + fine layer x3.7.
++    //      One fetch per layer, no dynamic loops, mip-amplitude restore on
++    //      both live layers. ----
++    float2 wuv = IN.worldPos.xy * waterParams.y * 0.02;
++    float2 uv1 = wuv + float2( 0.013, -0.009) * time;
++    float2 uv2 = wuv * 1.73 + float2(-0.017, 0.011) * time;
++    float amp1 = LayerAmpRestore(uv1);
++    float amp2 = LayerAmpRestore(uv2);
++
++    float4 t1 = tex2D(detailTex, uv1);
++    float3 n1 = t1.xyz * 2.0 - 1.0;
++    n1.xy *= amp1;
++    float3 n2 = float3(0.0, 0.0, 0.0);
++    float h2 = 0.0;
++    if(tier >= 1){
++        float4 t2 = tex2D(detailTex, uv2);
++        n2 = t2.xyz * 2.0 - 1.0;
++        n2.xy *= amp2;
++        h2 = t2.w;
++    }
++    if(tier >= 3){
++        // Fine detail layer at x3.7 + the two crossed low-freq swell layers
++        // (V /448 and /512 recipe, rescaled to SA world units).
++        float4 t3 = tex2D(detailTex, uv1 * 3.7 + float2(0.019, 0.015) * time);
++        n2 += (t3.xyz * 2.0 - 1.0) * 0.35;
++        float4 t4 = tex2D(detailTex, wuv * 0.1 + float2( 0.025,  0.020) * time * 0.1);
++        float4 t5 = tex2D(detailTex, wuv * 0.088 + float2(-0.020, 0.025) * time * 0.1);
++        n1 += (t4.xyz * 2.0 - 1.0) * 0.30;
++        n2 += (t5.xyz * 2.0 - 1.0) * 0.30;
++    }
++
++    // Cell-mask anti-tiling: pow(...,32) of the height channel produces a
++    // sparse mask that breaks the normal-map repeat pattern.
++    float cellMask = pow(saturate(t1.w), 32.0);
++
++    float strength = waterParams.x * (1.0 - 0.85 * S.distFactor);
++    float2 dN = (n1.xy + n2.xy * 0.7) * strength * (0.75 + 0.5 * cellMask);
++    float3 N = normalize(float3(dN, 1.0));
++
++    // View from below: face the camera (see WaterXbox for the full note).
++    if(below > 0.5)
++        N = -N;
++
++    float NdotV = max(dot(N, S.V), 0.0);
++    float NdotL = max(dot(N, S.L), 0.0);
++    float NdotH = max(dot(N, S.H), 0.0);
++
++    // ---- Anti-chrome reflection: damped reflection normal lerp(N,(0,0,1),5/6)
++    //      and flattened fresnel lerp(NdotV, 1, 0.3). From below the flat
++    //      reference must be the camera-facing side too, or the damped normal
++    //      points away from the viewer and the reflection goes dead. ----
++    float3 flatN = below > 0.5 ? float3(0.0, 0.0, -1.0) : float3(0.0, 0.0, 1.0);
++    float3 Nrefl = normalize(lerp(N, flatN, 5.0 / 6.0));
++    float3 skyReflect = SkyReflection(Nrefl, S.V, S.distFactor, below);
++    // Flattened fresnel lerp(NdotV, 1, 0.3) is V's face-on-biased curve: at
++    // grazing it only reaches ~0.17 and the split would hand those angles to
++    // transmission ("reflection missing from above"), so floor it with the
++    // physical Schlick curve — the cap keeps it under 1 (anti-chrome).
++    float vAmt = saturate(lerp(NdotV, 1.0, 0.3) * waterParams.w);
++    float vSchlick = 0.02 + 0.98 * pow(saturate(1.0 - NdotV), 5.0);
++    float reflAmt = saturate(max(vAmt, vSchlick * waterParams.w));
++
++    // ---- Water body colour: depth ramp + gentle far blend + timecycle light --
++    float3 waterCol = lerp(shallowColor.rgb, deepColor.rgb, deepFactor);
++    waterCol = FarBlendWater(waterCol, S.distFactor);
++    waterCol = WaterBodyLight(waterCol, NdotL);
++
++    // ---- Blinn specular (watertune SpecularFalloff ~1118, low intensity,
++    //      never wide GGX = chrome) ----
++    float specPow = max(specParams.x * (1.0 - 0.85 * S.distFactor), 8.0);
++    float spec = pow(NdotH, specPow) * specParams.y * (1.0 - 0.6 * S.distFactor);
++
++    // ---- Foam band: FoamMask*(len(flatN.xy)*0.27 + 0.44), foamWeight 0.65,
++    //      FoamMask = saturate((512-depth)/512) shore depth gate ----
++    float foam = 0.0;
++    if(tier >= 2){
++        float foamMask = saturate((512.0 - thickness * 100.0) / 512.0);
++        float foamBand = foamMask * (length(dN) * 0.27 + 0.44) * 0.65;
++        foam = foamBand * smoothstep(0.45, 0.8, (t1.w + h2) * 0.5) * shoreFade * WaterFoamGate();
++    }
++
++    float pierce = 0.0;
++    if(tier >= 3 && below < 0.5)
++        pierce = SunPierce(S.V, N, S.L, thickness) * qualityParams.z * dayF;
++
++    // ---- Composite: fresnel split (V's exp depth colour blend becomes the
++    //      BODY colour of the transmission lobe — see WaterSplitOpaque) ----
++    float3 highlights = spec * float3(1.0, 0.97, 0.9) * WaterSpecTint()
++                      + float3(0.85, 0.9, 0.95) * foam
++                      + float3(1.0, 0.97, 0.85) * pierce
++                      + float3(0.85, 0.92, 1.0) * WaterUnderShimmer(S.V, N, uv1, time, below);
++
++    float F = (below > 0.5) ? WaterBelowOpacity(NdotV) : reflAmt;
++    F *= RefractGate(thickness) * saturate(1.0 - frontFade * lerp(0.85, 0.5, below));
++    float bodyT = WaterBodyOpacity(thickness, NdotV, frontFade, S.vtxA, below);
++
++    // Legacy composite (INI waterFresnelSplit = 0).
++    float3 legacySurf = waterCol * (1.0 - reflAmt) + skyReflect * reflAmt + highlights;
++    float legacyOp = saturate(deepColor.w * specParams.z
++                              * lerp(0.35, 1.0, deepFactor) * S.vtxA);
++    if(below > 0.5)
++        legacyOp = saturate(WaterBelowOpacity(NdotV) * S.vtxA);
++
++    // ---- V translucency: exp depth colour blend ----
++    //      depthBlend = exp(float2(-20, -60*|V.z|) * WaterColor.a * depth * e)
++    //      litRefr = lerp(2*WaterColor*refr, refr, depthBlend.y)
++    //      water   = lerp(waterCol, litRefr, depthBlend.x)
++    if(tier >= 2){
++        float2 refractOffset = N.xy * clipPlanes.w * RefractGate(thickness)
++                             * (1.0 - 0.7 * S.distFactor);
++        float2 refractUV = clamp(S.screenUV + refractOffset, float2(0.001, 0.001), float2(0.999, 0.999));
++        float3 refr = tex2D(sceneTex, refractUV).rgb;
++
++        float2 depthBlend = exp(float2(-20.0, -60.0 * abs(S.V.z))
++                                * deepColor.w * thickness * 0.25);
++        float3 litRefr = lerp(2.0 * waterCol * refr, refr, depthBlend.y);
++        float3 baseCol = lerp(waterCol, litRefr, depthBlend.x);
++
++        if(split < 0.5){
++            float3 surfV = baseCol * (1.0 - reflAmt)
++                         + skyReflect * reflAmt + highlights;
++            // Junction blend: at the waterline the pixel reproduces the scene
++            // behind it (refractOffset -> 0 there, so refr = the exact scene).
++            float junction = saturate(shoreFade * (1.0 - frontFade * 0.85));
++            // From below the sheet is see-through face-on / a mirror at grazing —
++            // the depth-driven junction would paint the underside solid.
++            if(below > 0.5)
++                junction = saturate(WaterBelowOpacity(NdotV) * (1.0 - frontFade * 0.5));
++            return float4(saturate(lerp(refr, surfV, junction)), 1.0);
++        }
++        return float4(saturate(WaterSplitOpaque(refr, skyReflect, baseCol,
++                                                 F, bodyT, highlights)), 1.0);
++    }
++
++    if(split < 0.5)
++        return float4(saturate(legacySurf), legacyOp);
++    return WaterSplitBlend(skyReflect, waterCol, F, bodyT, highlights);
++}
++
++// ---- Entry points (one CSO per style, multi_entry compilation) ----
++float4 main_xbox(VS_OUTPUT IN) : COLOR { return WaterXbox(IN); }
++float4 main_iv(VS_OUTPUT IN)   : COLOR { return WaterIV(IN); }
++float4 main_v(VS_OUTPUT IN)    : COLOR { return WaterV(IN); }
++
++// Default entry kept as an alias of the Xbox core for standalone compiles.
++float4 main(VS_OUTPUT IN) : COLOR { return WaterXbox(IN); }
+diff --git a/shaders/vehiclePipeVS.hlsl b/shaders/vehiclePipeVS.hlsl
+index 39b5695..0030907 100644
+--- a/shaders/vehiclePipeVS.hlsl
++++ b/shaders/vehiclePipeVS.hlsl
+@@ -1,7 +1,7 @@
+ // vehiclePipeVS.hlsl - Consolidated vehicle vertex shaders
+ // Entry points: main_vehicle, main_vehiclePBR, main_ps2CarFx, main_specCarFx,
+ //               main_xboxCar, main_leedsCarFx, main_mobileVehicle,
+-//               main_neoPass1, main_neoPass2, main_edgeTessellation
++//               main_neoPass1, main_neoPass2
+ // Compile with /E <entry> for each pass
+ 
+ // ============================================================
+@@ -56,6 +56,12 @@ VS_OUTPUT_VEH main_vehicle(VS_INPUT_VEH IN)
+ float4   fxParams    : register(c21);
+ float4x4 world       : register(c30);
+ float3   eyePos      : register(c34);
++// VS c28.x = vehPrelightFallback (config). c22..c29 are otherwise unused by
++// main_vehiclePBR (c5..c11 = directCol[7], c12..c18 = directDir[7], c19 matCol,
++// c20 surfProps, c21 fxParams, c30..c33 world, c34 eye). Uploaded once per
++// Env cb invocation from vehiclePipe.cpp; every path that binds vehiclePBRVS
++// (opaque paint, glass, rubber) therefore sees the same value.
++float4   vehLitFallback : register(c28);
+ 
+ #define fresnel   (fxParams.x)
+ #define shininess (fxParams.w)
+@@ -84,17 +90,42 @@ VS_OUTPUT_VPBR main_vehiclePBR(VS_INPUT_VEH IN)
+         float l = max(0.0, dot(IN.Normal, -directDir[i]));
+         OUT.Color.xyz += l * directCol[i] * surfDiff;
+     }
+-    OUT.Color = saturate(OUT.Color) * matCol;
++    OUT.Color = saturate(OUT.Color);
++    // Non-prelit prelight fallback (config->vehPrelightFallback, VS c28.x).
++    // SA vehicle geometry ships WITHOUT rpGEOMETRYPRELIT (1793/1793 meshes in
++    // skygfx_dbg.log), so surfPrelight = 0, the prelight line above is
++    // identically 0, and the shade side is left with only timecycle ambient
++    // * material ambient — live log 0.03 * 0.5 = 0.02 — while the sun-lit side
++    // reaches 1.47: a dark silhouette box. Rather than invent a fake prelight
++    // (which would flatten every lit face), FLOOR the already-lit colour:
++    //   * max() only raises values below the floor -> shade lifts,
++    //   * sun-lit faces are already >= floor -> bit-identical, and
++    //   * the branch is skipped entirely when the geometry IS prelit, so
++    //     baked-lit geometry is untouched (no wash-out).
++    // Applied before the material-colour multiply so the floor keeps the
++    // paint's hue; c28 = 0 (unuploaded) degrades to the exact legacy result.
++    if(surfPrelight <= 0.5)
++        OUT.Color.rgb = max(OUT.Color.rgb, vehLitFallback.rgb);
++    OUT.Color = OUT.Color * matCol;
+ 
+     float4 WorldPos = mul(IN.Position, world);
+-    float3 WorldNormal = normalize(mul(IN.Normal, (float3x3)world));
+-    float3 ViewVector = normalize(WorldPos.xyz - eyePos);
++    float3 wn = mul(IN.Normal, (float3x3)world);
++    float3 WorldNormal = length(wn) > 1e-6 ? normalize(wn) : float3(0, 1, 0);
++    // View direction: surface -> camera (matches buildingPBRVS convention).
++    // Previously WorldPos - eyePos (camera->surface) made NdotV = max(dot(N,V),0)
++    // evaluate to 0 in the PS: clearcoatFresnel clamped to 1, kr collapsed to 1,
++    // and layer2 = lerp(layer1, envTerm, 1) replaced the base texture with the env
++    // reflection — the base paint vanished. Also corrupted reflect(-V, N).
++    float3 vv = eyePos - WorldPos.xyz;
++    float3 ViewVector = length(vv) > 1e-6 ? normalize(vv) : float3(0, 0, 1);
+     OUT.WorldPos = WorldPos;
+     OUT.WorldNormal = WorldNormal;
+     OUT.ViewDir = ViewVector;
+     OUT.SunDir = -directDir[0];
+ 
+-    float b = 1.0 - saturate(dot(-ViewVector, WorldNormal));
++    // Grazing rim for glass env intensity: b = 1 - NdotV (ViewVector is now
++    // surface->camera, so dot(ViewVector, WorldNormal) is the positive NdotV).
++    float b = 1.0 - saturate(dot(ViewVector, WorldNormal));
+     OUT.EnvColor = lerp(1.0f, b * b * b * b * b, fresnel) * shininess;
+ 
+     return OUT;
+@@ -157,7 +188,7 @@ VS_OUTPUT_PS2 main_ps2CarFx(VS_INPUT_VEH IN)
+ float4   fxParams_spec  : register(c30);
+ float4   envXform_spec  : register(c31);
+ float3x3 envmat_spec    : register(c32);
+-float3   eyePos_spec    : register(c35);
++float3   eyePos_spec    : register(c36);
+ 
+ #define shininess_spec (fxParams_spec.y)
+ #define specularity_spec (fxParams_spec.z)
+@@ -188,7 +219,8 @@ VS_OUTPUT_SPEC main_specCarFx(VS_INPUT_VEH IN)
+     }
+     OUT.Envcolor = float4(192.0, 192.0, 192.0, 0.0) / 128.0 * shininess_spec * lightmult_spec;
+ 
+-    float3 V = normalize(eyePos_spec - IN.Position.xyz);
++    float3 ve = eyePos_spec - IN.Position.xyz;
++    float3 V = length(ve) > 1e-6 ? normalize(ve) : float3(0, 0, 1);
+     float spec = pow(saturate(dot(IN.Normal, normalize(V + -directDir[0]))), 16);
+     OUT.Speccolor.rgb = spec * 3 * float3(0.75, 0.75, 0.75) * specularity_spec * lightmult_spec;
+     OUT.Speccolor.a = 1.0;
+@@ -273,7 +305,7 @@ VS_OUTPUT_XB main_xboxCar(VS_INPUT_XB IN)
+ // ============================================================
+ float4    fxParams_leeds : register(c30);
+ float3x3  envmat_leeds   : register(c32);
+-float4x4  texmat_leeds   : register(c36);
++float4x4  texmat_leeds   : register(c40);
+ 
+ #define shininess_leeds (fxParams_leeds.y)
+ #define lightmult_leeds (fxParams_leeds.w)
+@@ -300,7 +332,7 @@ VS_OUTPUT_LEEDS main_leedsCarFx(VS_INPUT_VEH IN)
+ // ============================================================
+ float4   fxParams_mob   : register(c30);
+ float4x4 worldmat       : register(c31);
+-float3   campos          : register(c35);
++float3   campos          : register(c36);
+ 
+ #define surfAmb_mob    (surfProps.x)
+ #define surfDiff_mob   (surfProps.z)
+@@ -325,7 +357,8 @@ VS_OUTPUT_MOB main_mobileVehicle(VS_INPUT_VEH IN)
+ 
+     float4 WorldPos = mul(IN.Position, worldmat);
+     float3 WorldNormal = mul(IN.Normal, (float3x3)worldmat);
+-    float3 ReflVector = normalize(WorldPos.xyz - campos);
++    float3 rv = WorldPos.xyz - campos;
++    float3 ReflVector = length(rv) > 1e-6 ? normalize(rv) : float3(0, 0, 1);
+     ReflVector = ReflVector - 2.0 * dot(ReflVector, WorldNormal) * WorldNormal;
+     OUT.Texcoord1 = ReflVector;
+ 
+@@ -378,8 +411,10 @@ VS_OUTPUT_NEO1 main_neoPass1(VS_INPUT_VEH IN)
+     VS_OUTPUT_NEO1 Out;
+     Out.position = mul(IN.Position, combined);
+     Out.texcoord0 = IN.Texcoord0;
+-    float3 N = normalize(mul(IN.Normal, (float3x3)world_neo).xyz);
+-    float3 V = normalize(eye_neo - mul(IN.Position, world_neo).xyz);
++    float3 wn2 = mul(IN.Normal, (float3x3)world_neo).xyz;
++    float3 N = length(wn2) > 1e-6 ? normalize(wn2) : float3(0, 1, 0);
++    float3 vn = eye_neo - mul(IN.Position, world_neo).xyz;
++    float3 V = length(vn) > 1e-6 ? normalize(vn) : float3(0, 0, 1);
+ 
+     float3 c = saturate(dot(N, -directDir_neo)) * surfDiff_neo;
+     c += ambient_neo * surfAmb_neo;
+@@ -421,7 +456,8 @@ VS_OUTPUT_NEO2 main_neoPass2(VS_INPUT_VEH IN)
+ {
+     VS_OUTPUT_NEO2 Out;
+     Out.position = mul(IN.Position, combined);
+-    float3 V = normalize(eye_neo - mul(IN.Position, world_neo).xyz);
++    float3 vn2 = eye_neo - mul(IN.Position, world_neo).xyz;
++    float3 V = length(vn2) > 1e-6 ? normalize(vn2) : float3(0, 0, 1);
+     float3 N = mul(IN.Normal, (float3x3)world_neo).xyz;
+ 
+     Out.color = float4((directSpec_neo2 * specTerm2(N, -directDir_neo, V, power_neo)).rgb, 1.0);
+@@ -431,9 +467,3 @@ VS_OUTPUT_NEO2 main_neoPass2(VS_INPUT_VEH IN)
+ 
+     return Out;
+ }
+-
+-// ============================================================
+-// Pass 9: Edge tessellation VS (optional, smooths jagged edges)
+-// ============================================================
+-// This is a modern feature - kept for compatibility but not actively used
+-// when edgeTessEnable is false in config
+diff --git a/shaders/vs/EdgeTessellationVS.hlsl b/shaders/vs/EdgeTessellationVS.hlsl
+deleted file mode 100644
+index 95add67..0000000
+--- a/shaders/vs/EdgeTessellationVS.hlsl
++++ /dev/null
+@@ -1,77 +0,0 @@
+-// Edge Smoothing Vertex Shader (vs_3_0)
+-// Smooths jagged edges by averaging vertex positions
+-// Reads from SMAA edge buffer to detect sharp edges
+-// Creates smoother silhouettes without adding geometry
+-//
+-// Constants:
+-//   c0-c3   = World*View*Projection matrix
+-//   c4      = (smoothStrength, edgeThreshold, normalBlend, 0)
+-//   c5      = (screenW, screenH, 1/screenW, 1/screenH)
+-//
+-// Textures:
+-//   s0 = edge buffer from SMAA (RG=luma edges)
+-
+-sampler2D edgeTex : register(s0);
+-
+-uniform float4x4 WorldViewProj : register(c0);
+-uniform float4 smoothParams    : register(c4); // x=strength, y=threshold, z=normalBlend
+-uniform float4 screenSize      : register(c5);
+-
+-struct VS_INPUT
+-{
+-    float4 position : POSITION;
+-    float3 normal   : NORMAL;
+-    float2 texcoord : TEXCOORD0;
+-    float4 color    : COLOR0;
+-};
+-
+-struct VS_OUTPUT
+-{
+-    float4 position : POSITION;
+-    float2 texcoord : TEXCOORD0;
+-    float4 color    : COLOR0;
+-    float3 worldPos : TEXCOORD1;
+-    float3 worldNrm : TEXCOORD2;
+-};
+-
+-VS_OUTPUT main(VS_INPUT IN)
+-{
+-    VS_OUTPUT OUT;
+-    
+-    // Transform position to clip space
+-    float4 clipPos = mul(IN.position, WorldViewProj);
+-    
+-    // Calculate screen-space UV for edge buffer sampling
+-    float2 screenUV = clipPos.xy / clipPos.w;
+-    screenUV = screenUV * 0.5 + 0.5;
+-    screenUV.y = 1.0 - screenUV.y;
+-    
+-    // Sample edge buffer at vertex position
+-    float4 edgeSample = tex2Dlod(edgeTex, float4(screenUV, 0, 0));
+-    float edgeStrength = max(edgeSample.r, edgeSample.g);
+-    
+-    // Calculate view-space normal for smoothing direction
+-    float3 worldNormal = normalize(IN.normal);
+-    
+-    // Edge-based smoothing: blend vertex toward average
+-    // This creates a smoother appearance by pulling vertices inward at edges
+-    float smoothFactor = edgeStrength * smoothParams.x;
+-    
+-    // Average position calculation (fake tessellation effect)
+-    // Move vertex slightly toward center of face along normal
+-    float3 smoothedPos = IN.position.xyz;
+-    
+-    // Pull vertex inward along normal (reverse of extrusion)
+-    // This smooths sharp edges by averaging the surface
+-    smoothedPos -= worldNormal * smoothFactor * smoothParams.z;
+-    
+-    // Apply smoothed position
+-    float4 finalPos = float4(smoothedPos, IN.position.w);
+-    OUT.position = mul(finalPos, WorldViewProj);
+-    OUT.texcoord = IN.texcoord;
+-    OUT.color = IN.color;
+-    OUT.worldPos = IN.position.xyz;
+-    OUT.worldNrm = worldNormal;
+-    
+-    return OUT;
+-}
+diff --git a/shaders/vs/GTAIVBuilding_vs.cso b/shaders/vs/GTAIVBuilding_vs.cso
+index bc022a6..7f4004b 100644
+Binary files a/shaders/vs/GTAIVBuilding_vs.cso and b/shaders/vs/GTAIVBuilding_vs.cso differ
+diff --git a/shaders/vs/GTAIVBuilding_vs.hlsl b/shaders/vs/GTAIVBuilding_vs.hlsl
+new file mode 100644
+index 0000000..c363ffe
+--- /dev/null
++++ b/shaders/vs/GTAIVBuilding_vs.hlsl
+@@ -0,0 +1,104 @@
++// GTAIVBuilding_vs.hlsl - GTA IV building vertex shader.
++// Entry: main, profile vs_3_0 -> resources/cso/GTAIVBuilding_vs.cso
++// (Resource.rc IDR_GTAIVBUILDINGVS, loaded by pipelinecommon CreateShaders).
++//
++// ---------------------------------------------------------------------------
++// WHY THIS FILE EXISTS
++// ---------------------------------------------------------------------------
++// Until now the only artifact in the tree was the prebuilt
++// GTAIVBuilding_vs.cso (shaders/vs + resources/cso) with NO HLSL source, so
++// nothing could be audited or recompiled. Disassembling it showed it was out
++// of sync with what CCustomBuildingDNPipeline__CustomPipeRenderCB_PS2
++// (buildingPipe.cpp) actually uploads:
++//
++//  1. Diffuse UV: it never read the mesh texcoords. TEXCOORD0 was emitted as
++//     `(normal . envmat).xy * envXform.zw` - i.e. the ENVMAP projection - and
++//     envXform (VS c37) is only uploaded for env-mapped materials. For every
++//     other material c37 was stale/zero, so the UV scale collapsed to 0 and
++//     the whole atomic sampled a single texel of its diffuse map: flat,
++//     posterised colour.
++//  2. Day/night: it read only COLOR0. DNInstance_PS2 writes the NIGHT colour
++//     to COLOR0 and the DAY colour to COLOR1, and setDnParams() uploads the
++//     blend weights to c30/c31 - registers the old shader never used, so IV
++//     buildings were drawn with night prelight at noon.
++//  3. c30 was declared as fxParams while the callback fills c30 with
++//     setDnParams()'s dayparam, and fxParams actually lives at c36
++//     (REG_fxParams). The IV pixel shader reads COLOR1.a as its env-lerp
++//     weight, so that weight was being driven by the time-of-day parameters.
++//
++// This rebuild keeps the exact output contract GTAIVBuilding_ps.cso consumes
++//   TEXCOORD0 = diffuse UV          (ps: texld s0)
++//   TEXCOORD1 = normal              (ps: uv = v1 * 0.5 + 0.5 -> texld s1)
++//   COLOR0    = lit vertex colour   (ps: * tex, drives oC0.a)
++//   COLOR1.a  = env lerp weight     (ps: mad oC0, v3.w, env-diffuse, diffuse)
++// while taking the lighting/UV path from the proven xboxBuildingVS /
++// ps2BuildingVS pair.
++//
++// Lighting is deliberately PS2/Xbox-equivalent: prelight + ambient only, no
++// live 7-light sum. The callback packs c20 as {ambient, diffuse, diffuse, 0}
++// (buildingPipe_uploadSurfProps) with a diffuse==0 -> 1.0 fallback, so
++// surfDiff reaches the shader as a real, non-zero prelight scale.
++// ---------------------------------------------------------------------------
++
++float4x4	combined	: register(c0);     // WVP (c0-c3)
++float3		ambient		: register(c4);
++float4		matCol		: register(c19);
++float3		surfProps	: register(c20);    // x = ambient scale, z = surfDiff
++float4		shaderParams	: register(c29);    // colorScale (x) - unused here
++float4		dayparam	: register(c30);
++float4		nightparam	: register(c31);
++float4x4	texmat		: register(c32);    // c32-c35
++float3x3	envmat		: register(c38);    // c38-c40 (object -> camera)
++
++#define surfAmb  (surfProps.x)
++#define surfDiff (surfProps.z)
++
++struct VS_INPUT {
++	float4 Position		: POSITION;
++	float3 Normal		: NORMAL;
++	float2 TexCoord		: TEXCOORD0;
++	float4 NightColor	: COLOR0;
++	float4 DayColor		: COLOR1;
++};
++
++struct VS_OUTPUT {
++	float4 Position		: POSITION;
++	float2 Texcoord0	: TEXCOORD0;    // diffuse UV
++	float3 Texcoord1	: TEXCOORD1;    // normal (ps env UV)
++	float3 Texcoord2	: TEXCOORD2;    // camera-space position
++	float4 Color		: COLOR0;
++	float4 Envcolor		: COLOR1;       // .a = env lerp weight
++};
++
++VS_OUTPUT
++main(in VS_INPUT IN)
++{
++	VS_OUTPUT OUT;
++
++	OUT.Position = mul(IN.Position, combined);
++	OUT.Texcoord0 = mul(texmat, float4(IN.TexCoord, 0.0, 1.0)).xy;
++
++	// Same camera-space basis the shipped shader used; the PS derives its
++	// reflection UV from Texcoord1 with `uv = n.xy * 0.5 + 0.5`.
++	OUT.Texcoord1 = mul(envmat, IN.Normal);
++	OUT.Texcoord2 = mul(envmat, IN.Position.xyz);
++
++	// prelight (day/night blended by setDnParams) * surfDiff + ambient*surfAmb,
++	// modulated by the material colour, exactly like xboxBuildingVS.
++	// Division guard: surfDiff is never 0 (the callback substitutes 1.0), and
++	// nothing here divides.
++	float4 prelight = IN.DayColor * dayparam + IN.NightColor * nightparam;
++	float4 col = prelight;
++	col.rgb *= surfDiff;
++	col.rgb += ambient * surfAmb;
++	OUT.Color = col * matCol;
++	OUT.Color.rgb = saturate(OUT.Color.rgb);
++
++	// Env lerp stays OFF: env-mapped materials are composited by the separate
++	// ps2BuildingFxVS / ps2EnvSpecFxPS pass in the callback, and every other
++	// material has no env texture bound on s1. With .a == 0 the IV pixel
++	// shader collapses to `tex * color`, which is exactly what we want.
++	OUT.Envcolor = float4(0.0, 0.0, 0.0, 0.0);
++
++	return OUT;
++}
+diff --git a/shaders/vs/Water_VS.hlsl b/shaders/vs/Water_VS.hlsl
+index 4181283..64a621b 100644
+--- a/shaders/vs/Water_VS.hlsl
++++ b/shaders/vs/Water_VS.hlsl
+@@ -1,27 +1,21 @@
+-// Water_VS.hlsl - Ocean water vertex shader with Gerstner wave displacement (vs_3_0)
++// Water_VS.hlsl - Flat water plane vertex shader (vs_3_0)
+ //
+-// Gerstner waves: each wave has direction, steepness, wavelength.
+-// Vertex position is displaced along wave direction and upward.
+-// Tangent/bitangent computed from wave derivatives for normal mapping.
++// REWRITE (shading-only waves): the water plane geometry is NEVER displaced.
++// All wave motion lives in the pixel shader as animated normal perturbation /
++// scrolling normal detail. The flat plane therefore always stays at exactly
++// its geometry level and can no longer pop or intersect land/other water at
++// the coast when waves animate.
+ //
+ // Constants:
+ //   c0-c3 = WorldViewProjection
+ //   c4-c7 = World
+ //   c8 = (camPosX, camPosY, camPosZ, time)
+-//   c9 = (sunDirX, sunDirY, sunDirZ, numWaves)
+-//   c10 = waveDir1 + steepness1 (xy, z)
+-//   c11 = waveDir2 + steepness2 (xy, z)
+-//   c12 = waveDir3 + steepness3 (xy, z)
+-//   c13 = (wavelength1, wavelength2, wavelength3, amplitude)
++//   c9 = (sunDirX, sunDirY, sunDirZ, sunBrightness)
+ 
+ uniform float4x4 worldViewProj : register(c0);
+ uniform float4x4 world         : register(c4);
+ uniform float4   camTime       : register(c8);  // xyz=camera pos, w=time
+-uniform float4   sunNumWaves   : register(c9);  // xyz=sun dir, w=num waves
+-uniform float4   wave1         : register(c10); // xy=dir, z=steepness
+-uniform float4   wave2         : register(c11); // xy=dir, z=steepness
+-uniform float4   wave3         : register(c12); // xy=dir, z=steepness
+-uniform float4   waveProps     : register(c13); // x=wavelength1, y=wavelength2, z=wavelength3, w=amplitude
++uniform float4   sunDir        : register(c9);  // xyz=sun dir (negated), w=brightness
+ 
+ struct VS_INPUT {
+     float3 position : POSITION;
+@@ -37,69 +31,38 @@ struct VS_OUTPUT {
+     float3 viewDir   : TEXCOORD2;
+     float3 lightDir  : TEXCOORD3;
+     float4 screenPos : TEXCOORD4;
+-    float4 waveParams : TEXCOORD5; // foam factor in .w
++    float4 vtxColor  : COLOR0;
+ };
+ 
+-// Gerstner wave displacement
+-// Returns displaced position and computes tangent for normal
+-float3 GerstnerWave(float2 pos, float2 dir, float steepness, float wavelength, float time,
+-                    inout float2 tangent, inout float2 bitangent)
+-{
+-    float k = 6.28318 / wavelength;
+-    float c = sqrt(9.81 / k);
+-    float2 d = normalize(dir);
+-    float f = k * (dot(d, pos) - c * time);
+-    float a = steepness / k;
+-
+-    tangent += float2(-d.x * d.x * steepness * sin(f),
+-                      -d.x * d.y * steepness * sin(f));
+-    bitangent += float2(-d.x * d.y * steepness * sin(f),
+-                        -d.y * d.y * steepness * sin(f));
+-
+-    return float3(d.x * a * cos(f),
+-                  d.y * a * cos(f),
+-                  a * sin(f));
+-}
+-
+ VS_OUTPUT main(VS_INPUT IN)
+ {
+     VS_OUTPUT OUT;
+ 
+-    float time = camTime.w;
+-    float2 pos = IN.position.xy;
+-
+-    // Accumulate Gerstner waves
+-    float3 displacement = float3(0, 0, 0);
+-    float2 tangent = float2(1, 0);
+-    float2 bitangent = float2(0, 1);
+-
+-    // Wave 1: large swell
+-    displacement += GerstnerWave(pos, wave1.xy, wave1.z, waveProps.x, time, tangent, bitangent);
+-    // Wave 2: medium chop
+-    displacement += GerstnerWave(pos, wave2.xy, wave2.z, waveProps.y, time, tangent, bitangent);
+-    // Wave 3: small detail
+-    displacement += GerstnerWave(pos, wave3.xy, wave3.z, waveProps.z, time, tangent, bitangent);
+-
+-    // Apply displacement to vertex position
+-    float3 displacedPos = IN.position + displacement;
+-
+-    // Transform
+-    OUT.position = mul(float4(displacedPos, 1.0), worldViewProj);
++    // Flat plane: position passes through completely untouched — no
++    // Gerstner/vertex displacement of any kind (req: geometry level fixed).
++    OUT.position  = mul(float4(IN.position, 1.0), worldViewProj);
+     OUT.screenPos = OUT.position;
+-    OUT.worldPos = mul(float4(displacedPos, 1.0), world);
+-
+-    // UVs from displaced world position
+-    OUT.texCoord = displacedPos.xy * 0.02;
+-
+-    // View direction
++    OUT.worldPos  = mul(float4(IN.position, 1.0), world);
++
++    // Base UV: the game fills the water render buffer with the original SA
++    // water texture mapping, so passing it through keeps the tile scale
++    // identical to the original SA water texture scale. Degenerate-UV guard:
++    // fall back to a world-space mapping per vertex (SM3.0 allows branches
++    // without dependent texture reads).
++    float2 baseUV = IN.texCoord;
++    if(abs(baseUV.x) + abs(baseUV.y) < 1e-6)
++        baseUV = IN.position.xy * 0.0625;
++    OUT.texCoord = baseUV;
++
++    // Unnormalized camera->surface vector; the PS normalizes with a 1e-7 guard.
+     OUT.viewDir = OUT.worldPos.xyz - camTime.xyz;
+ 
+-    // Light direction
+-    OUT.lightDir = -sunNumWaves.xyz;
++    OUT.lightDir = -sunDir.xyz;
+ 
+-    // Wave params for PS: foam factor from wave steepness
+-    float steepness = wave1.z + wave2.z + wave3.z;
+-    OUT.waveParams = float4(steepness, displacement.z, 0, saturate(steepness - 1.0));
++    // Game vertex colour/alpha — SA modulates its water quads through COLOR0;
++    // the PS uses it as a modulation so per-vertex shore fades (if present
++    // in the buffer) survive.
++    OUT.vtxColor = IN.color;
+ 
+     return OUT;
+ }
+diff --git a/shaders/vs/buildingPBRVS.hlsl b/shaders/vs/buildingPBRVS.hlsl
+index a17ddc9..91b30a6 100644
+--- a/shaders/vs/buildingPBRVS.hlsl
++++ b/shaders/vs/buildingPBRVS.hlsl
+@@ -1,14 +1,18 @@
+ // buildingPBRVS.hlsl - PBR vertex shader for buildings
+-// Outputs world-space vectors matching VehiclePBR_Modern PS_INPUT:
++// Outputs world-space vectors matching VehiclePBR_Modern PS_INPUT_BUILDING:
+ //   TEXCOORD0 = texture UV
+ //   TEXCOORD1 = WorldNormal (float3)
+ //   TEXCOORD2 = WorldPos (float3)
+ //   TEXCOORD3 = ViewDir (float3)
+ //   TEXCOORD4 = SunDir (float3)
++//   TEXCOORD5 = camera-space normal (float3) — env UV basis, PORTED FROM
++//               GTAIVBuilding_vs (see below). MUST stay in sync with
++//               PS_INPUT_BUILDING in VehiclePBR_Modern.hlsl or the two halves
++//               of the PBR building path read different interpolators.
+ //   COLOR0 = vertex color (day/night blended, lit)
+ //   COLOR1 = envColor (Fresnel + shininess)
+ //
+-// Register layout matches buildingPBR callback uploads in buildingPipe.cpp
++// Register layout matches buildingPipe.cpp's PBR callback uploads.
+ 
+ float4x4	combined	: register(c0);     // WVP matrix
+ float3		ambient		: register(c4);
+@@ -20,10 +24,22 @@ float4		shaderParams	: register(c29);
+ float4		dayparam	: register(c30);
+ float4		nightparam	: register(c31);
+ float4x4	texmat		: register(c32);    // c32-c35
+-float4x4	worldMat		: register(c24);    // World matrix (c24-c27)
++float4x4	worldMat	: register(c24);    // World matrix (c24-c27)
+ float3		eyePos		: register(c36);    // Camera position (c36, free — avoids texmat conflict)
++// object -> camera 3x3, uploaded by EVERY building cb (PS2/Xbox/PBR) as
++// REG_envmat = c38-c40 from CustomBuildingEnvMapPipeline__SetupEnv. The PS2
++// and Xbox cbs already feed it to their FX vertex shaders; the PBR cb
++// uploaded it too but until now nothing read it.
++float3x3	envmat		: register(c38);
+ 
+ #define surfAmb  (surfProps.x)
++// c20 packed by buildingPipe.cpp (PBR cb): x = ambient scale, y = dynamic
++// light scale, z = prelight scale. SA road/terrain/vegetation materials ship
++// diffuse=0 with lighting baked into vertex prelight; the CPU fallback boosts
++// ONLY z (prelight passes at full) and leaves y at the raw diffuse (~0) so the
++// live 7-light sum cannot stack on top of already-baked lighting (2x energy =
++// white blown-out ground).
++#define surfLightScale (surfProps.y)
+ #define surfDiff (surfProps.z)
+ 
+ struct VS_INPUT
+@@ -42,6 +58,7 @@ struct VS_OUTPUT {
+ 	float3 WorldPos		: TEXCOORD2;
+ 	float3 ViewDir		: TEXCOORD3;
+ 	float3 SunDir		: TEXCOORD4;
++	float3 CamNormal	: TEXCOORD5;
+ 	float4 Color		: COLOR0;
+ 	float4 Envcolor		: COLOR1;
+ };
+@@ -74,9 +91,31 @@ VS_OUTPUT main(in VS_INPUT IN)
+ 	float sunLen = length(directDir[0]);
+ 	OUT.SunDir = sunLen > 1e-6 ? -directDir[0] / sunLen : float3(0, 0, -1);
+ 
+-	// Vertex color: day/night blend + lighting (same as xboxBuildingVS)
++	// Camera-space normal — PORTED FROM GTAIVBuilding_vs:83
++	// (`OUT.Texcoord1 = mul(envmat, IN.Normal)`; its PS then builds the env
++	// UV as `uv = n.xy * 0.5 + 0.5`). envmat is object->camera and IN.Normal
++	// is object-space, so this is a single mul. Guarded against a degenerate
++	// matrix (identity/zero rows when there is no camera) so the UV can never
++	// come out of a NaN basis.
++	float3 camNormal = mul(envmat, IN.Normal);
++	float camNormLen = length(camNormal);
++	OUT.CamNormal = camNormLen > 1e-6 ? camNormal / camNormLen : float3(0, 0, 1);
++
++	// Vertex color: baked day/night prelight + LIVE timecycle sun (mirrors vehicleVS).
++	// directDir is WORLD-space here (buildingPipe.cpp pipeUploadLightDirectionForce),
++	// so NdotL uses worldNormal, not the object-space IN.Normal. saturate() is required
++	// now that sun is added (sunlit faces can otherwise exceed 1.0).
+ 	float4 prelight = IN.DayColor * dayparam + IN.NightColor * nightparam;
+-	OUT.Color = (prelight * surfDiff + float4(ambient, 0.0) * surfAmb) * matCol;
++	OUT.Color = prelight * surfDiff;
++	OUT.Color.xyz += ambient * surfAmb;
++	for (int i = 0; i < 7; i++){
++		float l = max(0.0, dot(worldNormal, -directDir[i]));
++		// Dynamic lights scale by surfLightScale (y), NOT surfDiff: for
++		// baked-lighting materials (diffuse=0) the CPU sends y~=0, so the
++		// live light sum stays off while prelight passes at full strength.
++		OUT.Color.xyz += l * directCol[i] * surfLightScale;
++	}
++	OUT.Color = saturate(OUT.Color) * matCol;
+ 
+ 	// Env/Fresnel params for PBR specular
+ 	float3 V = normalize(eyePos - worldPos.xyz);
+diff --git a/shaders/vs/vehicleVS.hlsl b/shaders/vs/vehicleVS.hlsl
+index dd048d3..04ca5bd 100644
+--- a/shaders/vs/vehicleVS.hlsl
++++ b/shaders/vs/vehicleVS.hlsl
+@@ -30,7 +30,12 @@ main(VS_INPUT IN)
+ 	OUT.Texcoord0 = IN.Texcoord0;
+ 
+ 	OUT.Color = float4(IN.Color.rgb*isPrelit, 1.0);
+-	OUT.Color.xyz += ambient*surfAmb;
++	// AmbienCe floor: SA car materials often carry a near-zero surfaceProps.ambient,
++	// which zeroed the timecycle ambient and left vehicles pure black in daytime
++	// shade. Clamp the ambient reflectivity to a small minimum so shadowed paint
++	// stays dark-but-tinted (peds receive timecycle ambient unscaled, so this keeps
++	// the pipes in step). Materials already at/above the floor are unaffected.
++	OUT.Color.xyz += ambient*max(surfAmb, 0.4);
+ 	for(int i = 0; i < 7; i++){
+ 		float l = max(0.0, dot(IN.Normal, -directDir[i]));
+ 		OUT.Color.xyz += l*directCol[i]*surfDiff;

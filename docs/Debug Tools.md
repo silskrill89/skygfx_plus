@@ -14,7 +14,7 @@ Runtime debug tools for development. The debug menu provides real-time configura
 ## Debug Menu
 The debug menu (toggled via F4) provides access to all rendering configuration:
 - **Pipeline selection** — Building pipe, vehicle pipe modes
-- **Feature toggles** — Detail maps, stochastic texturing, grass, shadows, radiosity
+- **Feature toggles** — Detail maps, noise-detail texturing, grass, shadows, radiosity
 - **Environment** — Env map size, far clip multiplier
 - **Shininess/specularity** — Per-pipe multipliers (Neo, Leeds, Env)
 - **Advanced** — Dual-pass settings, alpha threshold, PS2-modulate, infrared/night vision

@@ -20,6 +20,25 @@
 // c42: enableVertexAO, enablePointLight, enableIBL, enableIBLTint
 // c43: enableSurfaceWeights, enableGrading, enableGamma, enableSMAA
 
+// Constant declarations. No consumer declares these (unifiedPipe.hlsl only
+// declares c2/c4-c8), so they live here; uploaded by UploadUnifiedConstants.
+// c39 is intentionally unused (see layout above).
+float4 c28 : register(c28);
+float4 c29 : register(c29);
+float4 c30 : register(c30);
+float4 c31 : register(c31);
+float4 c32 : register(c32);
+float4 c33 : register(c33);
+float4 c34 : register(c34);
+float4 c35 : register(c35);
+float4 c36 : register(c36);
+float4 c37 : register(c37);
+float4 c38 : register(c38);
+float4 c40 : register(c40);
+float4 c41 : register(c41);
+float4 c42 : register(c42);
+float4 c43 : register(c43);
+
 #define SAT_BOOST          c28.x
 #define IBL_TINT_STR       c28.y
 
@@ -165,9 +184,13 @@ float2 DetectEdge(float2 uv, sampler2D depthTex, sampler2D colorTex,
     float3 colorDiff = abs(rColor - lColor) + abs(dColor - uColor);
     float colorLuma = dot(colorDiff, float3(0.2126, 0.7152, 0.0722));
 
-    float3 avgCar = AVG_CAR_COLOUR;
-    float carSat = length(cColor - float3(dot(cColor, float3(0.333)), dot(cColor, float3(0.333)), dot(cColor, float3(0.333))));
-    float avgCarSat = length(avgCar - float3(0.5));
+    float3 avgCar = AVG_CAR_COLOUR.rgb;
+    // fxc 9.29 (June 2010 SDK) rejects single-scalar vector constructors
+    // (X3014: float3(0.333) / float3(0.5)), so the component splats are
+    // spelled out — bit-identical values, same carSat/avgCarSat math.
+    float avg = dot(cColor, float3(0.333, 0.333, 0.333));
+    float carSat = length(cColor - float3(avg, avg, avg));
+    float avgCarSat = length(avgCar - float3(0.5, 0.5, 0.5));
     float carMask = smoothstep(0.1, 0.4, carSat) * smoothstep(0.1, 0.4, avgCarSat);
     float colorEdge = step(threshold, colorLuma) * (1.0 - carMask * 0.5);
 

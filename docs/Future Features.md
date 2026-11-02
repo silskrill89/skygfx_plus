@@ -7,7 +7,7 @@ See [[Roadmap to Ultimate Mod]] for the full development roadmap.
 ### Phase 1: Restore Full Compatibility
 - Verify all 9 aap car pipes work
 - Verify all 2 aap building pipes work
-- Verify all junior features (stochastic, wind, radiosity, trails, grading)
+- Verify all junior features (noise-detail texturing — formerly stochastic — wind, radiosity, trails, grading)
 - Fix dead code stubs (UploadUnifiedConstants, wheel extender, env map normals)
 - Restore YCbCr correction from junior fork
 
@@ -83,7 +83,7 @@ Most features are already implemented (see [[Implemented Features]]). Remaining:
 ### Normal Map Plugin Integration
 - **Status:** Deferred
 - **Reason:** Requires DK22Pac normalmap SDK, complex dependencies
-- **Notes:** Code exists in `src/rw/normalmap.cpp` but excluded from build
+- **Notes:** Code now lives in `src/texdefs.cpp` (external DK22Pac lane `TexDefsExternalInit`/`TexDefsTryAttachExternal`), gated at runtime by `enableNormalMaps`
 
 ### Multi-pass Vehicle Glass with Parallax
 - **Status:** Partially implemented

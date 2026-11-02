@@ -4,14 +4,14 @@
 
 ## Overview
 
-GTA IV-style rendering mode that combines building/vehicle pipeline swaps with filmic post-processing. Implemented across `iv_mode.cpp`, `vehiclePipe.cpp`, and `postfx.cpp`.
+GTA IV-style rendering mode that combines building/vehicle pipeline swaps with filmic post-processing. IV lives in the `ModeManager` `GTAIV` profile (70 owned fields, `src/core/modeManager.cpp:418-529`), the IV branches in `src/render/vehiclePipe.cpp` (`CAR_GTAIV` / `ivMode`, `:1005-1080`), and the IV postFX grade (`DrawIVGrade`, `src/render/postfx_colourfilter.cpp:1383`). All `src/render/*_mode.cpp` files — including `iv_mode.cpp` — are retired no-op stubs.
 
 ## Rendering Configuration
 
 | Component | Value | Effect |
 |-----------|-------|--------|
 | `buildingPipe` | `BUILDING_GTAIV` | Swaps to `gtaivBuildingVS`/`gtaivBuildingPS` |
-| `vehiclePipe` | `CAR_NEO` | Uses `CarPipe` class (Neo pipe) |
+| `vehiclePipe` | `CAR_GTAIV` | Uses the GTA IV vehicle shader pair (`gtaivVehicleVS`/`gtaivVehiclePS`) |
 | `colorFilter` | `COLORFILTER_GTAIV` | Bypass mode — no filter applied |
 | `ps2Modulate` | 0 | No PS2 color modulation |
 | `dualPass` | 0 | No dual-pass rendering |

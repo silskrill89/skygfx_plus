@@ -386,6 +386,3 @@ enum RockstarPipelineIDs
 
 uint32 GetPipelineID(RpAtomic *atomic);
 void SetPipelineID(RpAtomic *atomic, uint32 id);
-
-uint8 GetDefinedShader(RpAtomic* atomic);
-void SetDefinedShader(RpAtomic* atomic, uint8 shader);

@@ -1,0 +1,27 @@
+﻿=== 1. TabShellAppSettings (the key the binary reads) ===
+HKCU\Software\Microsoft\Windows\CurrentVersion\TabShellAppSettings  -> KEY_ABSENT
+HKLM\Software\Microsoft\Windows\CurrentVersion\TabShellAppSettings  -> KEY_ABSENT
+
+=== 2. Velocity feature gates (Overrides\4, obfuscated names) ===
+Overrides buckets present: 0,15,4,8,9
+  HIT Overrides\8\1365873800  (11895592 TabShellWinRtApi)  -> EnabledState=2  EnabledStateOptions=0  Variant=0  VariantPayload=0  VariantPayloadKind=0
+  HIT Overrides\8\1527625864  (10727725 TabShell)  -> EnabledState=2  EnabledStateOptions=0  Variant=0  VariantPayload=0  VariantPayloadKind=0
+  HIT Overrides\8\3167312009  (13849566 TabShellVisibility)  -> EnabledState=2  EnabledStateOptions=0  Variant=0  VariantPayload=0  VariantPayloadKind=0
+  HIT Overrides\8\3192474248  (14291807 TabShellVisibilityOverrideToOnForGates)  -> EnabledState=2  EnabledStateOptions=0  Variant=0  VariantPayload=0  VariantPayloadKind=0
+  HIT Overrides\8\3403740811  (17057765 TabShellAutoTabbingPreference)  -> EnabledState=2  EnabledStateOptions=0  Variant=0  VariantPayload=0  VariantPayloadKind=0
+  HIT Overrides\8\768013962  (17093654 TabSettingStateRepoIntegration)  -> EnabledState=2  EnabledStateOptions=0  Variant=0  VariantPayload=0  VariantPayloadKind=0
+(only matches for the 6 TabShell fids are printed above; blank = still absent)
+
+=== 3. BOGUS fabricated CloudStore key (must be deleted if signature matches) ===
+BOGUS_KEY PRESENT -> Software\Microsoft\Windows\CurrentVersion\CloudStore\Store\Cache\DefaultAccount\windows.data.tabshell
+   [Current] TestTabSetting = [String] SampleValue
+   [Current] Version = [DWord] 2
+   [Current] Timestamp = [QWord] 134351227744676985
+   [Current] Data = [Binary] 02-00-00-00-00-00-00-00-00-00-00-00-01-00-00-00-00-00-00-00
+
+=== 4. VALID  tabshell key (should keep its 21-byte Data) ===
+subkeys: Current
+   [Current] Data = [Binary] 02-00-00-00-51-1A-48-FB-C1-CD-D3-01-00-00-00-00-43-42-01-00-00
+
+=== 5. ReconcileFeatures task (can silently revert our gates) ===
+FeatureConfig task -> PRESENT

@@ -93,7 +93,7 @@ struct RagdollDeathInstance {
 	btRigidBody *groundBody;
 	btCollisionShape *groundShape;
 
-	// Dismemberment state (opaque pointer, defined in dismember.h)
+	// Dismemberment state (opaque pointer, defined in sftbdyphsx.h)
 	void *dismemberState;
 	int processedBodypart; // last m_nBodypartToRemove value we processed
 

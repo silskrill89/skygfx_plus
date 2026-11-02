@@ -52,7 +52,7 @@ SkyGFX Plus reads settings from `skygfx.ini` (and `skygfx.1.ini` through `skygfx
 | `dualPassBuilding` | 0/1 | inherits `dualPass` | PS2 alpha test emulation |
 | `ps2ModulateBuilding` | 0/1 | inherits `ps2Modulate` | PS2 colour modulation |
 | `detailMaps` | 0/1 | 0 | Enable detail texture maps on buildings |
-| `stochasticTexturing` | 0/1 | 0 | Stochastic texture sampling (reduces tiling) |
+| `noiseDetail` | 0/1 | 0 (mode-dependent) | Blue-noise UV jitter on tiled detail textures to hide repeats. Canonical key. `stochastic` / `stochasticTexturing` are deprecated aliases (still parsed, logged at load) |
 
 ### Grass Pipeline
 

@@ -111,8 +111,14 @@ float4 main(float2 uv : TEXCOORD0) : COLOR0
     float3 fogColor = saturate(weatherFog.rgb);
     float fogDensity = saturate(weatherFog.w);
     float sunBright = saturate(sunData.w);
-    float3 sunDir = normalize(sunData.xyz);
-    float3 moonDir = normalize(moonData.xyz);
+    // Zero-length guards (SM3.0: NaN propagates as black). A missing/zero
+    // upload must degrade to "no sun/moon term", never to NaN UVs.
+    float sunLen   = length(sunData.xyz);
+    float3 sunDir  = sunData.xyz / max(sunLen, 1e-7);
+    float sunOK    = (sunLen > 1e-7) ? 1.0 : 0.0;
+    float moonLen  = length(moonData.xyz);
+    float3 moonDir = moonData.xyz / max(moonLen, 1e-7);
+    float moonOK   = (moonLen > 1e-7) ? 1.0 : 0.0;
     float cloudA = saturate(cloudAlpha);
     float cov = saturate(coverage);
     float smogBoost = saturate(weatherType.w);
@@ -131,15 +137,15 @@ float4 main(float2 uv : TEXCOORD0) : COLOR0
     // ---- Sun glow ----
     float2 sunUV = sunDir.xy * 0.5 + 0.5;
     float sunDist = length(uv - sunUV);
-    float sunGlow = exp(-sunDist * 6.0) * 0.3 * sunBright;
-    float sunDisc = smoothstep(0.02, 0.015, sunDist) * sunBright;
+    float sunGlow = exp(-sunDist * 6.0) * 0.3 * sunBright * sunOK;
+    float sunDisc = smoothstep(0.02, 0.015, sunDist) * sunBright * sunOK;
     skyColor += float3(1.0, 0.95, 0.8) * sunGlow;
     skyColor += float3(1.0, 0.98, 0.9) * sunDisc * 2.0;
 
     // ---- Moon ----
     float2 moonUV = moonDir.xy * 0.5 + 0.5;
     float moonDist = length(uv - moonUV);
-    float moonDisc = smoothstep(0.025, 0.02, moonDist);
+    float moonDisc = smoothstep(0.025, 0.02, moonDist) * moonOK;
     float moonPhase = moonData.w; // 0-1 phase
     float moonBright = moonDisc * 0.8 * saturate(1.0 - abs(moonPhase - 0.5) * 2.0);
     skyColor += float3(0.8, 0.85, 1.0) * moonBright;

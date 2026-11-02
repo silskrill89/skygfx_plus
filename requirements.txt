@@ -1,6 +1,17 @@
-PyQt5>=5.15.10
-requests>=2.31.0
-beautifulsoup4>=4.12.0
-py7zr>=0.20.0
-rarfile>=4.1
-psutil>=5.9.0
+# SkyGFX Plus Python tooling requirements
+# Interpreter used in this repo: Python 3.10-32
+#   C:\Program Files (x86)\Python310-32\python.exe
+# Install: python -m pip install -r requirements.txt
+# Verify:  python tools/skytool.py doctor
+#
+# These are the third-party packages actually imported by tools/*.py.
+# Everything else in tools/ is stdlib-only (tkinter ships with Python).
+
+watchdog>=3.0,<7          # fast_build.py --watch
+numpy>=1.24,<3            # assets.py, pack_helper_tex.py
+Pillow>=10.0,<13          # assets.py, pack_helper_tex.py (import name: PIL)
+yt-dlp>=2024.1.0          # research.py (import name: yt_dlp)
+PyPDF2>=3.0.1             # extract_pdf_info.py
+
+# Optional legacy helpers, not used by build/doctor/knowledge/memory:
+# pywin32, flask, keyboard, pyttsx3, winshell  (tools/fibrodyslexia.py only)

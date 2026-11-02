@@ -1,9 +1,11 @@
 #include "ragdoll_death.h"
-#include "dismember.h"
+#include "../entities/sftbdyphsx.h"
+#include "../entities/softbody.h"
 #include "../rw/gta.h"
 #include "../rw/rphanim.h"
 #include "../rw/rtquat.h"
 #include "../rw/rtslerp.h"
+#include "../core/physicscfg.h"	// softbodyBudget (task 4: max-active cap)
 // Bullet Physics headers
 #include <BulletCollision/CollisionShapes/btCapsuleShape.h>
 #include <BulletCollision/CollisionShapes/btStaticPlaneShape.h>
@@ -37,10 +39,6 @@ typedef int (*RpHAnimIDGetIndex_t)(void *hierarchy, int ID);
 #define RpHAnimIDGetIndex(h, id)  ((RpHAnimIDGetIndex_t)0x7C51A0)(h, id)
 typedef void *(*RpHAnimHierarchyGetMatrixArray_t)(void *hierarchy);
 #define RpHAnimHierarchyGetMatrixArray(h)  ((RpHAnimHierarchyGetMatrixArray_t)0x7C5120)(h)
-
-// Local CVector matching GTA SA memory layout (3 floats)
-// Not needed, CVector is already defined in src/rw/gta.h included via skygfx.h
-typedef void *(*GetAnimHierarchyFromSkinClump_t)(void *clump);
 
 // ============================================================
 // Globals
@@ -393,13 +391,17 @@ void Ragdoll_Shutdown(void) {
 		}
 	}
 
+	// Tear the gibs down FIRST, while g_bulletWorld is still live:
+	// Dismember_Shutdown skips btRigidBody/motion-state deletion when the
+	// world pointer is already null, so deleting the world before it leaked
+	// every active gib's body + motion state.
+	Dismember_Shutdown();
+
 	delete g_bulletWorld; g_bulletWorld = nullptr;
 	delete g_solver; g_solver = nullptr;
 	delete g_broadphase; g_broadphase = nullptr;
 	delete g_dispatcher; g_dispatcher = nullptr;
 	delete g_collisionConfig; g_collisionConfig = nullptr;
-
-	Dismember_Shutdown();
 
 	dbglog("Ragdoll_Shutdown: Bullet world destroyed");
 }
@@ -428,7 +430,6 @@ bool Ragdoll_Activate(void *pPed) {
 	inst->settleFrames = 0;
 	inst->settleTimer = 0.0f;
 	inst->groundZ = 0.0f;
-	inst->dismemberState = (void*)new DismemberState();
 	inst->processedBodypart = 0;
 
 	// Get ped clump (RpClump*)
@@ -439,6 +440,7 @@ bool Ragdoll_Activate(void *pPed) {
 	if (!clump) {
 		dbglog("Ragdoll_Activate: no clump for ped %p", pPed);
 		inst->state = RAGDOLL_DEATH_INACTIVE;
+		inst->pPed = nullptr;	// no stale pointer on a refused slot
 		return false;
 	}
 	inst->pClump = clump;
@@ -448,6 +450,8 @@ bool Ragdoll_Activate(void *pPed) {
 	if (!hierarchy) {
 		dbglog("Ragdoll_Activate: no hierarchy for ped %p", pPed);
 		inst->state = RAGDOLL_DEATH_INACTIVE;
+		inst->pPed = nullptr;
+		inst->pClump = nullptr;
 		return false;
 	}
 
@@ -464,8 +468,15 @@ bool Ragdoll_Activate(void *pPed) {
 	if (!matArray) {
 		dbglog("Ragdoll_Activate: null matrix array");
 		inst->state = RAGDOLL_DEATH_INACTIVE;
+		inst->pPed = nullptr;
+		inst->pClump = nullptr;
 		return false;
 	}
+
+	// Dismemberment state — allocated only after every early-out gate above
+	// has passed (was allocated before the clump/hierarchy/matArray checks,
+	// leaking one DismemberState per refused activation).
+	inst->dismemberState = (void*)new DismemberState();
 
 	// We need the ped's world position for ground plane
 	// SA v1.0 US: CPed inherits CPlaceable. Plugin-sdk CPed.h:
@@ -477,7 +488,9 @@ bool Ragdoll_Activate(void *pPed) {
 	{
 		uintptr_t pedAddr = (uintptr_t)pPed;
 		pedWorldZ = *(float*)(pedAddr + 0x0C);
-		pedWorldZ = fabs(pedWorldZ) > 10000.0f ? 0.0f : pedWorldZ;
+		// NaN guard: fabs(NaN) > 10000 is false, so the old ternary kept NaN
+		// in groundZ -> NaN btStaticPlaneShape constant -> NaN physics.
+		if (!(pedWorldZ > -10000.0f && pedWorldZ < 10000.0f)) pedWorldZ = 0.0f;
 	}
 	inst->groundZ = pedWorldZ;
 
@@ -759,7 +772,14 @@ bool Ragdoll_Activate(void *pPed) {
 
 		// Add upward bias for dramatic fold
 		damageDir.setZ(damageDir.z() + g_hitUpBias);
-		damageDir.normalize();
+		// Guarded normalize (project division-safety rule): a hand-edited
+		// ragdoll.ini upBias can cancel the vector exactly; btVector3::
+		// normalize() on a zero-length vector divides by 0 -> NaN impulse.
+		{
+			float dLen = damageDir.length();
+			if (dLen > 1e-7f) damageDir /= dLen;
+			else damageDir = btVector3(0.0f, 0.0f, 1.0f);
+		}
 
 		// Map ePedBone to Bullet body index
 		static const int hitBoneToBody[55] = {
@@ -932,6 +952,7 @@ void Ragdoll_Deactivate(void *pPed) {
 
 	inst->state = RAGDOLL_DEATH_INACTIVE;
 	inst->pPed = nullptr;
+	inst->pClump = nullptr;	// stale RpClump* must not outlive the instance
 	inst->settleFrames = 0;
 	inst->settleTimer = 0.0f;
 
@@ -943,6 +964,143 @@ void Ragdoll_Deactivate(void *pPed) {
 	inst->processedBodypart = 0;
 
 	dbglog("Ragdoll_Deactivate: ped %p deactivated", pPed);
+}
+
+// ============================================================
+// RagdollWaterForces — water layer for the Bullet ragdolls (task 2/4).
+//
+// Per active body/bone: query the game water surface height (CWaterLevel
+// no-waves core 0x6E8580 - byte-verified against the live exe; task
+// candidates 0x6E84C0/0x6E8460 are mid-instruction and thunks
+// 0x541330/0x409B56 are a counter stub in this build - byte evidence in
+// softbody.cpp),
+// then for each body below the surface apply at the body centre:
+//   - buoyancy   = gravity * submergedFraction * densityRatio (0.6-1.0
+//                  knob; 1.0 = neutral when fully submerged -> a settled
+//                  submerged body FLOATS and can never sink through the
+//                  water plane, the task-4 lifecycle guarantee)
+//   - linear + angular drag scaled by the submersion fraction
+//   - wave force: follow the SAME swell law as the water VS
+//     (Water_VS.hlsl c11: 2-wave 45 m/0.10 m + 23 m/0.06 m vertical,
+//     time-phased - SoftbodyWaterSwell/SwellVel) plus a bounded drift
+//     toward the wave surface height ("wave height as target y-drift"),
+//     so corpses bob with the rendered water.
+// SoftbodyWaterQuery returning false (the 0.0/no-water fallback) means no
+// water and skips the body. All forces are acceleration-form (mass-scaled)
+// so Bullet's stepSimulation integrates them at its own timestep; every
+// term is clamped and NaN-guarded (project division-safety rule).
+//
+// Called from Ragdoll_Simulate immediately BEFORE stepSimulation (forces
+// must exist before the step that integrates them). The native softbody
+// lane runs the same law through SoftRagdoll_c::WaterResponse (softbody.cpp,
+// which runs BEFORE GroundResponse - documented order contract there).
+// ============================================================
+
+// Water tunables - MUST mirror softbody.cpp's G-water constants (same law,
+// both lanes; only the integration differs: forces here, velocity response
+// there). Directive tunables: buoyancyGain / dragCoeff / waveForceScale.
+// Buoyancy model: netUp = g * (submergedFraction * buoyancyGain - 1);
+// buoyancyGain 1.0 is the sink-proof end of the directive's 0.6-1.0 range.
+#define SOFTBODY_WATER_BUOYANCY_GAIN	1.0f	// buoyancyGain: upward accel = g*frac*gain (0.6-1.0; 1.0 = never sinks through)
+#define SOFTBODY_WATER_DRAG_COEFF	2.5f	// dragCoeff: velocity-proportional linear drag (1/s) at full submersion
+#define SOFTBODY_WATER_WAVE_FORCE_SCALE	1.0f	// waveForceScale: master scale on both swell-driven wave terms
+#define SOFTBODY_WATER_ANG_DRAG		2.0f	// angular drag (1/s) at full submersion
+#define SOFTBODY_WATER_COUPLING		4.0f	// wave-velocity follow (1/s) at full submersion
+#define SOFTBODY_WATER_SPRING		2.0f	// surface-height target drift (1/s^2) at full submersion
+#define SOFTBODY_WATER_DRIFT_MAX	1.0f	// height-drift clamp (m) - deep-water floor guard
+#define SOFTBODY_WATER_VZ_MAX		8.0f	// wave-follow correction clamp (m/s)
+
+static bool RgFinite(float v) { return (v == v) && v > -1e30f && v < 1e30f; }
+
+static void RagdollWaterForces(RagdollDeathInstance *inst, float dt) {
+	if (!inst || dt <= 0.0f) return;
+
+	int total = 0, wet = 0;
+	float fracSum = 0.0f, fracMax = 0.0f;
+	for (int i = 0; i < BULLET_BODYPART_COUNT; i++) {
+		btRigidBody *body = inst->bodies[i];
+		if (!body) continue;
+		// Bullet stores inverse mass; 0 = static/kinematic. Guard the divide
+		// (project 1e-7 rule) so a degenerate invMass never yields inf.
+		float invMass = body->getInvMass();
+		if (invMass <= 1e-7f) continue;	// static/kinematic body - no water force
+		float mass = 1.0f / invMass;
+		total++;
+
+		btVector3 pos = body->getCenterOfMassPosition();
+		float x = pos.x(), y = pos.y(), z = pos.z();
+		if (!RgFinite(x) || !RgFinite(y) || !RgFinite(z)) continue;
+
+		// game water surface; false = the 0.0/no-water fallback -> no water
+		float level;
+		if (!SoftbodyWaterQuery(x, y, z, &level)) continue;
+		float surf = level + SoftbodyWaterSwell(x, y);
+		if (!RgFinite(surf)) continue;
+
+		// capsule-equivalent radius (sphere approximation of the capsule):
+		// full half-extent = halfHeight + radius keeps limbs mostly submerged
+		// at rest, matching the softbody lane's SOFTBODY_BONE_RADIUS use
+		float R = 0.15f;	// sane default if the shape cast ever fails
+		if (inst->shapes[i]) {
+			btCapsuleShape *caps = (btCapsuleShape*)inst->shapes[i];
+			R = caps->getHalfHeight() + caps->getRadius();
+		}
+		if (R < 1e-7f) continue;
+
+		// submerged fraction (0 = clear of the surface, 1 = fully under);
+		// R >= 1e-7 checked above keeps the divide safe (project rule)
+		float frac = (surf + R - z) / (2.0f * R);
+		if (frac <= 0.0f) continue;
+		if (frac > 1.0f) frac = 1.0f;
+		wet++;
+		fracSum += frac;
+		if (frac > fracMax) fracMax = frac;
+
+		// SA-scale gravity (Ragdoll_Init sets (0,0,-19.6))
+		const float g = 19.6f;
+
+		// buoyancyGain: gravity * submergedFraction * gain (upward accel)
+		float upAccel = g * frac * SOFTBODY_WATER_BUOYANCY_GAIN;
+
+		// wave follow: match the swell's vertical velocity ("wave force
+		// using the same swell law as the water VS")
+		btVector3 vel = body->getLinearVelocity();
+		float dv = (SoftbodyWaterSwellVel(x, y) - vel.z()) * SOFTBODY_WATER_COUPLING *
+			frac * SOFTBODY_WATER_WAVE_FORCE_SCALE;
+		if (dv > SOFTBODY_WATER_VZ_MAX) dv = SOFTBODY_WATER_VZ_MAX;
+		else if (dv < -SOFTBODY_WATER_VZ_MAX) dv = -SOFTBODY_WATER_VZ_MAX;
+		upAccel += dv;
+
+		// wave height as target y(z)-drift toward the surface, clamped so a
+		// deep-water floor cannot fire a limb out of the water
+		float drift = surf - z;
+		if (drift > SOFTBODY_WATER_DRIFT_MAX) drift = SOFTBODY_WATER_DRIFT_MAX;
+		else if (drift < -SOFTBODY_WATER_DRIFT_MAX) drift = -SOFTBODY_WATER_DRIFT_MAX;
+		upAccel += drift * SOFTBODY_WATER_SPRING * frac * SOFTBODY_WATER_WAVE_FORCE_SCALE;
+
+		// velocity-proportional linear drag scaled by submersion (3 axes)
+		float dragK = SOFTBODY_WATER_DRAG_COEFF * frac;
+
+		btVector3 force(
+			-vel.x() * dragK * mass,
+			-vel.y() * dragK * mass,
+			(upAccel - vel.z() * dragK) * mass);
+		if (!RgFinite(force.x()) || !RgFinite(force.y()) || !RgFinite(force.z()))
+			continue;	// NaN guard - nothing NaN may reach the solver
+		body->applyCentralForce(force);
+
+		// angular drag scaled by submersion (mass as inertia proxy - tuned
+		// damp, the bodies already carry 0.85 base angular damping)
+		btVector3 w = body->getAngularVelocity();
+		btVector3 torque = w * (-(SOFTBODY_WATER_ANG_DRAG * frac * mass));
+		if (RgFinite(torque.x()) && RgFinite(torque.y()) && RgFinite(torque.z()))
+			body->applyTorque(torque);
+	}
+
+	// throttled receipt (task 2): submerged fractions per contact event
+	if (wet > 0 && dbglog_throttle("softbody_water_bt"))
+		dbglog("[Softbody] water: bullet %d/%d bodies submerged (frac avg %.2f max %.2f)",
+			wet, total, fracSum / (float)wet, fracMax);
 }
 
 // ============================================================
@@ -962,6 +1120,11 @@ void Ragdoll_Deactivate(void *pPed) {
 
 void Ragdoll_Simulate(void) {
 	if (!g_ragdollDeathEnable || !g_bulletWorld) return;
+
+	// A/B exclusivity (softbody.h): when the native softbody backend is
+	// enabled it owns death ragdolls — the Bullet poll must not also
+	// activate the same corpses (both backends trigger on states 65|66).
+	if (SoftbodyGetEnabled()) return;
 
 	// V7: Frame gate — only step physics once per unique render frame.
 	// Mirror/shadow passes re-enter RenderScene but share the same
@@ -997,6 +1160,17 @@ void Ragdoll_Simulate(void) {
 	if (pool && pool->storage && pool->flags && pool->size > 0) {
 		static const int kPedStride = 0x7C4;
 
+		// live budget (sky_physics.ini softbodyBudget, physicscfg owns the
+		// key) - task 4: max-active cap in this lane too, same semantics as
+		// SoftbodyUpdate's pass 2 (softbody.cpp)
+		int budget = PhysicsCfgGetInt("softbodyBudget", 8);
+		if (budget < 1) budget = 1;
+		if (budget > RAGDOLL_DEATH_POOL_SIZE) budget = RAGDOLL_DEATH_POOL_SIZE;
+		int activeNow = 0;
+		for (int pi = 0; pi < RAGDOLL_DEATH_POOL_SIZE; pi++)
+			if (g_ragdollDeathPool[pi].state != RAGDOLL_DEATH_INACTIVE)
+				activeNow++;
+
 		for (int i = 0; i < pool->size; i++) {
 			if (pool->flags[i] & 0x80) continue;
 			scanned++;
@@ -1014,8 +1188,9 @@ void Ragdoll_Simulate(void) {
 						break;
 					}
 				}
-				if (!alreadyActive) {
+				if (!alreadyActive && activeNow < budget) {
 					if (Ragdoll_Activate((void*)ped)) {
+						activeNow++;
 						s_activatedTotal++;
 						int bodypartToRemove = *(unsigned char*)(ped + 0x754);
 						float dmX = *(float*)(ped + 0x44);
@@ -1068,12 +1243,15 @@ void Ragdoll_Simulate(void) {
 
 	// Get frame delta
 	float timeStep = *(float*)0xB7CB5C;
-	if (timeStep < 0.001f) timeStep = 0.001f;
+	// NaN guard: the old `timeStep < 0.001f` clamp let NaN through (NaN
+	// comparisons are false) and dt became NaN -> NaN straight into
+	// stepSimulation. `!(x >= min)` catches NaN, negative and zero.
+	if (!(timeStep >= 0.001f)) timeStep = 0.001f;
 	if (timeStep > 1.0f) timeStep = 1.0f;
 	float dt = timeStep / 50.0f;
 	if (dt > 0.05f) dt = 0.05f;
 
-	// Step simulation for each active instance
+	// Pass 1: retire settled instances + apply water forces (pre-step).
 	for (int pi = 0; pi < RAGDOLL_DEATH_POOL_SIZE; pi++) {
 		RagdollDeathInstance *inst = &g_ragdollDeathPool[pi];
 		if (inst->state == RAGDOLL_DEATH_INACTIVE) continue;
@@ -1082,9 +1260,24 @@ void Ragdoll_Simulate(void) {
 			continue;
 		}
 
-		if (g_bulletWorld) {
-			g_bulletWorld->stepSimulation(dt, 2, 1.0f / 60.0f);
-		}
+		// water layer (G-water, task 2/4): buoyancy + wave forces for this
+		// instance - applied BEFORE stepSimulation so the step integrates them
+		RagdollWaterForces(inst, dt);
+	}
+
+	// Step the shared world ONCE per frame. (Was inside the per-instance
+	// loop below: with N active ragdolls the shared world was stepped N
+	// times per frame, running every corpse's physics N× real-time and
+	// multiplying solver cost by the corpse count.)
+	if (g_bulletWorld) {
+		g_bulletWorld->stepSimulation(dt, 2, 1.0f / 60.0f);
+	}
+
+	// Pass 2: read back body transforms + settle logic.
+	for (int pi = 0; pi < RAGDOLL_DEATH_POOL_SIZE; pi++) {
+		RagdollDeathInstance *inst = &g_ragdollDeathPool[pi];
+		if (inst->state == RAGDOLL_DEATH_INACTIVE) continue;
+		if (inst->state == RAGDOLL_DEATH_DONE) continue;	// retired in pass 1
 
 		// Read back body transforms
 		for (int bi = 0; bi < RAGDOLL_DEATH_BONES; bi++) {

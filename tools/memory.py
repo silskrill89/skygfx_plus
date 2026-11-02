@@ -24,7 +24,7 @@ from datetime import datetime, timedelta
 from collections import defaultdict
 
 # Paths
-PROJECT = Path(os.environ.get("SKYGFX_PROJECT", "E:/dev(dave)/skygfx_plus_expIV"))
+PROJECT = Path(os.environ.get("SKYGFX_PROJECT") or Path(__file__).resolve().parent.parent)
 MEMORY_BANK = PROJECT / "memory-bank"
 CACHE = MEMORY_BANK / ".cache"
 OBSIDIAN = Path("E:/dev(dave)/SKYGFXPLUS_DOCS")
@@ -188,7 +188,7 @@ def load_knowledge_stats():
     # 1. Cross-reference system
     xref_path = CACHE / "cross-reference.json"
     if xref_path.exists():
-        xref = json.loads(xref_path.read_text())
+        xref = json.loads(xref_path.read_text(encoding="utf-8"))
         stats["xref_concepts"] = xref.get("stats", {}).get("concepts", 0)
         stats["xref_files"] = xref.get("stats", {}).get("files_scanned", 0)
         stats["xref_links"] = xref.get("stats", {}).get("total_links", 0)
@@ -196,7 +196,7 @@ def load_knowledge_stats():
     # 2. Knowledge graph
     graph_path = CACHE / "knowledge-graph.json"
     if graph_path.exists():
-        graph = json.loads(graph_path.read_text())
+        graph = json.loads(graph_path.read_text(encoding="utf-8"))
         stats["graph_concepts"] = len(graph.get("relationships", {}))
         stats["graph_chains"] = len(graph.get("chains", []))
         stats["graph_implementations"] = len(graph.get("implementations", {}))
@@ -204,14 +204,14 @@ def load_knowledge_stats():
     # 3. Ingest sync
     ingest_path = CACHE / "ingest-sync.json"
     if ingest_path.exists():
-        ingest = json.loads(ingest_path.read_text())
+        ingest = json.loads(ingest_path.read_text(encoding="utf-8"))
         stats["ingest_files"] = len(ingest.get("files", {}))
         stats["ingest_last"] = ingest.get("last_sync", "never")
     
     # 4. Knowledge timeline
     timeline_path = CACHE / "knowledge-timeline.md"
     if timeline_path.exists():
-        content = timeline_path.read_text()
+        content = timeline_path.read_text(encoding="utf-8")
         stats["timeline_known"] = content.count("[x]")
         stats["timeline_missing"] = content.count("[ ]")
         stats["timeline_total"] = stats["timeline_known"] + stats["timeline_missing"]
@@ -290,7 +290,7 @@ def generate_daily_dream():
     
     # Save JSON
     CACHE.mkdir(parents=True, exist_ok=True)
-    (CACHE / "dream-daily.json").write_text(json.dumps(dream, indent=2))
+    (CACHE / "dream-daily.json").write_text(json.dumps(dream, indent=2), encoding="utf-8")
     
     # Generate markdown
     md = f"# Daily Dream — {datetime.now().strftime('%Y-%m-%d')}\n\n"
@@ -373,7 +373,7 @@ def generate_weekly_dream():
     
     # Save JSON
     CACHE.mkdir(parents=True, exist_ok=True)
-    (CACHE / "dream-weekly.json").write_text(json.dumps(dream, indent=2))
+    (CACHE / "dream-weekly.json").write_text(json.dumps(dream, indent=2), encoding="utf-8")
     
     # Generate markdown
     md = f"# Weekly Dream — {datetime.now().strftime('%Y-%m-%d')}\n\n"
@@ -448,7 +448,7 @@ def generate_compact_index():
     cache_files = list(CACHE.glob("*.json"))
     index["layers"]["cache"] = {"count": len(cache_files), "files": [f.name for f in cache_files]}
     CACHE.mkdir(parents=True, exist_ok=True)
-    (CACHE / "compact-index.json").write_text(json.dumps(index, indent=2))
+    (CACHE / "compact-index.json").write_text(json.dumps(index, indent=2), encoding="utf-8")
     return index
 
 # ═══════════════════════════════════════════════════════════════
@@ -460,7 +460,7 @@ def sync_all():
     try:
         ref = build_compact_reference()
         CACHE.mkdir(parents=True, exist_ok=True)
-        (CACHE / "compact-reference.md").write_text(ref)
+        (CACHE / "compact-reference.md").write_text(ref, encoding="utf-8")
         results["compact_reference"] = True
     except Exception as e:
         results["compact_reference_error"] = str(e)
@@ -471,7 +471,7 @@ def sync_all():
         results["index_error"] = str(e)
     try:
         ctx = generate_dream_context()
-        (CACHE / "dream-context-full.json").write_text(json.dumps(ctx, indent=2))
+        (CACHE / "dream-context-full.json").write_text(json.dumps(ctx, indent=2), encoding="utf-8")
         results["dream_context"] = True
     except Exception as e:
         results["dream_context_error"] = str(e)
@@ -483,6 +483,8 @@ def sync_all():
 
 def main():
     import argparse
+    from _toolutil import setup_console
+    setup_console()
     parser = argparse.ArgumentParser(description="Unified memory system")
     parser.add_argument("command", nargs="?", default="status", choices=["status", "compact", "tier", "lunar", "dream", "optimize", "sync", "history"])
     parser.add_argument("target", nargs="?", help="Tier name, date range, etc.")
@@ -509,7 +511,7 @@ def main():
     elif args.command == "compact":
         ref = build_compact_reference()
         if args.output:
-            Path(args.output).write_text(ref)
+            Path(args.output).write_text(ref, encoding="utf-8")
             print(f"Saved to {args.output}")
         else:
             print(ref)
@@ -533,7 +535,7 @@ def main():
         else:
             ctx = generate_dream_context()
         if args.output:
-            Path(args.output).write_text(json.dumps(ctx, indent=2))
+            Path(args.output).write_text(json.dumps(ctx, indent=2), encoding="utf-8")
             print(f"Saved to {args.output}")
         else:
             print(json.dumps(ctx, indent=2))

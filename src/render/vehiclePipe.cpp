@@ -1,12 +1,17 @@
 #include "skygfx.h"
-#include "neo.h"
+#include "neopipe.h"
 #include "brdfLibrary.h"
+#include "profiler.h"	// PF_SCOPE / PfBindVS / PfBindPS — instrumentation only
+#include "texdefs.h"	// texdb.txt TexInfo + NM lane: <diffuse>_n pairing lookup (s8 bind)
+#include "texalpha.h"	// per-texture alpha classification (solid vs cutout/faded)
 
 extern void *Glass_Vehicle;
 extern void *Rubber_Vehicle;
 extern void *Rubber_Vehicle_Modern;
 extern int GetVehicleEraByID(int modelID);
 extern float &CWeather__WetRoads;	// buildingPipe.cpp — 0..1 rain/wetness for the PS c20.z wet term
+extern bool ivFPReady(void);	// buildingPipe.cpp — lazy one-shot GTAIVForwardPlus pair load
+extern void *gtaivFPVS, *gtaivFPPS;	// pipelinecommon.cpp — pair cache filled by ivFPReady()
 
 enum {
 	// common
@@ -104,17 +109,6 @@ extern void pipeEnsureIBLBuffer(void);	// pipelinecommon.cpp — shared once-per
 extern void pipeForceAlphaBlock(void);	// buildingPipe.cpp — layer-3 alpha/blend repair
                                         // (the alpha half of pipeForceCullMode)
 extern RwUInt32 pipeAlphaFuncToD3D(RwUInt32 rwFunc);	// pipelinecommon.cpp — rw alpha-func -> D3DCMP
-
-// rw RwBlendFunction -> D3D D3DBLEND. Mirrors the (file-static)
-// pipelinecommon.cpp pipeBlendToD3D: the enums are 1:1 for valid values
-// (rwBLENDZERO=1 == D3DBLEND_ZERO ... rwBLENDSRCALPHASAT=11), 0 is the rw
-// "NA" placeholder and is not a valid D3D value, so fall back.
-static DWORD vehiclePipe_blendToD3D(int rwBlend, DWORD fallback)
-{
-	if(rwBlend == rwBLENDNABLEND || rwBlend > rwBLENDSRCALPHASAT)
-		return fallback;
-	return (DWORD)rwBlend;
-}
 
 float black4f[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 float white4f[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
@@ -226,7 +220,14 @@ CCustomCarEnvMapPipeline__Init(void)
 	static RwV3d axis_Z = { 0.0, 0.0, 1.0 };
 
 	reflectionTex = RwTextureCreate(nil);
-	RwTextureSetFilterMode(reflectionTex, rwFILTERLINEAR);
+	// NULL guard (audit): RwTextureCreate can fail under memory pressure —
+	// the unguarded SetFilterMode crashed init. A NULL reflectionTex is
+	// safe downstream: vehEnvBindTexture/vehBindDiffuse3L resolve it to
+	// gpWhiteTexture and the debug log guards the raster read.
+	if(reflectionTex)
+		RwTextureSetFilterMode(reflectionTex, rwFILTERLINEAR);
+	else
+		dbglog("CCustomCarEnvMapPipeline__Init: reflectionTex creation failed — env lane falls back to gpWhiteTexture");
 
 	MakeEnvmapCam();
 	MakeEnvmapRasters();
@@ -320,6 +321,12 @@ CCustomCarEnvMapPipeline__Env1Xform(RwMatrix *envmat,
 	float sclx, scly;
 	sclx = envData->GetTransScaleX()*50.0f;
 	scly = envData->GetTransScaleY()*50.0f;
+	// Division-safety guard (audit): transScale is int8/8 — an authored 0
+	// (or an int8>=128 wrap-negative) divides the fractional-part math
+	// below by zero -> inf/NaN env UVs. Same NaN-safe clamp idiom the Xbox
+	// cb uses for GetScaleX/Y (:2314-2317).
+	if(!(sclx > 0.0f)) sclx = 1.0f;
+	if(!(scly > 0.0f)) scly = 1.0f;
 if(betaEnvmaptest){
 sclx *= envmap1tweak;
 scly *= envmap1tweak;
@@ -349,6 +356,10 @@ CCustomCarEnvMapPipeline__Env2Xform(RpAtomic *atomic, RwMatrix *envmat,
 
 	sclx = envData->GetTransScaleX()*50.0f;
 	scly = envData->GetTransScaleY()*50.0f;
+	// Division-safety guard (audit): see Env1Xform — 0/negative int8
+	// transScale divides scaledfract()/the fractional math by zero.
+	if(!(sclx > 0.0f)) sclx = 1.0f;
+	if(!(scly > 0.0f)) scly = 1.0f;
 
 	if(s_env2xform_lastrenderframe != RWSRCGLOBAL(renderFrame) ||
 	   s_env2xform_lastobject != atomic ||
@@ -410,6 +421,9 @@ CCustomCarEnvMapPipeline__Env1Xform_PC(RpAtomic *atomic,
 	}
 	sclx = envData->GetTransScaleX()*50.0f;
 	scly = envData->GetTransScaleY()*50.0f;
+	// Division-safety guard (audit): see Env1Xform.
+	if(!(sclx > 0.0f)) sclx = 1.0f;
+	if(!(scly > 0.0f)) scly = 1.0f;
 	// fractional parts of pos/scl
 	envXform[0] = -(envmat->pos.x - ((float)(int)(envmat->pos.x/sclx))*sclx)/sclx;
 	envXform[1] = -(envmat->pos.y - ((float)(int)(envmat->pos.y/scly))*scly)/scly;
@@ -427,6 +441,9 @@ CCustomCarEnvMapPipeline__Env2Xform_PC(RpAtomic *atomic,
 
 	sclx = envData->GetTransScaleX()*50.0f;
 	scly = envData->GetTransScaleY()*50.0f;
+	// Division-safety guard (audit): see Env1Xform.
+	if(!(sclx > 0.0f)) sclx = 1.0f;
+	if(!(scly > 0.0f)) scly = 1.0f;
 	RwFrame *envFrame2 = RpAtomicGetClump(atomic) ? RpClumpGetFrame(RpAtomicGetClump(atomic)) : RpAtomicGetFrame(atomic);
 	if(envFrame2)
 		envmat = RwFrameGetLTM(envFrame2);
@@ -491,8 +508,19 @@ CCustomCarEnvMapPipeline__SetupEnv(RpAtomic *atomic, RwFrame *envframe, RwMatrix
 	   s_setupEnv_lastfrm != envframe ||
 	   s_setupEnv_lastrenderframe != RWSRCGLOBAL(renderFrame)){
 		frame = clump ? RpClumpGetFrame(clump) : RpAtomicGetFrame(atomic);
-		if(frame)
-			RwMatrixMultiply(&s_setupEnv_lastmat, RwFrameGetLTM(frame), frminv);
+		if(!frame){
+			// NULL frame (audit — stale-matrix cache poisoning): the old
+			// code fell through and ARMED the cache with this object while
+			// s_setupEnv_lastmat still held the PREVIOUS object's matrix —
+			// this call copied that stale matrix and every cache hit for
+			// the object kept it. Mirror the building twin
+			// (CustomBuildingEnvMapPipeline__SetupEnv): hand back identity
+			// and leave the cache untouched so a later valid frame
+			// recomputes.
+			RwMatrixSetIdentity(envmat);
+			return;
+		}
+		RwMatrixMultiply(&s_setupEnv_lastmat, RwFrameGetLTM(frame), frminv);
 
 		s_setupEnv_lastobject = (clump ? (void*)clump : (void*)atomic);
 		s_setupEnv_lastfrm = envframe;
@@ -552,7 +580,8 @@ uploadLights(RwMatrix *lightmat)
 	pipeUploadLightColorForce(pDirect, REG_directCol);
 	pipeUploadLightDirectionLocal(pDirect, lightmat, REG_directDir);
 	for(int i = 0; i < 6; i++)
-		if(i < NumExtraDirLightsInWorld && RpLightGetType(pExtraDirectionals[i]) == rpLIGHTDIRECTIONAL){
+		if(i < NumExtraDirLightsInWorld && pExtraDirectionals[i] &&
+		   RpLightGetType(pExtraDirectionals[i]) == rpLIGHTDIRECTIONAL){
 			pipeUploadLightColor(pExtraDirectionals[i], REG_directCol+i+1);
 			pipeUploadLightDirectionLocal(pExtraDirectionals[i], lightmat, REG_directDir+i+1);
 		}else{
@@ -603,7 +632,14 @@ static void vehiclePipe_saveRenderState(VehicleRenderState *state)
 	RwRenderStateGet(rwRENDERSTATESRCBLEND, &state->src);
 	RwRenderStateGet(rwRENDERSTATEDESTBLEND, &state->dst);
 	RwRenderStateGet(rwRENDERSTATEFOGCOLOR, &state->fog);
-	d3d9device->GetRenderState(D3DRS_TEXTUREFACTOR, &state->texturefactor);
+	// TFACTOR read guarded + pre-seeded (audit): the sampler loop below
+	// checks d3d9device but this raw Get dereferenced it unchecked — a NULL
+	// device (lost/reset window) crashed the save. 0xFFFFFFFF = opaque-white
+	// TFACTOR, the FFP-neutral value a failed Get must not replace with
+	// garbage on the restore path.
+	state->texturefactor = 0xFFFFFFFFu;
+	if(d3d9device)
+		d3d9device->GetRenderState(D3DRS_TEXTUREFACTOR, &state->texturefactor);
 	// TEXTUREADDRESS (audit item 2): the FX branches push
 	// rwTEXTUREADDRESSWRAP through the rw cache only (":929/:944 — is this
 	// needed?") and NOTHING ever restored it — the WRAP survived past the
@@ -637,23 +673,52 @@ static void vehiclePipe_cleanup()
 	RwD3D9SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
 	RwD3D9SetTextureStageState(1, D3DTSS_TEXCOORDINDEX, 1);
 	RwD3D9SetTextureStageState(1, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_DISABLE);
-	// Reset sampler 3 states (IBL sampler)
-	d3d9device->SetSamplerState(3, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP);
-	d3d9device->SetSamplerState(3, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
-	d3d9device->SetSamplerState(3, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
-	d3d9device->SetSamplerState(3, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+	// Reset sampler 3 states (IBL sampler) — guarded (audit): the s6/s7
+	// texture clears below check d3d9device but these raw sampler writes
+	// dereferenced it unchecked (NULL device = crash on every cb exit).
+	if(d3d9device){
+		d3d9device->SetSamplerState(3, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP);
+		d3d9device->SetSamplerState(3, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
+		d3d9device->SetSamplerState(3, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+		d3d9device->SetSamplerState(3, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+	}
 	// Unbind sampler 4 (normal buffer) and 5 (forward+ index) to prevent
 	// texture leaks into subsequent game/HUD draws
 	RwD3D9SetTexture(NULL, 4);
 	RwD3D9SetTexture(NULL, 5);
-	d3d9device->SetSamplerState(4, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP);
-	d3d9device->SetSamplerState(4, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
-	d3d9device->SetSamplerState(4, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
-	d3d9device->SetSamplerState(4, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
-	d3d9device->SetSamplerState(5, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP);
-	d3d9device->SetSamplerState(5, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
-	d3d9device->SetSamplerState(5, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
-	d3d9device->SetSamplerState(5, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+	// Forward+ light atlases: ForwardPlus_SetConstants binds s6/s7 per frame
+	// and nothing unbound them, so the atlases stayed on the device past the
+	// callback. Two-step clear (rw + raw device), same as s3/s4/s5/s8.
+	RwD3D9SetTexture(NULL, 6);
+	RwD3D9SetTexture(NULL, 7);
+	if(d3d9device){
+		d3d9device->SetTexture(6, NULL);
+		d3d9device->SetTexture(7, NULL);
+	}
+	// NM lane: s8 (<diffuse>_n) — rw-set only; the Env cb's exit does the raw
+	// device clear (two-step pattern, same as s3/s4/s5 below).
+	RwD3D9SetTexture(NULL, 8);
+	// Sampler resets for s4-s7 guarded (audit): same NULL-device class as the
+	// s3 block above — these ran unchecked on every cb exit.
+	if(d3d9device){
+		d3d9device->SetSamplerState(4, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP);
+		d3d9device->SetSamplerState(4, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
+		d3d9device->SetSamplerState(4, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+		d3d9device->SetSamplerState(4, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+		d3d9device->SetSamplerState(5, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP);
+		d3d9device->SetSamplerState(5, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
+		d3d9device->SetSamplerState(5, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+		d3d9device->SetSamplerState(5, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+		// Forward+ atlas samplers (s6/s7): canonical WRAP/LINEAR, same as s3-s5.
+		d3d9device->SetSamplerState(6, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP);
+		d3d9device->SetSamplerState(6, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
+		d3d9device->SetSamplerState(6, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+		d3d9device->SetSamplerState(6, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+		d3d9device->SetSamplerState(7, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP);
+		d3d9device->SetSamplerState(7, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
+		d3d9device->SetSamplerState(7, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+		d3d9device->SetSamplerState(7, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+	}
 }
 
 // FX additive blend pass: sets states, renders, restores.
@@ -670,7 +735,17 @@ static void vehiclePipe_fxAdditiveBlend(RxD3D9ResEntryHeader *header,
 	// VERTEXALPHA state; capture it so the additive pass can hand it back.
 	RwUInt32 savedVtxAlpha = FALSE;
 	RwRenderStateGet(rwRENDERSTATEVERTEXALPHAENABLE, &savedVtxAlpha);
+	// ALPHATESTENABLE has no RwRenderState twin or VehicleRenderState field:
+	// capture the raw device value (pre-seeded TRUE for the no-device path) so
+	// the forced TRUE below cannot leak into the next consumer. ALPHAFUNC is
+	// forced to ALWAYS here but is already restored from state->alphafunc
+	// through L1/L2/L3 below; ALPHAREF is never touched by this leg.
+	DWORD savedAlphaTestEnable = TRUE;	// DWORD: IDirect3DDevice9::Get/SetRenderState
+	if(d3d9device)
+		d3d9device->GetRenderState(D3DRS_ALPHATESTENABLE, &savedAlphaTestEnable);
 
+	// FX legs MUST keep ALPHAFUNC=ALWAYS + ONE/ONE — RGB=0 soft borders are
+	// the black-quad payload if drift bypasses fxAdditiveBlend.
 	RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION, (void*)rwALPHATESTFUNCTIONALWAYS);
 	RwD3D9SetRenderState(D3DRS_ALPHAFUNC, (RwUInt32)D3DCMP_ALWAYS);
 	RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
@@ -701,15 +776,18 @@ static void vehiclePipe_fxAdditiveBlend(RxD3D9ResEntryHeader *header,
 	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
 	RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
 	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)state->src);
-	RwD3D9SetRenderState(D3DRS_SRCBLEND, vehiclePipe_blendToD3D(state->src, D3DBLEND_SRCALPHA));
+	RwD3D9SetRenderState(D3DRS_SRCBLEND, pipeBlendToD3D((RwUInt32)state->src, D3DBLEND_SRCALPHA));
 	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)state->dst);
-	RwD3D9SetRenderState(D3DRS_DESTBLEND, vehiclePipe_blendToD3D(state->dst, D3DBLEND_INVSRCALPHA));
+	RwD3D9SetRenderState(D3DRS_DESTBLEND, pipeBlendToD3D((RwUInt32)state->dst, D3DBLEND_INVSRCALPHA));
 	RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION, (void*)state->alphafunc);
 	RwD3D9SetRenderState(D3DRS_ALPHAFUNC, pipeAlphaFuncToD3D((RwUInt32)state->alphafunc));
 	// Close the VERTEXALPHA=TRUE leak through all three layers (L1 read back
 	// per mesh; L2 is what D3D9RenderDual's gate reads).
 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)savedVtxAlpha);
 	RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, savedVtxAlpha ? TRUE : FALSE);
+	// ALPHATESTENABLE: L1 N/A, but L2 was forced TRUE at entry — hand back the
+	// captured value through L2 and raw L3.
+	RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, savedAlphaTestEnable);
 	// TEXTUREADDRESS: the env branches (PS2 cb :929/:944, spec cb :1081/
 	// :1092) pushed rwTEXTUREADDRESSWRAP through the rw cache before this
 	// pass and nothing else ever restored it — the WRAP leaked past the
@@ -720,15 +798,196 @@ static void vehiclePipe_fxAdditiveBlend(RxD3D9ResEntryHeader *header,
 	RwRenderStateSet(rwRENDERSTATETEXTUREADDRESS, (void*)state->textureaddress);
 	if(d3d9device){
 		d3d9device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
-		d3d9device->SetRenderState(D3DRS_SRCBLEND, vehiclePipe_blendToD3D(state->src, D3DBLEND_SRCALPHA));
-		d3d9device->SetRenderState(D3DRS_DESTBLEND, vehiclePipe_blendToD3D(state->dst, D3DBLEND_INVSRCALPHA));
+		// FOGCOLOR raw L3 mirror (audit — unpaired raw write): the entry
+		// forced D3DRS_FOGCOLOR to 0 through the raw device (:719) but the
+		// restore above only wrote L1/L2. An applied[]-gated flush then
+		// cache-hit-skips (L2 already holds the saved value) and the device
+		// keeps fog-black for every later pass of the frame.
+		d3d9device->SetRenderState(D3DRS_FOGCOLOR, (DWORD)state->fog);
+		d3d9device->SetRenderState(D3DRS_SRCBLEND, pipeBlendToD3D((RwUInt32)state->src, D3DBLEND_SRCALPHA));
+		d3d9device->SetRenderState(D3DRS_DESTBLEND, pipeBlendToD3D((RwUInt32)state->dst, D3DBLEND_INVSRCALPHA));
 		d3d9device->SetRenderState(D3DRS_ALPHAFUNC, pipeAlphaFuncToD3D((RwUInt32)state->alphafunc));
 		d3d9device->SetRenderState(D3DRS_ALPHABLENDENABLE, savedVtxAlpha ? TRUE : FALSE);
+		// L3 mirror of the ALPHATESTENABLE restore above.
+		d3d9device->SetRenderState(D3DRS_ALPHATESTENABLE, savedAlphaTestEnable);
 		d3d9device->SetRenderState(D3DRS_TEXTUREFACTOR, state->texturefactor);
 		// L3 mirror of the TEXTUREADDRESS restore above (see comment).
 		for(int i = 0; i < 3; i++){
 			d3d9device->SetSamplerState(i, D3DSAMP_ADDRESSU, state->sampU[i]);
 			d3d9device->SetSamplerState(i, D3DSAMP_ADDRESSV, state->sampV[i]);
+		}
+	}
+}
+
+// ===========================================================================
+// vehBindDiffuse3L — THREE-LAYER diffuse/stage bind (the BINDING FIX).
+//
+// Black-silhouette defect (docs/plans/2026-10-30-test2-0438/log-forensics.md #3,
+// A2/S8): a vehicle mesh's diffuse raster is NULL (an SA "paint" material with
+// no diffuse map — tex='' null=1) and device stage 0 is left holding a
+// screen-family raster (front-buffer / render-target, e.g. 0x04C84B28) leaked
+// by a postfx/water pass. The mesh then samples that raster with its UVs ->
+// black/garbage silhouette.
+//
+// The old bind was pipeSetTexture -> RwD3D9SetTexture (L2 ONLY), which is
+// change-gated against RW's texture cache. When the device has drifted from that
+// cache (a raw dev->SetTexture or an unrestored rwRENDERSTATETEXTURERASTER from
+// postfx), the L2 set cache-hit NO-OPS and the leaked screen raster stays bound
+// — so even the gpWhiteTexture fallback never reached the device. This helper
+// writes the resolved texture through ALL THREE layers so no cache-hit no-op can
+// hold the screen raster back:
+//   L1  RwRenderStateSet(rwRENDERSTATETEXTURERASTER, ...)  stage-0 rw cache;
+//       PARK-AND-SET (park on a guaranteed-different raster first) so the real
+//       set is always a transition, never a cache-hit no-op.
+//   L2  RwD3D9SetTexture(resolved, stage)                 RW driver/applied[].
+//   L3  d3d9device->SetTexture(stage, d3d)                RAW device — the only
+//       layer a cache-hit skip can never hold back.
+// NULL resolves to gpWhiteTexture (the pipe's neutral opaque sample), so an
+// untextured mesh draws paint colour via MODULATE(white, DIFFUSE) instead of
+// inheriting the previous pass's raster. A same-texture rebind is state-
+// identical (L1/L2 cache no-op, L3 sets the identical pointer), so correctly-
+// textured vehicles are visually unchanged — this is binding-only.
+// [bind-elision] stage-0 last-bound D3D texture pointer cache (POD statics).
+// The three-layer bind's L1 park-and-set alone forces two real driver texture
+// transitions per mesh, x 1000-4000 meshes/frame. The cache elides the whole
+// write when the device PROVABLY already holds the target: because L3
+// (d3d9device->SetTexture) is always written on the miss path below, a valid
+// cache entry with a matching pointer proves the device holds that texture —
+// skipping L1/L2 as well is then state-identical (zero driver calls). The
+// cache is invalidated at every vehicle cb entry (vehBindElideInvalidate):
+// postfx/water/other pipes write foreign rasters onto device s0 between
+// callbacks, so a cache that survived a callback boundary could prove
+// nothing. Only stage 0 (diffuse) is wired; stage 1+ (env lanes) keep the
+// unconditional three-layer write.
+static IDirect3DBaseTexture9 *s_vehLastBoundD3D0 = NULL;
+static bool                   s_vehLastBoundD3D0Valid = false;
+
+// [bind-elision] counters + one-shot receipt. skips >> writes is the healthy
+// signature (same-texture rebinds dominate); writes are the entry-contract
+// leak repairs and genuine texture changes.
+static int  s_vehBindElideSkips  = 0;
+static int  s_vehBindElideWrites = 0;
+static int  s_vehElideMismatch   = 0;	// hits whose readback proved the cache stale
+static bool s_vehBindElideActive = false;
+
+static void
+vehBindElideInvalidate(void)
+{
+	s_vehLastBoundD3D0 = NULL;
+	s_vehLastBoundD3D0Valid = false;
+}
+
+// Throttled skip/write receipt (same cheap-gate idiom as vehEnvElideLog).
+// dev_mismatch is the elide-hit counter that the g_diagLevel>=1 readback
+// verify below increments when the device did NOT hold the cached texture —
+// hits >> writes is healthy, any non-zero dev_mismatch means a stage-0
+// writer slipped between the arm and the hit (tag veh_elide_mismatch fires
+// at the mismatch site itself).
+static void
+vehBindElideLog(void)
+{
+	static int tick = 0;
+	if((++tick & 63) != 0)
+		return;
+	if(!s_vehBindElideSkips && !s_vehBindElideWrites && !s_vehElideMismatch)
+		return;
+	if(!dbglog_throttle("veh_bindelide"))
+		return;
+	dbglog("[bind-elision] veh hits=%d writes=%d dev_mismatch=%d",
+	       s_vehBindElideSkips, s_vehBindElideWrites, s_vehElideMismatch);
+	s_vehBindElideSkips = 0;
+	s_vehBindElideWrites = 0;
+	s_vehElideMismatch = 0;
+}
+
+static void
+vehBindDiffuse3L(RwTexture *tex, int stage)
+{
+	RwTexture *resolved = tex ? tex : gpWhiteTexture;
+
+	// [bind-elision] resolve the L3 target FIRST so the elision check can run
+	// before ANY driver call. A NULL extraction leaves the device state
+	// unprovable — the cache must never hit on it (invalidation (b) below).
+	IDirect3DTexture9 *d3d = NULL;
+	if(d3d9device)
+		d3d = TexDefsGetD3DTexture(resolved);
+
+	if(stage == 0){
+		vehBindElideLog();
+		if(!s_vehBindElideActive){
+			s_vehBindElideActive = true;
+			dbglog("[bind-elision] veh active");
+		}
+		// Hit: the device provably holds this exact texture (L3 was the last
+		// stage-0 writer on the previous miss) — skip all three layers,
+		// zero driver calls. Same-texture rebind stays a no-op, now a
+		// zero-call no-op.
+		//
+		// [verify lever] The proof only holds while nothing else wrote device
+		// s0 since the arm. An in-callback raw stage-0 writer (the Leeds FX
+		// pass binds reflectionTex with L2 only, vehiclePipe.cpp leeds cb)
+		// breaks it: the next mesh with the same diffuse as the pre-FX mesh
+		// would hit and keep the reflection map on s0. With g_diagLevel>=1 we
+		// read the device back on every hit; a mismatch is counted/logged
+		// (tag veh_elide_mismatch), the cache is dropped and the FULL
+		// three-layer write runs instead of the hit (self-heal). Lever off =
+		// untouched zero-call fast path.
+		if(d3d && s_vehLastBoundD3D0Valid &&
+		   s_vehLastBoundD3D0 == (IDirect3DBaseTexture9*)d3d){
+			bool mismatch = false;
+			if(g_diagLevel >= 1 && d3d9device){
+				IDirect3DBaseTexture9 *dev0 = NULL;
+				if(SUCCEEDED(d3d9device->GetTexture(0, &dev0))){
+					mismatch = dev0 != (IDirect3DBaseTexture9*)d3d;
+					if(dev0)
+						dev0->Release();	// GetTexture AddRefs
+				}
+			}
+			if(!mismatch){
+				s_vehBindElideSkips++;
+				return;
+			}
+			s_vehElideMismatch++;
+			if(dbglog_throttle("veh_elide_mismatch"))
+				dbglog("[bind-elision] veh elide HIT mismatch: cached s0=%p but device holds a different texture — invalidating + full rebind",
+				       (void*)d3d);
+			vehBindElideInvalidate();
+		}
+	}
+
+	// L1 rw cache — only stage 0 has a rw render-state twin (TEXTURERASTER);
+	// stages 1..2 are pure D3D9 texture stages and have no rw twin to park.
+	if(stage == 0 && resolved->raster){
+		RwRaster *whiteRas = (gpWhiteTexture && gpWhiteTexture->raster)
+			? gpWhiteTexture->raster : NULL;
+		RwRaster *targetRas = resolved->raster;
+		RwRaster *parkRas = (targetRas == whiteRas) ? NULL : whiteRas;
+		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)parkRas);
+		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)targetRas);
+	}
+
+	// L2 RW driver cache / texture apply (maps raster -> d3d internally).
+	RwD3D9SetTexture(resolved, stage);
+
+	// L3 raw device: bypass every cache. Only pin when the guarded extraction
+	// yields a real d3d pointer — never clear a valid bind on extraction
+	// failure (L2 already bound the resolved texture correctly).
+	if(d3d9device){
+		if(d3d){
+			d3d9device->SetTexture(stage, d3d);
+			if(stage == 0){
+				// [bind-elision] miss path: arm the cache with the pointer
+				// this write just put on the device.
+				s_vehLastBoundD3D0 = (IDirect3DBaseTexture9*)d3d;
+				s_vehLastBoundD3D0Valid = true;
+				s_vehBindElideWrites++;
+			}
+		}else if(stage == 0){
+			// [bind-elision] L3 extraction failure: the device state is
+			// unprovable, so the cache must not survive (invalidation (b)).
+			// L2 already bound the resolved texture correctly (as before).
+			vehBindElideInvalidate();
+			s_vehBindElideWrites++;
 		}
 	}
 }
@@ -741,7 +1000,12 @@ static bool vehiclePipe_setupMaterial(RxD3D9InstanceData *inst, RwUInt32 flags,
 	*outMaterial = inst->material;
 	if((*outMaterial)->color.alpha == 0)
 		return false;
-	pipeSetTexture((*outMaterial)->texture, 0);
+	// R2-04 + three-layer bind (vehBindDiffuse3L above): a NULL paint texture
+	// resolves to gpWhiteTexture AND the resolved raster is forced through
+	// L1/L2/L3, so a cache-hit no-op can never leave the previous pass's raster
+	// (or a leaked screen raster) on s0. Never call raw RwD3D9SetTexture with a
+	// material texture (NULL leaves the previous pass's raster bound on s0).
+	vehBindDiffuse3L((*outMaterial)->texture, 0);
 	*outAlpha = inst->vertexAlpha != 0 || (*outMaterial)->color.alpha != 255;
 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)*outAlpha);
 	// Layer-(2) mirror. RwRenderStateSet only touches the rw cache (L1); when
@@ -769,9 +1033,124 @@ static bool vehiclePipe_setupMaterial(RxD3D9InstanceData *inst, RwUInt32 flags,
 	return true;
 }
 
+// ============================================================
+// Instrumentation only (dbg-pipes-logging lane) — NO behaviour change.
+//
+// Each vehicle render cb tags its bind points here; a 2s throttled
+// dbglog then reports which cb ran, the selected vehiclePipe, the VS/PS
+// actually bound and whether the forward+ cluster-light upload ran.
+// No render path reads this data; maths, render state and draw calls
+// are untouched.
+// ============================================================
+struct VehiclePipeTrace {
+	const char *vs;	// last VS tag bound by this cb ("-" = none)
+	const char *ps;	// last PS tag bound by this cb ("-" = none)
+	int  fp;	// ForwardPlus_SetConstants called (cluster lights)
+};
+
+enum { VTR_PS2 = 0, VTR_SPEC = 1, VTR_XBOX = 2, VTR_LEEDS = 3, VTR_MOBILE = 4,
+       VTR_ENV = 5, VTR_COUNT = 6 };
+
+static VehiclePipeTrace vTrace[VTR_COUNT] = {
+	{ "-", "-", 0 }, { "-", "-", 0 }, { "-", "-", 0 },
+	{ "-", "-", 0 }, { "-", "-", 0 }, { "-", "-", 0 },
+};
+
+static inline void
+vTraceBegin(VehiclePipeTrace &t)
+{
+	t.vs = "-"; t.ps = "-"; t.fp = 0;
+}
+
+// pointer -> tag for the report (IDR_* names from resources/resource.h)
+static const char *
+vehPSTag(void *sh)
+{
+	if(sh == NULL) return "-";
+	if(sh == VehiclePBR_Modern) return "IDR_VEHICLEPBR_MODERN";
+	if(sh == Rubber_Vehicle_Modern) return "IDR_RUBBER_VEHICLE_MODERN";
+	if(sh == Rubber_Vehicle) return "IDR_RUBBER_VEHICLE";
+	if(sh == Glass_Vehicle) return "IDR_GLASS_VEHICLE";
+	if(sh == specCarFxPS) return "IDR_SPECCARFXPS";
+	if(sh == mobileVehiclePipePS) return "IDR_MOBILEVEHICLEPS";
+	if(sh == gtaivVehiclePS) return "IDR_GTAIVVEHICLEPS";
+	if(sh == gtaivFPPS) return "IDR_GTAIVFPPS";
+	if(sh == ps2EnvSpecFxPS) return "ps2EnvSpecFxPS";
+	if(sh == simplePS) return "simplePS";
+	return "?";
+}
+
+static const char *
+vehVSTag(void *sh)
+{
+	if(sh == NULL) return "-";
+	if(sh == vehiclePBRVS) return "IDR_VEHICLEPBRVS";
+	if(sh == vehiclePipeVS) return "IDR_CUSTOMBUILDINGVS";
+	if(sh == ps2CarFxVS) return "IDR_PS2CARFXVS";
+	if(sh == specCarFxVS) return "IDR_SPECCARFXVS";
+	if(sh == xboxCarVS) return "IDR_XBOXCARVS";
+	if(sh == leedsCarFxVS) return "IDR_LEEDSCARFXVS";
+	if(sh == mobileVehiclePipeVS) return "IDR_MOBILEVEHICLEVS";
+	if(sh == gtaivVehicleVS) return "IDR_GTAIVVEHICLEVS";
+	if(sh == gtaivFPVS) return "IDR_GTAIVFPVS";
+	return "?";
+}
+
+// record the bind point for the profiler timeline + the throttled report
+static inline void
+vehBindPS(VehiclePipeTrace &t, void *sh)
+{
+	const char *tag = vehPSTag(sh);
+	t.ps = tag;
+	PfBindPS(sh, tag);
+}
+
+static inline void
+vehBindVS(VehiclePipeTrace &t, void *sh)
+{
+	const char *tag = vehVSTag(sh);
+	t.vs = tag;
+	PfBindVS(sh, tag);
+}
+
+static const char *
+vehiclePipeName(int p)
+{
+	switch(p){
+	case CAR_PS2:    return "PS2";
+	case CAR_PC:     return "PC";
+	case CAR_XBOX:   return "XBOX";
+	case CAR_SPEC:   return "SPEC";
+	case CAR_MOBILE: return "MOBILE";
+	case CAR_NEO:    return "NEO";
+	case CAR_LCS:    return "LCS";
+	case CAR_VCS:    return "VCS";
+	case CAR_ENV:    return "ENV";
+	case CAR_GTAIV:  return "GTAIV";
+	case CAR_MODERN: return "MODERN";
+	}
+	return "?";
+}
+
+// Throttled [VPIPE] report — one short line per cb, at most one per 2s.
+static void
+vpipeTraceLog(const char *cb, int idx, const char *tag, RpAtomic *atomic)
+{
+	if(!dbglog_throttle(tag))
+		return;
+	if(config == NULL)	// instrumentation must never be the first NULL deref
+		return;
+	VehiclePipeTrace &t = vTrace[idx];
+	dbglog("[VPIPE] cb=%s obj=%p pipe=%s(%d) ivMode=%d fpCfg=%d fpUp=%d VS=%s PS=%s",
+		cb, (void*)atomic, vehiclePipeName(config->vehiclePipe), config->vehiclePipe,
+		config->ivMode, config->forwardPlusEnable ? 1 : 0, t.fp, t.vs, t.ps);
+}
+
 void
 CCustomCarEnvMapPipeline__CustomPipeRenderCB_PS2(RwResEntry *repEntry, void *object, RwUInt8 type, RwUInt32 flags)
 {
+	PF_SCOPE("VehiclePipe_PS2");	// instrumentation only
+	vTraceBegin(vTrace[VTR_PS2]);	// instrumentation only
 	RxD3D9ResEntryHeader *resEntryHeader;
 	RxD3D9InstanceData *instancedData;
 	RpAtomic *atomic;
@@ -796,6 +1175,12 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_PS2(RwResEntry *repEntry, void *obj
 	RwMatrix lightmat;
 	float transform[16];
 	memset(&fxParams, 0, sizeof(fxParams));
+
+	// [bind-elision] cb entry: foreign pipes (buildings/peds/postfx/water)
+	// write device s0 between callbacks, so the last-bound cache proves
+	// nothing across this boundary — invalidate it and let the first mesh
+	// bind in full (the leak-repair path, unchanged).
+	vehBindElideInvalidate();
 
 	atomic = (RpAtomic*)object;
 
@@ -860,9 +1245,21 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_PS2(RwResEntry *repEntry, void *obj
 		// coming from the PS2-callback MatFX env FX pass below
 		// (hasEnv1/hasEnv2 -> ps2CarFxVS + envData->texture) — unchanged.
 		if(config->ivMode || config->vehiclePipe == CAR_GTAIV){
-			if(vehiclePBRVS){
+			// Forward+ gate: when forwardPlusEnable is set, the IV pair becomes
+			// the GTAIVForwardPlus VS/PS pair (gtaivFPVS/gtaivFPPS) — VS and PS
+			// swap TOGETHER (useIVFP is only true when BOTH handles loaded;
+			// never a half-swap). When the toggle is off, or the FP pair failed
+			// to load, the existing pairings below bind exactly as before.
+			// NOTE: the shipped GTAIVForwardPlus pair is byte-identical to the
+			// frozen gtaivVehicleVS/PS pair, so it lands on the frozen-pair
+			// fixups of the else-branch below (same bytes, same contract) — see
+			// the report for the register-contract mismatch.
+			bool useIVFP = config->forwardPlusEnable && ivFPReady();
+			if(!useIVFP && vehiclePBRVS){
 				RwD3D9SetVertexShader(vehiclePBRVS);
+				vehBindVS(vTrace[VTR_PS2], vehiclePBRVS);	// instrumentation only
 				RwD3D9SetPixelShader(gtaivVehiclePS);
+				vehBindPS(vTrace[VTR_PS2], gtaivVehiclePS);	// instrumentation only
 				// c21 = fxParams {fresnel, -, -, shininess} -> COLOR1 = 0
 				static const float ivFxZero[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 				RwD3D9SetVertexShaderConstant(21, ivFxZero, 1);
@@ -910,12 +1307,19 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_PS2(RwResEntry *repEntry, void *obj
 				RwD3D9SetPixelShaderConstant(0, &fxParams, 1);
 				RwD3D9SetPixelShaderConstant(1, psParams, 1);
 			}else{
-				// Legacy fallback: frozen GTAIVVehicle_vs.cso needs identity
-				// envXform/envmat + zero fxParams (its fresnel/env interpolator
-				// then dies and stale s1 cannot wash the mesh white). UV smear
-				// is an intrinsic shader limitation — see report.
-				RwD3D9SetVertexShader(gtaivVehicleVS);
-				RwD3D9SetPixelShader(gtaivVehiclePS);
+				// Frozen IV pair — the forward+ pair (useIVFP) or the plain
+				// legacy pair (gtaivVehicleVS/PS, used when vehiclePBRVS is
+				// NULL). Byte-identical today, so both share the SAME fixups:
+				// identity envXform/envmat + zero fxParams (its fresnel/env
+				// interpolator then dies and stale s1 cannot wash the mesh
+				// white). UV smear is an intrinsic shader limitation — see
+				// report. VS/PS are selected together, never half-swap.
+				void *ivVS = useIVFP ? gtaivFPVS : gtaivVehicleVS;
+				void *ivPS = useIVFP ? gtaivFPPS : gtaivVehiclePS;
+				RwD3D9SetVertexShader(ivVS);
+				vehBindVS(vTrace[VTR_PS2], ivVS);	// instrumentation only
+				RwD3D9SetPixelShader(ivPS);
+				vehBindPS(vTrace[VTR_PS2], ivPS);	// instrumentation only
 				static const float ivEnvXform[4] = { 0.0f, 0.0f, 1.0f, 1.0f };
 				static const float ivEnvMat[12] = {
 					1.0f, 0.0f, 0.0f,
@@ -931,7 +1335,9 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_PS2(RwResEntry *repEntry, void *obj
 			}
 		}else{
 			RwD3D9SetVertexShader(vehiclePipeVS);
+			vehBindVS(vTrace[VTR_PS2], vehiclePipeVS);	// instrumentation only
 			RwD3D9SetPixelShader(simplePS);
+			vehBindPS(vTrace[VTR_PS2], simplePS);	// instrumentation only
 		}
 
 		D3D9RenderDual(config->dualPassVehicle, resEntryHeader, instancedData);
@@ -960,13 +1366,28 @@ if(betaEnvmaptest) hasSpec = false;
 		fxParams.specularity = 0.0f;
 		envData = *GETENVMAP(material);
 		specData = *GETSPECMAP(material);
+		// Plugin-slot NULL guards (audit): a material can carry the env/spec
+		// bits with the plugin slot never allocated (mod assets) — the
+		// branches below dereferenced envData/specData unchecked (crash).
+		// Drop the affected FX legs instead.
+		if(!envData){
+			hasEnv1 = false;
+			hasEnv2 = false;
+		}
+		if(!specData)
+			hasSpec = false;
 		if(hasEnv1){
 			fxParams.fxSwitch = 1;
 			fxParams.shininess = envData->GetShininess();
 			CCustomCarEnvMapPipeline__SetupEnv(atomic, carfx_env1Frame, &carfx_env1Inv, &envmat);
 			RwD3D9SetVertexShaderConstant(REG_envmat, &envmat, 3);
 			RwRenderStateSet(rwRENDERSTATETEXTUREADDRESS, (void*)rwTEXTUREADDRESSWRAP);	// is this needed?
-			RwD3D9SetTexture(envData->texture, 1);
+			// Three-layer stage-1 bind (audit — same conversion the Xbox cb
+			// got at its env1/env2 branches): the raw RwD3D9SetTexture was
+			// L2-only, so a leaked screen raster on device stage 1 survived
+			// the cache-hit no-op; vehBindDiffuse3L also resolves a NULL env
+			// texture to gpWhiteTexture. Stage 1 has no rw twin (no L1).
+			vehBindDiffuse3L(envData->texture, 1);
 			CCustomCarEnvMapPipeline__Env1Xform(&envmat, envData, &envXform.x);
 			envXform.z = envData->GetScaleX();
 			envXform.w = envData->GetScaleY();
@@ -981,7 +1402,8 @@ if(betaEnvmaptest){
 			CCustomCarEnvMapPipeline__SetupEnv(atomic, carfx_env2Frame, &carfx_env2Inv, &envmat);
 			RwD3D9SetVertexShaderConstant(REG_envmat, &envmat, 3);
 			RwRenderStateSet(rwRENDERSTATETEXTUREADDRESS, (void*)rwTEXTUREADDRESSWRAP);	// is this needed?
-			RwD3D9SetTexture(envData->texture, 1);
+			// Three-layer stage-1 bind (audit — see the env1 branch above).
+			vehBindDiffuse3L(envData->texture, 1);
 			atmEnvData = CCustomCarEnvMapPipeline__AllocEnvMapPipeAtomicData(atomic);
 			if(!atmEnvData){
 				dbglog("PS2_CB: atmEnvData NULL (pool full), skipping env2 for atomic %p", atomic);
@@ -995,19 +1417,35 @@ if(betaEnvmaptest){
 
 		if(hasSpec){
 			fxParams.specularity = specData->specularity;
-			RwD3D9SetTexture(specData->texture, 2);
+			// Three-layer stage-2 bind (audit — see the env1 branch above).
+			vehBindDiffuse3L(specData->texture, 2);
 			fxpass = 1;
 		}
 
 		if(fxpass){
+			// Defined s1 sample for spec-only FX meshes (audit): the env
+			// branches above bind s1, but a hasSpec-only mesh leaves the
+			// PREVIOUS mesh's/pipeline's stage-1 raster under ps2EnvSpecFxPS.
+			// Its env term multiplies the sample by envcolor=0 (fxSwitch=0):
+			// 0 for a finite texel, but NaN for a NaN one (NaN*0 = NaN ->
+			// black mesh — the exact mechanism the IV branch's defined-sample
+			// bind documents at :1683-1692 of buildingPipe.cpp). Bind the
+			// neutral white so the sample is defined.
+			if(!hasEnv1 && !hasEnv2)
+				pipeSetTexture(NULL, 1);
 			RwD3D9SetVertexShader(ps2CarFxVS);
+			vehBindVS(vTrace[VTR_PS2], ps2CarFxVS);	// instrumentation only
 			// ps2EnvSpecFxPS samples envMapTex(s1) * envcolor + maskTex(s2) *
 			// speccolor — the binds above already put env on s1 and the spec
 			// map on s2 (backup_original/vehiclePipe.cpp:524 did the same).
 			// simplePS would sample s0 (diffuse) at env UVs instead — the
 			// wrong-texture bug. NULL-guard: if the resource failed to load,
 			// keep today's stable behaviour rather than binding a NULL PS.
+			// FX legs MUST keep ALPHAFUNC=ALWAYS + ONE/ONE — RGB=0 soft
+			// borders are the black-quad payload if drift bypasses
+			// fxAdditiveBlend.
 			RwD3D9SetPixelShader(ps2EnvSpecFxPS ? ps2EnvSpecFxPS : simplePS);
+			vehBindPS(vTrace[VTR_PS2], ps2EnvSpecFxPS ? ps2EnvSpecFxPS : simplePS);	// instrumentation only
 
 			RwD3D9SetVertexShaderConstant(REG_fxParams, &fxParams, 1);
 			RwD3D9SetVertexShaderConstant(REG_envXform, &envXform, 1);
@@ -1018,11 +1456,14 @@ if(betaEnvmaptest){
 		;
 	}
 	vehiclePipe_cleanup();
+	vpipeTraceLog("PS2", VTR_PS2, "vpipe_ps2", atomic);	// instrumentation only
 }
 
 void
 CCustomCarEnvMapPipeline__CustomPipeRenderCB_Specular(RwResEntry *repEntry, void *object, RwUInt8 type, RwUInt32 flags)
 {
+	PF_SCOPE("VehiclePipe_Spec");	// instrumentation only
+	vTraceBegin(vTrace[VTR_SPEC]);	// instrumentation only
 	RxD3D9ResEntryHeader *resEntryHeader;
 	RxD3D9InstanceData *instancedData;
 	RpAtomic *atomic;
@@ -1046,6 +1487,9 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Specular(RwResEntry *repEntry, void
 	RwMatrix lightmat;
 	float transform[16];
 	memset(&fxParams, 0, sizeof(fxParams));
+
+	// [bind-elision] cb entry invalidation — see the PS2 cb note.
+	vehBindElideInvalidate();
 
 	atomic = (RpAtomic*)object;
 
@@ -1112,13 +1556,24 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Specular(RwResEntry *repEntry, void
 		fxParams.specularity = 0.0f;
 		envData = *GETENVMAP(material);
 		specData = *GETSPECMAP(material);
+		// Plugin-slot NULL guards (audit — see the PS2 cb block): drop the
+		// affected FX legs instead of dereferencing an unallocated slot.
+		if(!envData){
+			hasEnv1 = false;
+			hasEnv2 = false;
+		}
+		if(!specData)
+			hasSpec = false;
 		if(hasEnv1){
 			fxParams.fxSwitch = 1;
 			fxParams.shininess = envData->GetShininess();
 			CCustomCarEnvMapPipeline__SetupEnv(atomic, carfx_env1Frame, &carfx_env1Inv, &envmat);
 			RwD3D9SetVertexShaderConstant(REG_envmat, &envmat, 3);
 			RwRenderStateSet(rwRENDERSTATETEXTUREADDRESS, (void*)rwTEXTUREADDRESSWRAP);	// is this needed?
-			RwD3D9SetTexture(envData->texture, 1);
+			// Three-layer stage-1 bind (audit — same conversion the Xbox cb
+			// and the PS2 cb got): L2-only raw bind could cache-hit no-op
+			// against a leaked screen raster; NULL resolves to white.
+			vehBindDiffuse3L(envData->texture, 1);
 			CCustomCarEnvMapPipeline__Env1Xform(&envmat, envData, &envXform.x);
 			envXform.z = envData->GetScaleX();
 			envXform.w = envData->GetScaleY();
@@ -1129,7 +1584,8 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Specular(RwResEntry *repEntry, void
 			CCustomCarEnvMapPipeline__SetupEnv(atomic, carfx_env2Frame, &carfx_env2Inv, &envmat);
 			RwD3D9SetVertexShaderConstant(REG_envmat, &envmat, 3);
 			RwRenderStateSet(rwRENDERSTATETEXTUREADDRESS, (void*)rwTEXTUREADDRESSWRAP);	// is this needed?
-			RwD3D9SetTexture(envData->texture, 1);
+			// Three-layer stage-1 bind (audit — see the env1 branch above).
+			vehBindDiffuse3L(envData->texture, 1);
 			atmEnvData = CCustomCarEnvMapPipeline__AllocEnvMapPipeAtomicData(atomic);
 			if(!atmEnvData){
 				dbglog("SPEC_CB: atmEnvData NULL (pool full), skipping env2 for atomic %p", atomic);
@@ -1147,8 +1603,16 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Specular(RwResEntry *repEntry, void
 		}
 
 		if(fxpass){
+			// Defined s1 sample for spec-only FX meshes (audit — see the PS2
+			// cb block): main_specCarFx samples s1 unconditionally and a
+			// hasSpec-only mesh leaves the previous stage-1 raster under it;
+			// envcolor=0 makes a NaN texel render the mesh black.
+			if(!hasEnv1 && !hasEnv2)
+				pipeSetTexture(NULL, 1);
 			RwD3D9SetVertexShader(specCarFxVS);
+			vehBindVS(vTrace[VTR_SPEC], specCarFxVS);	// instrumentation only
 			RwD3D9SetPixelShader(specCarFxPS);
+			vehBindPS(vTrace[VTR_SPEC], specCarFxPS);	// instrumentation only
 
 			RwD3D9SetVertexShaderConstant(REG_fxParams, &fxParams, 1);
 			RwD3D9SetVertexShaderConstant(REG_envXform, &envXform, 1);
@@ -1159,6 +1623,7 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Specular(RwResEntry *repEntry, void
 		;
 	}
 	vehiclePipe_cleanup();
+	vpipeTraceLog("Spec", VTR_SPEC, "vpipe_spec", atomic);	// instrumentation only
 }
 
 // OLD
@@ -1209,6 +1674,15 @@ SetupMaterial_Xbox(RpMaterial *material, RwBool lighting, RwUInt32 flags, RwBool
 
 	RwRGBAReal color;
 	RwRGBARealFromRwRGBA(&color, &matColor);
+	// SA paint marker: material alpha byte 16 is NOT a translucency request
+	// (it means "use the vehicle paint colour"). Same rule as
+	// pipeUploadMatCol (pipelinecommon.cpp:464-471): RwRGBARealFromRwRGBA
+	// turns it into 16/255 = 0.0627, which the Xbox VS copies into COLOR0.a
+	// (vehiclePipeVS.hlsl:281) and paints the panels ~6% opaque. Upload 1.0
+	// for the marker; every other alpha byte passes through unchanged.
+	// (No-op on the unmodulated/white path, where matColor.a is already 255.)
+	if(material->color.alpha == 16)
+		color.alpha = 1.0f;
 	RwD3D9SetVertexShaderConstant(LOC_matCol, (void*)&color, 1);
 	// c26 surfProps — contract slot order (see "c20 SURFPROPS CONTRACT" at the
 	// top of this file): {x:ambient, y:spec, z:diffuse, w:prelit}, exactly what
@@ -1229,9 +1703,94 @@ SetupMaterial_Xbox(RpMaterial *material, RwBool lighting, RwUInt32 flags, RwBool
 	RwD3D9SetVertexShaderConstant(LOC_surfProps, surfProps, 1);
 }
 
+// Cull mode the vehicle Switch captured at pipe entry (pipeEnterCullMode),
+// re-asserted by the Xbox cb immediately before its mesh draw loop — that
+// callback has no cull ownership of its own and so inherited whatever the rw
+// cache / device pairing happened to hold. The saved value — not a hardcoded
+// BACK — is the contract: the mirror pass legitimately runs CULLNONE and must
+// survive. Same pattern as s_bldSwitchSavedCull (buildingPipe.cpp Xbox cb).
+static RwUInt32 s_vehSwitchSavedCull = (RwUInt32)rwCULLMODECULLBACK;
+
+// R2-04 one-shot: the first 24 vehicle meshes report whether the material had
+// a diffuse texture, which bind branch ran, which texture the cb actually
+// bound, and — critically — the INTENDED stage-0 d3d texture vs the ACTUAL
+// device stage-0 texture read straight back. `bound` is the RESOLVED pointer
+// (NULL material textures resolve to gpWhiteTexture; passing NULL through to
+// RwD3D9SetTexture leaves the previous pass's raster — vegetation atlas /
+// cloud raster / a leaked screen raster — on s0). The want-vs-dev0 readback is
+// the discriminator for the black-silhouette defect: DIVERGED means the bind
+// never reached the device (cache-hit no-op / device-vs-cache divergence).
+static int s_vehTexLogged = 0;
+
+// L3 device stage-0 readback shared by the bind receipts. GetTexture AddRefs
+// (caller Releases dev0). `want` is a BORROWED TexDefsGetD3DTexture pointer
+// (never released). Returns true when the device disagrees with the intended
+// bind — the exact divergence vehBindDiffuse3L exists to kill.
+static bool
+vehTexDiagDev0(RwTexture *bound, IDirect3DTexture9 **outWant, IDirect3DBaseTexture9 **outDev0)
+{
+	IDirect3DBaseTexture9 *dev0 = NULL;
+	if(d3d9device)
+		d3d9device->GetTexture(0, &dev0);
+	IDirect3DTexture9 *want = bound ? TexDefsGetD3DTexture(bound) : NULL;
+	if(outWant) *outWant = want;
+	if(outDev0) *outDev0 = dev0;
+	return dev0 != (IDirect3DBaseTexture9*)want;
+}
+
+// First-hit receipt — fires ONCE for the first mesh whose diffuse texture is
+// NULL (the "material-with-no-texture" paint path the forensics show resolving
+// to a leaked screen raster). Prints the material name, which bind branch ran,
+// and the intended-vs-device stage-0 readback so the next log tells "the bind
+// never reached the device" (DIVERGED) apart from "bind worked, material simply
+// has no diffuse map".
+static void
+vehTexDiagFirstHit(RpMaterial *material, RwTexture *bound, const char *branch)
+{
+	if(!dbglog_once("veh_tex_first"))
+		return;
+	IDirect3DTexture9 *want = NULL;
+	IDirect3DBaseTexture9 *dev0 = NULL;
+	bool diverged = vehTexDiagDev0(bound, &want, &dev0);
+	dbglog("[VehTex-FIRST] branch=%s tex='%s' null=%d bound=%p want=%p dev0=%p %s",
+	       branch ? branch : "?",
+	       (material && material->texture && material->texture->name[0])
+	           ? material->texture->name : "(null)",
+	       (material && material->texture) ? 0 : 1,
+	       (void*)bound, (void*)want, (void*)dev0,
+	       diverged ? "DIVERGED" : "ok");
+	if(dev0)
+		dev0->Release();	// GetTexture AddRefs
+}
+
+static void
+vehTexDiag(RpMaterial *material, RwTexture *bound, const char *branch,
+           int hasEnv1, int hasEnv2, int hasSpec)
+{
+	if(material && !material->texture)
+		vehTexDiagFirstHit(material, bound, branch);	// NULL-diffuse first-hit
+	if(s_vehTexLogged >= 24 || !dbglog_throttle("veh_tex"))
+		return;
+	s_vehTexLogged++;
+	IDirect3DTexture9 *want = NULL;
+	IDirect3DBaseTexture9 *dev0 = NULL;
+	bool diverged = vehTexDiagDev0(bound, &want, &dev0);
+	dbglog("[VehTex] branch=%s tex='%s' null=%d bound=%p want=%p dev0=%p%s env=%d%d spec=%d matA=%u",
+	       branch ? branch : "?",
+	       material->texture ? material->texture->name : "",
+	       material->texture ? 0 : 1, bound,
+	       (void*)want, (void*)dev0, diverged ? " DIVERGED" : "",
+	       hasEnv1 ? 1 : 0, hasEnv2 ? 1 : 0, hasSpec ? 1 : 0,
+	       (unsigned)material->color.alpha);
+	if(dev0)
+		dev0->Release();	// GetTexture AddRefs
+}
+
 void
 CCustomCarEnvMapPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *object, RwUInt8 type, RwUInt32 flags)
 {
+	PF_SCOPE("VehiclePipe_Xbox");	// instrumentation only
+	vTraceBegin(vTrace[VTR_XBOX]);	// instrumentation only
 	RxD3D9ResEntryHeader *resEntryHeader;
 	RxD3D9InstanceData *instancedData;
 	RpAtomic *atomic;
@@ -1262,11 +1821,17 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *ob
 	RwRenderStateGet(rwRENDERSTATEZWRITEENABLE, &xboxZwrite);
 
 	noFx = !!(CVisibilityPlugins__GetAtomicId(atomic) & 0x6000);
-	blownUp = !((RpLightGetFlags(pDirect) & rpLIGHTLIGHTATOMICS) == 0 ||
+	// pDirect NULL guard (audit): the sun upload below guards pDirect
+	// (:1747-1753); this read dereferenced it unchecked. No sun -> flags 0
+	// -> blownUp false, the same semantics a NULL light produced on the
+	// guarded paths.
+	RwUInt32 xboxSunFlags = pDirect ? (RwUInt32)RpLightGetFlags(pDirect) : 0;
+	blownUp = !((xboxSunFlags & rpLIGHTLIGHTATOMICS) == 0 ||
 	           (CVisibilityPlugins__GetAtomicId(atomic) & 0x4000) == 0);
 
 	RwD3D9SetPixelShader(NULL);
 	RwD3D9SetVertexShader(xboxCarVS);
+	vehBindVS(vTrace[VTR_XBOX], xboxCarVS);	// instrumentation only
 
 	RwD3D9GetTransform(D3DTS_WORLD, &worldMat);
 	RwD3D9GetTransform(D3DTS_VIEW, &viewMat);
@@ -1310,6 +1875,27 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *ob
 
 	vehiclePipe_setupResEntry(repEntry, &resEntryHeader, &instancedData, &numMeshes);
 
+	// Cull re-assert at the draw boundary (buildingPipe.cpp Xbox cb idiom):
+	// the Switch forced the sanitized pre-entry cull through L1/L2/L3 and this
+	// cb has no mid-callback state-heavy pass, so one assert here is the whole
+	// contract. Re-assert the SAVED value, never a hardcoded BACK — the mirror
+	// pass legitimately runs CULLNONE. A device that drifted behind an
+	// unchanged cache (the double no-op in pipelinecommon pipeForceCullMode)
+	// is repaired here before any mesh draws.
+	pipeForceCullMode(s_vehSwitchSavedCull);
+
+	// ENTRY CONTRACT (black-silhouette fix, same doctrine as the Env cb): force
+	// stage 0 to the safe white fallback through ALL THREE layers before any
+	// mesh draw, so a leaked screen/front-buffer raster left on s0 by a
+	// postfx/water pass can never be inherited (an L2-only bind would cache-hit
+	// no-op against it). Each mesh's bind below then overrides white with its
+	// own diffuse (or keeps white for a texture-less paint mesh).
+	// [bind-elision] entry-contract invalidation: foreign passes may have
+	// leaked onto device s0 since the last callback, so the cache proves
+	// nothing — this white repair bind always runs in full.
+	vehBindElideInvalidate();
+	vehBindDiffuse3L(gpWhiteTexture, 0);
+
 	for(; numMeshes--; instancedData++){
 		material = instancedData->material;
 
@@ -1322,8 +1908,27 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *ob
 		hasEnv1  = (materialFlags & 1) && !noFx;
 		hasEnv2  = (materialFlags & 2) && !noFx && (flags & rpGEOMETRYTEXTURED2);
 		hasSpec  = (materialFlags & 4) && !noFx && !renderingWheel;
+		// MatFX effect guard (audit — same one the PS2 (:1302) / Spec
+		// (:1465) / mobile (:2308) cbs carry): the surfaceProps.specular
+		// bits can be set while the MatFX effect is bump/other. Without
+		// this guard the env branches below dereference an envData slot
+		// that was never allocated for the envmap effect (crash) or bind
+		// a stale plugin texture into the FFP env path.
+		if(RpMatFXMaterialGetEffects(material) != rpMATFXEFFECTENVMAP){
+			hasEnv1 = false;
+			hasEnv2 = false;
+			hasSpec = false;
+		}
 
-		hasAlpha = instancedData->vertexAlpha != 0 || instancedData->material->color.alpha != 255;
+		// alpha byte 16 is the SA paint marker ("use paint colour"), not a
+		// translucency request — it must not enable blending. Genuine
+		// material alpha (!=255, !=16) and vertex alpha behave as before.
+		// Without this exclusion the L2 mirror below and D3D9RenderDual's
+		// gate fire on alpha 16, so leg 1 rejects the body (no depth) and
+		// leg 2 draws it at ~6% with ZWRITE off -> x-ray.
+		hasAlpha = instancedData->vertexAlpha != 0 ||
+		           (instancedData->material->color.alpha != 255 &&
+		            instancedData->material->color.alpha != 16);
 		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)hasAlpha);
 		// Layer-(2) mirror — same class as setupMaterial/Env: this cb also
 		// draws through D3D9RenderDual (:1396), whose pass gate reads
@@ -1351,6 +1956,13 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *ob
 		}
 
 		envData = *GETENVMAP(material);
+		// Plugin-slot NULL guard (audit): the env bits can be set with the
+		// envmap plugin slot never allocated (mod assets) — the branches
+		// below dereference envData unchecked. Drop the env legs instead.
+		if(!envData){
+			hasEnv1 = false;
+			hasEnv2 = false;
+		}
 		if(blownUp){
 			if(hasEnv2)
 				envSwitch = 3;
@@ -1370,7 +1982,13 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *ob
 			texMat._31 = trans[0];
 			texMat._32 = trans[1];
 			RwD3D9SetVertexShaderConstant(LOC_Texture, (void*)&texMat, 4);
-			RwD3D9SetTexture(envData->texture, 1);
+			// Three-layer stage-1 bind (vehBindDiffuse3L above): resolves a NULL
+			// env texture to gpWhiteTexture AND forces the resolved raster
+			// through L2/L3, so a missing env map — or a postfx/water pass that
+			// leaked a screen raster onto device stage 1 — can never survive an
+			// L2 cache-hit no-op (the old pipeSetTexture was L2-only). Stage 1
+			// has no rw render-state twin, so L1 does not apply here.
+			vehBindDiffuse3L(envData->texture, 1);
 			tfactor = CCustomCarEnvMapPipeline__m_EnvMapLightingMult * 96.0f;
 			if(tfactor > 255)
 				tfactor = 255;
@@ -1404,7 +2022,10 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *ob
 			texMat._31 = trans[0];
 			texMat._32 = trans[1];
 			RwD3D9SetVertexShaderConstant(LOC_Texture, (void*)&texMat, 4);
-			RwD3D9SetTexture(envData->texture, 1);
+			// NULL -> gpWhiteTexture, three-layer (same contract as the env1
+			// bind above): L2/L3 so a leaked screen raster on device stage 1
+			// cannot survive an L2 cache-hit no-op.
+			vehBindDiffuse3L(envData->texture, 1);
 			tfactor = CCustomCarEnvMapPipeline__m_EnvMapLightingMult * 24.0f;
 			if(tfactor > 255) tfactor = 255;
 			RwD3D9SetRenderState(D3DRS_TEXTUREFACTOR, D3DCOLOR_ARGB(tfactor,255,255,255));
@@ -1423,8 +2044,24 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *ob
 
 		SetupMaterial_Xbox(material, lighting, flags, blownUp, specularity);
 
+		RwTexture *diffuseBound;
+		const char *texBranch;
 		if(flags & (rxGEOMETRY_TEXTURED2 | rxGEOMETRY_TEXTURED)){
-			RwD3D9SetTexture(material->texture, 0);
+			// R2-04 + three-layer bind (vehBindDiffuse3L): SA paint meshes are
+			// flagged textured but carry material->texture == NULL — paint is
+			// material colour + env map, not a diffuse map. A raw
+			// RwD3D9SetTexture(NULL, 0) does not clear stage 0 (cache no-op), so
+			// the mesh sampled whatever raster the previous pass left bound
+			// (vegetation atlas / cloud raster / a leaked screen raster) and
+			// MODULATE(TEXTURE, DIFFUSE) multiplied the ghost into the body.
+			// vehBindDiffuse3L resolves NULL to the game's opaque white texture
+			// AND forces it through L1/L2/L3 so no cache-hit no-op can leave the
+			// leaked raster bound; SetupMaterial_Xbox above already uploaded
+			// matCol (LOC_matCol) from material->color, so MODULATE(white,
+			// DIFFUSE) renders the paint colour even when env/spec is absent.
+			diffuseBound = material->texture ? material->texture : gpWhiteTexture;
+			texBranch = material->texture ? "xboxTex" : "xboxPaintNull";
+			vehBindDiffuse3L(material->texture, 0);
 			RwD3D9SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
 			RwD3D9SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
 			RwD3D9SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
@@ -1432,12 +2069,18 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *ob
 			RwD3D9SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TEXTURE);
 			RwD3D9SetTextureStageState(0, D3DTSS_ALPHAARG2, D3DTA_DIFFUSE);
 		}else{
-			RwD3D9SetTexture(NULL, 0);
+			// Even the SELECTARG2=DIFFUSE branch must not leave an unknown
+			// raster in the stage-0 cache: bind the white fallback three-layer so
+			// a later cache-hit bind cannot inherit the previous pass's texture.
+			diffuseBound = gpWhiteTexture;
+			texBranch = "xboxNoTexFlag";
+			vehBindDiffuse3L(NULL, 0);
 			RwD3D9SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG2);
 			RwD3D9SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
 			RwD3D9SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG2);
 			RwD3D9SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
 		}
+		vehTexDiag(material, diffuseBound, texBranch, hasEnv1, hasEnv2, hasSpec);
 		D3D9RenderDual(config->dualPassVehicle, resEntryHeader, instancedData);
 	}
 	RwD3D9SetVertexShader(NULL);
@@ -1452,6 +2095,15 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *ob
 	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)xboxState.dst);
 	RwRenderStateSet(rwRENDERSTATEFOGCOLOR, (void*)xboxState.fog);
 	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)xboxZwrite);
+	// TFACTOR leak plug (audit item 1): the env branches above push
+	// D3DRS_TEXTUREFACTOR (L2) per env mesh and NOTHING restored it — the
+	// VehicleRenderState snapshot field existed only for
+	// vehiclePipe_fxAdditiveBlend, which this cb never routes through. There
+	// is no rw render state for TFACTOR (L1 N/A), so restore L2 + raw L3
+	// from the cb-entry snapshot.
+	RwD3D9SetRenderState(D3DRS_TEXTUREFACTOR, xboxState.texturefactor);
+	if(d3d9device)
+		d3d9device->SetRenderState(D3DRS_TEXTUREFACTOR, xboxState.texturefactor);
 	// Same TEXTUREADDRESS leak class as the PS2/spec cb (sets at :1325/:1354
 	// pushed WRAP through the rw cache only). This cb never routes through
 	// vehiclePipe_fxAdditiveBlend, so restore L1 here; the L3 sampler state
@@ -1463,6 +2115,7 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *ob
 			d3d9device->SetSamplerState(i, D3DSAMP_ADDRESSV, xboxState.sampV[i]);
 		}
 	}
+	vpipeTraceLog("Xbox", VTR_XBOX, "vpipe_xbox", atomic);	// instrumentation only
 }
 
 
@@ -1470,6 +2123,8 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *ob
 void
 CCustomCarEnvMapPipeline__CustomPipeRenderCB_leeds(RwResEntry *repEntry, void *object, RwUInt8 type, RwUInt32 flags)
 {
+	PF_SCOPE("VehiclePipe_Leeds");	// instrumentation only
+	vTraceBegin(vTrace[VTR_LEEDS]);	// instrumentation only
 	RxD3D9ResEntryHeader *resEntryHeader;
 	RxD3D9InstanceData *instancedData;
 	RpAtomic *atomic;
@@ -1490,6 +2145,9 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_leeds(RwResEntry *repEntry, void *o
 	RwMatrix lightmat;
 	float transform[16];
 	memset(&fxParams, 0, sizeof(fxParams));
+
+	// [bind-elision] cb entry invalidation — see the PS2 cb note.
+	vehBindElideInvalidate();
 
 	atomic = (RpAtomic*)object;
 	if(!atomic) return;
@@ -1545,7 +2203,9 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_leeds(RwResEntry *repEntry, void *o
 		RwD3D9SetVertexShaderConstant(REG_surfProps, surfProps, 1);
 
 		RwD3D9SetVertexShader(vehiclePipeVS);
+		vehBindVS(vTrace[VTR_LEEDS], vehiclePipeVS);	// instrumentation only
 		RwD3D9SetPixelShader(simplePS);
+		vehBindPS(vTrace[VTR_LEEDS], simplePS);	// instrumentation only
 
 		D3D9RenderDual(config->dualPassVehicle, resEntryHeader, instancedData);
 
@@ -1560,6 +2220,7 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_leeds(RwResEntry *repEntry, void *o
 			continue;
 
 		RwD3D9SetVertexShader(leedsCarFxVS);
+		vehBindVS(vTrace[VTR_LEEDS], leedsCarFxVS);	// instrumentation only
 
 		envData = *GETENVMAP(material);
 
@@ -1572,6 +2233,14 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_leeds(RwResEntry *repEntry, void *o
 		RwD3D9SetVertexShaderConstant(REG_fxParams, &fxParams, 1);
 
 		RwD3D9SetTexture(reflectionTex, 0);
+		// [bind-elision] This is a RAW stage-0 writer between two per-mesh
+		// binds of the SAME callback: it leaves reflectionTex on device s0
+		// (and in RW's applied[] cache) while the bind-elision cache still
+		// names the mesh diffuse bound above. Without this invalidation the
+		// next mesh whose diffuse equals the cached pointer would HIT and
+		// keep the reflection map on s0 (env map sampled as diffuse). Drop
+		// the cache so the next mesh bind is always a full three-layer write.
+		vehBindElideInvalidate();
 
 		// Snapshot the rw-side VERTEXALPHA that setupMaterial just programmed,
 		// so the FX pass can hand it back on every exit path (same discipline
@@ -1579,7 +2248,13 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_leeds(RwResEntry *repEntry, void *o
 		RwUInt32 savedVtxAlpha = FALSE;
 		RwRenderStateGet(rwRENDERSTATEVERTEXALPHAENABLE, &savedVtxAlpha);
 
-		DWORD leedsDstBlend = (config->vehiclePipe == 6)	// VCS
+		// aap parity (AAP-PARITY SWEEP): LCS ADDS the env map to the diffuse
+		// (dst blend ONE); VCS alpha-blends it instead (dst blend INVSRCALPHA).
+		// The old literal `== 6` pinned the VCS test to CAR_LCS (CarPipeline:
+		// PS2=0 PC=1 XBOX=2 SPEC=3 MOBILE=4 NEO=5 LCS=6 VCS=7), so LCS drew
+		// alpha-blended and VCS drew additive — exactly inverted. Compare the
+		// symbolic constant, same as aap's leeds cb.
+		DWORD leedsDstBlend = (config->vehiclePipe == CAR_VCS)
 			? D3DBLEND_INVSRCALPHA : D3DBLEND_ONE;
 
 		// Three-layer doctrine (rw cache L1 + RwD3D9SetRenderState L2 + device
@@ -1598,7 +2273,7 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_leeds(RwResEntry *repEntry, void *o
 		RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
 		RwD3D9SetRenderState(D3DRS_SRCBLEND, (RwUInt32)D3DBLEND_SRCALPHA);
 		RwRenderStateSet(rwRENDERSTATEDESTBLEND,
-			(void*)(config->vehiclePipe == 6 ? rwBLENDINVSRCALPHA : rwBLENDONE));
+			(void*)(config->vehiclePipe == CAR_VCS ? rwBLENDINVSRCALPHA : rwBLENDONE));
 		RwD3D9SetRenderState(D3DRS_DESTBLEND, (RwUInt32)leedsDstBlend);
 		if(d3d9device){
 			d3d9device->SetRenderState(D3DRS_ALPHAFUNC, D3DCMP_ALWAYS);
@@ -1612,9 +2287,9 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_leeds(RwResEntry *repEntry, void *o
 		D3D9Render(resEntryHeader, instancedData);
 
 		RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)state.dst);
-		RwD3D9SetRenderState(D3DRS_DESTBLEND, vehiclePipe_blendToD3D(state.dst, D3DBLEND_INVSRCALPHA));
+		RwD3D9SetRenderState(D3DRS_DESTBLEND, pipeBlendToD3D((RwUInt32)state.dst, D3DBLEND_INVSRCALPHA));
 		RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)state.src);
-		RwD3D9SetRenderState(D3DRS_SRCBLEND, vehiclePipe_blendToD3D(state.src, D3DBLEND_SRCALPHA));
+		RwD3D9SetRenderState(D3DRS_SRCBLEND, pipeBlendToD3D((RwUInt32)state.src, D3DBLEND_SRCALPHA));
 		RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)state.fog);
 		RwD3D9SetRenderState(D3DRS_FOGENABLE, (RwUInt32)(state.fog != 0));
 		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
@@ -1629,8 +2304,8 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_leeds(RwResEntry *repEntry, void *o
 		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)savedVtxAlpha);
 		RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, savedVtxAlpha ? TRUE : FALSE);
 		if(d3d9device){
-			d3d9device->SetRenderState(D3DRS_DESTBLEND, vehiclePipe_blendToD3D(state.dst, D3DBLEND_INVSRCALPHA));
-			d3d9device->SetRenderState(D3DRS_SRCBLEND, vehiclePipe_blendToD3D(state.src, D3DBLEND_SRCALPHA));
+			d3d9device->SetRenderState(D3DRS_DESTBLEND, pipeBlendToD3D((RwUInt32)state.dst, D3DBLEND_INVSRCALPHA));
+			d3d9device->SetRenderState(D3DRS_SRCBLEND, pipeBlendToD3D((RwUInt32)state.src, D3DBLEND_SRCALPHA));
 			d3d9device->SetRenderState(D3DRS_FOGENABLE, state.fog != 0 ? TRUE : FALSE);
 			d3d9device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
 			d3d9device->SetRenderState(D3DRS_ALPHAFUNC, pipeAlphaFuncToD3D((RwUInt32)state.alphafunc));
@@ -1638,11 +2313,14 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_leeds(RwResEntry *repEntry, void *o
 		}
 	}
 	vehiclePipe_cleanup();
+	vpipeTraceLog("Leeds", VTR_LEEDS, "vpipe_leeds", atomic);	// instrumentation only
 }
 
 void
 CCustomCarEnvMapPipeline__CustomPipeRenderCB_mobile(RwResEntry *repEntry, void *object, RwUInt8 type, RwUInt32 flags)
 {
+	PF_SCOPE("VehiclePipe_Mobile");	// instrumentation only
+	vTraceBegin(vTrace[VTR_MOBILE]);	// instrumentation only
 	RxD3D9ResEntryHeader *resEntryHeader;
 	RxD3D9InstanceData *instancedData;
 	RpAtomic *atomic;
@@ -1663,11 +2341,24 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_mobile(RwResEntry *repEntry, void *
 	float transform[16];
 	memset(&fxParams, 0, sizeof(fxParams));
 
+	// [bind-elision] cb entry invalidation — see the PS2 cb note.
+	vehBindElideInvalidate();
+
 	atomic = (RpAtomic*)object;
 	if(!atomic) return;
 
 	RwFrame *atomicFrame_m = RpAtomicGetFrame(atomic);
 	if(!atomicFrame_m) return;
+
+	// Stage-1 sampler addressing snapshot (raw L3: there is no rw twin for
+	// per-stage address outside the rwTEXTUREADDRESS cache). The WRAP forced
+	// for env sampling below is restored to these cb-entry values on exit.
+	DWORD savedAddrU1 = D3DTADDRESS_WRAP;
+	DWORD savedAddrV1 = D3DTADDRESS_WRAP;
+	if(d3d9device){
+		d3d9device->GetSamplerState(1, D3DSAMP_ADDRESSU, &savedAddrU1);
+		d3d9device->GetSamplerState(1, D3DSAMP_ADDRESSV, &savedAddrV1);
+	}
 
 	_rwD3D9EnableClippingIfNeeded(object, type);
 
@@ -1682,9 +2373,32 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_mobile(RwResEntry *repEntry, void *
 	else
 		uploadNoLights();
 
+	// Forward+ clustered lights: upload c45/c48-c111 and bind the tile index
+	// texture (s5) — same call as the two PBR vehicle cbs
+	// (:2262, :2580) and the PS2/GTAIV building cb. This cb (mobile) never
+	// called SetConstants, so with PIPELINE_MOBILE the per-frame cull
+	// collected lights that never reached the GPU ("collected N lights,
+	// gpu=0" — g_fpGpuLightCount only advances inside UploadLightConstants,
+	// which is deferred to SetConstants). Callee self-guards
+	// (forwardplus.cpp:414) and clears stale c45/s5 when the flag is off.
+	ForwardPlus_SetConstants();
+	vTrace[VTR_MOBILE].fp = 1;	// instrumentation only: cluster-light upload ran
+
 	vehiclePipe_setupResEntry(repEntry, &resEntryHeader, &instancedData, &numMeshes);
 
-	noFx = CVisibilityPlugins__GetAtomicId(atomic) & 0x6000;
+	// Draw-boundary re-asserts (same idiom as the Xbox cb at :1488 and the
+	// Env cb at :2379/:2390): ForwardPlus_SetConstants() above binds s6/s7 and
+	// writes device-side state directly, so the rw cache and the device can
+	// disagree by the time the first mesh draws. Re-assert the Switch-captured
+	// cull — s_vehSwitchSavedCull, never a hardcoded BACK: the mirror/sphere
+	// pass legitimately runs CULLNONE — then re-assert the alpha block.
+	pipeForceCullMode(s_vehSwitchSavedCull);
+	pipeForceAlphaBlock();
+
+	// Unlit atomics skip the env path, same condition as the Env cb (:2483):
+	// without the rpGEOMETRYLIGHT term an unlit atomic still took the env-map
+	// branch and got reflections it must not have.
+	noFx = CVisibilityPlugins__GetAtomicId(atomic) & 0x6000 || !(flags & rpGEOMETRYLIGHT);
 	fxParams.lightmult = CCustomCarEnvMapPipeline__m_EnvMapLightingMult;
 
 	RwCamera *curCam_m = (RwCamera*)RWSRCGLOBAL(curCamera);
@@ -1781,24 +2495,367 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_mobile(RwResEntry *repEntry, void *
 			// cross-frame postfx values — lerp extrapolated toward the env
 			// map color -> washed-white mobile vehicles.
 			RwD3D9SetPixelShaderConstant(1, &fxParams, 1);
-			pipeSetTexture(reflectionTex, 1);
+			// Stage-1 addressing: a CLAMP left by an earlier pass would clamp
+			// the env sampling — force WRAP for this cb (restored at exit from
+			// the cb-entry snapshot). Raw L3 only: no rw twin exists.
+			if(d3d9device){
+				d3d9device->SetSamplerState(1, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP);
+				d3d9device->SetSamplerState(1, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
+			}
+			// Feedback guard, same idiom as the Env cb's s1 sites (:2826/:3204):
+			// this cb also runs inside the env-map sphere pass, so binding
+			// reflectionTex there samples the very RT being drawn into. Bind the
+			// white fallback instead (NULL resolves to gpWhiteTexture exactly
+			// like vehEnvBindTexture(NULL, 1) does in the Env cb). Three-layer
+			// bind (vehBindDiffuse3L): the old pipeSetTexture was L2-only, so a
+			// screen raster leaked onto device stage 1 by postfx/water survived
+			// the cache-hit no-op -> wrong reflections. Same-texture rebind is
+			// state-identical (L2 no-op, L3 sets the identical pointer).
+			if(!gRenderingSpheremap)
+				vehBindDiffuse3L(reflectionTex, 1);
+			else
+				vehBindDiffuse3L(NULL, 1);
 			RwD3D9SetVertexShader(mobileVehiclePipeVS);
+			vehBindVS(vTrace[VTR_MOBILE], mobileVehiclePipeVS);	// instrumentation only
 			RwD3D9SetPixelShader(mobileVehiclePipePS);
+			vehBindPS(vTrace[VTR_MOBILE], mobileVehiclePipePS);	// instrumentation only
 		}else{
 			RwD3D9SetVertexShader(vehiclePipeVS);
+			vehBindVS(vTrace[VTR_MOBILE], vehiclePipeVS);	// instrumentation only
 			RwD3D9SetPixelShader(simplePS);
+			vehBindPS(vTrace[VTR_MOBILE], simplePS);	// instrumentation only
 		}
 
 		D3D9RenderDual(config->dualPassVehicle, resEntryHeader, instancedData);
 	}
+	// Restore the cb-entry stage-1 addressing (see the snapshot at cb entry).
+	if(d3d9device){
+		d3d9device->SetSamplerState(1, D3DSAMP_ADDRESSU, savedAddrU1);
+		d3d9device->SetSamplerState(1, D3DSAMP_ADDRESSV, savedAddrV1);
+	}
 	vehiclePipe_cleanup();
+	vpipeTraceLog("Mobile", VTR_MOBILE, "vpipe_mobile", atomic);	// instrumentation only
+}
+
+// One-shot opacity diagnostic for the Env/PBR cb: the first 16 meshes print
+// the texture name, alpha class and the resulting blend/shader-alpha decision
+// so a misclassified car body/glass texture is named instead of guessed.
+static int s_vehMeshLogged = 0;
+static int s_vehOverrideLogged = 0;	// glass/tire c48.w=1.0 override samples
+
+// TexAlphaClass -> name for the diagnostics below. Kept local to this file:
+// texalpha.h deliberately exports only the classifier API. The bare tac
+// NUMBER misled the log reader once (tac=0 is TAC_UNKNOWN, not TAC_OPAQUE),
+// so every opacity line prints the name.
+static const char *TexAlphaClassTag(int cls)
+{
+	switch(cls){
+	case TAC_OPAQUE: return "OPAQUE";
+	case TAC_CUTOUT: return "CUTOUT";
+	case TAC_FADED:  return "FADED";
+	default:         return "UNKNOWN";
+	}
+}
+
+// ============================================================
+// Env (Modern) cb — per-callback D3D9 write tracker (per-mesh CPU cost).
+//
+// The Env cb issues ~60 D3D9 calls per mesh. Most of that burst is invariant
+// ACROSS THE CALLBACK: PS c5-c18 (lights), PS c25-c27 (view rotation), PS c46
+// (layer mask), PS c24 (ambient), PS c20 (IBL ambient), PS c28 (sky), PS c29
+// (screen size), PS c4 (cloud shadow), the s3 IBL sampler set, the s4 normal
+// buffer bind and the whole Forward+ cluster block (c45 + s5/s6/s7 + 12
+// sampler states). Their inputs are per-FRAME globals (lights, timecycle,
+// camera raster, IBL texture, config) that cannot change between the meshes
+// of one atomic callback, so the callback only needs to write them once.
+//
+// Rules encoded here (kept deliberately narrow):
+//   - The tracker is reset at cb entry and records only writes THIS cb
+//     issued. It NEVER reads the D3D9/RW caches back to decide anything:
+//     RW's render-state cache is change-gated/skips sets, and raw writers
+//     can desync it, so a read-back would race those.
+//   - Same-value elision is EXACT — memcmp over the float4(s) about to be
+//     uploaded, so -0.0f vs +0.0f or any ULP difference still writes.
+//   - Nothing is elided across a block this code does not own: the PipeChain
+//     classify bracket (postfx.cpp) parks ALPHABLENDENABLE/ZWRITE through all
+//     three layers and restores the exact device values it read at Begin; the
+//     pair cache is invalidated after it anyway (vehEnvElideForgetBlend), so a
+//     future bracket change can never inherit a stale skip.
+//   - Per-mesh writers (NM c48 block, c3 iblParams, material/light/surfProps
+//     uploads) are NOT cached here — they legitimately change per mesh.
+//   - Writes outside this cb (Switch enter/exit, alphaseq, cleanup) are
+//     untouched; the trackers die with the callback.
+// ============================================================
+enum {
+	// Tracked PS constant registers: reg + count must stay below this.
+	// c4..c46 covers every invariant vector this cb uploads (c46 is the
+	// highest cached register; c45 and c5-c18 are whole-block guarded).
+	VEH_ENV_PSREG_MAX = 48,
+	// Texture stages this cb can bind: s0/s1/s2 (RW) + s3/s4/s8 (raw).
+	VEH_ENV_STAGE_MAX = 9
+};
+
+struct VehEnvElideStats {
+	int cbs;		// Env callbacks in this receipt window
+	int meshes;		// mesh-loop iterations in this receipt window
+	int constSkip;		// PS constant VECTORS not re-uploaded
+	int texSkip;		// texture binds skipped (same texture on the stage)
+	int blendSkip;		// L1+L2 alpha pairs skipped (2 writes each)
+	int zwriteSkip;		// ZWRITE L1 writes skipped
+	int blockSkip;		// whole-block writes skipped (approx; see sites)
+};
+
+struct VehEnvElide {
+	bool  psKnown[VEH_ENV_PSREG_MAX];
+	float psVal[VEH_ENV_PSREG_MAX][4];
+	bool  texKnown[VEH_ENV_STAGE_MAX];
+	const void *texVal[VEH_ENV_STAGE_MAX];
+	bool  blendKnown;
+	int   blendVal;
+	bool  zwriteKnown;
+	int   zwriteVal;
+	bool  fpDone;
+	bool  psLightsDone;
+	bool  viewRotDone;
+	bool  iblSamplerDone;
+	bool  nmSamplerDone;
+	VehEnvElideStats stats;
+};
+
+static VehEnvElide s_vehEnvElide;
+
+// Reset the per-callback trackers. Stats are NOT cleared here: they
+// accumulate until the throttled receipt, so the log shows the last ~2 s of
+// callbacks instead of whichever atomic happened to run last.
+static void
+vehEnvElideBegin(void)
+{
+	memset(s_vehEnvElide.psKnown, 0, sizeof(s_vehEnvElide.psKnown));
+	memset(s_vehEnvElide.texKnown, 0, sizeof(s_vehEnvElide.texKnown));
+	s_vehEnvElide.blendKnown = false;
+	s_vehEnvElide.zwriteKnown = false;
+	s_vehEnvElide.fpDone = false;
+	s_vehEnvElide.psLightsDone = false;
+	s_vehEnvElide.viewRotDone = false;
+	s_vehEnvElide.iblSamplerDone = false;
+	s_vehEnvElide.nmSamplerDone = false;
+	s_vehEnvElide.stats.cbs++;
+}
+
+// PS constant upload with EXACT same-value elision. Returns true when the
+// upload was skipped because the value this callback last wrote for those
+// registers is bitwise identical. Registers outside the tracker always write.
+static bool
+vehEnvUploadPS(int reg, const float *v, int vecs)
+{
+	if(reg >= 0 && vecs > 0 && reg + vecs <= VEH_ENV_PSREG_MAX){
+		bool same = true;
+		for(int i = 0; i < vecs; i++){
+			if(!s_vehEnvElide.psKnown[reg + i] ||
+			   memcmp(s_vehEnvElide.psVal[reg + i], v + i * 4, 4 * sizeof(float)) != 0){
+				same = false;
+				break;
+			}
+		}
+		if(same){
+			s_vehEnvElide.stats.constSkip += vecs;
+			return true;
+		}
+		for(int i = 0; i < vecs; i++){
+			memcpy(s_vehEnvElide.psVal[reg + i], v + i * 4, 4 * sizeof(float));
+			s_vehEnvElide.psKnown[reg + i] = true;
+		}
+	}
+	RwD3D9SetPixelShaderConstant(reg, (const void*)v, vecs);
+	return false;
+}
+
+// Three-layer bind (vehBindDiffuse3L) with same-texture elision for stages 0-2
+// (RW textures). NULL resolves to gpWhiteTexture exactly like pipeSetTexture,
+// so the comparison key is the pointer that would actually be bound. The elision
+// is per-callback and EXACT (the first bind after vehEnvElideBegin always runs),
+// so it can never hide the one write that repairs a leaked screen raster — and
+// when the write runs it goes through L1/L2/L3 (vehBindDiffuse3L), so no cache-
+// hit no-op can leave the previous pass's raster on the stage.
+static void
+vehEnvBindTexture(RwTexture *tex, int stage)
+{
+	RwTexture *resolved = tex ? tex : gpWhiteTexture;
+	if(stage >= 0 && stage < VEH_ENV_STAGE_MAX &&
+	   s_vehEnvElide.texKnown[stage] &&
+	   s_vehEnvElide.texVal[stage] == (const void*)resolved){
+		s_vehEnvElide.stats.texSkip++;
+		return;
+	}
+	if(stage >= 0 && stage < VEH_ENV_STAGE_MAX){
+		s_vehEnvElide.texKnown[stage] = true;
+		s_vehEnvElide.texVal[stage] = (const void*)resolved;
+	}
+	vehBindDiffuse3L(resolved, stage);
+}
+
+// Raw IDirect3DTexture9* bind (s3 IBL / s4 normal buffer / s8 NM) with the
+// same pointer-compare elision. No write and no tracking without a device.
+static void
+vehEnvBindTextureRaw(int stage, IDirect3DTexture9 *tex)
+{
+	if(!d3d9device)
+		return;
+	if(stage >= 0 && stage < VEH_ENV_STAGE_MAX &&
+	   s_vehEnvElide.texKnown[stage] &&
+	   s_vehEnvElide.texVal[stage] == (const void*)tex){
+		s_vehEnvElide.stats.texSkip++;
+		return;
+	}
+	if(stage >= 0 && stage < VEH_ENV_STAGE_MAX){
+		s_vehEnvElide.texKnown[stage] = true;
+		s_vehEnvElide.texVal[stage] = (const void*)tex;
+	}
+	d3d9device->SetTexture(stage, tex);
+}
+
+// L1 (rw cache) + L2 (driver cache) alpha-blend pair for the per-mesh blend
+// decision. Consecutive meshes with the SAME value make both sets cache-hit
+// no-ops in the original code (RW's sets are change-gated), so skipping the
+// pair is state-identical, not merely visually identical.
+static void
+vehEnvSetAlphaBlend(int blendOn)
+{
+	if(s_vehEnvElide.blendKnown && s_vehEnvElide.blendVal == blendOn){
+		s_vehEnvElide.stats.blendSkip++;
+		return;
+	}
+	s_vehEnvElide.blendKnown = true;
+	s_vehEnvElide.blendVal = blendOn;
+	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)blendOn);
+	// Layer-(2) mirror — same desync as vehiclePipe_setupMaterial: the rw
+	// set no-ops against an unchanged cache and leaves D3DRS_ALPHABLENDENABLE
+	// at the Switch's FALSE baseline, so the opaque path's D3D9RenderDual
+	// gate reads blend-off and drops the dual pass. Force L2 so the
+	// per-mesh alpha actually reaches the gate and the device flush.
+	RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, blendOn ? TRUE : FALSE);
+}
+
+// L1 ZWRITE pair (glass/decal branch). Tracked like the pair above; the
+// branch is a set(FALSE)/draw/restore(TRUE), so it cannot collapse across
+// meshes (the device must be FALSE for the draw and the restore is
+// observable by the next mesh) — 0 skips is the expected steady state. The
+// tracker makes the pair explicit and would catch a future path that leaves
+// ZWRITE parked.
+static void
+vehEnvSetZWrite(int on)
+{
+	if(s_vehEnvElide.zwriteKnown && s_vehEnvElide.zwriteVal == on){
+		s_vehEnvElide.stats.zwriteSkip++;
+		return;
+	}
+	s_vehEnvElide.zwriteKnown = true;
+	s_vehEnvElide.zwriteVal = on;
+	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)on);
+}
+
+// The PipeChain classify bracket (postfx.cpp) writes ALPHABLENDENABLE +
+// ZWRITE through L1/L2/L3 and restores the exact device value it read at
+// Begin. That restore is outside this tracker's write log, so drop both
+// trackers: the next mesh re-asserts instead of trusting a value another
+// module wrote. Cost is one pair per bracket (pipeChainEnable off by default).
+static void
+vehEnvElideForgetBlend(void)
+{
+	s_vehEnvElide.blendKnown = false;
+	s_vehEnvElide.zwriteKnown = false;	// same bracket parks ZWRITE (L1+L2+L3)
+}
+
+// IBL stage-3 bind + sampler set + cloud-shadow c4, shared by the rubber and
+// opaque branches. Every input is per-frame (g_iblTex, cloudAnimTimer, sun
+// orientation), so the four sampler writes collapse to once per callback and
+// the c4 vector is exact-compared like any other invariant constant.
+static void
+vehEnvIblAndCloudShadow(void)
+{
+	extern IDirect3DTexture9 *g_iblTex;
+	extern float cloudAnimTimer;
+	extern RpLight *&pDirect;
+	IDirect3DDevice9 *dev = d3d9device;
+
+	if(dev && g_iblTex){
+		vehEnvBindTextureRaw(3, g_iblTex);
+		if(!s_vehEnvElide.iblSamplerDone){
+			s_vehEnvElide.iblSamplerDone = true;
+			dev->SetSamplerState(3, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+			dev->SetSamplerState(3, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+			dev->SetSamplerState(3, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+			dev->SetSamplerState(3, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+		}else{
+			s_vehEnvElide.stats.blockSkip += 4;
+		}
+		float cloudShadow[4] = { 0.0f, cloudAnimTimer * 0.01f, 1.0f, 0.0f };
+		if(pDirect){
+			RwFrame *sunFrame = RpLightGetFrame(pDirect);
+			if(sunFrame){
+				RwMatrix *sunLTM = RwFrameGetLTM(sunFrame);
+				if(sunLTM){
+					cloudShadow[0] = sunLTM->at.x;
+					cloudShadow[1] = sunLTM->at.y;
+					cloudShadow[2] = sunLTM->at.z;
+				}
+			}
+		}
+		vehEnvUploadPS(4, cloudShadow, 1);
+	}else if(dev){
+		vehEnvBindTextureRaw(3, NULL);
+	}
+}
+
+// One throttled receipt per ~2 s window so the elision is measurable. The
+// counters accumulate across callbacks; the trackers themselves are
+// per-callback (see vehEnvElideBegin).
+static void
+vehEnvElideLog(void)
+{
+	// Cheap gate first: one static increment per callback; the (hash +
+	// GetTickCount) throttle check runs at most every 64th callback.
+	static int tick = 0;
+	if((++tick & 63) != 0)
+		return;
+	if(!dbglog_throttle("veh_elide"))
+		return;
+	VehEnvElideStats *s = &s_vehEnvElide.stats;
+	int skipped = s->constSkip + s->texSkip + s->blendSkip * 2 +
+	              s->zwriteSkip + s->blockSkip;
+	int winCbs = s->cbs > 0 ? s->cbs : 1;
+	dbglog("[VehElide] cb=Env window_cbs=%d meshes=%d elided=%d writes (const=%d tex=%d blendpair=%d x2 zwrite=%d blocks=%d) per_cb=%.1f",
+	       s->cbs, s->meshes, skipped, s->constSkip, s->texSkip,
+	       s->blendSkip, s->zwriteSkip, s->blockSkip,
+	       (double)skipped / (double)winCbs);
+	memset(s, 0, sizeof(*s));
 }
 
 void
 CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *object, RwUInt8 type, RwUInt32 flags)
 {
+	PF_SCOPE("VehiclePipe_Env");	// instrumentation only
+	vTraceBegin(vTrace[VTR_ENV]);	// instrumentation only
 	if(!repEntry || !object)
 		return;
+	// Throttled receipt for the PREVIOUS window, then reset this callback's
+	// write trackers (stats accumulate until the receipt; trackers never do).
+	vehEnvElideLog();
+	vehEnvElideBegin();
+	// ENTRY CONTRACT (black-silhouette fix): force stage 0 to the safe white
+	// fallback through ALL THREE layers, unconditionally, before any mesh draw.
+	// The forensics show device-vs-cache divergence — a postfx/water pass leaves
+	// a screen/front-buffer raster on s0 and the L2-only binds cache-hit no-op
+	// against it. This raw vehBindDiffuse3L call bypasses the elision tracker
+	// (texKnown stays clean), so it both (a) repairs the device to a known-good
+	// raster right now and (b) leaves the first per-mesh bind to run in full.
+	// A correct textured mesh overrides white on its own bind; an untextured
+	// (paint) mesh keeps white instead of inheriting the leaked raster.
+	// [bind-elision] entry-contract invalidation: foreign passes may have
+	// leaked onto device s0 since the last callback, so the cache proves
+	// nothing — this white repair bind always runs in full.
+	vehBindElideInvalidate();
+	vehBindDiffuse3L(gpWhiteTexture, 0);
 	RxD3D9ResEntryHeader *resEntryHeader;
 	RxD3D9InstanceData *instancedData;
 	RpAtomic *atomic;
@@ -1861,6 +2918,15 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 	if(!gRenderingSpheremap)
 		pipeEnsureIBLBuffer();
 
+	// [bind-elision] pipeEnsureIBLBuffer() above is a fullscreen Im2D pass that
+	// runs AFTER the entry contract armed the cache with gpWhiteTexture — it can
+	// rebind device s0 (sky/corona rasters, raw Im2D writes). Drop the cache
+	// again so the first per-mesh bind is a full three-layer write instead of a
+	// spurious white HIT that would keep the IBL pass's raster on s0 for every
+	// untextured (paint) mesh. The cull/alpha re-asserts below exist for the
+	// same Im2D-ordering reason.
+	vehBindElideInvalidate();
+
 	// Re-assert the pipe cull — mirror of buildingPipe.cpp:731. This cb
 	// runs pipeEnsureIBLBuffer above (fullscreen Im2D pass:
 	// ImmediateModeRenderStatesSet parks rw cull at NONE and the pass's
@@ -1868,8 +2934,10 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 	// vehicle geometry. If the caches still say BACK while the device
 	// kept the pass's leftover value, a plain rw set no-ops (double
 	// no-op) and vehicles render double-sided / wrongly culled. Force all
-	// three cull layers back to BACK through pipeForceCullMode.
-	pipeForceCullMode(rwCULLMODECULLBACK);
+	// three cull layers back to the Switch-captured pre-entry mode — never
+	// a hardcoded BACK: the game legitimately enters at NONE/FRONT (mirror,
+	// stencil-shadow spans) and BACK there culls the opposite face.
+	pipeForceCullMode(s_vehSwitchSavedCull);
 
 	// ...and re-assert the ALPHA block for the same reason. The
 	// pipeEnsureIBLBuffer() Im2D pass above restores the raw alpha/blend
@@ -1882,11 +2950,12 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 	// transparent texels, ref off-by-a-domain -> grey posterized blobs.
 	pipeForceAlphaBlock();
 
-	// Per-frame debug logging (throttle to once per ~60 seconds)
-	static unsigned int vehLogCounter = 0;
-	bool vehLogThisFrame = (vehLogCounter++ % 3600 == 0);
-
-	if(vehLogThisFrame){
+	// Debug logging — wall-clock throttle. The old vehLogCounter % 3600 gate
+	// counted DRAWS (the counter advanced once per atomic callback), not
+	// frames, and produced 7,178 lines in a 6-minute run. The frame/env and
+	// per-mesh blocks use separate tags so neither can suppress the other
+	// within the same callback (dbglog_throttle is once per tag per interval).
+	if(dbglog_throttle("vehpbr_env")){
 		RwUInt32 frame = RWSRCGLOBAL(renderFrame);
 		dbglog("[VehiclePBR] === FRAME %u ===", frame);
 		dbglog("[VehiclePBR] atomic=%p flags=%X", atomic, flags);
@@ -1938,6 +3007,7 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 			viewMat._31, viewMat._32, viewMat._33, 0.0f
 		};
 		RwD3D9SetPixelShaderConstant(25, viewRot, 3);
+		s_vehEnvElide.viewRotDone = true;	// view is fixed for the whole cb
 	}
 	RwMatrixInvert(&lightmat, RwFrameGetLTM(atomicFrame));
 	if(flags & rpGEOMETRYLIGHT)
@@ -1959,10 +3029,17 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 	int alphafunc;
 	int src, dst;
 	int fog;
+	int textureaddress;
 	RwRenderStateGet(rwRENDERSTATEALPHATESTFUNCTION, &alphafunc);
 	RwRenderStateGet(rwRENDERSTATESRCBLEND, &src);
 	RwRenderStateGet(rwRENDERSTATEDESTBLEND, &dst);
 	RwRenderStateGet(rwRENDERSTATEFOGCOLOR, &fog);
+	// TEXTUREADDRESS snapshot (audit item 1): the glass/light path below sets
+	// rwTEXTUREADDRESSWRAP for the env bind and must hand back THIS value —
+	// the hard rwTEXTUREADDRESSCLAMP it used to write there was an unpaired
+	// set that persisted past the callback (Switch exit does not cover
+	// addressing, same leak class the PS2/spec/Xbox cbs already plugged).
+	RwRenderStateGet(rwRENDERSTATETEXTUREADDRESS, &textureaddress);
 
 	noFx = CVisibilityPlugins__GetAtomicId(atomic) & 0x6000 || !(flags & rpGEOMETRYLIGHT);
 	fxParams.fresnel = config->envFresnel;
@@ -2013,13 +3090,15 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 	pipeUploadLightColorForcePS(pDirect, REG_directCol);
 	pipeUploadLightDirectionForcePS(pDirect, REG_directDir);
 	for(int i = 0; i < 6; i++)
-		if(i < NumExtraDirLightsInWorld && RpLightGetType(pExtraDirectionals[i]) == rpLIGHTDIRECTIONAL){
+		if(i < NumExtraDirLightsInWorld && pExtraDirectionals[i] &&
+		   RpLightGetType(pExtraDirectionals[i]) == rpLIGHTDIRECTIONAL){
 			pipeUploadLightColorPS(pExtraDirectionals[i], REG_directCol+i+1);
 			pipeUploadLightDirectionPS(pExtraDirectionals[i], REG_directDir+i+1);
 		}else{
 			pipeUploadZeroPS(REG_directCol+i+1);
 			pipeUploadZeroPS(REG_directDir+i+1);
 		}
+	s_vehEnvElide.psLightsDone = true;	// PS c5-c18 written for the whole cb
 
 
 	for(; numMeshes--; instancedData++){
@@ -2028,16 +3107,202 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 		if(instancedData->material->color.alpha == 0)
 			continue;
 
-		pipeSetTexture(material->texture, 0);
+		s_vehEnvElide.stats.meshes++;
+		// s0 elision: body/grille/trim chunks repeat the same texture; the
+		// first bind after cb entry always runs (texKnown starts false).
+		// R2-04: NULL material texture is a VALID state for SA paint meshes
+		// (UVs + rxGEOMETRY_TEXTURED, but paint is material colour + env map).
+		// vehEnvBindTexture resolves NULL to gpWhiteTexture and stores the
+		// RESOLVED pointer in the per-stage tracker, so a real-texture -> NULL
+		// transition invalidates the entry and forces the white bind instead of
+		// leaving the previous pass's raster (vegetation atlas / cloud raster)
+		// on s0 for MODULATE to multiply into the body colour.
+		RwTexture *diffuseTex = material->texture ? material->texture : gpWhiteTexture;
+		vehEnvBindTexture(diffuseTex, 0);
+		const char *texBranch = material->texture ? "envTex" : "envPaintNull";
 
-		hasAlpha = instancedData->vertexAlpha != 0 || instancedData->material->color.alpha != 255;
-		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)hasAlpha);
-		// Layer-(2) mirror — same desync as vehiclePipe_setupMaterial: the rw
-		// set no-ops against an unchanged cache and leaves D3DRS_ALPHABLENDENABLE
-		// at the Switch's FALSE baseline, so the opaque path's D3D9RenderDual
-		// gate reads blend-off and drops the dual pass. Force L2 so the
-		// per-mesh alpha actually reaches the gate and the device flush.
-		RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, hasAlpha ? TRUE : FALSE);
+		// Env/spec flags come from the MATERIAL env bits, never from the
+		// texture: a texture-less paint mesh keeps its reflection. Hoisted
+		// from the opaque branch so the [VehTex] diagnostic observes exactly
+		// the values the paint path consumes. Gating is unchanged: noFx
+		// (atomic-id bit / unlit atomic) disables all three, and the MatFX
+		// effect guard clears them when the bits belong to another effect.
+		materialFlags = *(RwUInt32*)&material->surfaceProps.specular;
+		hasEnv1 = !noFx && !!(materialFlags & 1);
+		hasEnv2 = !noFx && !!(materialFlags & 2);
+		hasSpec = !noFx && !!(materialFlags & 4) && !renderingWheel;
+		if(RpMatFXMaterialGetEffects(material) != rpMATFXEFFECTENVMAP){
+			hasEnv1 = false;
+			hasEnv2 = false;
+			hasSpec = false;
+		}
+		vehTexDiag(material, diffuseTex, texBranch, hasEnv1, hasEnv2, hasSpec);
+
+		// SA paint marker: material->color.alpha == 16 means "this mesh uses
+		// the vehicle paint colour" — it is NOT a translucency value. Feeding
+		// it into the alpha decision made body/grunge/light meshes blend with
+		// the texture alpha of empty DXT3/DXT5 blocks (tex.a~0) -> see-through
+		// roofs and dissolving body panels. Only a real material alpha may
+		// drive blending from here on.
+		const bool matPaintMarker = (material->color.alpha == 16);
+		const bool matTranslucent  = (material->color.alpha != 255 && !matPaintMarker);
+
+		// Per-texture alpha class: solid meshes whose texture has an unused
+		// alpha channel (empty DXT3 blocks) decode tex.a~0 and GREATER-EQUAL@1
+		// would discard them. The class decides the CPU blend enable AND
+		// c48.w (main() alpha override: 1 = force output alpha 1, 0 = use the
+		// texture alpha). config->texAlphaClassify=0 disables the classifier
+		// (TAC_UNKNOWN, legacy-hasAlpha decision below);
+		// TexAlpha_Classify self-budgets to 256 new textures/frame (warm-up
+		// ~16 frames for a 4k-texture level). hasAlpha is diagnostic only and
+		// excludes the paint marker.
+		hasAlpha = instancedData->vertexAlpha != 0 || matTranslucent;
+		// SAFE DEFAULT note (was "parity item 2"): the legacy aap decided
+		// blending from hasAlpha = (vertexAlpha || material alpha != 255).
+		// That fallback is GONE — see the TAC_UNKNOWN arm below: vertex alpha
+		// alone must never blend (or ZWRITE-carve) solid vehicle geometry,
+		// and an unclassified paint mesh must stay opaque. Classified
+		// textures keep the audited OPAQUE/CUTOUT/FADED mapping.
+
+		int tac = (config && config->texAlphaClassify) ? TexAlpha_Classify(material->texture) : TAC_UNKNOWN;
+
+		// Glass MUST be classified BEFORE the TAC_UNKNOWN fallback below: the
+		// classifier can skip a window texture (tac=0), and the safe default
+		// would not reliably keep the glass pass blending
+		// (the isGlassMesh override below forces blendOn=1 regardless).
+		const char *texName = material->texture ? material->texture->name : "";
+		int modelIndex = VehShaders_GetModelIndex(object);
+		// Glass promotion must come from a genuinely translucent class (FADED)
+		// or an explicitly translucent material — vertexAlpha alone and the
+		// paint marker (alpha 16) must not turn an opaque body into glass.
+		bool glassAlphaArg = (tac == TAC_FADED) || matTranslucent;
+		bool isGlassMesh = VehShaders_IsGlassTexture(texName, glassAlphaArg, material->color.alpha);
+		// Ghost-car / mirror-chrome guard. IsGlassTexture's alpha<200 fallback
+		// claims ANY low-alpha material, including dirt/grunge overlays
+		// (vehiclegrunge* -> SURFACE_CAR_DIRT) and paint meshes — those then
+		// draw through Glass_Vehicle as a chrome shell. The fallback may only
+		// survive when the texture really resolves to SURFACE_CAR_GLASS;
+		// positive window/glass/windscreen name matches are unaffected.
+		if(isGlassMesh && !(texName && texName[0] &&
+		   VehShaders_GetSurfaceType(texName) == SURFACE_CAR_GLASS))
+			isGlassMesh = false;
+
+		int blendOn;
+		float shaderAlpha;
+		// AUDITED mapping (texalpha.h): TAC_UNKNOWN=0, TAC_OPAQUE=1,
+		// TAC_CUTOUT=2, TAC_FADED=3. tac=0 in a log line is UNKNOWN, NOT
+		// OPAQUE — it is the budget-skipped / not-yet-classified texture, and
+		// it takes the SAFE DEFAULT below (replaces the legacy hasAlpha
+		// fallback / parity item 2). TAC_OPAQUE MUST still yield 1.0
+		// here or solid meshes whose alpha channel is unused (all-zero DXT3
+		// nibbles) get alpha-tested away.
+		switch(tac){
+		case TAC_OPAQUE:	// no usable alpha data → FORCE output alpha 1
+			blendOn = 0; shaderAlpha = 1.0f; break;
+		case TAC_CUTOUT:	// 0/255 mask → alpha test, no blending
+			blendOn = 0; shaderAlpha = 0.0f; break;
+		case TAC_FADED:		// intermediate alpha → blend + texture alpha
+			blendOn = 1; shaderAlpha = 0.0f; break;
+		case TAC_UNKNOWN:	// tac=0 == UNKNOWN → SAFE DEFAULT (see below)
+		default:
+			// SAFE DEFAULT (unconditional — runs when the classifier is
+			// INI-off AND when it budget-skips a texture): opaque geometry
+			// draws opaque, only real decal/vedecal materials blend.
+			//   blendOn = matTranslucent — vertex alpha alone must never
+			//   blend solid geometry. SA vehicle meshes carry vertex alpha
+			//   (D/N extra-vert-colour data), so the legacy
+			//   hasAlphaLegacy term blended body/grille meshes at
+			//   texture*vertex alpha (see-through vehicles) AND left them
+			//   ZWRITE-on while blending: the decal policy below only
+			//   parks ZWRITE for matTranslucent/FADED meshes, so the
+			//   blended mesh carved its depth plane and every later draw
+			//   behind it (peds, markers, other vehicles) depth-rejected.
+			//   build-10 live log: [BldTex] green_glass_64 blend=1 zw=1.
+			//   shaderAlpha = 1 for the alpha-16 paint marker — the
+			//   classified path resolves paint markers to TAC_OPAQUE
+			//   (all-zero texture alpha fails the 85% zero ceiling), so
+			//   c48w=1 is the DESIGNED result and the INI-off fallback
+			//   must match it. The legacy shaderAlpha=0 left
+			//   grunge/lights/generic meshes alpha-tested away (invisible)
+			//   with their all-zero texture alpha. Everything else keeps
+			//   texture alpha (shaderAlpha 0) so cutout masks (grilles,
+			//   perforated trim) keep cutting at the GREATER@ref test.
+			//   No per-mesh device reads; the 3-layer blend/ZWRITE writes
+			//   and the decal policy below are untouched.
+			blendOn = matTranslucent ? 1 : 0;
+			shaderAlpha = matPaintMarker ? 1.0f : 0.0f;
+			break;
+		}
+		// Only an explicitly translucent material (real alpha, i.e. NOT the
+		// paint marker) forces blending. When the texture class was skipped,
+		// c48.w must also drop back to 0 here or the blend would force alpha 1
+		// and the "translucent" mesh would still draw solid.
+		if(matTranslucent){
+			blendOn = 1;
+			shaderAlpha = 0.0f;
+		}
+
+		// Classified textures own the blend decision: a solid (OPAQUE) or
+		// alpha-tested (CUTOUT) texture must never blend just because
+		// instancedData->vertexAlpha is set — that was the whole-mesh
+		// inversion that pushed solid car bodies into the transparent pass.
+		// matTranslucent excludes the paint marker, so alpha==16 cannot
+		// re-enable blending here either.
+		if(tac == TAC_OPAQUE || tac == TAC_CUTOUT)
+			blendOn = matTranslucent ? 1 : 0;
+
+		// Glass always keeps its own blended path, even when the classifier
+		// skipped the texture (tac=0). Its branch overrides c48.w to 1.0.
+		if(isGlassMesh)
+			blendOn = 1;
+
+		// NM lane: bind <diffuse>_n on s8 (raw D3D9) + c48 = {bound, intensity,
+		// glossFromAlpha, shaderAlpha}. Player-scoped (normalMapPlayerOnly):
+		// only the player's current vehicle (TexDefsVehicleAllowed, per-frame
+		// cached). The explicit else-reset is REQUIRED — D3D9 constants and
+		// textures persist across draws, so a mesh without a pairing must zero
+		// c48.x/y/z and unbind s8 or it would sample the previous mesh's normal
+		// map. c48.w must be written on BOTH paths (the else branch used to
+		// write 0.0f → with normalMapEnable=0 every mesh would silently fall
+		// back to texture alpha, leaving solid DXT3 surfaces hole-prone — the
+		// #1 trap for this fix).
+		{
+			bool nmAlpha = false;
+			IDirect3DTexture9 *nmD3d =
+				(config->normalMapEnable && !gHasExternalNormalMapPlugin
+				 && TexDefsVehicleAllowed(atomic))
+				? TexDefsGetNormalMap(material->texture, &nmAlpha) : NULL;
+			if(nmD3d && d3d9device){
+				vehEnvBindTextureRaw(8, nmD3d);
+				// WRAP/LINEAR are constants on this stage: land them once per
+				// callback; the cb exit unbinds s8. c48 stays per-material.
+				if(!s_vehEnvElide.nmSamplerDone){
+					s_vehEnvElide.nmSamplerDone = true;
+					d3d9device->SetSamplerState(8, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP);
+					d3d9device->SetSamplerState(8, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
+					d3d9device->SetSamplerState(8, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+					d3d9device->SetSamplerState(8, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+					d3d9device->SetSamplerState(8, D3DSAMP_MIPFILTER, D3DTEXF_LINEAR);
+				}else{
+					s_vehEnvElide.stats.blockSkip += 5;
+				}
+				float nmP[4] = { 1.0f, config->normalMapIntensity, nmAlpha ? 1.0f : 0.0f, shaderAlpha };
+				RwD3D9SetPixelShaderConstant(48, nmP, 1);
+			}else{
+				float nmZero[4] = { 0.0f, 0.0f, 0.0f, shaderAlpha };
+				RwD3D9SetPixelShaderConstant(48, nmZero, 1);
+				vehEnvBindTextureRaw(8, NULL);
+			}
+		}
+		// Blend enable from the per-TEXTURE class (the TAC_UNKNOWN arm uses
+		// the safe matTranslucent default — see the switch above). hasAlpha
+		// stays diagnostic — it no longer feeds glass promotion.
+		// L1+L2 pair via the tracker: consecutive meshes of the same class (the
+		// common body/grille run) skip both writes. First mesh after cb entry
+		// always writes. Layer-(2) reason kept: the rw set no-ops against an
+		// unchanged cache and would leave D3DRS_ALPHABLENDENABLE at the Switch's
+		// FALSE baseline, so D3D9RenderDual's dual gate reads blend-off.
+		vehEnvSetAlphaBlend(blendOn);
 
 	// ================================================================
 	// Vehicle glass system (skygfx core — like carcols/timecycle)
@@ -2045,22 +3310,33 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 	// ================================================================
 
 	// ================================================================
-	// Vehicle subsystem — all classification via veh_shaders bridge
+	// Vehicle subsystem — glass classification
+	// texName / modelIndex / glassAlphaArg / isGlassMesh were resolved ABOVE,
+	// before the TAC_UNKNOWN fallback, so glass keeps blendOn=1 even when the
+	// classifier never saw the texture.
 	// ================================================================
-	const char *texName = material->texture ? material->texture->name : "";
-	int modelIndex = VehShaders_GetModelIndex(object);
 
-	bool isGlassMesh = VehShaders_IsGlassTexture(texName, hasAlpha, material->color.alpha);
-	// Ghost-car guard: IsGlassTexture's alpha<200 fallback also fires for
-	// body panels whose material alpha is <200. Positive window/glass name
-	// matches classify as SURFACE_CAR_GLASS, not BODY — so BODY + glass
-	// means the fallback claimed a paint mesh: it then draws through
-	// Glass_Vehicle with fresnel alpha 0.3-0.8 -> translucent white ghost.
-	// Keep the fallback for empty/unknown names (modded glass with no
-	// window/glass/windscreen substring) only.
-	if(isGlassMesh && texName && texName[0] &&
-	   VehShaders_GetSurfaceType(texName) == SURFACE_CAR_BODY)
-		isGlassMesh = false;
+	// One-shot opacity diagnostic (first 16 meshes): texture, class, legacy
+	// hasAlpha, paint marker, the final blend decision and the c48.w alpha
+	// override actually uploaded by the NM block ABOVE (same shaderAlpha
+	// variable / same write, so the line cannot drift from the register). The
+	// class NAME is printed because tac=0 is TAC_UNKNOWN, not TAC_OPAQUE.
+	// legacy=1 marks a mesh whose decision came from the TAC_UNKNOWN SAFE
+	// DEFAULT (matTranslucent blend + paint-marker opaque override) and makes
+	// parity-build runs distinguishable in the log. Glass/light and tire
+	// meshes take a later branch that overrides c48.w to 1.0 and logs its own
+	// [VehOpacity] line.
+	// Expected for the SA paint-marker meshes (vehiclegrunge256 /
+	// vehiclelights128 / vehiclegeneric256):
+	//   [VehOpacity] ... paint=1 blendOn=0 c48w=1.00 matA=16
+	if(s_vehMeshLogged < 16){
+		s_vehMeshLogged++;
+		dbglog("[VehOpacity] tex='%s' tac=%d(%s) hasAlpha=%d paint=%d blendOn=%d c48w=%.2f matA=%d legacy=%d",
+		       texName ? texName : "", tac, TexAlphaClassTag(tac), hasAlpha ? 1 : 0,
+		       matPaintMarker ? 1 : 0, blendOn, shaderAlpha, material->color.alpha,
+		       tac == TAC_UNKNOWN ? 1 : 0);
+	}
+
 	bool isHeadlight = !isGlassMesh && VehShaders_IsHeadlightTexture(texName);
 	bool isTaillight = !isGlassMesh && !isHeadlight && VehShaders_IsTaillightTexture(texName);
 	bool isLightMesh = isHeadlight || isTaillight;
@@ -2149,30 +3425,79 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 
 		// Env map on stage 1 — guard against D3D9 feedback loop during sphere render
 		if(!gRenderingSpheremap)
-			pipeSetTexture(reflectionTex, 1);
+			vehEnvBindTexture(reflectionTex, 1);
 		else
-			pipeSetTexture(NULL, 1);
+			vehEnvBindTexture(NULL, 1);
 		RwRenderStateSet(rwRENDERSTATETEXTUREADDRESS, (void*)rwTEXTUREADDRESSWRAP);
 		RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION, (void*)rwALPHATESTFUNCTIONALWAYS);
-		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
+		// Tracked L1 set/restore pair (FALSE for the draw, TRUE back): the
+		// tracker cannot collapse this across meshes - 0 skips is expected.
+		vehEnvSetZWrite(FALSE);
 
+		// Three-layer doctrine (audit item 2): the Switch entry force
+		// (pipeEnterAlphaMode + pipeForceAlphaBlock) parks the DEVICE on the
+		// canonical (SRCALPHA, INVSRCALPHA) normal blend; this pass used to
+		// push its blend factors through the rw cache (L1) ONLY, so an
+		// applied[]-gated flush could leave the device on the canonical pair
+		// while the cache claimed the FX pair — vehicle headlight/taillight
+		// flares then draw normal-blended (dark overlay) instead of the
+		// additive (SRCALPHA, ONE). Mirror the set through L2 + raw L3, same
+		// shape as vehiclePipe_fxAdditiveBlend.
+		RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
+		RwD3D9SetRenderState(D3DRS_SRCBLEND, (RwUInt32)D3DBLEND_SRCALPHA);
 		if(isLightMesh){
-			RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
 			RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDONE);
+			RwD3D9SetRenderState(D3DRS_DESTBLEND, (RwUInt32)D3DBLEND_ONE);
 		}else{
-			RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
 			RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
+			RwD3D9SetRenderState(D3DRS_DESTBLEND, (RwUInt32)D3DBLEND_INVSRCALPHA);
+		}
+		if(d3d9device){
+			d3d9device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+			d3d9device->SetRenderState(D3DRS_DESTBLEND,
+				isLightMesh ? D3DBLEND_ONE : D3DBLEND_INVSRCALPHA);
+		}
+
+		// Glass/light draws: write a defined c48 before the draw so no stale
+		// per-texture override leaks into it. Glass_Vehicle does not declare
+		// c48 (see its register audit above), so the value is inert here;
+		// shaderAlpha = 1.0 keeps the task-specified "force opaque" override.
+		{
+			float glassNmp[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+			RwD3D9SetPixelShaderConstant(48, glassNmp, 1);
+		}
+		// [VehOpacity] parity: this branch overwrites c48.w AFTER the
+		// per-texture decision logged above, so the effective value for this
+		// mesh is 1.0 whatever its class says.
+		if(s_vehOverrideLogged < 4){
+			s_vehOverrideLogged++;
+			dbglog("[VehOpacity] glass tex='%s' tac=%d(%s) c48w=1.00 blend=1",
+			       texName ? texName : "", tac, TexAlphaClassTag(tac));
 		}
 
 		RwD3D9SetVertexShader(vehiclePBRVS);
+		vehBindVS(vTrace[VTR_ENV], vehiclePBRVS);	// instrumentation only
 		RwD3D9SetPixelShader(Glass_Vehicle);
+		vehBindPS(vTrace[VTR_ENV], Glass_Vehicle);	// instrumentation only
 		D3D9Render(resEntryHeader, instancedData);
 
-		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
+		vehEnvSetZWrite(TRUE);
 		RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION, (void*)alphafunc);
+		// Mirror restores through L2 + raw L3 (see the set-block comment):
+		// an L1-only restore can no-op against an unchanged cache and leave
+		// the device on the FX pair past this mesh.
 		RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)src);
+		RwD3D9SetRenderState(D3DRS_SRCBLEND, pipeBlendToD3D((RwUInt32)src, D3DBLEND_SRCALPHA));
 		RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)dst);
-		RwRenderStateSet(rwRENDERSTATETEXTUREADDRESS, (void*)rwTEXTUREADDRESSCLAMP);
+		RwD3D9SetRenderState(D3DRS_DESTBLEND, pipeBlendToD3D((RwUInt32)dst, D3DBLEND_INVSRCALPHA));
+		// TEXTUREADDRESS: restore the CB-ENTRY snapshot, not a fresh CLAMP —
+		// the hard CLAMP write was itself an unpaired set that leaked past
+		// the callback into every later pass.
+		RwRenderStateSet(rwRENDERSTATETEXTUREADDRESS, (void*)textureaddress);
+		if(d3d9device){
+			d3d9device->SetRenderState(D3DRS_SRCBLEND, pipeBlendToD3D((RwUInt32)src, D3DBLEND_SRCALPHA));
+			d3d9device->SetRenderState(D3DRS_DESTBLEND, pipeBlendToD3D((RwUInt32)dst, D3DBLEND_INVSRCALPHA));
+		}
 		continue;
 	}
 
@@ -2219,57 +3544,56 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 
 		// main_rubber consumes the same shared per-vehicle state as the opaque
 		// path: c46 (layer bitmask via LF(4)), s3 (iblTex), c24 (ambientColor)
-		// and the Forward+ cluster block (c45/c48-c111 + s5 tile texture).
-		// Mirror the opaque branch uploads so tires don't read stale/undefined
-		// D3D9 state. Order follows the opaque path: c46 -> s3 -> Forward+ -> c24.
-		extern IDirect3DTexture9 *g_iblTex;
-		IDirect3DDevice9 *dev = d3d9device;
-
-		// c46.x = PBR layer bitmask — modular layer toggles (config->vehPBRLayers)
+		// and the Forward+ cluster block (c45 + s5/s6/s7). Mirror the opaque
+		// branch uploads so tires don't read stale/undefined D3D9 state.
+		// Order follows the opaque path: c46 -> s3 -> Forward+ -> c24.
+		// c46 is config-only (per callback): exact-compare elision. c22/c23 stay
+		// raw (pipeUploadPBR contract, per-material). s3 + its sampler states +
+		// c4 live in vehEnvIblAndCloudShadow (whole block, once per callback).
 		{
 			float layerCfg[4] = { (float)config->vehPBRLayers, 0.0f, 0.0f, 0.0f };
-			RwD3D9SetPixelShaderConstant(46, layerCfg, 1);
+			vehEnvUploadPS(46, layerCfg, 1);
 		}
 
-		// IBL on stage 3 (raw D3D9 — no RW wrapper) + cloud shadow (c4)
-		if(dev && g_iblTex){
-			dev->SetTexture(3, g_iblTex);
-			dev->SetSamplerState(3, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
-			dev->SetSamplerState(3, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
-			dev->SetSamplerState(3, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
-			dev->SetSamplerState(3, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
-			extern float cloudAnimTimer;
-			float cloudShadow[4] = { 0.0f, cloudAnimTimer * 0.01f, 1.0f, 0.0f };
-			extern RpLight *&pDirect;
-			if(pDirect){
-				RwFrame *sunFrame = RpLightGetFrame(pDirect);
-				if(sunFrame){
-					RwMatrix *sunLTM = RwFrameGetLTM(sunFrame);
-					if(sunLTM){
-						cloudShadow[0] = sunLTM->at.x;
-						cloudShadow[1] = sunLTM->at.y;
-						cloudShadow[2] = sunLTM->at.z;
-					}
-				}
-			}
-			RwD3D9SetPixelShaderConstant(4, cloudShadow, 1);
-		}else if(dev){
-			dev->SetTexture(3, NULL);
-		}
+		vehEnvIblAndCloudShadow();
 
-		// Forward+ clustered point lights: bind the tile index texture (s5) and
-		// upload c45/c48-c111 — main_rubber reads all of these for street lights.
-		ForwardPlus_SetConstants();
+		// Forward+ clustered point lights: bind the tile textures (s5/s6/s7) and
+		// upload c45 - main_rubber reads all of these for street lights. The
+		// bundle is per-FRAME, so the whole block runs once per callback.
+		if(!s_vehEnvElide.fpDone){
+			s_vehEnvElide.fpDone = true;
+			ForwardPlus_SetConstants();
+			vTrace[VTR_ENV].fp = 1;	// instrumentation only: cluster-light upload ran
+		}else{
+			s_vehEnvElide.stats.blockSkip += 16;	// c45+s5..s7+12 samplers (4 if FP off)
+		}
 
 		// Object ambient from timecycle (PS c24) — same source as the opaque path.
 		{
 			RwRGBAReal tcAmbient = GetTimecycleAmbientPBR();
 			float ambientPS[4] = { tcAmbient.red, tcAmbient.green, tcAmbient.blue, 0.0f };
-			RwD3D9SetPixelShaderConstant(24, ambientPS, 1);
+			vehEnvUploadPS(24, ambientPS, 1);	// per-frame, exact-compare
+		}
+
+		// Tire/rubber draws are opaque by definition: force shaderAlpha = 1.0
+		// (c48.w) so the per-texture class cannot make main_rubber's output
+		// alpha translucent or cut the tire out.
+		{
+			float rubberNmp[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+			RwD3D9SetPixelShaderConstant(48, rubberNmp, 1);
+		}
+		// [VehOpacity] parity: c48.w was overwritten to 1.0 after the
+		// per-texture decision logged above (main_rubber reads c48.w).
+		if(s_vehOverrideLogged < 4){
+			s_vehOverrideLogged++;
+			dbglog("[VehOpacity] tire tex='%s' tac=%d(%s) c48w=1.00 blend=1",
+			       texName ? texName : "", tac, TexAlphaClassTag(tac));
 		}
 
 		RwD3D9SetVertexShader(vehiclePBRVS);
+		vehBindVS(vTrace[VTR_ENV], vehiclePBRVS);	// instrumentation only
 		RwD3D9SetPixelShader(Rubber_Vehicle_Modern);
+		vehBindPS(vTrace[VTR_ENV], Rubber_Vehicle_Modern);	// instrumentation only
 		D3D9Render(resEntryHeader, instancedData);
 		continue;
 	}
@@ -2282,8 +3606,8 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 			// Silent-failure fix: this used to fall through to a BLIND
 			// D3D9Render() with whatever VS/PS happened to be bound last —
 			// a stale shader from an earlier mesh/pipeline producing
-			// garbage, and its warning was gated behind vehLogThisFrame
-			// (once per 3600 frames), i.e. effectively silent. A missing
+			// garbage, and its warning was gated behind the old draw-counter
+			// mesh log (effectively silent). A missing
 			// shader handle means CreateShaders failed; there is no valid
 			// draw to fall back to inside this cb (the legacy PS2/PC/leeds
 			// cbs are separate entry points, not reachable per-mesh), so
@@ -2301,19 +3625,16 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 		// shaped-math identity both need the un-mutated carcols value.
 		float rawShininess = 0.0f;
 		if(!noFx){
-			materialFlags = *(RwUInt32*)&material->surfaceProps.specular;
-			hasEnv1 = !!(materialFlags & 1);
-			hasEnv2 = !!(materialFlags & 2);
-			hasSpec = !!(materialFlags & 4) && !renderingWheel;
-			if(RpMatFXMaterialGetEffects(material) != rpMATFXEFFECTENVMAP){
-				hasEnv1 = false;
-				hasEnv2 = false;
-				hasSpec = false;
-			}
+			// hasEnv1/hasEnv2/hasSpec were resolved from the material env bits
+			// per mesh at the s0 bind above (single source:
+			// material->surfaceProps.specular) — reuse them here.
 
 			if(hasEnv1 || hasEnv2){
 				envData = *GETENVMAP(material);
-				rawShininess = envData->GetShininess();
+				// Plugin-slot NULL guard (audit — same idiom the mobile cb
+				// uses at :2321): the env bits can be set with the slot
+				// never allocated; dereferencing crashed.
+				rawShininess = envData ? envData->GetShininess() : 0.0f;
 				fxParams.shininess = rawShininess * 8.0f;
 				// Part A2: envShininessMult now drives ALL paths (raw + fallback
 				// below), not just this branch — that's why the slider "didn't
@@ -2328,15 +3649,19 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 
 			if(hasSpec){
 				specData = *GETSPECMAP(material);
-				surfProps.specular = specData->specularity;
-				surfProps.specular *= 3.0f;
-				// Part A3 (semantics note): PS main() never reads surfProps.y
-				// (c0 = {ambient, spec-unread, diffuse, prelit} after the C1
-				// struct reorder), so this mult was DEAD in the PS. Real spec
-				// scaling now rides PS c44.y at the specTotal combine
-				// (VehiclePBR_Modern :383). Keep the surfProps scale for the
-				// (currently unused) VS path + VS uploads.
-				surfProps.specular *= config->envSpecularityMult;
+				// Plugin-slot NULL guard (audit — see the envData guard
+				// above): drop the spec scale instead of crashing.
+				if(specData){
+					surfProps.specular = specData->specularity;
+					surfProps.specular *= 3.0f;
+					// Part A3 (semantics note): PS main() never reads surfProps.y
+					// (c0 = {ambient, spec-unread, diffuse, prelit} after the C1
+					// struct reorder), so this mult was DEAD in the PS. Real spec
+					// scaling now rides PS c44.y at the specTotal combine
+					// (VehiclePBR_Modern :383). Keep the surfProps scale for the
+					// (currently unused) VS path + VS uploads.
+					surfProps.specular *= config->envSpecularityMult;
+				}
 			}
 		}
 
@@ -2400,6 +3725,10 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 
 		// Re-upload fxParams now that shininess is corrected — the upload earlier
 		// in this block carried shininess=0 for most paint materials.
+		// c1 layout = the compiled PS contract (VehiclePBR_Modern.hlsl main):
+		//   .y = envPow (sun-glint exponent, config->envPower, default 20)
+		//   .w = carcolsShine (env shininess ×8 × envShininessMult, capped 4)
+		// .x/.z are unused by main(); the VS c21 twin reads only .x/.w.
 		RwD3D9SetVertexShaderConstant(21, &fxParams, 1);
 		RwD3D9SetPixelShaderConstant(1, &fxParams, 1);
 
@@ -2479,12 +3808,12 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 		// Env map on stage 1 (s1 = envMapTex in shader)
 		// Guard: skip during sphere map render to avoid D3D9 feedback loop
 		if(!gRenderingSpheremap)
-			pipeSetTexture(reflectionTex, 1);
+			vehEnvBindTexture(reflectionTex, 1);
 		else
-			pipeSetTexture(NULL, 1);
+			vehEnvBindTexture(NULL, 1);
 
 		// Reflection mask on stage 2 (RwTexture)
-		pipeSetTexture(CarPipe::reflectionMask, 2);
+		vehEnvBindTexture(CarPipe::reflectionMask, 2);
 
 		// IBL on stage 3 (raw D3D9 — no RW wrapper)
 		// c3 = {envIntensity, glossiness, tanHalfFovX, tanHalfFovY} — .zw let the
@@ -2513,35 +3842,14 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 			float iblParams[4] = { envEff, glossiness, tanX, tanY };
 			RwD3D9SetPixelShaderConstant(3, iblParams, 1);
 		}
-		// c46.x = PBR layer bitmask — modular layer toggles (config->vehPBRLayers)
+		// c46.x = PBR layer bitmask - config-only, exact-compare elision.
 		{
 			float layerCfg[4] = { (float)config->vehPBRLayers, 0.0f, 0.0f, 0.0f };
-			RwD3D9SetPixelShaderConstant(46, layerCfg, 1);
+			vehEnvUploadPS(46, layerCfg, 1);
 		}
-		if(dev && g_iblTex){
-			dev->SetTexture(3, g_iblTex);
-			dev->SetSamplerState(3, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
-			dev->SetSamplerState(3, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
-			dev->SetSamplerState(3, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
-			dev->SetSamplerState(3, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
-			extern float cloudAnimTimer;
-			float cloudShadow[4] = { 0.0f, cloudAnimTimer * 0.01f, 1.0f, 0.0f };
-			extern RpLight *&pDirect;
-			if(pDirect){
-				RwFrame *sunFrame = RpLightGetFrame(pDirect);
-				if(sunFrame){
-					RwMatrix *sunLTM = RwFrameGetLTM(sunFrame);
-					if(sunLTM){
-						cloudShadow[0] = sunLTM->at.x;
-						cloudShadow[1] = sunLTM->at.y;
-						cloudShadow[2] = sunLTM->at.z;
-					}
-				}
-			}
-			RwD3D9SetPixelShaderConstant(4, cloudShadow, 1);
-		}else if(dev){
-			dev->SetTexture(3, NULL);
-		}
+		// s3 IBL bind + 4 CLAMP/LINEAR sampler writes + c4 cloud shadow: all
+		// per-frame inputs, whole block once per callback (shared w/ rubber).
+		vehEnvIblAndCloudShadow();
 
 		// Normal buffer on stage 4 (s4 = normalBufTex in shader).
 		// Gate mirrored from buildingPipe.cpp:1083-1089: a D3DPOOL_DEFAULT
@@ -2559,7 +3867,7 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 			if(g_normalBufferTex && dev
 			   && g_normalBufferHasContent
 			   && config->normalBufferEnable){
-				dev->SetTexture(4, g_normalBufferTex);
+				vehEnvBindTextureRaw(4, g_normalBufferTex);	// same pointer repeats
 				ambientPS[3] = 1.0f;  // flag: normal buffer available
 			}
 		}
@@ -2571,13 +3879,19 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 			if(camRas){
 				float sw = (float)camRas->width, sh = (float)camRas->height;
 				float screenP[4] = { sw, sh, 1.0f/max(sw, 1e-7f), 1.0f/max(sh, 1e-7f) };
-				RwD3D9SetPixelShaderConstant(29, screenP, 1);
+				vehEnvUploadPS(29, screenP, 1);	// camera raster: per-frame constant
 			}
 		}
 
-		// Forward+ clustered point lights: bind the tile index texture (s5) and
-		// its POINT/CLAMP sampler. Lights arrive as PS constants c48-c111.
-		ForwardPlus_SetConstants();
+		// Forward+ clustered point lights: bind the tile textures (s5/s6/s7) and
+		// upload c45. Per-FRAME bundle -> whole block once per callback.
+		if(!s_vehEnvElide.fpDone){
+			s_vehEnvElide.fpDone = true;
+			ForwardPlus_SetConstants();
+			vTrace[VTR_ENV].fp = 1;	// instrumentation only: cluster-light upload ran
+		}else{
+			s_vehEnvElide.stats.blockSkip += 16;	// c45+s5..s7+12 samplers (4 if FP off)
+		}
 
 		// Object ambient from timecycle (PS c24) — use the same ambient as the
 		// building PBR pipe (GetTimecycleAmbient), which is the proven working
@@ -2590,7 +3904,7 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 			ambientPS[1] = tcAmbient.green;
 			ambientPS[2] = tcAmbient.blue;
 		}
-		RwD3D9SetPixelShaderConstant(24, ambientPS, 1);
+		vehEnvUploadPS(24, ambientPS, 1);	// per-frame ambient + s4 flag
 
 		// Universal dynamic-sky ambient weight (PS c20) — shared with the building path.
 		// .y/.z/.w carry the reflection-model toggles this cb is the only writer
@@ -2600,43 +3914,56 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 		//       samples maskTex (s2) behind this flag, so a missing mask must
 		//       read as "off" rather than multiply by an unbound sampler.
 		float iblAmbient[4] = {
-			config->pbrIblAmbientWeight,
+			// Outdoor-only: zero the sky-hemisphere tint weight indoors (no visible sky).
+			(*CGame__currArea == 0) ? config->pbrIblAmbientWeight : 0.0f,
 			config->vehEnvFallback ? 1.0f : 0.0f,
 			config->vehWetEnv ? CWeather__WetRoads : 0.0f,
 			(config->vehEnvMask && CarPipe::reflectionMask) ? 1.0f : 0.0f
 		};
-		RwD3D9SetPixelShaderConstant(20, iblAmbient, 1);
+		vehEnvUploadPS(20, iblAmbient, 1);	// currArea/WetRoads: per-frame
 
 		// PS light constants (c5-c18): sun color/direction + 6 extra directional lights
 		// The VS uploads these to VS registers via uploadLights(), but the PS has its
 		// own independent constant registers. Without these, directCol (c5) and
 		// directDir (c12) are stale/zero → no specular highlights and wrong L vector.
 		// Mirror what the glass path does at lines 1552-1560.
-		{
-		extern RpLight *&pDirect;
-		pipeUploadLightColorForcePS(pDirect, REG_directCol);
-		pipeUploadLightDirectionForcePS(pDirect, REG_directDir);
+		// PS c5-c18 (7 direct colours + directions) were uploaded once for the
+		// whole callback above (:2516); this block used to repeat the identical
+		// 14 uploads per mesh. Whole-block flag; first write always runs.
+		if(!s_vehEnvElide.psLightsDone){
+			s_vehEnvElide.psLightsDone = true;
+			extern RpLight *&pDirect;
+			pipeUploadLightColorForcePS(pDirect, REG_directCol);
+			pipeUploadLightDirectionForcePS(pDirect, REG_directDir);
+			for(int i = 0; i < 6; i++)
+				if(i < NumExtraDirLightsInWorld && pExtraDirectionals[i] &&
+				   RpLightGetType(pExtraDirectionals[i]) == rpLIGHTDIRECTIONAL){
+					pipeUploadLightColorPS(pExtraDirectionals[i], REG_directCol+i+1);
+					pipeUploadLightDirectionPS(pExtraDirectionals[i], REG_directDir+i+1);
+				}else{
+					pipeUploadZeroPS(REG_directCol+i+1);
+					pipeUploadZeroPS(REG_directDir+i+1);
+				}
+		}else{
+			s_vehEnvElide.stats.blockSkip += 14;
 		}
-		for(int i = 0; i < 6; i++)
-			if(i < NumExtraDirLightsInWorld && RpLightGetType(pExtraDirectionals[i]) == rpLIGHTDIRECTIONAL){
-				pipeUploadLightColorPS(pExtraDirectionals[i], REG_directCol+i+1);
-				pipeUploadLightDirectionPS(pExtraDirectionals[i], REG_directDir+i+1);
-			}else{
-				pipeUploadZeroPS(REG_directCol+i+1);
-				pipeUploadZeroPS(REG_directDir+i+1);
-			}
 
-		// View matrix rotation for sphere map UV computation (PS c25-c27)
-		// The sphere map is rendered from the camera's viewpoint, so reflection
-		// vectors must be in view space for correct UV mapping.
-		D3DMATRIX viewMat;
-		RwD3D9GetTransform(D3DTS_VIEW, &viewMat);
-		float viewRot[12] = {
-			viewMat._11, viewMat._12, viewMat._13, 0.0f,
-			viewMat._21, viewMat._22, viewMat._23, 0.0f,
-			viewMat._31, viewMat._32, viewMat._33, 0.0f
-		};
-		RwD3D9SetPixelShaderConstant(25, viewRot, 3);
+		// View matrix rotation for sphere map UV computation (PS c25-c27).
+		// The cb-level write (:2436) covers every mesh path and the view cannot
+		// change inside one atomic callback -> the per-mesh repeat is elided.
+		if(!s_vehEnvElide.viewRotDone){
+			s_vehEnvElide.viewRotDone = true;
+			D3DMATRIX viewMat;
+			RwD3D9GetTransform(D3DTS_VIEW, &viewMat);
+			float viewRot[12] = {
+				viewMat._11, viewMat._12, viewMat._13, 0.0f,
+				viewMat._21, viewMat._22, viewMat._23, 0.0f,
+				viewMat._31, viewMat._32, viewMat._33, 0.0f
+			};
+			RwD3D9SetPixelShaderConstant(25, viewRot, 3);
+		}else{
+			s_vehEnvElide.stats.blockSkip += 3;
+		}
 
 		// Sky color for env reflection (PS c28)
 		// Upward-facing surfaces on the car reflect the sky from the sphere map.
@@ -2646,12 +3973,14 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 			CTimeCycle__m_CurrentColours.skyTopB / 255.0f,
 			0.6f  // skyReflectStrength — how much sky tints upward reflections
 		};
-		RwD3D9SetPixelShaderConstant(28, skyP, 1);
+		vehEnvUploadPS(28, skyP, 1);	// timecycle sky: per-frame constant
 
 		RwD3D9SetVertexShader(vehiclePBRVS);
+		vehBindVS(vTrace[VTR_ENV], vehiclePBRVS);	// instrumentation only
 		RwD3D9SetPixelShader(VehiclePBR_Modern);
+		vehBindPS(vTrace[VTR_ENV], VehiclePBR_Modern);	// instrumentation only
 
-		if(vehLogThisFrame){
+		if(dbglog_throttle("vehpbr_mesh")){
 			RwUInt32 frame = RWSRCGLOBAL(renderFrame);
 			dbglog("[VehiclePBR] MESH@frame=%u: glossiness=%.2f specular=%.2f specTintR=%.2f carcolsShine=%.2f", frame, glossiness, specular, specularTintR, fxParams.shininess);
 			dbglog("[VehiclePBR] MESH@frame=%u: envIntensity slider=%.3f eff=%.3f (slider*2.5 after [0..0.4] load clamp)", frame, config->vehEnvIntensity, config->vehEnvIntensity * 2.5f);
@@ -2674,6 +4003,9 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 		}
 
 		D3D9RenderDual(config->dualPassVehicle, resEntryHeader, instancedData);
+		// D3D9RenderDual parks ZWRITE TRUE/FALSE then restores the L1 value it
+		// read: drop the tracker instead of assuming that restore was ours.
+		s_vehEnvElide.zwriteKnown = false;
 
 		// PipeChain classify pack (see buildingPipe): R=class, G=gloss,
 		// B=spec(F0), A=metallicness — the same final values the pipe just
@@ -2684,7 +4016,11 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 			if(PipeChain_ClassifyBegin((float)surfType, glossiness, specular, metallicness)){
 				D3D9Render(resEntryHeader, instancedData);
 				PipeChain_ClassifyEnd();
+				// Bracket wrote ALPHABLENDENABLE/ZWRITE through L1/L2/L3; its
+				// restore is outside our write log -> invalidate both trackers.
+				vehEnvElideForgetBlend();
 				RwD3D9SetPixelShader(VehiclePBR_Modern); // Begin forced PipeChainShader
+				vehBindPS(vTrace[VTR_ENV], VehiclePBR_Modern);	// instrumentation only
 			}
 		}
 		continue;
@@ -2716,12 +4052,14 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 		d3d9device->SetTexture(3, NULL);
 		d3d9device->SetTexture(4, NULL);
 		d3d9device->SetTexture(5, NULL);
+		d3d9device->SetTexture(8, NULL);	// NM lane: s8 bound raw per mesh
 	}
 	// Restore render state saved at entry
 	RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION, (void*)alphafunc);
 	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)src);
 	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)dst);
 	RwRenderStateSet(rwRENDERSTATEFOGCOLOR, (void*)fog);
+	vpipeTraceLog("Env", VTR_ENV, "vpipe_env", atomic);	// instrumentation only
 }
 
 void
@@ -2732,6 +4070,10 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Switch(RwResEntry *repEntry, void *
 		return;
 	}
 	RwUInt32 savedCull = pipeEnterCullMode();
+	// Hand the raw pre-entry cull to the Xbox cb's draw-boundary re-assert
+	// (pipeForceCullMode sanitizes out-of-domain values itself, so the mirror
+	// pass's CULLNONE reaches the assert intact).
+	s_vehSwitchSavedCull = savedCull;
 	// Same alpha/blend guard the building Switch uses (buildingPipe.cpp:868):
 	// resyncs device<->rw blend/alpha-test state on entry (raw postfx/chars
 	// D3DRS_* writes bypass the rw cache and leave the device blending or
@@ -2757,7 +4099,12 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Switch(RwResEntry *repEntry, void *
 	DWORD savedZWriteDev = TRUE;
 	RwRenderStateGet(rwRENDERSTATEZWRITEENABLE, &savedZWriteRw);
 	RwD3D9GetRenderState(D3DRS_ZWRITEENABLE, &savedZWriteCache);
-	d3d9device->GetRenderState(D3DRS_ZWRITEENABLE, &savedZWriteDev);
+	// d3d9device guarded (audit — the building Switch (:3399-3400) guards the
+	// same capture; this one dereferenced it unchecked). Pre-seeds above
+	// already hold the canonical TRUE, so a NULL device degrades to the
+	// pre-parity values instead of crashing.
+	if(d3d9device)
+		d3d9device->GetRenderState(D3DRS_ZWRITEENABLE, &savedZWriteDev);
 	if(!savedZWriteRw || !savedZWriteCache || !savedZWriteDev){
 		if(dbglog_throttle("VehicleZWrite"))
 			dbglog("[VEHICLE] ZWRITE off/desynced on entry (rw=%d cache=%u dev=%d) — forcing TRUE for cb",
@@ -2765,7 +4112,8 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Switch(RwResEntry *repEntry, void *
 	}
 	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
 	RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
-	d3d9device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+	if(d3d9device)
+		d3d9device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
 	// Layer-3 alpha/blend repair — the vehicle Switch was the ONLY one of the
 	// three pipe-group switches (building :1197, ped main.cpp:747) that had
 	// just pipeEnterAlphaMode, whose RwD3D9SetRenderState writes are
@@ -2853,10 +4201,41 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Switch(RwResEntry *repEntry, void *
 		break;
 	}
 	pipeExitAlphaMode(savedAlpha);
+	// Clobber-scope fix (audit item 2): the entry forces (pipeEnterAlphaMode
+	// + pipeForceAlphaBlock above, plus the Env cb's mid-cb re-assert) push
+	// the canonical (SRCALPHA, INVSRCALPHA, blend-enable, ADD) quartet into
+	// the DEVICE unconditionally, but pipeExitAlphaMode restores it through
+	// L1+L2 ONLY — an applied[]-gated flush can leave the device on the
+	// canonical normal-blend while the rw cache already reads the saved
+	// (possibly additive ONE/ONE) values. Coronas then re-set additive
+	// through the cache, no-op against it, and draw normal-blended — the
+	// black-quad + dark-overlay symptom. Mirror the per-layer ZWRITE restore
+	// below: re-assert the saved blend quartet at layer 3 so the forced
+	// block cannot outlive the vehicle draw.
+	if(d3d9device){
+		d3d9device->SetRenderState(D3DRS_SRCBLEND,
+			pipeBlendToD3D(savedAlpha.srcBlend, D3DBLEND_SRCALPHA));
+		d3d9device->SetRenderState(D3DRS_DESTBLEND,
+			pipeBlendToD3D(savedAlpha.dstBlend, D3DBLEND_INVSRCALPHA));
+		// fix-21 follow-up: faithful L3 completion. pipeExitAlphaMode restores
+		// each layer from its own enter-time capture; this block must not undo
+		// that with vtxAlpha-derived guesses (PAACAP_* bits mark the captures
+		// present; zero-fill = absent = legacy derived fallback).
+		if(savedAlpha.capMask & PAACAP_BLENDENABLE)
+			d3d9device->SetRenderState(D3DRS_ALPHABLENDENABLE,
+				savedAlpha.alphaBlendEnableDev ? TRUE : FALSE);
+		else
+			d3d9device->SetRenderState(D3DRS_ALPHABLENDENABLE, savedAlpha.vtxAlpha ? TRUE : FALSE);
+		if(savedAlpha.capMask & PAACAP_BLENDOP)
+			d3d9device->SetRenderState(D3DRS_BLENDOP, (D3DBLENDOP)savedAlpha.blendOpDev);
+		else
+			d3d9device->SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
+	}
 	// Restore each zwrite layer to its own pre-entry value (see entry comment).
 	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)savedZWriteRw);
 	RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, savedZWriteCache);
-	d3d9device->SetRenderState(D3DRS_ZWRITEENABLE, savedZWriteDev);
+	if(d3d9device)
+		d3d9device->SetRenderState(D3DRS_ZWRITEENABLE, savedZWriteDev);
 	pipeExitCullMode(savedCull);
 	fixSAMP();
 }
@@ -2885,7 +4264,6 @@ int CCarFXRenderer__IsCCPCPipelineAttached(RpAtomic *atomic)
 	return false;
 }
 
-#include "debugmenu_public.h"
 RwTexture *RwTextureRead_HACK(const RwChar * name, const RwChar * maskName)
 {
 	if(strcmp(name, "xvehicleenv128") == 0)
@@ -2900,22 +4278,9 @@ hookVehiclePipe(void)
 	InterceptCall(&CCustomCarEnvMapPipeline__PreRenderUpdate_orig, CCustomCarEnvMapPipeline__PreRenderUpdate, 0x5D5B10);
 	InjectHook(0x7323C0, CVisibilityPlugins__RenderWheelAtomicCB, PATCH_JUMP);
 
-	// TEMP - disable car pipe
-#if 0
-	InjectHook(0x5D5B80, CCarFXRenderer__IsCCPCPipelineAttached, PATCH_JUMP);
-	Nop(0x4C8907, 5);	// don't auto-assign on vehicles
-	*(float*)0x8A7780 = 1.0f;	// hardcoded coefficient
-//	Nop(0x4C8899, 5);	// don't set coefficient
-	Nop(0x4C982F, 5);	// don't update coefficient for lighting
-#endif
 	// temp hack RwTextureRead to read other env map
 	if(betaEnvmaptest){
 		InjectHook(0x80483C, RwTextureRead_HACK);
-		if(DebugMenuLoad()){
-			DebugMenuAddVarBool32("SkyGFX", "Beta Env map test", &betaEnvmaptest, nil);
-			DebugMenuAddVar("SkyGFX", "envmap tweak 1", &envmap1tweak, nil, 0.1f, 0.0f, 10.0f);
-			DebugMenuAddVar("SkyGFX", "envmap tweak 2", &envmap2tweak, nil, 0.1f, 0.0f, 10.0f);
-		}
 	}
 
 }
@@ -2923,6 +4288,9 @@ hookVehiclePipe(void)
 // Release vehicle pipe caches on device reset
 void ReleaseVehiclePipeCaches(void)
 {
+	// [bind-elision] a device reset/recreate invalidates every D3D texture
+	// pointer the static elision cache could hold — never let one survive.
+	vehBindElideInvalidate();
 	if(carfx_env1Frame){ RwFrameDestroy(carfx_env1Frame); carfx_env1Frame = NULL; }
 	if(carfx_env2Frame){ RwFrameDestroy(carfx_env2Frame); carfx_env2Frame = NULL; }
 	carfx_view = RwMatrix();

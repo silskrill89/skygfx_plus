@@ -17,6 +17,8 @@
     <RootNamespace>skygfx</RootNamespace>
     <WindowsTargetPlatformVersion>10.0.19041.0</WindowsTargetPlatformVersion>
     <UseEnv>true</UseEnv>
+    <!-- Deploy target; override with /p:SkyGfxGameDir=<dir> (keep trailing backslash). -->
+    <SkyGfxGameDir Condition="'$(SkyGfxGameDir)'==''">E:\games\gtasa_skygfx_plus\</SkyGfxGameDir>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
@@ -43,14 +45,14 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
-    <OutDir>E:\games\gtasa_skygfx_plus\</OutDir>
+    <OutDir>$(SkyGfxGameDir)</OutDir>
     <IntDir>$(ProjectDir)obj\Release\</IntDir>
     <TargetName>skygfx</TargetName>
     <TargetExt>.dll</TargetExt>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
-    <OutDir>E:\games\gtasa_skygfx_plus\</OutDir>
+    <OutDir>$(SkyGfxGameDir)</OutDir>
     <IntDir>$(ProjectDir)obj\Debug\</IntDir>
     <TargetName>skygfx</TargetName>
     <TargetExt>.dll</TargetExt>
@@ -60,7 +62,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>rsc_CompanyName="aap";rsc_LegalCopyright="";rsc_FileVersion="4.2.0.0";rsc_ProductVersion="4.2.0.0";rsc_InternalName="skygfx";rsc_ProductName="skygfx";rsc_OriginalFilename="skygfx.dll";rsc_FileDescription="https://github.com/aap";rsc_UpdateUrl="https://github.com/aap/skygfx";NDEBUG;_CRT_NONSTDC_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\third_party\bullet\src;E:\SDKs\imgui-master;E:\SDKs\imgui-master\backends;E:\SDKs\plugin-sdk-master\plugin_sa;E:\SDKs\normalmap_byDK_1.01\normalmap_byDK_1.01\sources;E:\dev(dave)\Sa_dev\GTASource\GTA SA RE\source;..\external\injector\include;..\external;..\external\d3d9;..\resources;..\shaders;..\src;..\src\rw;..\src\render;..\src\core;..\src\entities;..\src\extras;E:\SDKs\Renderware 3.7 SDK (For Windows) Full\RWSDK37\Graphics\rwsdk\include\d3d9;C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include;C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\um;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\third_party\bullet\src;E:\SDKs\imgui-master;E:\SDKs\imgui-master\backends;E:\SDKs\plugin-sdk-master\plugin_sa;E:\SDKs\normalmap_byDK_1.01\normalmap_byDK_1.01\sources;E:\dev(dave)\Sa_dev\GTASource\GTA SA RE\source;..\external\injector\include;..\external;..\external\d3d9;..\resources;..\shaders;..\src;..\src\rw;..\src\render;..\src\core;..\src\entities;..\src\extras;E:\SDKs\Renderware 3.7 SDK (For Windows) Full\RWSDK37\Graphics\rwsdk\include\d3d9;C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include;$(WindowsSDK_IncludePath);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -81,15 +83,15 @@
       <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
       <AdditionalDependencies>d3d9.lib;d3dx9.lib;winmm.lib;rpnormmap.lib;dbghelp.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Lib\x86;E:\SDKs\normalmap_byDK_1.01\normalmap_byDK_1.01\sources;E:\SDKs\Renderware 3.7 SDK (For Windows) Full\RWSDK37\Graphics\rwsdk\lib\d3d9\release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <ImportLibrary>E:\games\gtasa_skygfx_plus\skygfx.lib</ImportLibrary>
-      <MapFile>E:\games\gtasa_skygfx_plus\skygfx.map</MapFile>
+      <ImportLibrary>$(SkyGfxGameDir)skygfx.lib</ImportLibrary>
+      <MapFile>$(SkyGfxGameDir)skygfx.map</MapFile>
       <GenerateMapFile>true</GenerateMapFile>
     </Link>
     <PreBuildEvent>
       <Command>rem Shaders precompiled manually</Command>
     </PreBuildEvent>
     <PostBuildEvent>
-      <Command>copy /y "$(TargetPath)" "$(OutDir)skygfx.asi" &amp;&amp; del /f "$(TargetPath)"</Command>
+      <Command>copy /y "$(TargetPath)" "$(SkyGfxGameDir)skygfx.asi" &amp;&amp; del /f "$(TargetPath)"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -97,7 +99,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>rsc_CompanyName="aap";rsc_LegalCopyright="";rsc_FileVersion="4.2.0.0";rsc_ProductVersion="4.2.0.0";rsc_InternalName="skygfx";rsc_ProductName="skygfx";rsc_OriginalFilename="skygfx.dll";rsc_FileDescription="https://github.com/aap";rsc_UpdateUrl="https://github.com/aap/skygfx";DEBUG;_CRT_NONSTDC_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\third_party\bullet\src;E:\SDKs\imgui-master;E:\SDKs\imgui-master\backends;E:\SDKs\plugin-sdk-master\plugin_sa;E:\SDKs\normalmap_byDK_1.01\normalmap_byDK_1.01\sources;E:\dev(dave)\Sa_dev\GTASource\GTA SA RE\source;..\external\injector\include;..\external;..\external\d3d9;..\resources;..\shaders;..\src;..\src\rw;..\src\render;..\src\core;..\src\entities;..\src\extras;E:\SDKs\Renderware 3.7 SDK (For Windows) Full\RWSDK37\Graphics\rwsdk\include\d3d9;C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include;C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\um;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\third_party\bullet\src;E:\SDKs\imgui-master;E:\SDKs\imgui-master\backends;E:\SDKs\plugin-sdk-master\plugin_sa;E:\SDKs\normalmap_byDK_1.01\normalmap_byDK_1.01\sources;E:\dev(dave)\Sa_dev\GTASource\GTA SA RE\source;..\external\injector\include;..\external;..\external\d3d9;..\resources;..\shaders;..\src;..\src\rw;..\src\render;..\src\core;..\src\entities;..\src\extras;E:\SDKs\Renderware 3.7 SDK (For Windows) Full\RWSDK37\Graphics\rwsdk\include\d3d9;C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include;$(WindowsSDK_IncludePath);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
@@ -114,88 +116,127 @@
       <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
       <AdditionalDependencies>d3d9.lib;d3dx9.lib;winmm.lib;rpnormmap.lib;dbghelp.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Lib\x86;E:\SDKs\normalmap_byDK_1.01\normalmap_byDK_1.01\sources;E:\SDKs\Renderware 3.7 SDK (For Windows) Full\RWSDK37\Graphics\rwsdk\lib\d3d9\release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <ImportLibrary>E:\games\gtasa_skygfx_plus\skygfx.lib</ImportLibrary>
+      <ImportLibrary>$(SkyGfxGameDir)skygfx.lib</ImportLibrary>
     </Link>
     <PreBuildEvent>
       <Command>rem Shaders precompiled manually</Command>
     </PreBuildEvent>
     <PostBuildEvent>
-      <Command>copy /y "$(TargetPath)" "$(OutDir)skygfx.asi" &amp;&amp; del /f "$(TargetPath)"</Command>
+      <Command>copy /y "$(TargetPath)" "$(SkyGfxGameDir)skygfx.asi" &amp;&amp; del /f "$(TargetPath)"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="..\external\ini_parser.hpp" />
     <ClInclude Include="..\resources\VersionInfo.h" />
     <ClInclude Include="..\resources\resource.h" />
-    <ClInclude Include="..\src\rw\HLSL_hook.h" />
     <ClInclude Include="..\src\rw\LinkList.h" />
     <ClInclude Include="..\src\rw\MemoryMgr.h" />
     <ClInclude Include="..\src\rw\ModuleList.hpp" />
     <ClInclude Include="..\src\rw\Pools.h" />
     <ClInclude Include="..\src\rw\gta.h" />
-    <ClInclude Include="..\src\render\SMAA.h" />
-    <ClInclude Include="..\src\extras\debugmenu_public.h" />
-    <ClInclude Include="..\src\render\neo.h" />
-    <ClInclude Include="..\src\render\PC_GrassRenderer.h" />
+    <ClInclude Include="..\src\render\neopipe.h" />
+    <!-- W8-3: plant island (explicit entries — never glob) -->
+    <ClInclude Include="..\src\render\grasssys.h" />
     <ClInclude Include="..\src\render\postfx.h" />
+    <ClInclude Include="..\src\render\noise.h" />
+    <!-- profiler: pass/frame profiler API (PF_SCOPE) + imgui snapshot surface -->
+    <ClInclude Include="..\src\render\profiler.h" />
+    <!-- render-state monitor: L1 rw cache / L2 driver cache / L3 raw device divergence probe -->
+    <ClInclude Include="..\src\render\renderstate_monitor.h" />
     <ClInclude Include="..\src\skygfx.h" />
-    <ClInclude Include="..\src\entities\Ragdoll.h" />
-    <ClInclude Include="..\src\core\menu_inject.h" />
-    <ClInclude Include="..\src\extras\dismember.h" />
+    <ClInclude Include="..\src\texdefs.h" />
+    <ClInclude Include="..\src\entities\sftbdyphsx.h" />
+    <!-- softbody: native RW-physics ragdoll core (docs/plans/2026-10-29-rw-physics-ragdoll-re.md §5).
+         Unique basename - no ObjectFileName override, no LNK4042 duplicate-basename risk. -->
+    <ClInclude Include="..\src\entities\softbody.h" />
+    <ClInclude Include="..\src\core\debug_handl.h" />
+    <ClInclude Include="..\src\core\modeManager.h" />
+    <!-- physicscfg: dedicated sky_physics.ini service (m0971 - physics/crash-FX
+         keys + mode-owned rows). Unique basename - no ObjectFileName override,
+         no LNK4042 duplicate-basename risk. -->
+    <ClInclude Include="..\src\core\physicscfg.h" />
+    <!-- ImGui debug menu theme (palette + glass draw helpers). -->
+    <ClInclude Include="..\src\core\debugmenu_theme.h" />
   </ItemGroup>
   <ItemGroup>
     <!-- All source paths point to new subdirectory layout after merge restructure -->
-    <ClCompile Include="..\src\rw\HLSL_hook.cpp" />
     <ClCompile Include="..\src\render\buildingPipe.cpp" />
+    <!-- W8-2: tree wind sway + console tree lighting/alpha (TreeWind_*/TreeAlpha_* called live from buildingPipe.cpp) -->
+    <ClCompile Include="..\src\render\treeWind.cpp" />
     <ClCompile Include="..\src\entities\chars.cpp" />
-    <ClCompile Include="..\src\entities\ragdoll.cpp" />
-    <ClCompile Include="..\src\core\crashhandler.cpp" />
-    <ClCompile Include="..\src\core\diagnostics.cpp" />
-    <ClCompile Include="..\src\core\menu_inject.cpp" />
+    <!-- sftbdyphsx: merged ragdoll + dismemberment. Unique basename - no
+         ObjectFileName override, no LNK4042 duplicate-basename risk. -->
+    <ClCompile Include="..\src\entities\sftbdyphsx.cpp" />
+    <!-- softbody: native velocity-integrator ragdoll (SoftBone_c BlendKeyframe
+         write-back). Unique basename - no ObjectFileName override, no LNK4042
+         duplicate-basename risk. -->
+    <ClCompile Include="..\src\entities\softbody.cpp" />
+    <ClCompile Include="..\src\peds\peds_pipe.cpp" />
+    <ClCompile Include="..\src\peds\skin.cpp" />
+    <ClCompile Include="..\src\core\debug_handl.cpp" />
     <!-- <ClCompile Include="..\src\core\config.cpp" /> -->
-    <ClCompile Include="..\src\render\custom_mode.cpp" />
-    <ClCompile Include="..\src\rw\defaultFuncs.cpp" />
     <ClCompile Include="..\src\render\depthhook.cpp" />
     <ClCompile Include="..\src\render\envmap.cpp" />
-    <ClCompile Include="..\src\rw\extendedplg.cpp" />
+    <!-- W7-C: CMirrors composite distortion fix (mirrorPass_init hook at 0x53EABA) -->
+    <ClCompile Include="..\src\render\mirrorPass.cpp" />
     <ClCompile Include="..\src\render\forwardplus.cpp" />
     <ClCompile Include="..\src\rw\gta.cpp" />
-    <ClCompile Include="..\src\render\iv_mode.cpp" />
     <ClCompile Include="..\src\core\main.cpp" />
-    <ClCompile Include="..\src\render\mobile.cpp" />
-    <ClCompile Include="..\src\render\neo.cpp" />
-    <ClCompile Include="..\src\render\neoCarpipe.cpp" />
-    <ClCompile Include="..\src\render\neoWaterdrops.cpp" />
-    <ClCompile Include="..\src\rw\normalmap.cpp" />
+    <ClCompile Include="..\src\core\modeManager.cpp" />
+    <!-- physicscfg: sky_physics.ini load/save + backend/budget/crashFx store
+         (m0971). Unique basename - no ObjectFileName override, no LNK4042
+         duplicate-basename risk. -->
+    <ClCompile Include="..\src\core\physicscfg.cpp" />
+    <!-- neopipe: merged neo + neoCarpipe + neoWaterdrops. Unique basename —
+         no ObjectFileName override, no LNK4042 duplicate-basename risk. -->
+    <ClCompile Include="..\src\render\neopipe.cpp" />
+    <!-- texdefs: unified texdb.txt metadata + <diffuse>_n pairing + DK22Pac
+         external normal-map lane. Unique basename — no ObjectFileName override,
+         no LNK4042 duplicate-basename risk. -->
+    <ClCompile Include="..\src\texdefs.cpp" />
     <ClCompile Include="..\src\rw\normmap_stubs.cpp" />
-    <ClCompile Include="..\src\render\PC_GrassRenderer.cpp" />
-    <ClCompile Include="..\src\render\pc_patched_mode.cpp" />
+    <!-- grasssys: merged PC_GrassRenderer + PC_GrassInstancer (the W8-3 plant
+         island pair). Unique basename — no LNK4042 duplicate-basename risk. -->
+    <ClCompile Include="..\src\render\grasssys.cpp" />
     <ClCompile Include="..\src\render\pipelinecommon.cpp" />
+    <ClCompile Include="..\src\render\particles_gpu.cpp" />
+    <!-- profiler: QPC scope timings + D3D9 TIMESTAMP/DISJOINT GPU timers -->
+    <ClCompile Include="..\src\render\profiler.cpp" />
     <ClCompile Include="..\src\rw\pipeplg.cpp" />
     <ClCompile Include="..\src\render\postfx.cpp" />
+    <ClCompile Include="..\src\render\postfx_colourfilter.cpp" />
+    <ClCompile Include="..\src\render\postfx_luminance.cpp" />
+    <ClCompile Include="..\src\render\postfx_motionblur.cpp" />
+    <ClCompile Include="..\src\render\postfx_newfx.cpp" />
+    <ClCompile Include="..\src\render\postfx_smaa.cpp" />
+    <ClCompile Include="..\src\render\postfx_ssao.cpp" />
+    <ClCompile Include="..\src\render\postfx_utils.cpp" />
+    <!-- W7-D staged Diff 3a (applied by W8-3 as sole build-file owner — do NOT re-apply) -->
+    <ClCompile Include="..\src\render\postfx_underwater.cpp" />
     <ClCompile Include="..\src\core\presets.cpp" />
-    <ClCompile Include="..\src\render\ps2_mode.cpp" />
-    <ClCompile Include="..\src\core\test.cpp" />
-    <ClCompile Include="..\src\extras\texdb.cpp" />
     <ClCompile Include="..\src\extras\ragdoll_death.cpp" />
-    <ClCompile Include="..\src\render\utilitynoise.cpp" />
+    <ClCompile Include="..\src\render\noise.cpp" />
     <ClCompile Include="..\src\render\vehiclePipe.cpp" />
+    <!-- Per-texture alpha classification (solid vs cutout/faded). Unique
+         basename "texalpha.cpp" — no ObjectFileName collision, no override. -->
+    <ClCompile Include="..\src\render\texalpha.cpp" />
+    <!-- Render-state monitor: three-layer rw/driver/device divergence probe.
+         Basename "renderstate_monitor.cpp" is unique — no ObjectFileName override. -->
+    <ClCompile Include="..\src\render\renderstate_monitor.cpp" />
     <ClCompile Include="..\src\extras\vehicles.cpp" />
     <ClCompile Include="..\src\extras\veh_shaders.cpp" />
     <ClCompile Include="..\src\render\waterPipe.cpp" />
     <ClCompile Include="..\src\core\weather.cpp" />
     <ClCompile Include="..\src\extras\wheels.cpp" />
-    <ClCompile Include="..\src\extras\dismember.cpp" />
-    <ClCompile Include="..\src\render\xbox_mode.cpp" />
     <ClCompile Include="..\src\core\debugmenu_ui.cpp" />
+    <!-- Aero/Bento theme foundation: palette, metrics, ImDrawList helpers. Unique basename. -->
+    <ClCompile Include="..\src\core\debugmenu_theme.cpp" />
     <ClCompile Include="E:\SDKs\imgui-master\imgui.cpp" />
     <ClCompile Include="E:\SDKs\imgui-master\imgui_draw.cpp" />
     <ClCompile Include="E:\SDKs\imgui-master\imgui_tables.cpp" />
     <ClCompile Include="E:\SDKs\imgui-master\imgui_widgets.cpp" />
     <ClCompile Include="E:\SDKs\imgui-master\backends\imgui_impl_dx9.cpp" />
     <ClCompile Include="E:\SDKs\imgui-master\backends\imgui_impl_win32.cpp" />
-    <!-- <ClCompile Include="..\src\rw\normalmap_plugin.cpp" /> -->
-    <!-- <ClCompile Include="..\src\render\SMAA.cpp" /> -->
     <!-- ============================================================ -->
     <!-- Bullet Physics (vendored v2.87, SM3.0 compatible, no double) -->
     <!-- ============================================================ -->

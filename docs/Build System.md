@@ -25,7 +25,7 @@ python tools/fix_build.py
 ## Shader Compilation
 Each HLSL file compiles to one CSO per entry point:
 ```
-fxc /E main_envCar /T ps_2_0 /Fo cso/envCarPS.cso ps/envCarPS.hlsl
+fxc /E main_envCar /T ps_3_0 /Fo cso/envCarPS.cso ps/envCarPS.hlsl
 ```
 
 Wrapper HLSL files `#include` the merged source, so `envCarPS.hlsl` → `VehiclePBR_Modern.hlsl` → compiled with `/E main_envCar`.

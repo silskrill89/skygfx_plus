@@ -7,6 +7,8 @@
 
 // GTAIV (110-119)
 #define IDR_GTAIVPS                 110
+#define IDR_GTAIVFPVS               111
+#define IDR_GTAIVFPPS               112
 
 // SMAA + SSAO (120-139)
 #define IDR_SSAOPS                  120
@@ -79,11 +81,11 @@
 #define IDR_PS2BUILDINGWINDVS       224
 #define IDR_XBOXBUILDINGVS          225
 #define IDR_XBOXBUILDINGPS          226
-#define IDR_XBOXBUILDINGSTOCHASTICPS 227
+#define IDR_XBOXBUILDINGNOISEDETAILPS 227
 #define IDR_XBOXBUILDINGWINDVS      228
 #define IDR_SPHEREBUILDINGVS        229
 #define IDR_SIMPLEDETAILPS          230
-#define IDR_SIMPLEDETAILSTOCHASTICPS 231
+#define IDR_SIMPLEDETAILNOISEDETAILPS 231
 #define IDR_SIMPLEFOGPS             232
 #define IDR_GTAIVBUILDINGVS         233
 #define IDR_GTAIVBUILDINGPS         234
@@ -103,3 +105,50 @@
 // Unified tonemap (frame-adaptive exposure)
 #define IDR_LUMINANCEREDUCE         253
 #define IDR_LUMINANCEADAPT          254
+
+// New effects (260-275)
+#define IDR_FXAA3                   260
+#define IDR_GRAIN                   261
+#define IDR_CA                      262
+#define IDR_VIGNETTE                263
+#define IDR_VECTORMOTIONBLUR        264
+#define IDR_DOF_COC                 265
+#define IDR_DOF_BOKEH               266
+#define IDR_DOF_TENT                267
+#define IDR_DOF_COMBINE             268
+#define IDR_TONEMAPLUT              269
+#define IDR_BLOOM_EXTRACT           270
+#define IDR_BLOOM_DOWNSAMPLE        271
+#define IDR_BLOOM_UPSAMPLE          272
+#define IDR_BLOOM_COMPOSITE         273
+#define IDR_SUNSHAFTS               274
+#define IDR_PEDPBRVS                275
+
+// W7-C: mirror distortion fix composite (Mirror_Composite.hlsl -> cso/Mirror_Composite.cso)
+// NOTE: 276 was staged for W7-D and IS NOW LIVE as IDR_WATER_UNDERWATER
+// (defined below; loaded by postfx_underwater.cpp) — do not reuse.
+// 278 is now IDR_SIMPLENOISEDETAILPS (defined at the end of this file).
+#define IDR_MIRROR_COMPOSITE         277
+
+// Underwater volume fog + SSS (W7-D)
+#define IDR_WATER_UNDERWATER        276
+#define IDR_TREEALPHA               279	// W8-2 TreeAlpha.cso (276=W7-D, 277=W7-C, 278=SimpleNoiseDetail below, 280=W8-3)
+
+// Legacy simple (non-detail-map) noise-detail building PS — aap SkyGfx parity
+#define IDR_SIMPLENOISEDETAILPS     278
+
+// W8 clouds (CloudsPS.hlsl). 280 stays reserved for W8-3 per the note above.
+//   main_clouds      -> cso/CloudsPS.cso      (auto-rglob /E main alias)
+//   main_cloudsSky   -> cso/cloudsSkyPS.cso   (fast_build.py multi_entry row)
+#define IDR_CLOUDSSKYPS             283
+#define IDR_CLOUDPS                 284
+
+// IV grade (IVGrade.hlsl -> cso/IVGrade.cso). The resource is wired for
+// CSO loading, but the shipped g_ivGradePSBytes array stays the default
+// for this build: the reconstructed CSO is NOT byte-identical (see
+// EnsureIVGradePS in postfx_colourfilter.cpp).
+#define IDR_IVGRADEPS               285
+
+// m0336 GPU particle lane (particles_gpu.cpp + WakeParticlePS.hlsl).
+// ps_3_0 sprite PS for the quad-batch particle path (boat wake first slice).
+#define IDR_WAKEPARTICLEPS          286

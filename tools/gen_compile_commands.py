@@ -2,6 +2,10 @@
 import xml.etree.ElementTree as ET
 import json, os, sys
 
+if '-h' in sys.argv or '--help' in sys.argv:
+    print(__doc__)
+    sys.exit(0)
+
 ns = '{http://schemas.microsoft.com/developer/msbuild/2003}'
 root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 vcxproj = os.path.join(root_dir, 'build', 'skygfx.vcxproj')
@@ -63,7 +67,7 @@ for src in src_files:
     })
 
 out = os.path.join(root_dir, 'compile_commands.json')
-with open(out, 'w') as f:
+with open(out, 'w', encoding='utf-8') as f:
     json.dump(compile_commands, f, indent=2)
 
 print(f'Generated {out} with {len(compile_commands)} entries')
