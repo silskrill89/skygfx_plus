@@ -2511,15 +2511,14 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 		CPostEffects::ColourFilter_PS2(rgb1, rgb2);
 		break;
 	case COLORFILTER_PC:
-		// The PC colour filter (vanilla ColourFilter @0x703650) draws a
-		// full-screen quad with rgb1pc/rgb2pc as vertex colours. When the
-		// timecycle hands dark values the quad lands as an opaque/near-opaque
-		// black layer over the whole frame (only entities drawn after the
-		// filter, like CJ, survive). The EnsureColorfilterVertsVisible guard
-		// at frame start cannot help because the vanilla code overwrites the
-		// verts during the filter pass. Until the underlying timecycle/blend
-		// desync is root-caused, skip the vanilla draw entirely for the PC
-		// filter so the frame is not blacked out.
+		// AAP parity: just call the vanilla ColourFilter (0x703650). AAP
+		// does no special handling here — no blend force, no rgb clamp, no
+		// vertex-colour guard. The rw-cache desync that broke the vanilla
+		// draw in our mod is handled by flushing pending state to the device
+		// first, mirroring AAP's implicit cache/device sync (AAP has no
+		// state-integrity fixes that could desync them).
+		_rwD3D9RenderStateFlushCache();
+		CPostEffects::ColourFilter(rgb1pc, rgb2pc);
 		break;
 	case COLORFILTER_MOBILE:
 		if(!UG_mod)
