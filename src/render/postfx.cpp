@@ -1956,11 +1956,9 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 
 	// Log entry with full context for crash correlation
 	if(dbglog_throttle("cf_switch"))
-		dbglog("[PostFX] ColourFilter_switch: filter=%d pipeline=%d smaa=%d ssao=%d motionBlur=%d rgb1=(%d,%d,%d,%d) rgb2=(%d,%d,%d,%d)",
+		dbglog("[PostFX] ColourFilter_switch: filter=%d pipeline=%d smaa=%d ssao=%d motionBlur=%d",
 			config->colorFilter, config->pipeline, config->smaaEnable,
-			config->ssaoEnable, config->motionBlurEnable,
-			rgb1.red, rgb1.green, rgb1.blue, rgb1.alpha,
-			rgb2.red, rgb2.green, rgb2.blue, rgb2.alpha);
+			config->ssaoEnable, config->motionBlurEnable);
 
 	if(!CPostEffects::pRasterFrontBuffer){
 		DBGLOG_BAIL("ColourFilter_switch", "pRasterFrontBuffer NULL");
@@ -2179,32 +2177,6 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 		// PC timecycle - values already in PC space
 		rgb1.alpha /= 2;
 		rgb2.alpha /= 2;
-		// PC colour filter (vanilla ColourFilter @0x703650) draws a full-screen
-		// quad with rgb1pc/rgb2pc as vertex colours; the game's timecycle
-		// values carry PS2-range alpha (0-128) which the vanilla code does NOT
-		// halve, so the quad lands ~50% opaque and darkens the frame. Halve
-		// here too, matching the rgb1/rgb2 path above, so the PC filter's
-		// composite stays in the same range as the Modern/PS2 paths.
-		rgb1pc.alpha /= 2;
-		rgb2pc.alpha /= 2;
-		// Hardening: the game's PC timecycle can leave rgb1/rgb2 (and the
-		// rgb1pc/rgb2pc copies) at 0,0,0,0, which makes the vanilla
-		// ColourFilter draw a fully-transparent black quad that zeroes the
-		// verts every frame (EnsureColorfilterVertsVisible then reports
-		// 0x00000000). Clamp each channel to a floor so the composite can
-		// never fully black out the frame.
-		if(rgb1.red < 32) rgb1.red = 32;
-		if(rgb1.green < 32) rgb1.green = 32;
-		if(rgb1.blue < 32) rgb1.blue = 32;
-		if(rgb2.red < 32) rgb2.red = 32;
-		if(rgb2.green < 32) rgb2.green = 32;
-		if(rgb2.blue < 32) rgb2.blue = 32;
-		if(rgb1pc.red < 32) rgb1pc.red = 32;
-		if(rgb1pc.green < 32) rgb1pc.green = 32;
-		if(rgb1pc.blue < 32) rgb1pc.blue = 32;
-		if(rgb2pc.red < 32) rgb2pc.red = 32;
-		if(rgb2pc.green < 32) rgb2pc.green = 32;
-		if(rgb2pc.blue < 32) rgb2pc.blue = 32;
 	}else if(mod2xConsumer){
 		// PS2 timecycle - convert to PC space (Fix R1: only for MOD2X-style
 		// consumers; vanilla/None/PC consumers keep raw/PC-space values)
