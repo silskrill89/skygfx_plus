@@ -58,6 +58,7 @@
 #include "skygfx.h"
 #include "postfx.h"		// overrideIm2dPixelShader (postfx.h:116)
 #include "mirrorPass.h"
+#include "transparency.h"
 #include "profiler.h"	// PF_SCOPE/PfBindPS/PfNote (renderlane profiler API)
 
 // ---- game globals (gta-reversed Mirrors.cpp addresses) ----------------
@@ -412,7 +413,7 @@ MirrorPass_Composite(void)
 			pushedStates = true;
 			RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
 			RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
-			RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
+			Transparency_SetZEnabled(false);
 			RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
 			RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)mirrorRas);
 			RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);

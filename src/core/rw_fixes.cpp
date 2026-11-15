@@ -12,6 +12,7 @@
 //     Config.rwFixesEnable (default 1). 0 = install none of the above.
 // Called once from main.cpp DllMain at the original install position.
 #include "skygfx.h"
+#include "transparency.h"
 #include <injector\hooking.hpp>
 #include <excpt.h>
 #include <string.h>
@@ -555,12 +556,8 @@ spriteFlushShieldClose(const char *path)
 	d3d9device->SetRenderState(D3DRS_BLENDOP, s.blendOp);
 	// ZENABLE: rw twin ZTESTENABLE — park the boolean inverse -> captured
 	// target, then L1+L2+raw L3 (same idiom as ZWRITEENABLE above).
-	RwRenderStateSet(rwRENDERSTATEZTESTENABLE,
-		(void*)(s.rwZtest ? (RwUInt32)FALSE : (RwUInt32)TRUE));
-	RwD3D9SetRenderState(D3DRS_ZENABLE, s.drvZenable ? FALSE : TRUE);
-	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)s.rwZtest);
-	RwD3D9SetRenderState(D3DRS_ZENABLE, s.drvZenable);
-	d3d9device->SetRenderState(D3DRS_ZENABLE, s.zenable);
+	Transparency_SetZEnabled(!(s.rwZtest ? true : false));
+	Transparency_SetZEnabled(s.rwZtest ? true : false);
 	// ZFUNC: no rw twin — L2+L3 only; park LESSEQUAL<->ALWAYS.
 	DWORD parkZFunc = (s.drvZfunc == (DWORD)D3DCMP_LESSEQUAL)
 		? (DWORD)D3DCMP_ALWAYS : (DWORD)D3DCMP_LESSEQUAL;
@@ -871,20 +868,20 @@ SpriteFlushIndexedDraw_hook(int primType, void *verts, int nverts, void *indices
 			RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
 			RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
 			RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
-			RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
+			Transparency_SetZEnabled(true);
 			RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
 			RwD3D9SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
 			RwD3D9SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
 			RwD3D9SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
 			RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
-			RwD3D9SetRenderState(D3DRS_ZENABLE, TRUE);
+			Transparency_SetZEnabled(true);
 			if(d3d9device){
 				d3d9device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
 				d3d9device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
 				d3d9device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
 				d3d9device->SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
 				d3d9device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
-				d3d9device->SetRenderState(D3DRS_ZENABLE, TRUE);
+				Transparency_SetZEnabled(true);
 			}
 			// N2 dead-depth repair: this canonical re-sync pushes ZTEST=1 /
 			// ZWRITE=1 but historically omitted ZFUNC, leaving zfunc=8 live —
@@ -1729,10 +1726,7 @@ CCoronas__Render_blendprobe_hook(void)
 				// ZTEST alongside the additive force (coronaZtest
 				// wiring) — same three layers, only on drift.
 				if(ztestDrift){
-					RwRenderStateSet(rwRENDERSTATEZTESTENABLE,
-						(void*)(ztTarget ? TRUE : FALSE));
-					RwD3D9SetRenderState(D3DRS_ZENABLE, (DWORD)ztTarget);
-					d3d9device->SetRenderState(D3DRS_ZENABLE, (DWORD)ztTarget);
+					Transparency_SetZEnabled(ztTarget ? true : false);
 				}
 				// First-hit one-shot (unthrottled) + the 2s bucket line, so
 				// the run's first [CoronaShield] force can never be starved.
@@ -1744,10 +1738,7 @@ CCoronas__Render_blendprobe_hook(void)
 				// Blend healthy but ZTEST drifted — standalone
 				// repair (same three layers), so the always-on-top
 				// symptom cannot hide behind a correct blend state.
-				RwRenderStateSet(rwRENDERSTATEZTESTENABLE,
-					(void*)(ztTarget ? TRUE : FALSE));
-				RwD3D9SetRenderState(D3DRS_ZENABLE, (DWORD)ztTarget);
-				d3d9device->SetRenderState(D3DRS_ZENABLE, (DWORD)ztTarget);
+				Transparency_SetZEnabled(ztTarget ? true : false);
 				if(dbglog_throttle("corona_ztest"))
 					dbglog("[CoronaZ] forced ztest=%d, was=%d (coronaZtest=%d)",
 					       ztTarget, (int)ztest,
@@ -1819,7 +1810,7 @@ CCoronas__Render_blendprobe_hook(void)
 			RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
 			RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
 			RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
-			RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
+			Transparency_SetZEnabled(true);
 			RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, preBlendDev);
 			RwD3D9SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
 			RwD3D9SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
@@ -1841,7 +1832,7 @@ CCoronas__Render_blendprobe_hook(void)
 			d3d9device->SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
 			d3d9device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
 		}
-		RwD3D9SetRenderState(D3DRS_ZENABLE, TRUE);
+		Transparency_SetZEnabled(true);
 		// N2 residual: ZENABLE is pushed TRUE above but ZFUNC is never
 		// re-asserted — a zfunc=8 (ALWAYS) device survives the corona exit
 		// and dead-depth-tests the next consumer. UNIFY: reuse the single
