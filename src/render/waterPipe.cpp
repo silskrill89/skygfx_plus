@@ -1111,6 +1111,29 @@ static void SyncDevice(void)
     }
 }
 
+// Water RTs are SCREEN-sized (the scene copy is a back-buffer StretchRect, the
+// refl/depth copies are screen-space). Size them from the BACK BUFFER, not the
+// live viewport: the viewport changes between passes (the reflection pass runs
+// at its own dims), and sizing off it made EnsureSceneTexture/Refl/Depth
+// disagree with themselves every frame — a perpetual recreate loop
+// (2048x1024 <-> 1920x1080, ~8 cycles/sec, 240 recreates per session: the
+// water_rt spam + 3 RT allocations of churn each time). Falls back to the
+// viewport only if the back buffer cannot be read.
+static void WaterScreenSize(int *outW, int *outH)
+{
+	*outW = 0;
+	*outH = 0;
+	if(!g_d3dDevice) return;
+	IDirect3DSurface9 *bb = nullptr;
+	if(FAILED(g_d3dDevice->GetRenderTarget(0, &bb)) || !bb) return;
+	D3DSURFACE_DESC desc;
+	if(SUCCEEDED(bb->GetDesc(&desc)) && desc.Width > 0 && desc.Height > 0){
+		*outW = (int)desc.Width;
+		*outH = (int)desc.Height;
+	}
+	bb->Release();
+}
+
 static void EnsureSceneTexture(int w, int h)
 {
     if(g_sceneTexture && g_sceneWidth == w && g_sceneHeight == h) return;
@@ -1808,9 +1831,18 @@ void waterPipe_setRenderState(void)
     // the PS c7.w flag + the s3 bind below. Gate off / tier < 2 / RT create
     // failed -> flag stays 0 and s3 gets NULL: the shader's SSR mix term is
     // then exactly 0 (analytic sky tint, bit-identical to before).
+    // RT dimensions: the BACK BUFFER (stable), not the live viewport — see
+    // WaterScreenSize for the recreate-loop this replaced.
+    int rtW = vp.Width, rtH = vp.Height;
+    {
+        int sw = 0, sh = 0;
+        WaterScreenSize(&sw, &sh);
+        if(sw > 0 && sh > 0){ rtW = sw; rtH = sh; }
+    }
+
     bool reflValid = false;
     if(needRT){
-        EnsureSceneTexture(vp.Width, vp.Height);
+        EnsureSceneTexture(rtW, rtH);
         if(!g_sceneTexture){
             // PERF/widening (2026-10-31): a failed refraction RT used to bail
             // the whole pipe to the FFP fallback — flat untextured water
@@ -1830,7 +1862,7 @@ void waterPipe_setRenderState(void)
             // G1 screen-space reflection: second capture of the scene, vertically
             // flipped (IV/V water-refs.md "High/Ultra = screen-space reflect").
             if(config->waterStyle != 0){
-                EnsureReflTexture(vp.Width, vp.Height);
+                EnsureReflTexture(rtW, rtH);
                 if(g_reflTexture)
                     reflValid = CopySceneFlippedToTexture();
             }
@@ -1856,7 +1888,7 @@ void waterPipe_setRenderState(void)
     // surface and blends into it instead of popping.
     bool depthValid = false;
     if(needRT){
-        EnsureDepthTexture(vp.Width, vp.Height);
+        EnsureDepthTexture(rtW, rtH);
         if(g_depthTexture){
             depthValid = PostFX_CopyDepthToTexture(g_depthTexture, g_depthWidth, g_depthHeight);
             // The depth-copy helper juggles RT/DS/raw states — flush RW's render
