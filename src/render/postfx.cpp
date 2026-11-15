@@ -2,6 +2,7 @@
 #include "debug_handl.h"
 #include "ModuleList.hpp"
 #include "postfx.h"
+extern void _rwD3D9RenderStateFlushCache(void);
 #include "chars.h"
 #include "depthhook.h"
 #include "postfx_underwater.h"
@@ -2496,6 +2497,16 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 		CPostEffects::ColourFilter_PS2(rgb1, rgb2);
 		break;
 	case COLORFILTER_PC:
+		// Force the device blend mode to SRCALPHA/INVSRCALPHA before the
+		// vanilla ColourFilter runs: the rw-cache can hold a stale value
+		// (rw cache desync), and the vanilla code's RwRenderStateSet calls
+		// are no-ops against an unchanged cache, leaving the device on the
+		// wrong blend mode -> the full-screen composite draws opaque black
+		// over everything (only CJ, drawn later, survives).
+		RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+		RwD3D9SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+		RwD3D9SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+		_rwD3D9RenderStateFlushCache();
 		CPostEffects::ColourFilter(rgb1pc, rgb2pc);
 		break;
 	case COLORFILTER_MOBILE:
