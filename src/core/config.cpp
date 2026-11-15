@@ -1212,7 +1212,8 @@ readIniFile(const char *modulePath, Config *c)
 		EMIT("SkyGfx", "zwriteThresholdGrass", "128"); \
 		EMIT("SkyGfx", "zwriteThresholdPed", "128"); \
 		EMIT("SkyGfx", "ambientFloor", "0.10"); \
-		EMIT("SkyGfx", "ambientClampEnable", "0"); 		EMIT("SkyGfx", "transparencyEnable", "1"); \
+		EMIT("SkyGfx", "ambientClampEnable", "0"); \
+		EMIT("SkyGfx", "transparencyEnable", "1"); \
 		EMIT("SkyGfx", "postfxDumpDebug", "0"); \
 		EMIT("SkyGfx", "debugOverlay", "0"); \
 		EMIT("SkyGfx", "pbrAmbientFloor", "0.0"); \
