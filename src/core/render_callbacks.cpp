@@ -714,41 +714,6 @@ myDefaultCallback(RpAtomic *atomic)
 	// each layer to its OWN pre-entry value (postfx manages the raw device
 	// side itself with its own save/restore — syncing the sides here would
 	// fight that contract).
-	RwUInt32 savedCull = (RwUInt32)rwCULLMODECULLBACK;
-	// Effective ped span cull for the draw-boundary re-assert: assigned in
-	// the pedCullMode block below (the explicit 3-layer entry set), re-set
-	// through pipeForceCullMode on the last line before the draw so no
-	// shield/restore block in between can clobber cull mid-ped-draw.
-	RwUInt32 pedCullDraw = (RwUInt32)rwCULLMODECULLBACK;
-	// Pre-seeded with the canonical scene block (never `{}`): colourWrite=0
-	// would blank every channel if pipeExitAlphaMode were ever reached
-	// without a matching enter.
-	PipeAlphaState savedAlpha = {
-		FALSE, rwBLENDSRCALPHA, rwBLENDINVSRCALPHA,
-		rwALPHATESTFUNCTIONGREATEREQUAL, 0,
-		FALSE, D3DCOLORWRITEENABLE_ALL
-	};
-	RwBool savedZWriteRw = TRUE;
-	DWORD savedZWriteDev = TRUE;
-	DWORD savedZWriteDrv = TRUE;	// layer 2 (RW driver cache) pre-entry
-	// Sticky-repair flag: set when entry found ZWRITE off/desynced. When set,
-	// the exit below restores the REPAIRED canonical TRUE to all three layers
-	// instead of re-creating the pre-entry desync — otherwise the exit
-	// faithfully restored the leak every frame and the entry guard re-detected
-	// and re-repaired it next frame (the recurring "[PED] ZWRITE" log).
-	bool zwriteWasDesync = false;
-	// Depth-trio sticky flag (ZTEST/ZENABLE/ZFUNC half of the same rule):
-	// set when the entry depth state was divergent anywhere, so the exit
-	// leaves the canonical depth signature behind instead of re-emitting the
-	// captured leak (see the sticky-depth block in the exit contract).
-	bool depthWasDesync = false;
-	// Pre-entry snapshot for the ped opaque contract (capture() pre-seeds, so
-	// a disabled contract or a failed Get still leaves a sane struct). The
-	// gate is latched once so the exit restore always matches the entry force
-	// even if the INI value changes mid-frame.
-	PedOpaqueState savedOpaque = {};
-	bool pedContractOn = false;
-	bool pedAlphaTestOn = true;
 	if(isPedPipe){
 		// PedsPipe absorb point (design doc §3.1 — SkinEntryContract lane:
 		// cull-mode A/B lever, pedAlphaTest A/B lever, sticky ZWRITE repair,
@@ -758,187 +723,7 @@ myDefaultCallback(RpAtomic *atomic)
 		// from skin.cpp, contract state in PedPipeState. pedsPipeState ==
 		// NULL keeps the legacy inline block below byte-for-byte (the
 		// pedsPipeEnable=0 rollback lever, skin.h:8 / peds_pipe.h:34).
-		if(pedsPipeState){
-			SkinEntryContract(pedsPipeState);
-		}else{
-		pedContractOn = (config->pedOpaqueContract != 0);
-		pedAlphaTestOn = (config->pedAlphaTestEnable != 0);
-		// pedAlphaTestEnable A/B receipt (tag ped_atest), re-armed on change
-		// so an INI reload is visible in the log (dbglog_once cannot re-fire).
-		static int pedAlphaTestLogged = -2;
-		if(pedAlphaTestLogged != (pedAlphaTestOn ? 1 : 0)){
-			pedAlphaTestLogged = pedAlphaTestOn ? 1 : 0;
-			dbglog("[PedAlphaTest] enabled=%d", pedAlphaTestLogged);
-		}
-		pedOpaqueCapture(&savedOpaque);
-		// One-shot per run: what the DEVICE actually had before any repair.
-		// [PipeAlpha] only reports cache-layer drift; this is the ped-pipeline
-		// truth (ref=140 here confirms the envmap outdoor leak reached peds).
-		if(dbglog_once("ped_opaque_pre"))
-			dbglog("[PedOpaque] pre-entry dev ALPHAREF=%u ALPHAFUNC=%u ALPHABLENDENABLE=%u ZWRITE=%u ZENABLE=%u ZFUNC=%u ALPHATEST=%u | rw ref=%u fn=%u vtx=%u zw=%u ztest=%u | drv ref=%u fn=%u blend=%u zw=%u",
-				(unsigned)savedOpaque.devAlphaRef, (unsigned)savedOpaque.devAlphaFunc,
-				(unsigned)savedOpaque.devBlend, (unsigned)savedOpaque.devZWrite,
-				(unsigned)savedOpaque.devZEnable, (unsigned)savedOpaque.devZFunc,
-				(unsigned)savedOpaque.devAlphaTest,
-				(unsigned)savedOpaque.rwAlphaRef, (unsigned)savedOpaque.rwAlphaFunc,
-				(unsigned)savedOpaque.rwVtxAlpha, (unsigned)savedOpaque.rwZWrite,
-				(unsigned)savedOpaque.rwZTest,
-				(unsigned)savedOpaque.drvAlphaRef, (unsigned)savedOpaque.drvAlphaFunc,
-				(unsigned)savedOpaque.drvBlend, (unsigned)savedOpaque.drvZWrite);
-		savedCull = pipeEnterCullMode();
-
-		// ===== pedCullMode A/B lever + explicit CULL set (3-layer paired) =====
-		// -1 (default) = the skin expectation CULLBACK in the main view: the
-		// span mode pipeEnterCullMode enforced (BACK outside a foreign cull
-		// scope; inside one — mirror/shadow spans — the scope's own live
-		// mode, per the vehiclePipe "never a hardcoded BACK" rule,
-		// vehiclePipe.cpp:2933-2940). 1/2/3 force CULLNONE/CULLBACK/CULLFRONT
-		// through all three layers for this ped span; the exit's
-		// pipeExitCullMode(savedCull) restores the pre-entry span mode.
-		// Out-of-range behaves as -1.
-		// The write is UNCONDITIONAL (build-11 transparent-ped fix): the ped
-		// entry must SET cull explicitly and restore it — inheriting
-		// "whatever the caches hold" is the CULLNONE/FRONT leak family
-		// ("backfaces showing through" skin = angle-dependent see-through,
-		// CULLFRONT = inside-out ped). pipeForceCullMode is THE 3-layer
-		// paired write (L1 park+set / L2 park+set / L3 raw pin), so no
-		// cache-hit skip can hold the force back.
-		int pedCullMode = config->pedCullMode;
-		if(pedCullMode < -1 || pedCullMode == 0 || pedCullMode > 3)
-			pedCullMode = -1;
-		RwUInt32 pedCullForced = savedCull;
-		if(pedCullForced != rwCULLMODECULLNONE &&
-		   pedCullForced != rwCULLMODECULLBACK &&
-		   pedCullForced != rwCULLMODECULLFRONT)
-			pedCullForced = (RwUInt32)rwCULLMODECULLBACK;
-		if(pedCullMode != -1){
-			pedCullForced = (RwUInt32)rwCULLMODECULLNONE;
-			if(pedCullMode == 2)
-				pedCullForced = (RwUInt32)rwCULLMODECULLBACK;
-			else if(pedCullMode == 3)
-				pedCullForced = (RwUInt32)rwCULLMODECULLFRONT;
-		}
-		pipeForceCullMode(pedCullForced);
-		pedCullDraw = pedCullForced;	// draw-boundary re-assert value
-		// One-shot receipt (tag ped_cull), re-armed whenever the effective
-		// mode changes (dbglog_once alone cannot re-fire after an INI reload).
-		static int pedCullLoggedMode = -2;
-		if(pedCullLoggedMode != pedCullMode){
-			pedCullLoggedMode = pedCullMode;
-			dbglog("[PedCull] mode=%d saved=%u forced=%u",
-				pedCullMode, (unsigned)savedCull, (unsigned)pedCullForced);
-		}
-
-		savedAlpha = pipeEnterAlphaMode();
-
-		// ZWRITE three-layer guard — mirror of buildingPipe.cpp:1185-1195.
-		// Pre-seeded TRUE: a failed Get leaves the out-param untouched, and
-		// TRUE is the canonical scene value (same pre-seed as the others).
-		RwRenderStateGet(rwRENDERSTATEZWRITEENABLE, (void*)&savedZWriteRw);
-		RwD3D9GetRenderState(D3DRS_ZWRITEENABLE, &savedZWriteDrv);
-		if(d3d9device)
-			d3d9device->GetRenderState(D3DRS_ZWRITEENABLE, &savedZWriteDev);
-		// 3-layer parity with the building Switch (buildingPipe.cpp:3462):
-		// ALL THREE captured layers count — a drv-only FALSE used to pass
-		// this gate and was then faithfully re-emitted at exit.
-		zwriteWasDesync = (!savedZWriteRw || !savedZWriteDrv || !savedZWriteDev);
-		// ===== PED DEPTH-TEST CONTRACT (unconditional — build-11 fix) =====
-		// "buildings/props draw over CJ" root family "Z-test state leaked
-		// into the ped draw": the ped draw must ALWAYS run with ZTEST ON +
-		// ZFUNC LESSEQUAL + ZWRITE ON — not only when pedOpaqueContract is
-		// on (that gate below covers the alpha/blend signature). CJ's pixels
-		// paint even with ZWRITE off, but his depth is never carved, so a
-		// building/prop face drawn after him at its own face depth passes
-		// LESSEQUAL and paints over the player. savedOpaque was captured
-		// above (pedOpaqueCapture), so the receipt reports the true
-		// pre-entry state. ZTEST TRUE has an rw twin (L1+L2+L3 paired);
-		// ZFUNC has none (L2+L3 paired — pedOpaqueEnforce idiom).
-		depthWasDesync = zwriteWasDesync ||
-			!savedOpaque.rwZTest || !savedOpaque.drvZEnable || !savedOpaque.devZEnable ||
-			savedOpaque.drvZFunc != D3DCMP_LESSEQUAL ||
-			savedOpaque.devZFunc != D3DCMP_LESSEQUAL;
-		if(depthWasDesync && dbglog_throttle("PedZDepth"))
-			dbglog("[PedZW] depth drift on entry (rw zw=%d ztest=%d | drv zw=%d zen=%u zfunc=%u | dev zw=%d zen=%u zfunc=%u) — forced ZTEST=1 ZFUNC=LESSEQUAL ZWRITE=1 (3L); victims if leaked: CJ overdrawn by props/buildings (draw-over-CJ)",
-				(int)savedZWriteRw, (int)savedOpaque.rwZTest,
-				(int)savedZWriteDrv, (unsigned)savedOpaque.drvZEnable,
-				(unsigned)savedOpaque.drvZFunc,
-				(int)savedZWriteDev, (unsigned)savedOpaque.devZEnable,
-				(unsigned)savedOpaque.devZFunc);
-		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
-		RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
-		RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
-		RwD3D9SetRenderState(D3DRS_ZENABLE, TRUE);
-		RwD3D9SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
-		if(d3d9device){
-			d3d9device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
-			d3d9device->SetRenderState(D3DRS_ZENABLE, TRUE);
-			d3d9device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
-		}
-
-		// Layer-3 alpha/blend repair: pipeEnterAlphaMode's RwD3D9 writes are
-		// applied[]-gated and cannot reach a device that drifted behind an
-		// unchanged cache (same rationale as buildingPipe.cpp:1197-1204).
-		pipeForceAlphaBlock();
-		// ALPHAFUNC/ALPHAREF: pipeEnterAlphaMode repaired the ref (degenerate
-		// 0 -> 1) and pipeForceAlphaBlock re-pushes the CACHE's func/ref
-		// through L2/L3 — not the caller's pre-entry pair. Put the captured
-		// pair (savedAlpha, snapshotted before the entry contract ran) back
-		// through L1 (rw setters) + L2 + raw L3 so the ped pass inherits
-		// exactly what it found. ALPHATESTENABLE is deliberately NOT touched:
-		// pipeForceAlphaBlock owns its force and the pre-entry value was
-		// never captured.
-		RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION, (void*)savedAlpha.alphaFunc);
-		RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTIONREF, (void*)savedAlpha.alphaRef);
-		RwD3D9SetRenderState(D3DRS_ALPHAFUNC, pipeAlphaFuncToD3D(savedAlpha.alphaFunc));
-		RwD3D9SetRenderState(D3DRS_ALPHAREF, (RwUInt32)savedAlpha.alphaRef);
-		if(d3d9device){
-			d3d9device->SetRenderState(D3DRS_ALPHAFUNC, pipeAlphaFuncToD3D(savedAlpha.alphaFunc));
-			d3d9device->SetRenderState(D3DRS_ALPHAREF, (DWORD)savedAlpha.alphaRef);
-		}
-
-		// ===== PED OPAQUE CONTRACT =====
-		// Last writer before the skin pipeline executes: pipeForceAlphaBlock
-		// and the saved-pair restore above deliberately put the PRE-ENTRY
-		// alpha func/ref back, which is exactly how envmap's leaked ref=140
-		// reached the device. Replace it with GREATEREQUAL@1 (rejects only
-		// fully-transparent texels) and force blending off / depth writes on.
-		// UNCONDITIONAL (build-11 transparent-ped fix, same rule the PED
-		// DEPTH-TEST CONTRACT states above: "not only when
-		// pedOpaqueContract is on"). With the bisect lever OFF (the live
-		// INI ships pedOpaqueContract=0!) the old gate skipped this enforce
-		// and the saved-pair restore above left the PRE-ENTRY pair live for
-		// the draw — envmap's leaked GREATER@140 (envmap.cpp:448 outdoor
-		// park) discards every skin/clothing texel <= 140 and the per-mesh
-		// vertex-alpha decision blends whole meshes: partially transparent
-		// peds ("alpha/blend decision varying per mesh"). The canonical
-		// opaque signature — alpha test ON, GREATEREQUAL@1, VERTEXALPHA
-		// OFF, blend OFF — must hold for every opaque skin span;
-		// pedAlphaTestEnable=0 keeps its S5 test-off lane (blend by the
-		// texel's own alpha). pedContractOn now gates ONLY the exit restore
-		// below (pedOpaqueRestore vs the fix-34 sticky reset).
-		{
-			// Receipt: dbglog_once for the run's FIRST repair (cannot be
-			// starved by bucket collisions — the old "ped_contract" tag
-			// hashed to the same bucket as pipeline_cull_enter, which fired
-			// ~9 ms earlier, so the contract line never appeared even though
-			// the repair ran), then the throttled "ped_contract2" tag.
-			if(pedOpaqueDiverged(&savedOpaque) &&
-			   (dbglog_once("ped_contract_first") || dbglog_throttle("ped_contract2")))
-				dbglog("[PedOpaque] contract repaired divergent entry: dev(ref=%u fn=%u blend=%u zw=%u zen=%u zfunc=%u atest=%u) rw(ref=%u fn=%u vtx=%u zw=%u ztest=%u) drv(ref=%u fn=%u blend=%u zw=%u)",
-					(unsigned)savedOpaque.devAlphaRef, (unsigned)savedOpaque.devAlphaFunc,
-					(unsigned)savedOpaque.devBlend, (unsigned)savedOpaque.devZWrite,
-					(unsigned)savedOpaque.devZEnable, (unsigned)savedOpaque.devZFunc,
-					(unsigned)savedOpaque.devAlphaTest,
-					(unsigned)savedOpaque.rwAlphaRef, (unsigned)savedOpaque.rwAlphaFunc,
-					(unsigned)savedOpaque.rwVtxAlpha, (unsigned)savedOpaque.rwZWrite,
-					(unsigned)savedOpaque.rwZTest,
-					(unsigned)savedOpaque.drvAlphaRef, (unsigned)savedOpaque.drvAlphaFunc,
-					(unsigned)savedOpaque.drvBlend, (unsigned)savedOpaque.drvZWrite);
-			if(!pedContractOn && dbglog_once("ped_enforce_uncond"))
-				dbglog("[PedOpaque] entry enforce UNCONDITIONAL (pedOpaqueContract=0): canonical GE@1/blend-off/vertexalpha-off pinned for the span");
-			pedOpaqueEnforce(pedAlphaTestOn ? 1 : 0);
-		}
-		}	// end legacy fallback (pedsPipeState == NULL)
+		SkinEntryContract(pedsPipeState);
 
 		// Stage-0 texture-raster resync: the skin pipeline's per-material
 		// bind must be a real transition (cache<->device split repair).
@@ -954,10 +739,7 @@ myDefaultCallback(RpAtomic *atomic)
 		// state lane — the pedsPipeEnable=0 rollback lever, skin.h:8 /
 		// peds_pipe.h:34).
 		if(!config || config->pedTexResync){
-			if(pedsPipeState)
-				SkinStage0Resync(atomic, pedsPipeState);
-			else
-				pedStage0Resync(atomic, NULL);	// legacy fallback (pedsPipeState == NULL -> NULL state lane)
+			SkinStage0Resync(atomic, pedsPipeState);
 		}
 	}
 
@@ -1033,8 +815,6 @@ myDefaultCallback(RpAtomic *atomic)
 	// pedAmbientFloor lever was removed 2026-11-10 - see wave-20-record §5),
 	// no cutscene 0.15 special. The 0.20 floor saturated the FFP skin pipe
 	// (final ≈ pAmbient + pDirect·NdotL) to flat white at noon.
-	RwRGBAReal savedAmb = {};
-	bool ambOverridden = false;
 	if(pipe == skinPipe && pAmbient){
 		// PedsPipe absorb point (design doc §3.1 — SkinAmbientOverride):
 		// Phase 3 FLIPPED — when the module owns this span (pedsPipeState
@@ -1043,40 +823,7 @@ myDefaultCallback(RpAtomic *atomic)
 		// PedPipeState). pedsPipeState == NULL keeps the legacy inline
 		// block below byte-for-byte (rollback lever). The ped_ambient
 		// receipts stay on both paths (skin.cpp logs the same tags).
-		if(pedsPipeState)
-			SkinAmbientOverrideEnter(pedsPipeState);
-		else{
-		savedAmb = pAmbient->color;
-		RwRGBAReal tcAmbient = GetTimecycleAmbient();
-		// Guard (log-forensics 2026-10-30 #4): never publish PURE BLACK
-		// ambient to the skin pipe unless the black is genuine — i.e. the
-		// game's own saved ambient is black too (true night / blackout).
-		// The 04:38 run showed 11x `[Ped] pAmbient override (0,0,0)` in
-		// the device-reset window (04:38:35-55) while savedAmb held real
-		// light: a zeroed GetTimecycleAmbient() sample is transient
-		// (reset / interior area switch), and publishing it greys every
-		// ped to a featureless mannequin. Fall back to the savedAmb
-		// capture in that case only; normal values pass through verbatim
-		// (W3 revert semantics preserved).
-		const float kAmbBlackEps = 1e-4f;
-		bool tcBlack = tcAmbient.red   < kAmbBlackEps &&
-		               tcAmbient.green < kAmbBlackEps &&
-		               tcAmbient.blue  < kAmbBlackEps;
-		bool savedBlack = savedAmb.red   < kAmbBlackEps &&
-		                  savedAmb.green < kAmbBlackEps &&
-		                  savedAmb.blue  < kAmbBlackEps;
-		if(tcBlack && !savedBlack){
-			tcAmbient = savedAmb;
-			if(dbglog_throttle("ped_ambient"))
-				dbglog("[Ped] pAmbient BLOCKED black override: timecycle=(0,0,0) with non-black saved ambient (%.3f,%.3f,%.3f) -> fallback savedAmb",
-				       savedAmb.red, savedAmb.green, savedAmb.blue);
-		}
-		pAmbient->color = tcAmbient;
-		ambOverridden = true;
-		if(dbglog_throttle("ped_ambient"))
-			dbglog("[Ped] pAmbient override: (%.3f,%.3f,%.3f)",
-				tcAmbient.red, tcAmbient.green, tcAmbient.blue);
-		}	// end legacy fallback (pedsPipeState == NULL)
+		SkinAmbientOverrideEnter(pedsPipeState);
 	}
 
 	// ===== DUAL PASS =====
@@ -1114,12 +861,7 @@ myDefaultCallback(RpAtomic *atomic)
 	// lever, skin.h:8 / peds_pipe.h:34). The receipt corpus is identical
 	// on either leg.
 	if(isPedPipe){
-		if(pedsPipeState)
-			SkinHeadPartReceipt(atomic);
-		else{
-		extern void chars_logHeadPartReceipt(const RpAtomic *atomic);
-		chars_logHeadPartReceipt(atomic);
-		}
+		SkinHeadPartReceipt(atomic);
 	}
 
 	// ===== ped draw-boundary cull re-assert (3-layer paired) =====
@@ -1143,8 +885,7 @@ myDefaultCallback(RpAtomic *atomic)
 	// local the inline entry filled.
 	if(isPedPipe)
 		pipeForceCullMode(pedsPipeState ? pedsPipeState->contractCullDraw
-					       : pedCullDraw);
-
+					    : (RwUInt32)rwCULLMODECULLBACK);
 	if(dodual){
 		RwRenderStateGet(rwRENDERSTATEALPHATESTFUNCTION, (void*)&alphatest);
 		RwRenderStateGet(rwRENDERSTATEALPHATESTFUNCTIONREF, (void*)&alpharef);
@@ -1172,77 +913,17 @@ myDefaultCallback(RpAtomic *atomic)
 			// byte-for-byte (the pedsPipeEnable=0 rollback lever,
 			// skin.h:8 / peds_pipe.h:34). The [PedDual] receipts stay on
 			// both paths.
-			if(pedsPipeState)
-				pipe = SkinDrawDual(pipe, atomic, pedsPipeState,
-						    alphatest, alpharef, zt);
-			else{
-			// Legacy skin-pipe sequence, transcribed from the original:
-			//   ZWRITE TRUE -> leg1 GREATEREQUAL@zt (depth seeds) ->
-			//   ZWRITE FALSE -> leg2 LESS@zt (fringe) ->
-			//   ZWRITE TRUE -> restore caller func/ref.
-			// The entry contract above already forced ZWRITE TRUE, but the
-			// legacy callback re-forced it for the skin pipe (its
-			// "parachute strings" fix) — keep that explicit write so the
-			// sequence does not depend on the entry path.
-			setZWriteTwoLayer(TRUE);
-			setAlphaTestTwoLayer(rwALPHATESTFUNCTIONGREATEREQUAL, zt);
-			// F6 fix: capture vertex-alpha before leg 1 so leg 2's restore
-			// returns the caller's true value (pre-seeded per POD convention).
-			BOOL blendSaved = TRUE;
-			RwRenderStateGet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)&blendSaved);
-			RxPipelineExecute(pipe, atomic, 1);
-			setZWriteTwoLayer(FALSE);
-			setAlphaTestTwoLayer(rwALPHATESTFUNCTIONLESS, zt);
-			// F6 fix: leg 2 (LESS@zt fringe) previously ran with blending OFF,
-			// painting sub-threshold texels as SOLID RGB fill — head-part
-			// textures carry chroma-green RGB in their transparent regions
-			// (green facet / black head in interiors). Blend the fringe by
-			// its own alpha instead (L2 mirror per buildingPipe:1946 discipline).
-			RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
-			RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-			pipe = RxPipelineExecute(pipe, atomic, 1);
-			RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)blendSaved);
-			RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, blendSaved ? TRUE : FALSE);
-			setZWriteTwoLayer(TRUE);
-			setAlphaTestTwoLayer((RwUInt32)alphatest, alpharef);
-			// One-shot receipt: proves the restored legacy path executed
-			// (the removed gate used to log only its skip).
-			static bool pedDualLegacyLogged = false;
-			if(!pedDualLegacyLogged){
-				pedDualLegacyLogged = true;
-				dbglog("[PedDual] legacy dual pass restored (zwriteThresholdPed=%d)", zt);
-			}
-			// One-shot ped-only texture-alpha probe: the diagnostic that
-			// explains why the old colour/prelit gate could never see CJ's
-			// cutout masks. Purely informational; it does NOT gate the pass.
-			static bool pedDualTexAlphaLogged = false;
-			if(!pedDualTexAlphaLogged){
-				pedDualTexAlphaLogged = true;
-				dbglog("[PedDual] first ped atomic alpha probe: material/prelit=%d texture=%d",
-				       (int)atomicHasAlpha(atomic, false),
-				       (int)atomicHasAlpha(atomic, true));
-			}
-			}	// end legacy fallback (pedsPipeState == NULL)
-		}else{
-			setAlphaTestTwoLayer(rwALPHATESTFUNCTIONGREATEREQUAL, zt);
-			RxPipelineExecute(pipe, atomic, 1);
-			setZWriteTwoLayer(FALSE);
-			setAlphaTestTwoLayer(rwALPHATESTFUNCTIONLESS, zt);
-			pipe = RxPipelineExecute(pipe, atomic, 1);
-			setZWriteTwoLayer(TRUE);
-			setAlphaTestTwoLayer((RwUInt32)alphatest, alpharef);
-		}
+			pipe = SkinDrawDual(pipe, atomic, pedsPipeState,
+					    alphatest, alpharef, zt);
 	}else
 		pipe = RxPipelineExecute(pipe, atomic, 1);
+}
 
 	// Restore original ambient after ped rendering — SkinAmbientOverrideExit
 	// on the module path (re-entrant: no-op unless Enter ran this span),
 	// legacy capture restore otherwise.
 	if(pedsPipeState)
 		SkinAmbientOverrideExit(pedsPipeState);
-	else if(ambOverridden && pAmbient){
-		pAmbient->color = savedAmb;
-	}
 
 	// ===== PED pipe group exit contract — mirror of buildingPipe.cpp:1223-1227
 	// and vehiclePipe.cpp:2480-2484. Also closes the dual pass above, which
@@ -1261,85 +942,7 @@ myDefaultCallback(RpAtomic *atomic)
 		// blocks below byte-for-byte (rollback lever). The [PedRS] exit
 		// monitor is absorbed on its own dual-path flip (SkinExitMonitor)
 		// right below and runs after either path.
-		if(pedsPipeState)
-			SkinExitContract(pedsPipeState);
-		else{
-		pipeExitAlphaMode(savedAlpha);
-		// Sticky ZWRITE repair: when entry found the state off/desynced, the
-		// repaired canonical TRUE is written to ALL THREE layers here instead
-		// of restoring each layer to its own (desynced) pre-entry value —
-		// cache now matches device, so the entry drift detector stops
-		// re-triggering every frame. A clean pre-entry state (all layers
-		// agreed) still restores faithfully per layer.
-		if(zwriteWasDesync){
-			RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
-			RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
-			if(d3d9device)
-				d3d9device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
-			if(dbglog_throttle("PedZWrite"))
-				dbglog("[PED] ZWRITE sticky repair: canonical TRUE written to rw/drv/dev at exit");
-		}else{
-			RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)savedZWriteRw);
-			RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, savedZWriteDrv ? TRUE : FALSE);
-			if(d3d9device)
-				d3d9device->SetRenderState(D3DRS_ZWRITEENABLE, savedZWriteDev);
-		}
-		pipeExitCullMode(savedCull);
-		// Ped opaque contract exit: restore the true pre-entry values AFTER
-		// pipeExitAlphaMode (which rewrites blend/alpha from the rw-cache
-		// snapshot). Unconditional when the contract ran — no early return
-		// above can skip it. D3DRS_ZWRITEENABLE is excluded; the sticky
-		// block above owns it.
-		if(pedContractOn)
-			pedOpaqueRestore(&savedOpaque);
-		else{
-			// fix-34: pedOpaqueRestore gated off (INI pedOpaqueContract=0).
-			// The ENTRY enforce is now unconditional (build-11 transparent-
-			// ped fix), so the draw itself always carries the canonical
-			// opaque signature — but pipeExitAlphaMode above still replays
-			// the PRE-ENTRY func/ref through the rw-cache side (envmap's
-			// leaked ref=140, envmap.cpp:448 outdoor park), which is how it
-			// would reach and stay on the device. Sticky-repair rule (same
-			// as the ZWRITE block above: never faithfully re-create a known
-			// leak): reset the canonical GREATEREQUAL@1 through ALL THREE
-			// layers so the alpharef/alphafunc contract no longer depends on
-			// the INI lever. D3DRS_ZWRITEENABLE stays owned by the sticky
-			// block.
-			RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION, (void*)rwALPHATESTFUNCTIONGREATEREQUAL);
-			RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTIONREF, (void*)1);
-			RwD3D9SetRenderState(D3DRS_ALPHAFUNC, pipeAlphaFuncToD3D(rwALPHATESTFUNCTIONGREATEREQUAL));
-			RwD3D9SetRenderState(D3DRS_ALPHAREF, 1);
-			if(d3d9device){
-				d3d9device->SetRenderState(D3DRS_ALPHAFUNC, pipeAlphaFuncToD3D(rwALPHATESTFUNCTIONGREATEREQUAL));
-				d3d9device->SetRenderState(D3DRS_ALPHAREF, 1);
-			}
-			if(dbglog_throttle("ped_contract_skip"))
-				dbglog("[PedOpaque] contract skipped (INI off) — exit "
-				       "reset GREATEREQUAL@1 through rw/drv/dev");
-		}
-
-		// ===== sticky-depth repair (never re-create a known leak) =====
-		// pedOpaqueRestore above faithfully replays the per-layer capture —
-		// correct for a CLEAN entry, but a divergent capture IS the leak
-		// (ZTEST/ZENABLE off or ZFUNC drifted), and re-emitting it at exit
-		// hands it to every later draw: buildings/props re-drawn after CJ
-		// then pass their depth test over him (build-11 draw-over-CJ chain).
-		// Same sticky rule as the ZWRITE block above — a divergent depth
-		// entry ends canonical (ZTEST=1 ZENABLE=1 ZFUNC=LESSEQUAL), a clean
-		// entry keeps its verbatim restore. ZWRITE stays owned by the block
-		// above. 3L-paired: ZTEST rw+drv+dev, ZFUNC drv+dev (no rw twin).
-		if(depthWasDesync){
-			RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
-			RwD3D9SetRenderState(D3DRS_ZENABLE, TRUE);
-			RwD3D9SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
-			if(d3d9device){
-				d3d9device->SetRenderState(D3DRS_ZENABLE, TRUE);
-				d3d9device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
-			}
-			if(dbglog_throttle("PedZDepth"))
-				dbglog("[PedZW] sticky depth repair at exit: canonical ZTEST=1 ZFUNC=LESSEQUAL left behind (entry divergent — leak NOT re-emitted); victims if re-emitted: CJ overdrawn by props/buildings (draw-over-CJ)");
-		}
-		}	// end legacy fallback (pedsPipeState == NULL)
+		SkinExitContract(pedsPipeState);
 
 		// ===== [PedRS] exit state monitor =====
 		// PedsPipe absorb point (design doc §3.1 — exit [PedRS] monitor):
@@ -1349,85 +952,7 @@ myDefaultCallback(RpAtomic *atomic)
 		// monitor below byte-for-byte (the pedsPipeEnable=0 rollback
 		// lever, skin.h:8 / peds_pipe.h:34). It still runs after EITHER
 		// exit contract (module or legacy), before vs_probe.
-		if(pedsPipeState)
-			SkinExitMonitor();
-		else{
-		// Throttled receipt (tag "ped_rs", at most once per 2 s): the
-		// post-restore value of every state this callback repairs, read from
-		// all three layers (rw cache / RW driver cache / raw device). A
-		// divergent triplet here is the fingerprint of a foreign raw write
-		// that survived the exit restore. The throttle gates the reads too,
-		// so the 21 GetRenderState calls only run when the line can actually
-		// be emitted; the first ped exit always samples once so the log
-		// proves the monitor is live even if the bucket was just taken.
-		// POD scalars only.
-		static bool pedRsFirst = false;
-		bool pedRsDue = dbglog_throttle("ped_rs");
-		if(pedRsDue || !pedRsFirst){
-			pedRsFirst = true;
-			RwUInt32 rwCull = 0, rwVtx = 0, rwSrc = 0, rwDst = 0;
-			RwUInt32 rwZWrite = 0, rwAFunc = 0, rwARef = 0;
-			DWORD drvCull = 0, drvBlend = 0, drvSrc = 0, drvDst = 0;
-			DWORD drvZWrite = 0, drvAFunc = 0, drvARef = 0;
-			DWORD devCull = 0, devBlend = 0, devSrc = 0, devDst = 0;
-			DWORD devZWrite = 0, devAFunc = 0, devARef = 0;
-			RwRenderStateGet(rwRENDERSTATECULLMODE, &rwCull);
-			RwRenderStateGet(rwRENDERSTATEVERTEXALPHAENABLE, &rwVtx);
-			RwRenderStateGet(rwRENDERSTATESRCBLEND, &rwSrc);
-			RwRenderStateGet(rwRENDERSTATEDESTBLEND, &rwDst);
-			RwRenderStateGet(rwRENDERSTATEZWRITEENABLE, &rwZWrite);
-			RwRenderStateGet(rwRENDERSTATEALPHATESTFUNCTION, &rwAFunc);
-			RwRenderStateGet(rwRENDERSTATEALPHATESTFUNCTIONREF, &rwARef);
-			RwD3D9GetRenderState(D3DRS_CULLMODE, &drvCull);
-			RwD3D9GetRenderState(D3DRS_ALPHABLENDENABLE, &drvBlend);
-			RwD3D9GetRenderState(D3DRS_SRCBLEND, &drvSrc);
-			RwD3D9GetRenderState(D3DRS_DESTBLEND, &drvDst);
-			RwD3D9GetRenderState(D3DRS_ZWRITEENABLE, &drvZWrite);
-			RwD3D9GetRenderState(D3DRS_ALPHAFUNC, &drvAFunc);
-			RwD3D9GetRenderState(D3DRS_ALPHAREF, &drvARef);
-			// Pre-seed the device mirrors from the driver cache: a null
-			// device (reset/teardown) must not read as a false divergence.
-			devCull = drvCull; devBlend = drvBlend; devSrc = drvSrc;
-			devDst = drvDst; devZWrite = drvZWrite; devAFunc = drvAFunc;
-			devARef = drvARef;
-			if(d3d9device){
-				d3d9device->GetRenderState(D3DRS_CULLMODE, &devCull);
-				d3d9device->GetRenderState(D3DRS_ALPHABLENDENABLE, &devBlend);
-				d3d9device->GetRenderState(D3DRS_SRCBLEND, &devSrc);
-				d3d9device->GetRenderState(D3DRS_DESTBLEND, &devDst);
-				d3d9device->GetRenderState(D3DRS_ZWRITEENABLE, &devZWrite);
-				d3d9device->GetRenderState(D3DRS_ALPHAFUNC, &devAFunc);
-				d3d9device->GetRenderState(D3DRS_ALPHAREF, &devARef);
-			}
-			// Domain normalisation for the comparison: rw vertex-alpha is the
-			// rw-side face of D3DRS_ALPHABLENDENABLE; rw alpha func 1..8 maps
-			// 1:1 to D3DCMP_* (pipeAlphaFuncToD3D); rw blend factors are 1:1
-			// with D3DBLEND for valid values (pipeBlendToD3D's rule: rw 0/NA
-			// and >SRCALPHASAT take the restore fallback). Cull is identity
-			// for NONE/BACK (1/2) in both enums.
-			RwUInt32 wantBlend = rwVtx ? TRUE : FALSE;
-			RwUInt32 wantAFunc = pipeAlphaFuncToD3D(rwAFunc);
-			RwUInt32 wantSrc = pipeBlendToD3D(rwSrc, D3DBLEND_SRCALPHA);
-			RwUInt32 wantDst = pipeBlendToD3D(rwDst, D3DBLEND_INVSRCALPHA);
-			bool rsDiverged =
-				rwCull != (RwUInt32)drvCull || drvCull != devCull ||
-				wantBlend != drvBlend || drvBlend != devBlend ||
-				wantSrc != (RwUInt32)drvSrc || drvSrc != devSrc ||
-				wantDst != (RwUInt32)drvDst || drvDst != devDst ||
-				rwZWrite != (RwUInt32)drvZWrite || drvZWrite != devZWrite ||
-				wantAFunc != drvAFunc || drvAFunc != devAFunc ||
-				rwARef != (RwUInt32)drvARef || drvARef != devARef;
-			dbglog("[PedRS] %s cull rw=%u drv=%u dev=%u | blend rw=%u drv=%u dev=%u | src rw=%u drv=%u dev=%u | dst rw=%u drv=%u dev=%u | zw rw=%u drv=%u dev=%u | afunc rw=%u drv=%u dev=%u | aref rw=%u drv=%u dev=%u",
-				rsDiverged ? "DIVERGED" : "ok",
-				(unsigned)rwCull, (unsigned)drvCull, (unsigned)devCull,
-				(unsigned)wantBlend, (unsigned)drvBlend, (unsigned)devBlend,
-				(unsigned)rwSrc, (unsigned)drvSrc, (unsigned)devSrc,
-				(unsigned)rwDst, (unsigned)drvDst, (unsigned)devDst,
-				(unsigned)rwZWrite, (unsigned)drvZWrite, (unsigned)devZWrite,
-				(unsigned)wantAFunc, (unsigned)drvAFunc, (unsigned)devAFunc,
-				(unsigned)rwARef, (unsigned)drvARef, (unsigned)devARef);
-		}
-		}	// end legacy fallback (pedsPipeState == NULL)
+		SkinExitMonitor();
 	}
 
 	// FIX 3: sample the vertex stage at ped/default-pipe callback exit.

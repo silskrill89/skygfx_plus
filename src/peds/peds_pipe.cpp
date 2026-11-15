@@ -51,7 +51,7 @@ struct PedsPipeConfig
 	int		hairEnable;			// hairEnable        — Phase 3 hair thread
 	int		clothEnable;		// clothEnable       — Phase 4 cloth sim
 };
-static PedsPipeConfig	s_cfg = { 0, 0, 0, 0 };	// all-off default = vanilla behaviour
+static PedsPipeConfig	s_cfg = { 1, 0, 0, 0 };	// pedsPipeEnable default ON (2026-11-10): module path is canonical; 0 = legacy inline (rollback)
 
 static uint32	s_deviceResetGen;	// bumped by PedsPipe_OnDeviceReset (latch invalidation)
 
