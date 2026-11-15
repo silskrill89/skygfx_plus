@@ -906,13 +906,13 @@ BuildSettingRows(void)
 		"(GetTimecycleAmbient, pipelinecommon.cpp). 1.0 = vanilla; 0.0-2.0.");
 	rFn("ambientFloor", "Absolute ambient floor", &config->ambientFloor, 0.0f, 0.2f,
 		"ClampAmbientToSky tail (pipelinecommon.cpp): minimum ambient luminance.\n"
-		"Default 0.03; clamped [0..0.2]. 0 = disabled.");
+		"Default 0.10; clamped [0..0.2]. 0 = disabled.");
 	A("ambientClampEnable", "Ambient clamp (night ceiling)", RK_BOOL, &config->ambientClampEnable, 0, 0, NULL, 0, NULL,
 		"ClampAmbientToSky night ceiling: ambient can never exceed sky luminance."
 		"Default 0 = disabled (matches original game). 1 = enable (night-only).");
-	A("transparencyEnable", "Transparency (depth state repair)", RK_BOOL, &config->transparencyEnable, 1, 0, NULL, 0, NULL,
-		"Centralized ZENABLE/ZFUNC/ZWRITE state management. Default 1 = on."
-		"0 = disable (use scattered per-site writes, AAP compatibility).");
+	A("transparencyEnable", "Transparency (park-restore)", RK_BOOL, &config->transparencyEnable, 0, 0, NULL, 0, NULL,
+		"Park-restore cache-flush pattern for ZENABLE. Default 0 = off (AAP parity)."
+		"1 = enable park-restore (legacy compatibility).");
 	rFn("pbrAmbientFloor", "PBR ped/vehicle ambient floor", &config->pbrAmbientFloor, 0.0f, 1.0f,
 		"Minimum ambient luminance for ped/vehicle PBR paths (0.0-1.0, default 0.0).\n"
 		"Keeps peds/vehicles visible at night without a grey veil.");
