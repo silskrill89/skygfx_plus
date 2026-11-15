@@ -1507,7 +1507,8 @@ pipeProbeState(PipeProbeState *s)
 	s->drvBlendOp = D3DBLENDOP_ADD;
 
 	RwRenderStateGet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)&s->rwVtxAlpha);
-	// rwBlend: no rw render-state twin for ALPHABLENDENABLE; pre-seed FALSE.
+	// scene-repair probe historically compared rwBlend (vertex-alpha) vs devBlend (device alpha-blend).
+	RwRenderStateGet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)&s->rwBlend);
 	RwRenderStateGet(rwRENDERSTATESRCBLEND, &s->rwSrc);
 	RwRenderStateGet(rwRENDERSTATEDESTBLEND, &s->rwDst);
 	RwRenderStateGet(rwRENDERSTATEZWRITEENABLE, &s->rwZWrite);
