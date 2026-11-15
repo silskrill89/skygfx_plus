@@ -470,37 +470,150 @@ MirrorPass_Composite(void)
 // ============================================================
 // Cull re-sync after the mirror span. pipeForceCullMode is the only
 // writer that repairs all three layers (rw cache / RW driver cache /
-// raw device). The game's own cull restore is an L1-only
-// RwRenderStateSet, and the composite's Im2D / raw-geom snapshot
-// restore can leave L3 on the mirror's NONE while L1 already holds
-// BACK — a later main-view draw is then cache-hit-skipped and renders
-// double-sided. Re-asserting from the rw-cache truth parks + writes
-// every layer, so the device ends up matching the cache.
+// raw device).
 //
-// NOTE: the hook now wraps its span in pipeCullScopeBegin(BACK) /
-// pipeCullScopeEnd(). The scope End is the AUTHORITATIVE post-span
-// re-assert (the RECORDED mode, all three layers); this resync is a
-// redundant safety net that stays in place before every End.
+// ROUGH FIX (2026-11-10): this used to read the rw cache and push THAT
+// value to all three layers. The mirror span's own L1-only restore
+// regularly leaves the cache on NONE, so the "safety net" LAUNDERED NONE
+// into L2/L3 right before the authoritative pipeCullScopeEnd(BACK) -
+// measured as [CullResync] mirror exit rw=1 followed by
+// [cullfix] ... rw=1 drv=1 dev=2 (42x/session): the caches claimed NONE
+// while the device held BACK. It now re-asserts the mode the span
+// recorded (BACK - the value handed to pipeCullScopeBegin in the hook),
+// which is the value that must hold after the span. The scope End stays
+// authoritative; this is the pre-End net and can no longer fight it.
 // ============================================================
 static void
 MirrorPass_ResyncCull(void)
 {
-	// No device, no layer to repair — also skips the rw Get (the
-	// caller-side truth read is pointless without a live device).
 	if(!d3d9device)
 		return;
 
-	RwUInt32 rwCull = (RwUInt32)rwCULLMODECULLBACK;
-	RwRenderStateGet(rwRENDERSTATECULLMODE, &rwCull);
-	// Out-of-domain (failed/foreign Get) is NEVER pushed: BACK.
-	if(rwCull != rwCULLMODECULLNONE && rwCull != rwCULLMODECULLBACK &&
-	   rwCull != rwCULLMODECULLFRONT)
-		rwCull = (RwUInt32)rwCULLMODECULLBACK;
-
-	pipeForceCullMode(rwCull);
+	pipeForceCullMode((RwUInt32)rwCULLMODECULLBACK);
 
 	if(dbglog_throttle("cull_resync"))
-		dbglog("[CullResync] mirror exit rw=%u", (unsigned)rwCull);
+		dbglog("[CullResync] mirror exit re-assert BACK (scope-recorded)");
+}
+
+// ============================================================
+// Depth scope for the mirror span (2026-11-10).
+//
+// Measured defect (session 06:25): [zfix] fired 37x with the RAW DEVICE
+// at ZWRITE=0 / ZENABLE=0 / ZFUNC=ALWAYS while both caches claimed the
+// world baseline - i.e. the game's RenderMirrorBuffer span (and our
+// composite restore) leaves depth testing AND depth writes OFF at the
+// device. Every later pipe entry then had to repair it, and anything
+// drawn between the leak and the next protected entry - the player ped
+// (CJ), building fragments - ran with no depth test and no depth write:
+// triangles paint in submission order, so back faces / interior parts
+// land over front faces ("CJ rendered backwards, backfaces drawn to the
+// front of the camera") and buildings resolve in the wrong order as the
+// camera moves ("choppy").
+//
+// Contract (same shape as the cull scope):
+//   MirrorPass_DepthScopeBegin()  captures the pre-span depth trio on
+//                                 ALL THREE layers. No writes.
+//   MirrorPass_DepthScopeEnd()    compares; if anything moved, restores
+//                                 the CAPTURED values through the
+//                                 3-layer idiom (L1 park+set / L2
+//                                 park+set / flush / L3 pin). Silent
+//                                 when the span held the pre-span depth.
+// Begin sits next to pipeCullScopeBegin and every End next to a
+// pipeCullScopeEnd (5 sites), so the pairs stay balanced.
+// ============================================================
+struct MirrorDepthSnap {
+	RwUInt32 rwZWrite, rwZTest;			// L1 (ZFUNC has no rw twin)
+	DWORD drvZWrite, drvZen, drvZFunc;	// L2 RW driver cache
+	DWORD devZWrite, devZen, devZFunc;	// L3 raw device
+};
+
+static MirrorDepthSnap s_mirrorDepth;
+static bool s_mirrorDepthValid = false;
+
+// Same extern idiom as postfx_luminance.cpp / postfx_newfx.cpp (the L2
+// pending[] must be committed before the L3 pins land).
+void _rwD3D9RenderStateFlushCache(void);
+
+static void
+MirrorPass_DepthScopeBegin(void)
+{
+	if(!d3d9device){
+		s_mirrorDepthValid = false;
+		return;
+	}
+	s_mirrorDepth.rwZWrite = TRUE;
+	s_mirrorDepth.rwZTest = TRUE;
+	RwRenderStateGet(rwRENDERSTATEZWRITEENABLE, &s_mirrorDepth.rwZWrite);
+	RwRenderStateGet(rwRENDERSTATEZTESTENABLE, &s_mirrorDepth.rwZTest);
+
+	s_mirrorDepth.drvZWrite = TRUE;
+	s_mirrorDepth.drvZen = TRUE;
+	s_mirrorDepth.drvZFunc = D3DCMP_LESSEQUAL;
+	RwD3D9GetRenderState(D3DRS_ZWRITEENABLE, &s_mirrorDepth.drvZWrite);
+	RwD3D9GetRenderState(D3DRS_ZENABLE, &s_mirrorDepth.drvZen);
+	RwD3D9GetRenderState(D3DRS_ZFUNC, &s_mirrorDepth.drvZFunc);
+
+	s_mirrorDepth.devZWrite = TRUE;
+	s_mirrorDepth.devZen = TRUE;
+	s_mirrorDepth.devZFunc = D3DCMP_LESSEQUAL;
+	s_mirrorDepthValid =
+		SUCCEEDED(d3d9device->GetRenderState(D3DRS_ZWRITEENABLE, &s_mirrorDepth.devZWrite)) &&
+		SUCCEEDED(d3d9device->GetRenderState(D3DRS_ZENABLE, &s_mirrorDepth.devZen)) &&
+		SUCCEEDED(d3d9device->GetRenderState(D3DRS_ZFUNC, &s_mirrorDepth.devZFunc));
+}
+
+static void
+MirrorPass_DepthScopeEnd(void)
+{
+	if(!d3d9device || !s_mirrorDepthValid){
+		s_mirrorDepthValid = false;
+		return;
+	}
+	// One-shot: the capture is consumed by this End.
+	const MirrorDepthSnap want = s_mirrorDepth;
+	s_mirrorDepthValid = false;
+
+	DWORD devZWrite = TRUE, devZen = TRUE, devZFunc = D3DCMP_LESSEQUAL;
+	if(FAILED(d3d9device->GetRenderState(D3DRS_ZWRITEENABLE, &devZWrite)) ||
+	   FAILED(d3d9device->GetRenderState(D3DRS_ZENABLE, &devZen)) ||
+	   FAILED(d3d9device->GetRenderState(D3DRS_ZFUNC, &devZFunc)))
+		return;
+
+	RwUInt32 rwZWrite = TRUE, rwZTest = TRUE;
+	RwRenderStateGet(rwRENDERSTATEZWRITEENABLE, &rwZWrite);
+	RwRenderStateGet(rwRENDERSTATEZTESTENABLE, &rwZTest);
+	DWORD drvZWrite = TRUE, drvZen = TRUE, drvZFunc = D3DCMP_LESSEQUAL;
+	RwD3D9GetRenderState(D3DRS_ZWRITEENABLE, &drvZWrite);
+	RwD3D9GetRenderState(D3DRS_ZENABLE, &drvZen);
+	RwD3D9GetRenderState(D3DRS_ZFUNC, &drvZFunc);
+
+	// Span held the pre-span depth on every layer - healthy, silent.
+	if(devZWrite == want.devZWrite && devZen == want.devZen &&
+	   devZFunc == want.devZFunc && rwZWrite == want.rwZWrite &&
+	   rwZTest == want.rwZTest && drvZWrite == want.drvZWrite &&
+	   drvZen == want.drvZen && drvZFunc == want.drvZFunc)
+		return;
+
+	// Park-and-set the caches (a park->target pair cannot be no-op'd by
+	// a value-compare skip), commit pending[], then pin the raw device.
+	pipeRwParkSet(rwRENDERSTATEZWRITEENABLE, want.rwZWrite ? FALSE : TRUE, want.rwZWrite);
+	pipeRwParkSet(rwRENDERSTATEZTESTENABLE, want.rwZTest ? FALSE : TRUE, want.rwZTest);
+	pipeL2ParkSet(D3DRS_ZWRITEENABLE, want.drvZWrite ? D3DZB_FALSE : D3DZB_TRUE, want.drvZWrite);
+	pipeL2ParkSet(D3DRS_ZENABLE, want.drvZen ? D3DZB_FALSE : D3DZB_TRUE, want.drvZen);
+	pipeL2ParkSet(D3DRS_ZFUNC,
+		(want.drvZFunc == D3DCMP_ALWAYS) ? D3DCMP_NEVER : D3DCMP_ALWAYS, want.drvZFunc);
+	_rwD3D9RenderStateFlushCache();
+	pipeL3Set(D3DRS_ZWRITEENABLE, want.devZWrite);
+	pipeL3Set(D3DRS_ZENABLE, want.devZen);
+	pipeL3Set(D3DRS_ZFUNC, want.devZFunc);
+
+	if(dbglog_once("mirror_depth_first") || dbglog_throttle("mirror_depth"))
+		dbglog("[MirrorDepth] mirror span depth restored -> dev zw=%u zen=%u zfunc=%u "
+		       "(span left zw=%u zen=%u zfunc=%u / rw zw=%u ztest=%u / drv zw=%u zen=%u zfunc=%u)",
+			(unsigned)want.devZWrite, (unsigned)want.devZen, (unsigned)want.devZFunc,
+			(unsigned)devZWrite, (unsigned)devZen, (unsigned)devZFunc,
+			(unsigned)rwZWrite, (unsigned)rwZTest,
+			(unsigned)drvZWrite, (unsigned)drvZen, (unsigned)drvZFunc);
 }
 
 // ============================================================
@@ -522,6 +635,10 @@ MirrorPass_RenderMirrorBuffer(void)
 	// every exit below (4 early returns + the fallthrough tail = 5 sites,
 	// one End per path, so the pair is balanced on every invocation).
 	pipeCullScopeBegin(rwCULLMODECULLBACK);
+	// Depth span guard: capture the pre-span depth trio (see
+	// MirrorPass_DepthScopeBegin header) so a span that leaves the device
+	// with ZENABLE/ZFUNC/ZWRITE off is repaired at exit.
+	MirrorPass_DepthScopeBegin();
 
 	// Instrumentation (additive, throttled): the displayed gate inputs at
 	// hook entry — TypeOfMirror drives the whole decision.
@@ -600,6 +717,7 @@ MirrorPass_RenderMirrorBuffer(void)
 		if(originalRan)
 			MirrorPass_ResyncCull();
 		// Span exit: End is authoritative (Resync above is a safety net).
+		MirrorPass_DepthScopeEnd();
 		pipeCullScopeEnd();
 		return;
 	}
@@ -613,6 +731,7 @@ MirrorPass_RenderMirrorBuffer(void)
 		if(originalRan)
 			MirrorPass_ResyncCull();
 		// Span exit: End is authoritative (Resync above is a safety net).
+		MirrorPass_DepthScopeEnd();
 		pipeCullScopeEnd();
 		return;
 	}
@@ -628,6 +747,7 @@ MirrorPass_RenderMirrorBuffer(void)
 		if(originalRan)
 			MirrorPass_ResyncCull();
 		// Span exit: End is authoritative (Resync above is a safety net).
+		MirrorPass_DepthScopeEnd();
 		pipeCullScopeEnd();
 		return;
 	}
@@ -647,6 +767,7 @@ MirrorPass_RenderMirrorBuffer(void)
 			if(originalRan)
 				MirrorPass_ResyncCull();
 			// Span exit: End is authoritative (Resync above is a safety net).
+			MirrorPass_DepthScopeEnd();
 			pipeCullScopeEnd();
 			return;
 		}
@@ -685,6 +806,7 @@ MirrorPass_RenderMirrorBuffer(void)
 	if(originalRan)
 		MirrorPass_ResyncCull();
 	// Span exit (fallthrough): must pair with every other exit path.
+	MirrorPass_DepthScopeEnd();
 	pipeCullScopeEnd();
 }
 

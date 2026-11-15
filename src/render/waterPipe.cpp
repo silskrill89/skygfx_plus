@@ -1124,14 +1124,17 @@ static void WaterScreenSize(int *outW, int *outH)
 	*outW = 0;
 	*outH = 0;
 	if(!g_d3dDevice) return;
-	IDirect3DSurface9 *bb = nullptr;
-	if(FAILED(g_d3dDevice->GetRenderTarget(0, &bb)) || !bb) return;
-	D3DSURFACE_DESC desc;
-	if(SUCCEEDED(bb->GetDesc(&desc)) && desc.Width > 0 && desc.Height > 0){
-		*outW = (int)desc.Width;
-		*outH = (int)desc.Height;
+	// ROUGH FIX (2026-11-10): this used GetRenderTarget(0), which returns the
+	// CURRENTLY BOUND render target - and during the water reflection pass that
+	// IS the reflection target, so the size alternated every flush and the
+	// ensure helpers recreated all three RTs ~240x/session (measured). The
+	// display mode is the real back-buffer size and never changes with the
+	// bound RT, so it is the stable source these screen-sized RTs want.
+	D3DDISPLAYMODE dm;
+	if(SUCCEEDED(g_d3dDevice->GetDisplayMode(0, &dm)) && dm.Width > 0 && dm.Height > 0){
+		*outW = (int)dm.Width;
+		*outH = (int)dm.Height;
 	}
-	bb->Release();
 }
 
 static void EnsureSceneTexture(int w, int h)
