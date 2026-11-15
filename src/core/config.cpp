@@ -785,7 +785,7 @@ readIniFile(const char *modulePath, Config *c)
 	c->ambientClampEnable = readint2(cfg, "Ped", "ambientClampEnable", 0);
 	if(c->ambientClampEnable < 0) c->ambientClampEnable = 0;
 	if(c->ambientClampEnable > 1) c->ambientClampEnable = 1;
-	c->transparencyEnable = readint2(cfg, "Ped", "transparencyEnable", 1);
+	c->transparencyEnable = readint2(cfg, "Ped", "transparencyEnable", 0);
 	if(c->transparencyEnable < 0) c->transparencyEnable = 0;
 	if(c->transparencyEnable > 1) c->transparencyEnable = 1;
 
@@ -1213,7 +1213,7 @@ readIniFile(const char *modulePath, Config *c)
 		EMIT("SkyGfx", "zwriteThresholdPed", "128"); \
 		EMIT("SkyGfx", "ambientFloor", "0.10"); \
 		EMIT("SkyGfx", "ambientClampEnable", "0"); \
-		EMIT("SkyGfx", "transparencyEnable", "1"); \
+		EMIT("SkyGfx", "transparencyEnable", "0"); \
 		EMIT("SkyGfx", "postfxDumpDebug", "0"); \
 		EMIT("SkyGfx", "debugOverlay", "0"); \
 		EMIT("SkyGfx", "pbrAmbientFloor", "0.0"); \
