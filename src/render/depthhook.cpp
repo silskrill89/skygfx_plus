@@ -17,6 +17,7 @@
 // through — SSAO/velocity/fog consumers bail on NULL g_intzTex.
 
 #include "depthhook.h"
+#include "transparency.h"
 #include "skygfx.h"
 #include "../rw/gta.h" // for d3d9device, Scene
 #include "noise.h"     // SkyNoise::ReleaseDeviceObjects / OnDeviceReset
@@ -607,9 +608,7 @@ void DepthHook_Suspend(void) {
 	// Three-layer Z disable (rw cache / RwD3D9 driver cache / raw device).
 	// The rw+driver cache writes stop a later pending flush from re-enabling Z
 	// mid-window; the raw write is what the next draw actually sees.
-	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
-	RwD3D9SetRenderState(D3DRS_ZENABLE, FALSE);
-	dev->SetRenderState(D3DRS_ZENABLE, FALSE);
+	Transparency_SetZEnabled(false);
 
 	g_depthSuspended = true;
 }
@@ -637,9 +636,7 @@ void DepthHook_Restore(void) {
 
 	// Re-enable Z to the saved value on ALL THREE layers (rw cache / RwD3D9
 	// driver cache / raw device) so none is left disagreeing with the device.
-	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)(g_savedZenable ? TRUE : FALSE));
-	RwD3D9SetRenderState(D3DRS_ZENABLE, g_savedZenable);
-	dev->SetRenderState(D3DRS_ZENABLE, g_savedZenable);
+	Transparency_SetZEnabled(g_savedZenable ? true : false);
 
 	// Re-bind the game DS directly (bypasses hook). INTZ will be re-substituted
 	// on the next SetDepthStencilSurface call through hook_SetDS.
@@ -687,9 +684,7 @@ void DepthHook_ReleaseResources(void) {
 		IDirect3DDevice9 *dev = d3d9device;
 		g_depthSuspended = false;
 		if(dev) {
-			RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)(g_savedZenable ? TRUE : FALSE));
-			RwD3D9SetRenderState(D3DRS_ZENABLE, g_savedZenable);
-			dev->SetRenderState(D3DRS_ZENABLE, g_savedZenable);
+			Transparency_SetZEnabled(g_savedZenable ? true : false);
 		}
 	}
 	if(g_intzSurf) { dbglog("DepthHook: Release surf=%p", g_intzSurf); g_intzSurf->Release(); g_intzSurf = NULL; }

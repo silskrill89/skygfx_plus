@@ -1,4 +1,5 @@
 #include "skygfx.h"
+#include "transparency.h"
 #include "postfx.h"	// GetScreenSize — trusted screen-size cache (transient-camRas fix)
 #include "brdfLibrary.h"
 #include "treeWind.h"	// W8-2 tree lane: TreeWind_ApplyToTransform (PBR/IV tilt),
@@ -3866,13 +3867,8 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Switch(RwResEntry *repEntry, void 
 		d3d9device->GetRenderState(D3DRS_ZENABLE, &bldZen);
 		d3d9device->GetRenderState(D3DRS_ZFUNC, &bldZfn);
 	}
-	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
-	RwD3D9SetRenderState(D3DRS_ZENABLE, TRUE);
-	RwD3D9SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
-	if(d3d9device){
-		d3d9device->SetRenderState(D3DRS_ZENABLE, TRUE);
-		d3d9device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
-	}
+	Transparency_SetZEnabled(true);
+	Transparency_SetZFunc(D3DCMP_LESSEQUAL);
 	if(bldZDepthDue && d3d9device && (bldZen != (DWORD)TRUE || bldZfn != (DWORD)D3DCMP_LESSEQUAL))
 		dbglog("[BldZW] Switch: Z-test drift at entry (zen=%u zfunc=%u) — forced ZTEST=1 ZFUNC=LESSEQUAL (3L-paired); victims if leaked: CJ/peds overdrawn by buildings/props (draw-over-CJ)",
 		       (unsigned)bldZen, (unsigned)bldZfn);
