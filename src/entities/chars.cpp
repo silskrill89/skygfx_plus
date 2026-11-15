@@ -1,5 +1,6 @@
 #include "skygfx.h"
 #include "chars.h"
+#include "transparency.h"
 #include <string>
 #include <map>
 
@@ -537,8 +538,8 @@ void chars_drawSSSBlur(void)
 		CPostEffects::ImmediateModeRenderStatesStore();
 		CPostEffects::ImmediateModeRenderStatesSet();
 		RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
-		RwD3D9SetRenderState(D3DRS_ZENABLE, FALSE);
-		RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+		Transparency_SetZEnabled(false);
+		Transparency_SetZWrite(false);
 		RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
 		RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
 		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
