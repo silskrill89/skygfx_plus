@@ -10,6 +10,9 @@
 extern IDirect3DDevice9 *&d3d9device;
 extern Config *config;
 
+// Saved ZENABLE for Suspend/Restore
+static DWORD s_savedZenable = TRUE;
+
 void
 Transparency_SetZEnabled(bool enable)
 {
@@ -47,7 +50,7 @@ Transparency_RepairDepthState(void)
 {
 	if(config && !config->transparencyEnable)
 		return;
-	// Force correct depth state on all 3 layers before any scene rendering.
+	// Force correct depth state on all 3 layers before any scene geometry draws.
 	Transparency_SetZEnabled(true);
 	Transparency_SetZFunc(D3DCMP_LESSEQUAL);
 	Transparency_SetZWrite(true);
@@ -58,9 +61,13 @@ Transparency_SuspendDepth(void)
 {
 	if(config && !config->transparencyEnable)
 		return;
-	// Suspend depth for INTZ sampling — disable Z on all 3 layers.
-	Transparency_SetZEnabled(false);
-	Transparency_SetZWrite(false);
+	// Save current ZENABLE and disable on all 3 layers for INTZ sampling.
+	if(d3d9device)
+		d3d9device->GetRenderState(D3DRS_ZENABLE, &s_savedZenable);
+	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
+	RwD3D9SetRenderState(D3DRS_ZENABLE, FALSE);
+	if(d3d9device)
+		d3d9device->SetRenderState(D3DRS_ZENABLE, FALSE);
 }
 
 void
@@ -68,7 +75,9 @@ Transparency_RestoreDepth(void)
 {
 	if(config && !config->transparencyEnable)
 		return;
-	// Restore depth after INTZ sampling — re-enable Z on all 3 layers.
-	Transparency_SetZEnabled(true);
-	Transparency_SetZWrite(true);
+	// Restore saved ZENABLE on all 3 layers.
+	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)(s_savedZenable ? (RwUInt32)TRUE : (RwUInt32)FALSE));
+	RwD3D9SetRenderState(D3DRS_ZENABLE, s_savedZenable);
+	if(d3d9device)
+		d3d9device->SetRenderState(D3DRS_ZENABLE, s_savedZenable);
 }
