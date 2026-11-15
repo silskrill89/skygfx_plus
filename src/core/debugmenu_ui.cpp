@@ -853,9 +853,11 @@ BuildSettingRows(void)
 		"window-close canonical re-sync (SpriteFlushIndexedDraw_hook). "
 		"0 = vanilla batch state. Bisect lever.");
 	rWn("effectsAlphaBlock", "Effects alpha block", &config->effectsAlphaBlock,
-		"Gates effectsForceAlphaBlock: the canonical alpha sweep at RenderEffects "
-		"enter/exit, PostFX exit, both corona reflection hooks and CClouds. "
-		"0 = no sweep. Bisect lever.");
+		"Gates effectsForceAlphaBlock: the canonical alpha push (pipeForceAlphaBlock) at "
+		"RenderEffects enter/exit, PostFX exit, both corona reflection hooks and CClouds, "
+		"plus the stale Im2D override sweep. The old 3-layer evidence sampling and the "
+		"ONE/ONE substitution net were removed in the 2026-11-10 reduction pass. "
+		"0 = no push. Bisect lever.");
 	rWn("camRasterRepair", "Camera-raster repair", &config->camRasterRepair,
 		"Gates the scene-entry repair that replaces a non-screen camera raster "
 		"with the game's (m0170/m0171 blank-world fix); detection still logs. "
