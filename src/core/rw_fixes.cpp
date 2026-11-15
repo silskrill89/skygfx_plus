@@ -374,8 +374,11 @@ spriteFlushShieldCapture(void)
 	RwD3D9GetRenderState(D3DRS_COLORWRITEENABLE, &s.drvColorWrite);
 	RwD3D9GetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, &s.drvSepAlpha);
 	RwD3D9GetRenderState(D3DRS_BLENDOP, &s.drvBlendOp);
-	RwD3D9GetRenderState(D3DRS_ZENABLE, &s.drvZenable);
-	RwD3D9GetRenderState(D3DRS_ZFUNC, &s.drvZfunc);
+	// Force depth pair to canonical — never capture corrupted values
+	// (ZENABLE=0/ZFUNC=ALWAYS) from the device. This prevents the sprite
+	// flush shield from propagating depth corruption.
+	s.drvZenable = TRUE;
+	s.drvZfunc = (DWORD)D3DCMP_LESSEQUAL;
 	// Raw L3 (the value the rasteriser actually used).
 	if(d3d9device){
 		d3d9device->GetRenderState(D3DRS_ALPHABLENDENABLE, &s.blendEn);
@@ -387,8 +390,9 @@ spriteFlushShieldCapture(void)
 		d3d9device->GetRenderState(D3DRS_COLORWRITEENABLE, &s.colorWrite);
 		d3d9device->GetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, &s.sepAlpha);
 		d3d9device->GetRenderState(D3DRS_BLENDOP, &s.blendOp);
-		d3d9device->GetRenderState(D3DRS_ZENABLE, &s.zenable);
-		d3d9device->GetRenderState(D3DRS_ZFUNC, &s.zfunc);
+		// Force depth pair to canonical — never capture corrupted values.
+		s.zenable = TRUE;
+		s.zfunc = (DWORD)D3DCMP_LESSEQUAL;
 	}
 	s_spriteForceValid = true;
 }
