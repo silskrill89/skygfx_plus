@@ -1484,6 +1484,62 @@ pipeForceCullMode(RwUInt32 rwCull)
 // contract can call this directly once a hunk wires it.
 // ============================================================
 void
+pipeProbeState(PipeProbeState *s)
+{
+	// Pre-seed canonical values: a failed Get leaves the out-param untouched.
+	s->rwVtxAlpha = FALSE;
+	s->rwBlend = FALSE;
+	s->rwSrc = rwBLENDSRCALPHA;
+	s->rwDst = rwBLENDINVSRCALPHA;
+	s->rwZWrite = TRUE;
+	s->rwZTest = TRUE;
+	s->rwAlphaFunc = rwALPHATESTFUNCTIONGREATEREQUAL;
+	s->rwAlphaRef = 1;
+	s->drvBlend = s->devBlend = FALSE;
+	s->drvSrc = s->devSrc = rwBLENDSRCALPHA;
+	s->drvDst = s->devDst = rwBLENDINVSRCALPHA;
+	s->drvZWrite = s->devZWrite = TRUE;
+	s->drvZEnable = s->devZEnable = TRUE;
+	s->drvZFunc = s->devZFunc = D3DCMP_LESSEQUAL;
+	s->drvAlphaTest = s->devAlphaTest = TRUE;
+	s->drvAlphaFunc = s->devAlphaFunc = D3DCMP_GREATEREQUAL;
+	s->drvAlphaRef = s->devAlphaRef = 1;
+	s->drvBlendOp = D3DBLENDOP_ADD;
+
+	RwRenderStateGet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)&s->rwVtxAlpha);
+	// rwBlend: no rw render-state twin for ALPHABLENDENABLE; pre-seed FALSE.
+	RwRenderStateGet(rwRENDERSTATESRCBLEND, &s->rwSrc);
+	RwRenderStateGet(rwRENDERSTATEDESTBLEND, &s->rwDst);
+	RwRenderStateGet(rwRENDERSTATEZWRITEENABLE, &s->rwZWrite);
+	RwRenderStateGet(rwRENDERSTATEZTESTENABLE, &s->rwZTest);
+	RwRenderStateGet(rwRENDERSTATEALPHATESTFUNCTION, (void*)&s->rwAlphaFunc);
+	RwRenderStateGet(rwRENDERSTATEALPHATESTFUNCTIONREF, (void*)&s->rwAlphaRef);
+
+	RwD3D9GetRenderState(D3DRS_ALPHABLENDENABLE, &s->drvBlend);
+	RwD3D9GetRenderState(D3DRS_SRCBLEND, &s->drvSrc);
+	RwD3D9GetRenderState(D3DRS_DESTBLEND, &s->drvDst);
+	RwD3D9GetRenderState(D3DRS_ZWRITEENABLE, &s->drvZWrite);
+	RwD3D9GetRenderState(D3DRS_ZENABLE, &s->drvZEnable);
+	RwD3D9GetRenderState(D3DRS_ZFUNC, &s->drvZFunc);
+	RwD3D9GetRenderState(D3DRS_ALPHATESTENABLE, &s->drvAlphaTest);
+	RwD3D9GetRenderState(D3DRS_ALPHAFUNC, &s->drvAlphaFunc);
+	RwD3D9GetRenderState(D3DRS_ALPHAREF, &s->drvAlphaRef);
+	RwD3D9GetRenderState(D3DRS_BLENDOP, &s->drvBlendOp);
+
+	if(d3d9device){
+		d3d9device->GetRenderState(D3DRS_ALPHABLENDENABLE, &s->devBlend);
+		d3d9device->GetRenderState(D3DRS_SRCBLEND, &s->devSrc);
+		d3d9device->GetRenderState(D3DRS_DESTBLEND, &s->devDst);
+		d3d9device->GetRenderState(D3DRS_ZWRITEENABLE, &s->devZWrite);
+		d3d9device->GetRenderState(D3DRS_ZENABLE, &s->devZEnable);
+		d3d9device->GetRenderState(D3DRS_ZFUNC, &s->devZFunc);
+		d3d9device->GetRenderState(D3DRS_ALPHATESTENABLE, &s->devAlphaTest);
+		d3d9device->GetRenderState(D3DRS_ALPHAFUNC, &s->devAlphaFunc);
+		d3d9device->GetRenderState(D3DRS_ALPHAREF, &s->devAlphaRef);
+	}
+}
+
+void
 pipeEnforceDepthContract(void)
 {
 	IDirect3DDevice9 *dev = d3d9device;
@@ -1494,29 +1550,16 @@ pipeEnforceDepthContract(void)
 	// Measurement-only (orthogonal axis): never alters the repair below.
 	RSMon_ContractSample("depthct_in", -1);
 
-	// Ground truth = raw device. A failed Get is left alone.
-	DWORD devZWrite = TRUE, devZen = TRUE, devZFunc = D3DCMP_LESSEQUAL;
-	if(FAILED(dev->GetRenderState(D3DRS_ZWRITEENABLE, &devZWrite)) ||
-	   FAILED(dev->GetRenderState(D3DRS_ZENABLE, &devZen)) ||
-	   FAILED(dev->GetRenderState(D3DRS_ZFUNC, &devZFunc)))
-		return;
-
-	// Cache layers for the divergence check (L1 zwrite/ztest have rw
-	// twins; ZFUNC has none — L2/L3 only). A stale cache value is a live
-	// mine: the next pre-draw flush can push it back over the device.
-	RwUInt32 rwZWrite = TRUE, rwZTest = TRUE;
-	RwRenderStateGet(rwRENDERSTATEZWRITEENABLE, &rwZWrite);
-	RwRenderStateGet(rwRENDERSTATEZTESTENABLE, &rwZTest);
-	DWORD drvZWrite = TRUE, drvZen = TRUE, drvZFunc = D3DCMP_LESSEQUAL;
-	RwD3D9GetRenderState(D3DRS_ZWRITEENABLE, &drvZWrite);
-	RwD3D9GetRenderState(D3DRS_ZENABLE, &drvZen);
-	RwD3D9GetRenderState(D3DRS_ZFUNC, &drvZFunc);
+	// Consolidated probe (P3): single PipeProbeState captures all three
+	// layers; this site reads only the depth subset.
+	PipeProbeState ps;
+	pipeProbeState(&ps);
 
 	// Healthy world baseline: ZWRITE on, Z-test on, LESSEQUAL, on every
 	// layer.
-	if(devZWrite && devZen && devZFunc == D3DCMP_LESSEQUAL &&
-	   rwZWrite && rwZTest && drvZWrite && drvZen &&
-	   drvZFunc == D3DCMP_LESSEQUAL)
+	if(ps.devZWrite && ps.devZEnable && ps.devZFunc == D3DCMP_LESSEQUAL &&
+	   ps.rwZWrite && ps.rwZTest && ps.drvZWrite && ps.drvZEnable &&
+	   ps.drvZFunc == D3DCMP_LESSEQUAL)
 		return;
 
 	// Drift — park-and-set the caches (guaranteed transition, so no
@@ -1535,9 +1578,9 @@ pipeEnforceDepthContract(void)
 	if(dbglog_once("zfix_first") || dbglog_throttle("zfix"))
 		dbglog("[zfix] pipe entry depth drift repaired -> ZWRITE=TRUE ZENABLE=TRUE ZFUNC=LESSEQUAL: "
 		       "rw zwrite=%u ztest=%u drv zwrite=%u zen=%u zfunc=%u dev zwrite=%u zen=%u zfunc=%u",
-			(unsigned)rwZWrite, (unsigned)rwZTest,
-			(unsigned)drvZWrite, (unsigned)drvZen, (unsigned)drvZFunc,
-			(unsigned)devZWrite, (unsigned)devZen, (unsigned)devZFunc);
+			(unsigned)ps.rwZWrite, (unsigned)ps.rwZTest,
+			(unsigned)ps.drvZWrite, (unsigned)ps.drvZEnable, (unsigned)ps.drvZFunc,
+			(unsigned)ps.devZWrite, (unsigned)ps.devZEnable, (unsigned)ps.devZFunc);
 
 	// [zfix2] contract comparator — EXIT sample, after any repair.
 	// Measurement-only (orthogonal axis): silent when the contract is held.
@@ -1651,23 +1694,18 @@ pipeRepairSceneStartSync(const char *tag)
 	if(!dev)
 		return;
 
-	// ---- Targets: rw cache (L1), pre-seeded with the
-	// pipeApplyWorldBaseline signature so a failed Get can never
-	// fabricate a target (same fault rule as rsmonCapture /
-	// buildingPipe_saveRenderState: a failed read leaves the seed).
-	RwUInt32 rwBlend  = FALSE;		// rwRENDERSTATEVERTEXALPHAENABLE
-	RwUInt32 rwSrc    = rwBLENDSRCALPHA;	// 5
-	RwUInt32 rwDst    = rwBLENDINVSRCALPHA;	// 6
-	RwUInt32 rwZWrite = TRUE;
-	RwUInt32 rwZTest  = TRUE;
-	DWORD    drvZFunc = D3DCMP_LESSEQUAL;	// no rw twin: L2 is the target
+	// ---- Targets: consolidated probe (P3) — pipeProbeState fills all three
+	// layers; this site reads the blend/src/dst/zwrite/ztest/zfunc subset
+	// and keeps the local names so the repair logic below is unchanged.
+	PipeProbeState ps;
+	pipeProbeState(&ps);
 
-	RwRenderStateGet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)&rwBlend);
-	RwRenderStateGet(rwRENDERSTATESRCBLEND, &rwSrc);
-	RwRenderStateGet(rwRENDERSTATEDESTBLEND, &rwDst);
-	RwRenderStateGet(rwRENDERSTATEZWRITEENABLE, &rwZWrite);
-	RwRenderStateGet(rwRENDERSTATEZTESTENABLE, &rwZTest);
-	RwD3D9GetRenderState(D3DRS_ZFUNC, &drvZFunc);
+	RwUInt32 rwBlend  = ps.rwBlend;
+	RwUInt32 rwSrc    = ps.rwSrc;
+	RwUInt32 rwDst    = ps.rwDst;
+	RwUInt32 rwZWrite = ps.rwZWrite;
+	RwUInt32 rwZTest  = ps.rwZTest;
+	DWORD    drvZFunc = ps.drvZFunc;
 
 	// Out-of-domain sanitize (rw/D3D blend domains are index-identical
 	// 1..11; compare functions 1..8 — see renderstate_monitor.cpp STATE
@@ -1679,16 +1717,10 @@ pipeRepairSceneStartSync(const char *tag)
 	if(drvZFunc < 1 || drvZFunc > 8)
 		drvZFunc = D3DCMP_LESSEQUAL;
 
-	// ---- Detection: 6 device Gets — the whole steady-state cost ----
-	DWORD devBlend = 0, devSrc = 0, devDst = 0, devZWrite = 0,
-	      devZEnable = 0, devZFunc = 0;
-	if(FAILED(dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &devBlend)) ||
-	   FAILED(dev->GetRenderState(D3DRS_SRCBLEND, &devSrc)) ||
-	   FAILED(dev->GetRenderState(D3DRS_DESTBLEND, &devDst)) ||
-	   FAILED(dev->GetRenderState(D3DRS_ZWRITEENABLE, &devZWrite)) ||
-	   FAILED(dev->GetRenderState(D3DRS_ZENABLE, &devZEnable)) ||
-	   FAILED(dev->GetRenderState(D3DRS_ZFUNC, &devZFunc)))
-		return;
+	// ---- Detection: reads from the consolidated probe ----
+	DWORD devBlend = ps.devBlend, devSrc = ps.devSrc, devDst = ps.devDst,
+	      devZWrite = ps.devZWrite, devZEnable = ps.devZEnable, devZFunc = ps.devZFunc;
+	(void)dev;  // dev still used below? no — probe owns the Gets now
 
 	int rBlend  = (!!devBlend)   != (!!rwBlend);
 	int rSrc    = devSrc   != (DWORD)rwSrc;

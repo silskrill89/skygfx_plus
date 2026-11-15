@@ -1443,6 +1443,28 @@ void pipeCullScopeBegin(RwUInt32 rwCull);
 void pipeCullScopeEnd(void);
 
 // ============================================================
+// PipeProbeState — single consolidated probe of the three render-state
+// layers (L1 rw cache, L2 RW driver cache, L3 raw device). Replaces the
+// duplicated RwRenderStateGet / RwD3D9GetRenderState / IDirect3DDevice9::
+// GetRenderState triples that were inlined in pipeEnforceDepthContract,
+// the scene-repair probe, and pedOpaqueCapture. pipeProbeState() fills
+// every field with pre-seeded canonical values (so a failed Get leaves a
+// known-good value) and is the single source of the probe.
+// ============================================================
+struct PipeProbeState {
+	// L1 rw render-state cache
+	RwUInt32 rwVtxAlpha, rwBlend, rwSrc, rwDst, rwZWrite, rwZTest,
+	         rwAlphaFunc, rwAlphaRef;
+	// L2 RW D3D9 driver cache
+	DWORD drvBlend, drvSrc, drvDst, drvZWrite, drvZEnable, drvZFunc,
+	      drvAlphaTest, drvAlphaFunc, drvAlphaRef, drvBlendOp;
+	// L3 raw device
+	DWORD devBlend, devSrc, devDst, devZWrite, devZEnable, devZFunc,
+	      devAlphaTest, devAlphaFunc, devAlphaRef;
+};
+void pipeProbeState(PipeProbeState *s);
+
+// ============================================================
 // Alpha/blend-mode guard for pipe render callbacks — sibling of
 // pipeEnterCullMode (pipelinecommon.cpp). Saves the rw-cached
 // vertex-alpha / src+dst blend / alpha-test func+ref states (all
