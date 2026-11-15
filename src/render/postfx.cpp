@@ -1957,9 +1957,11 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 
 	// Log entry with full context for crash correlation
 	if(dbglog_throttle("cf_switch"))
-		dbglog("[PostFX] ColourFilter_switch: filter=%d pipeline=%d smaa=%d ssao=%d motionBlur=%d",
+		dbglog("[PostFX] ColourFilter_switch: filter=%d pipeline=%d smaa=%d ssao=%d motionBlur=%d rgb1=(%d,%d,%d,%d) rgb2=(%d,%d,%d,%d)",
 			config->colorFilter, config->pipeline, config->smaaEnable,
-			config->ssaoEnable, config->motionBlurEnable);
+			config->ssaoEnable, config->motionBlurEnable,
+			rgb1.red, rgb1.green, rgb1.blue, rgb1.alpha,
+			rgb2.red, rgb2.green, rgb2.blue, rgb2.alpha);
 
 	if(!CPostEffects::pRasterFrontBuffer){
 		DBGLOG_BAIL("ColourFilter_switch", "pRasterFrontBuffer NULL");
@@ -2112,6 +2114,18 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 
 	RwRGBA rgb1pc = rgb1;
 	RwRGBA rgb2pc = rgb2;
+
+	// Guard: the PC colour filter (vanilla ColourFilter @0x703650) draws a
+	// full-screen quad with rgb1pc/rgb2pc as vertex colours. If the timecycle
+	// hands us near-black values the quad lands opaque-black over the whole
+	// frame (only entities drawn after the filter, like CJ, survive). Clamp
+	// to the Modern filter's floor so the composite can never zero the screen.
+	if(rgb1pc.red < 32) rgb1pc.red = 32;
+	if(rgb1pc.green < 32) rgb1pc.green = 32;
+	if(rgb1pc.blue < 32) rgb1pc.blue = 32;
+	if(rgb2pc.red < 32) rgb2pc.red = 32;
+	if(rgb2pc.green < 32) rgb2pc.green = 32;
+	if(rgb2pc.blue < 32) rgb2pc.blue = 32;
 
 	// ---- Resolve the FINAL colour-filter consumer up front (Fix R1) ----
 	// The PS2 conversion below is consumer-gated, so the PBR force +
