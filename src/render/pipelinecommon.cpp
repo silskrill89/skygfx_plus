@@ -78,6 +78,15 @@ static float s_lightsMult = 1.0f;                 // CCoronas__LightsMult
 static void
 ClampAmbientToSky(RwRGBAReal &c)
 {
+	// Toggle: ambientClampEnable (INI: SkyGfx.ambientClampEnable, default 0).
+	// When disabled (default), matches the original game which never clamps
+	// ambient to sky luminance — ambient is used as-is from the timecycle.
+	// When enabled, applies the night-ceiling clamp (ambient can never
+	// exceed sky luminance) for outdoor frames only.
+	extern Config *config;
+	if(!config || !config->ambientClampEnable)
+		return;
+
 	// INTERIOR FIX (dark-collapse cause 1): this night law is an OUTDOOR-ONLY
 	// contract — it exists to stop materials out-shining the VISIBLE sky, and
 	// it compares ambient against the exterior sky (m_CurrentColours.skyTop/

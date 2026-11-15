@@ -714,6 +714,11 @@ struct Config {
 	// Absolute ambient floor (ClampAmbientToSky tail, pipelinecommon.cpp) —
 	// INI: SkyGfx.ambientFloor, default 0.03, clamped [0..0.2]; 0 disables
 	float ambientFloor;
+	// Ambient clamp toggle (ClampAmbientToSky night ceiling) —
+	// INI: SkyGfx.ambientClampEnable, default 0 (disabled, matching original
+	// game which never clamps ambient to sky luminance). 1 = enable the
+	// night-ceiling clamp (ambient can never exceed sky luminance).
+	int ambientClampEnable;
 
 	// Debug toggles — individual effect enable/disable for isolation testing
 	// Set to 0 in INI to bypass specific effects (helps find black screen cause)

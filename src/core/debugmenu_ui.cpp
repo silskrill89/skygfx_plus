@@ -907,6 +907,9 @@ BuildSettingRows(void)
 	rFn("ambientFloor", "Absolute ambient floor", &config->ambientFloor, 0.0f, 0.2f,
 		"ClampAmbientToSky tail (pipelinecommon.cpp): minimum ambient luminance.\n"
 		"Default 0.03; clamped [0..0.2]. 0 = disabled.");
+	A("ambientClampEnable", "Ambient clamp (night ceiling)", RK_BOOL, &config->ambientClampEnable, 0, 0, NULL, 0, NULL,
+		"ClampAmbientToSky night ceiling: ambient can never exceed sky luminance."
+		"Default 0 = disabled (matches original game). 1 = enable (night-only).");
 	rFn("pbrAmbientFloor", "PBR ped/vehicle ambient floor", &config->pbrAmbientFloor, 0.0f, 1.0f,
 		"Minimum ambient luminance for ped/vehicle PBR paths (0.0-1.0, default 0.0).\n"
 		"Keeps peds/vehicles visible at night without a grey veil.");
