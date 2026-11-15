@@ -141,7 +141,10 @@ struct RMonSite {
 };
 
 // Runtime switch (RSMon_SetEnabled). RSMON_ENABLED is the compile-time one.
-static int s_enabled = 1;
+// ROUGH REDUCTION (2026-11-10): default OFF — measurement-only layer, no
+// behavior; the divergence classes it watched are fixed and understood.
+// Flip to 1 at runtime (RSMon_SetEnabled) when a new divergence hunt needs it.
+static int s_enabled = 0;
 static int s_initialized = 0;
 
 static uint32 s_total = 0;

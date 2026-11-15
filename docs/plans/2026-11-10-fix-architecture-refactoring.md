@@ -267,3 +267,16 @@ This refactoring will:
 **Plan created**: 2026-11-10
 **Status**: Ready for execution
 **Next**: Build W0.7 baseline
+---
+
+## Pass 2 evaluation verdicts (2026-11-10, post-pass-1)
+
+| Candidate | Verdict | Reason |
+|---|---|---|
+| pipeDeviceStateSet chokepoint | **KEEP** | pipelinecommon.cpp:1199-1330 — it IS the N1 master-fault kill (2026-11-08): coherent L1 rw + L2 driver + L3 raw write. Junior's L2-only RwD3D9SetRenderState was the rainbow class; removing this reintroduces the [zfix2] divergence (ALPHABLEND/ZWRITE/ZTEST disagree, flush skips). |
+| pipeForceAlphaBlock | **KEEP** | Same coherent-write doctrine for the canonical alpha block (12 states x 3 layers, lag-aware drift log). |
+| effectsForceAlphaBlock("Clouds") (main.cpp:2596) | **KEEP** | Comment documents the observed black-square sun-glow failure it fixes: CClouds::Render sets blend only via rw cache; a device parked behind an unchanged cache turns the additive glow into a black square. Load-bearing, not redundant. |
+| CClouds 3-layer save/restore | **KEEP** | Behavior (stage-0 texraster + full state restore). |
+| renderstate_monitor.cpp (812 lines) | **DISABLED BY DEFAULT** | Measurement-only ("no repair, no behavior"); s_enabled 1→0 (renderstate_monitor.cpp:144). Runtime kill switch RSMon_SetEnabled(1) remains for future divergence hunts. ~186 GetRenderState calls/frame + log noise removed. |
+
+**Refactor conclusion**: pass 1 removed the thrash layers (evidence nets, ONE/ONE substitution net, split-entry detect, SEH). Everything remaining is the coherent-write doctrine that FIXES the observed failure classes (rainbow, black square, zfix2). The architecture is now minimal: coherent writes at the boundaries, direct game state inside passes, no compare/repair cycles.
