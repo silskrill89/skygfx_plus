@@ -2511,17 +2511,15 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 		CPostEffects::ColourFilter_PS2(rgb1, rgb2);
 		break;
 	case COLORFILTER_PC:
-		// Force the device blend mode to SRCALPHA/INVSRCALPHA before the
-		// vanilla ColourFilter runs: the rw-cache can hold a stale value
-		// (rw cache desync), and the vanilla code's RwRenderStateSet calls
-		// are no-ops against an unchanged cache, leaving the device on the
-		// wrong blend mode -> the full-screen composite draws opaque black
-		// over everything (only CJ, drawn later, survives).
-		RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-		RwD3D9SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
-		RwD3D9SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
-		_rwD3D9RenderStateFlushCache();
-		CPostEffects::ColourFilter(rgb1pc, rgb2pc);
+		// The PC colour filter (vanilla ColourFilter @0x703650) draws a
+		// full-screen quad with rgb1pc/rgb2pc as vertex colours. When the
+		// timecycle hands dark values the quad lands as an opaque/near-opaque
+		// black layer over the whole frame (only entities drawn after the
+		// filter, like CJ, survive). The EnsureColorfilterVertsVisible guard
+		// at frame start cannot help because the vanilla code overwrites the
+		// verts during the filter pass. Until the underlying timecycle/blend
+		// desync is root-caused, skip the vanilla draw entirely for the PC
+		// filter so the frame is not blacked out.
 		break;
 	case COLORFILTER_MOBILE:
 		if(!UG_mod)
