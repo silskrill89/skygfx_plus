@@ -1608,6 +1608,21 @@ RenderScene_before(void*)
 	// cone shield window the previous frame left open (baselineFirst — see
 	// frameBoundaryCloseAndBaseline).
 	frameBoundaryCloseAndBaseline("SceneStart", "probe_baseline_scenestart", "scenestart", true);
+	// DEPTH-STATE REPAIR (2026-11-15): force ZENABLE=TRUE / ZFUNC=LESSEQUAL
+	// on all three layers (rw cache / RwD3D9 driver cache / raw device) before
+	// any scene geometry draws. The [SpriteDepthFix] repair at the sprite flush
+	// was too late — the sky dome and buildings were already drawn with the
+	// corrupted ZENABLE=0/ZFUNC=ALWAYS state, producing a black screen.
+	// This matches AAP's simpler approach: AAP never suspends Z for postfx
+	// samples, so the device stays on the correct depth state.
+	extern IDirect3DDevice9 *&d3d9device;
+	if(d3d9device){
+		RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
+		RwD3D9SetRenderState(D3DRS_ZENABLE, TRUE);
+		d3d9device->SetRenderState(D3DRS_ZENABLE, TRUE);
+		RwD3D9SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+		d3d9device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+	}
 	// FIX 3: 1-in-30 frame gate (shared s_rsmonFrameDiv latch — see the
 	// helper above); 31 GetRenderState calls saved on the other 29 frames.
 	if(RsMon_SceneStartDue())
