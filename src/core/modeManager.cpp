@@ -1520,11 +1520,14 @@ ApplyMode(ModeId id)
 	}
 
 	resetValues();
-	// Xbox mode: force SMAA off (the mode profile sets it, but something
-	// re-enables it — the log showed smaaEnable=1 after engage). SMAA
-	// running in Xbox mode causes black-screen redraws over the frame.
-	if(id == MODE_XBOX)
+	// Xbox mode: force SMAA + SSAO off (the mode profile sets them, but
+	// something re-enables them — the log showed smaaEnable=1 and
+	// ssaoEnable=1 after engage). Both cause black-screen redraws over
+	// the frame in Xbox mode.
+	if(id == MODE_XBOX){
 		config->smaaEnable = 0;
+		config->ssaoEnable = 0;
+	}
 	logModeReceipt("engage", ModeManager_GetAlias(id),
 		(incoming && incoming->values) ? incoming->numValues : 0);
 	dbglog("[Mode] apply %s pipes=%d/%d/%d cf=%d iv=%d smaa=%d",
