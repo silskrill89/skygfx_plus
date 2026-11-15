@@ -16,8 +16,6 @@ static DWORD s_savedZenable = TRUE;
 void
 Transparency_SetZEnabled(bool enable)
 {
-	if(config && !config->transparencyEnable)
-		return;
 	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)(enable ? (RwUInt32)TRUE : (RwUInt32)FALSE));
 	RwD3D9SetRenderState(D3DRS_ZENABLE, enable ? TRUE : FALSE);
 	if(d3d9device)
@@ -27,8 +25,6 @@ Transparency_SetZEnabled(bool enable)
 void
 Transparency_SetZFunc(DWORD zfunc)
 {
-	if(config && !config->transparencyEnable)
-		return;
 	RwD3D9SetRenderState(D3DRS_ZFUNC, zfunc);
 	if(d3d9device)
 		d3d9device->SetRenderState(D3DRS_ZFUNC, zfunc);
@@ -37,8 +33,6 @@ Transparency_SetZFunc(DWORD zfunc)
 void
 Transparency_SetZWrite(bool enable)
 {
-	if(config && !config->transparencyEnable)
-		return;
 	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)(enable ? (RwUInt32)TRUE : (RwUInt32)FALSE));
 	RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, enable ? TRUE : FALSE);
 	if(d3d9device)
@@ -48,19 +42,25 @@ Transparency_SetZWrite(bool enable)
 void
 Transparency_RepairDepthState(void)
 {
-	if(config && !config->transparencyEnable)
-		return;
-	// Force correct depth state on all 3 layers before any scene geometry draws.
-	Transparency_SetZEnabled(true);
-	Transparency_SetZFunc(D3DCMP_LESSEQUAL);
-	Transparency_SetZWrite(true);
+	// CRITICAL REPAIR: always runs regardless of transparencyEnable toggle.
+	// This fixes the depth state corruption (ZENABLE=0, ZFUNC=ALWAYS) that
+	// causes black screens. The toggle only gates the per-site writes.
+	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
+	RwD3D9SetRenderState(D3DRS_ZENABLE, TRUE);
+	if(d3d9device)
+		d3d9device->SetRenderState(D3DRS_ZENABLE, TRUE);
+	RwD3D9SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+	if(d3d9device)
+		d3d9device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
+	RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+	if(d3d9device)
+		d3d9device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
 }
 
 void
 Transparency_SuspendDepth(void)
 {
-	if(config && !config->transparencyEnable)
-		return;
 	// Save current ZENABLE and disable on all 3 layers for INTZ sampling.
 	if(d3d9device)
 		d3d9device->GetRenderState(D3DRS_ZENABLE, &s_savedZenable);
@@ -73,8 +73,6 @@ Transparency_SuspendDepth(void)
 void
 Transparency_RestoreDepth(void)
 {
-	if(config && !config->transparencyEnable)
-		return;
 	// Restore saved ZENABLE on all 3 layers.
 	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)(s_savedZenable ? (RwUInt32)TRUE : (RwUInt32)FALSE));
 	RwD3D9SetRenderState(D3DRS_ZENABLE, s_savedZenable);
