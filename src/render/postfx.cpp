@@ -1968,13 +1968,9 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 		return;
 	}
 
-	// WHITE-INIT (call site 1 of 2 — the main path). Must run before ANY
-	// colorfilterVerts consumer below (SSAO/pipe-chain composites, the bypass,
-	// the colour-filter switch, IVGrade, GodRays, FXAA3, YCbCr). The bypass
-	// branch further down has its own call because it can be reached from a
-	// path where this one has already bailed on the pRasterFrontBuffer NULL
-	// early-return.
-	EnsureColorfilterVertsVisible();
+	// WHITE-INIT (call site 1 of 2 — DISABLED for bisect). The verts
+	// are reset by the game or by other code; this fix may be interfering.
+	// EnsureColorfilterVertsVisible();
 
 	// Trusted screen-size capture point (postfx entry — main camera is on the
 	// screen here, see GetScreenSize above). Geometry-phase readers
@@ -2346,7 +2342,7 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 		// case where the vanilla writer does not run and the verts would stay
 		// black. Deliberately placed before the first UpdateFrontBuffer() so
 		// the re-seed is in place before any consumer reads the verts.
-		EnsureColorfilterVertsVisible();
+		// EnsureColorfilterVertsVisible();
 		UpdateFrontBuffer();
 		if(!PfFrontBufferReady("bypass identity tonemap")){
 			pfSkip |= PFG_CA | PFG_GRAIN | PFG_VIGNETTE | PFG_IVGRADE;
