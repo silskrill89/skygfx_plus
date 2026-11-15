@@ -1880,65 +1880,6 @@ effectsForceAlphaBlock(const char *tag)
 			       "alpha block skipped", tag);
 		return;
 	}
-	// ---- throttled three-layer evidence, sampled BEFORE the repair ----
-	// (1) rw cache, (2) RW driver cache, (3) raw device. Reads only happen
-	// while the throttle window is open, so this is ~free per frame.
-	if(dbglog_throttle("fx_alpha")){
-		RwUInt32 rSrc = rwBLENDSRCALPHA, rDst = rwBLENDINVSRCALPHA, rVtx = FALSE;
-		RwUInt32 rFn = rwALPHATESTFUNCTIONGREATEREQUAL, rRef = 1;
-		RwRenderStateGet(rwRENDERSTATESRCBLEND, (void*)&rSrc);
-		RwRenderStateGet(rwRENDERSTATEDESTBLEND, (void*)&rDst);
-		RwRenderStateGet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)&rVtx);
-		RwRenderStateGet(rwRENDERSTATEALPHATESTFUNCTION, (void*)&rFn);
-		RwRenderStateGet(rwRENDERSTATEALPHATESTFUNCTIONREF, (void*)&rRef);
-
-		RwUInt32 pSrc = 0, pDst = 0, pVtx = 0, pFn = 0, pRef = 0;
-		RwD3D9GetRenderState(D3DRS_SRCBLEND, &pSrc);
-		RwD3D9GetRenderState(D3DRS_DESTBLEND, &pDst);
-		RwD3D9GetRenderState(D3DRS_ALPHABLENDENABLE, &pVtx);
-		RwD3D9GetRenderState(D3DRS_ALPHAFUNC, &pFn);
-		RwD3D9GetRenderState(D3DRS_ALPHAREF, &pRef);
-
-		DWORD dSrc = 0, dDst = 0, dVtx = 0, dFn = 0, dRef = 0, dOp = 0;
-		if(d3d9device){
-			d3d9device->GetRenderState(D3DRS_SRCBLEND, &dSrc);
-			d3d9device->GetRenderState(D3DRS_DESTBLEND, &dDst);
-			d3d9device->GetRenderState(D3DRS_ALPHABLENDENABLE, &dVtx);
-			d3d9device->GetRenderState(D3DRS_ALPHAFUNC, &dFn);
-			d3d9device->GetRenderState(D3DRS_ALPHAREF, &dRef);
-			d3d9device->GetRenderState(D3DRS_BLENDOP, &dOp);
-		}
-		// drift = any layer pair disagreeing, or a non-ADD blend op (a leaked
-		// SUBTRACT/REVSUBTRACT turns an additive glow into a black quad too)
-		bool drift = (rSrc != pSrc) || (rDst != pDst) || (rVtx != pVtx) ||
-		             (rFn != pFn) || (rRef != pRef) ||
-		             (dSrc != pSrc) || (dDst != pDst) || (dVtx != pVtx) ||
-		             (dFn != pFn) || (dRef != pRef) ||
-		             (dOp != (DWORD)D3DBLENDOP_ADD);
-		if(drift)
-			dbglog("[FxAlpha] %s: layer drift BEFORE repair — "
-			       "rw(src=%u dst=%u vtx=%u fn=%u ref=%u) "
-			       "d3d(src=%u dst=%u vtx=%u fn=%u ref=%u) "
-			       "dev(src=%u dst=%u vtx=%u fn=%u ref=%u op=%u)",
-			       tag,
-			       (unsigned)rSrc, (unsigned)rDst, (unsigned)rVtx, (unsigned)rFn, (unsigned)rRef,
-			       (unsigned)pSrc, (unsigned)pDst, (unsigned)pVtx, (unsigned)pFn, (unsigned)pRef,
-			       (unsigned)dSrc, (unsigned)dDst, (unsigned)dVtx, (unsigned)dFn, (unsigned)dRef,
-			       (unsigned)dOp);
-
-		// Camera-raster probe (blank-world hunt, m0171): effects-phase sites
-		// run at the FIRST scene draw (CClouds) and around the frame's
-		// postfx — a mismatch here names WHEN the non-screen raster swap is
-		// live; the POINTER correlates against known rasters in this log
-		// (camRas=0488EFC0 pRasFB=04890A38 envFB=048911C8 ...). Mismatch only.
-		RwRaster *fxRas = Scene.camera ? RwCameraGetRaster(Scene.camera) : NULL;
-		if(fxRas && RsGlobal && fxRas->width > 0 &&
-		   (fxRas->width != RsGlobal->MaximumWidth || fxRas->height != RsGlobal->MaximumHeight))
-			dbglog("[FxAlpha] %s camRas=%p %dx%d != screen %dx%d — non-screen raster live",
-			       tag, (void*)fxRas, fxRas->width, fxRas->height,
-			       (int)RsGlobal->MaximumWidth, (int)RsGlobal->MaximumHeight);
-	}
-
 	// ---- stale Im2D override sweep (see block comment above) ----
 	if(overrideIm2dPixelShader || overrideColorMod >= 0 || overrideAlphaMod >= 0){
 		dbglog("[FxAlpha] %s: clearing stale Im2D override ps=%p colMod=%d alphaMod=%d",
@@ -1948,47 +1889,11 @@ effectsForceAlphaBlock(const char *tag)
 		overrideAlphaMod = -1;
 	}
 
-	// ---- the repair itself: layers (1)->(2)->(3) to one canonical block ----
-	// (test ON, BLENDOP ADD, colour-write ALL, separate-alpha OFF, ref bumped;
-	//  SRCBLEND/DESTBLEND/ALPHABLENDENABLE derived from the rw cache, so the
-	//  game's own RwRenderStateSet calls after this always transition.)
-	//
-	// ---- additive-leak substitution (outside producer windows only) ----
-	// The sweep used to rewrite ANY observed ONE/ONE (2/2) pair to the
-	// canonical normal-alpha 5/6 because a CCoronas::Render exit could leak
-	// the additive pair into the next consumer (props/pickups/markers
-	// ghosted). The whole-function producer gate above now returns before
-	// any body write while a corona/cloud/sprite batch owns the state, so
-	// this substitution is only the cleanup net for genuine additive leaks
-	// from non-sprite writers. ALPHABLENDENABLE stays per the cache vtx flag
-	// (pipeForceAlphaBlock pushes it); only the 2/2 pair is rewritten, any
-	// other blend (e.g. the modulate corona passes' own sets) passes through
-	// untouched. Pre-seeded canonical: a failed Get must not fabricate the
-	// additive signature.
-	{
-		RwUInt32 cSrc = (RwUInt32)D3DBLEND_SRCALPHA;	// pre-seeded canonical
-		RwUInt32 cDst = (RwUInt32)D3DBLEND_INVSRCALPHA;
-		RwUInt32 wSrc = (RwUInt32)rwBLENDSRCALPHA;
-		RwUInt32 wDst = (RwUInt32)rwBLENDINVSRCALPHA;
-		RwD3D9GetRenderState(D3DRS_SRCBLEND, &cSrc);	// layer (2)
-		RwD3D9GetRenderState(D3DRS_DESTBLEND, &cDst);
-		RwRenderStateGet(rwRENDERSTATESRCBLEND, (void*)&wSrc);	// layer (1)
-		RwRenderStateGet(rwRENDERSTATEDESTBLEND, (void*)&wDst);
-		if((cSrc == (RwUInt32)D3DBLEND_ONE && cDst == (RwUInt32)D3DBLEND_ONE) ||
-		   (wSrc == (RwUInt32)rwBLENDONE && wDst == (RwUInt32)rwBLENDONE)){
-			// Throttled substitution receipt — the observed blend pair
-			// (both cache layers) names the leaking call site in field logs.
-			if(dbglog_throttle("blend_subst"))
-				dbglog("[FxAlpha] %s: additive ONE/ONE leak substituted with "
-				       "canonical normal-alpha — rw(src=%u dst=%u) "
-				       "d3d(src=%u dst=%u)",
-				       tag,
-				       (unsigned)wSrc, (unsigned)wDst,
-				       (unsigned)cSrc, (unsigned)cDst);
-			RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
-			RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
-		}
-	}
+	// ---- ROUGH REDUCTION (2026-11-10): 3-layer evidence sampling + additive
+	// ONE/ONE substitution net removed. Each pass sets its own state (AAP
+	// direct-state approach); the producer gate above is the only whole-function
+	// skip kept (coronas/clouds/sprites own their additive state). The canonical
+	// block push stays — one state pusher, no drift-comparison layer.
 	pipeForceAlphaBlock();
 }
 
@@ -2848,36 +2753,9 @@ CClouds__Render_hygiene(void)
 		d3d9device->GetTextureStageState(0, D3DTSS_ALPHAOP, &sStageAlphaOp);
 	}
 
-	// ---- W0.6 split-entry receipt (additive, throttled) ----
-	// The pre-window state can be split at window entry: the rw/driver
-	// caches hold the canonical world block while the raw device holds a
-	// leaked pair (that disagreement is what the shield papers over while
-	// CClouds draws). The old restore mixed capture sources (L1/L2 from the
-	// rw/driver caches, raw L3 from the device), so it re-installed that
-	// split after close and [FxAlpha] had to repair it downstream. The
-	// restore now writes ONE source (the rw-cache capture) through
-	// L1+L2+L3, so this line -- the re-creator proof -- should fall to 0
-	// in the W0.6 retest. Token: "cloud_split_restore" (throttled bucket;
-	// deliberately NOT a once-gate, so a recurrence is visible later too).
-	bool sBlendSplitEntry =
-		((sZWriteRw ? TRUE : FALSE) != (sZWriteDrv ? TRUE : FALSE)) ||
-		((sZWriteRw ? TRUE : FALSE) != (sZWriteDev ? TRUE : FALSE)) ||
-		((sVtxAlphaRw ? TRUE : FALSE) != (sBlendDrv ? TRUE : FALSE)) ||
-		((sVtxAlphaRw ? TRUE : FALSE) != (sBlendDev ? TRUE : FALSE)) ||
-		((RwUInt32)sSrcRw != (RwUInt32)sSrcDrv) ||
-		((RwUInt32)sSrcRw != (RwUInt32)sSrcDev) ||
-		((RwUInt32)sDstRw != (RwUInt32)sDstDrv) ||
-		((RwUInt32)sDstRw != (RwUInt32)sDstDev);
-	if(sBlendSplitEntry && dbglog_throttle("cloud_split_restore"))
-		dbglog("[CloudShield] split-entry restore: rw(zw=%u vtx=%u src=%u dst=%u) "
-		       "dev(zw=%u vtx=%u src=%u dst=%u) d3d(zw=%u vtx=%u src=%u dst=%u) "
-		       "-> rw-capture through L1+L2+L3 (coherent after close)",
-		       (unsigned)sZWriteRw, (unsigned)sVtxAlphaRw,
-		       (unsigned)sSrcRw, (unsigned)sDstRw,
-		       (unsigned)sZWriteDev, (unsigned)sBlendDev,
-		       (unsigned)sSrcDev, (unsigned)sDstDev,
-		       (unsigned)sZWriteDrv, (unsigned)sBlendDrv,
-		       (unsigned)sSrcDrv, (unsigned)sDstDrv);
+	// ---- ROUGH REDUCTION (2026-11-10): split-entry detection receipt removed
+	// (pure logging — the restore writes ONE source, rw-capture through
+	// L1+L2+L3, so a split at entry cannot survive the close). ----
 
 	// ---- force (both layers; flush first so the rw sets are real
 	// transitions instead of no-ops against a desynced cache) ----
@@ -2923,29 +2801,11 @@ CClouds__Render_hygiene(void)
 		d3d9device->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_MODULATE);
 	}
 
-	// SEH guard (same frame-SEH precedent as InitialiseGame_hook): if the
-	// cloud/sun-corona draw faults mid-call, the 3-layer restore below MUST
-	// still run — letting the fault escape leaves ALPHAFUNC=ALWAYS /
-	// ALPHAREF=0 armed for the rest of the frame, i.e. every later
-	// alpha-cutout mesh accepts all texels (black sprites/decals covering
-	// the screen — the "whole screen covered outdoors" symptom). All locals
-	// in this function are POD (RwUInt32/DWORD/pointers), so __try/__except
-	// compiles without C2712/C2713.
-	static DWORD s_cloudFaultCode;
+	// ROUGH REDUCTION (2026-11-10): SEH __try/__except removed — call the
+	// original directly (AAP style; no fault-path restore gymnastics). The
+	// producer flag still wraps the call so the flush shield sees ONE/ONE.
 	g_inCloudsRender = true;	// producer flag: flush shield must pick ONE/ONE
-	__try {
-		CClouds__Render_orig();
-	} __except(
-		(s_cloudFaultCode = GetExceptionCode(), EXCEPTION_EXECUTE_HANDLER)
-	) {
-		g_inCloudsRender = false;	// never leave the cloud pair armed
-		if(dbglog_throttle("clouds_fault"))
-			dbglog("CClouds__Render_hygiene: FAULT code=0x%08X inside CClouds::Render — forcing 3-layer restore",
-				s_cloudFaultCode);
-	}
-	// Cleared unconditionally after the original returns (the except path
-	// above clears it too). POD write; no flush can draw between here and
-	// the restore block, so the flag never leaks past this hook.
+	CClouds__Render_orig();
 	g_inCloudsRender = false;
 
 	// ---- restore: rw cache first (so later Gets agree), then the raw force
