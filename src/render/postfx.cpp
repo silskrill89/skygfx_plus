@@ -2177,6 +2177,14 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 		// PC timecycle - values already in PC space
 		rgb1.alpha /= 2;
 		rgb2.alpha /= 2;
+		// PC colour filter (vanilla ColourFilter @0x703650) draws a full-screen
+		// quad with rgb1pc/rgb2pc as vertex colours; the game's timecycle
+		// values carry PS2-range alpha (0-128) which the vanilla code does NOT
+		// halve, so the quad lands ~50% opaque and darkens the frame. Halve
+		// here too, matching the rgb1/rgb2 path above, so the PC filter's
+		// composite stays in the same range as the Modern/PS2 paths.
+		rgb1pc.alpha /= 2;
+		rgb2pc.alpha /= 2;
 	}else if(mod2xConsumer){
 		// PS2 timecycle - convert to PC space (Fix R1: only for MOD2X-style
 		// consumers; vanilla/None/PC consumers keep raw/PC-space values)
