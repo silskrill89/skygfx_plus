@@ -183,6 +183,7 @@
     <ClCompile Include="..\src\peds\skin.cpp" />
     <ClCompile Include="..\src\core\debug_handl.cpp" />
     <ClCompile Include="..\src\render\depthhook.cpp" />
+    <ClCompile Include="..\src\render\transparency.cpp" />
     <ClCompile Include="..\src\render\envmap.cpp" />
     <!-- W7-C: CMirrors composite distortion fix (mirrorPass_init hook at 0x53EABA) -->
     <ClCompile Include="..\src\render\mirrorPass.cpp" />

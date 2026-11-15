@@ -719,6 +719,7 @@ struct Config {
 	// game which never clamps ambient to sky luminance). 1 = enable the
 	// night-ceiling clamp (ambient can never exceed sky luminance).
 	int ambientClampEnable;
+	int transparencyEnable;
 
 	// Debug toggles — individual effect enable/disable for isolation testing
 	// Set to 0 in INI to bypass specific effects (helps find black screen cause)

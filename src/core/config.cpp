@@ -785,6 +785,9 @@ readIniFile(const char *modulePath, Config *c)
 	c->ambientClampEnable = readint2(cfg, "Ped", "ambientClampEnable", 0);
 	if(c->ambientClampEnable < 0) c->ambientClampEnable = 0;
 	if(c->ambientClampEnable > 1) c->ambientClampEnable = 1;
+	c->transparencyEnable = readint2(cfg, "Ped", "transparencyEnable", 1);
+	if(c->transparencyEnable < 0) c->transparencyEnable = 0;
+	if(c->transparencyEnable > 1) c->transparencyEnable = 1;
 
 	// Debug toggles — set to 0 to bypass effects for black screen isolation
 	// colorFilterEnable also records USER INTENT (latch above): every legit
@@ -1209,7 +1212,7 @@ readIniFile(const char *modulePath, Config *c)
 		EMIT("SkyGfx", "zwriteThresholdGrass", "128"); \
 		EMIT("SkyGfx", "zwriteThresholdPed", "128"); \
 		EMIT("SkyGfx", "ambientFloor", "0.10"); \
-		EMIT("SkyGfx", "ambientClampEnable", "0"); \
+		EMIT("SkyGfx", "ambientClampEnable", "0"); 		EMIT("SkyGfx", "transparencyEnable", "1"); \
 		EMIT("SkyGfx", "postfxDumpDebug", "0"); \
 		EMIT("SkyGfx", "debugOverlay", "0"); \
 		EMIT("SkyGfx", "pbrAmbientFloor", "0.0"); \
@@ -1789,6 +1792,7 @@ saveConfigTo(const char *path)
 	cfg.set("SkyGfx", "pedAlphaTestEnable", std::to_string(c->pedAlphaTestEnable));
 	cfg.set("SkyGfx", "ambientFloor", std::to_string(c->ambientFloor));
 	cfg.set("SkyGfx", "ambientClampEnable", std::to_string(c->ambientClampEnable));
+	cfg.set("SkyGfx", "transparencyEnable", std::to_string(c->transparencyEnable));
 
 	// Water pipe (procedural PBR water)
 	cfg.set("SkyGfx", "waterParallaxEnable", std::to_string(c->waterParallaxEnable));
