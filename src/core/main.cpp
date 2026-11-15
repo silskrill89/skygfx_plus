@@ -1616,10 +1616,10 @@ RenderScene_before(void*)
 	// corrupted ZENABLE=0/ZFUNC=ALWAYS state, producing a black screen.
 	// This matches AAP's simpler approach: AAP never suspends Z for postfx
 	// samples, so the device stays on the correct depth state.
-	// DEPTH-STATE REPAIR: centralized in transparency.cpp (toggleable via
-	// config->transparencyEnable). Forces ZENABLE=TRUE/ZFUNC=LESSEQUAL on
-	// all three layers before any scene geometry draws.
-	Transparency_RepairDepthState();
+	// TRANSPARENCY REPAIR DISABLED (2026-11-15): user directive — running
+	// vanilla game settings, should not need state-integrity fixes. The mod
+	// should work like AAP's simpler approach without patching state.
+	// Transparency_RepairDepthState();
 	// FIX 3: 1-in-30 frame gate (shared s_rsmonFrameDiv latch — see the
 	// helper above); 31 GetRenderState calls saved on the other 29 frames.
 	if(RsMon_SceneStartDue())

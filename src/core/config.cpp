@@ -710,9 +710,9 @@ readIniFile(const char *modulePath, Config *c)
 	// writer, and it resets to 1 on the next INI reload.)
 	if(c->stateBaselineEnable < 1) c->stateBaselineEnable = 1;
 	if(c->stateBaselineEnable > 1) c->stateBaselineEnable = 1;
-	c->spriteStateShield = readint(cfg.get("SkyGfx", "spriteStateShield", ""), 1);
-	// SAFETY DEFAULT: floor to 1 (same H1 semantics as stateBaselineEnable).
-	if(c->spriteStateShield < 1) c->spriteStateShield = 1;
+	c->spriteStateShield = readint(cfg.get("SkyGfx", "spriteStateShield", ""), 0);
+	// 0 = disabled (AAP parity: no sprite state shield).
+	if(c->spriteStateShield < 0) c->spriteStateShield = 0;
 	if(c->spriteStateShield > 1) c->spriteStateShield = 1;
 
 	// m0970 bisect lane — render-state systems that were compiled ON with no
@@ -1194,7 +1194,7 @@ readIniFile(const char *modulePath, Config *c)
 		EMIT("SkyGfx", "pipeChainReflEnable", "0"); \
 		EMIT("SkyGfx", "texAlphaClassify", "1"); \
 		EMIT("SkyGfx", "stateBaselineEnable", "1"); \
-		EMIT("SkyGfx", "spriteStateShield", "1"); \
+		EMIT("SkyGfx", "spriteStateShield", "0"); \
 		EMIT("SkyGfx", "coronaBlendShield", "1"); \
 		EMIT("SkyGfx", "spriteFlushShield", "1"); \
 		EMIT("SkyGfx", "rwFixesEnable", "1"); \
