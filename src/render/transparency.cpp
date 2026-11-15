@@ -81,3 +81,13 @@ Transparency_RestoreDepth(void)
 	if(d3d9device)
 		d3d9device->SetRenderState(D3DRS_ZENABLE, s_savedZenable);
 }
+
+void
+Transparency_ParkSetZEnabled(bool value)
+{
+	if(config && !config->transparencyEnable)
+		return;
+	// Park to inverse, then set to target (forces cache transition on all layers).
+	Transparency_SetZEnabled(!value);
+	Transparency_SetZEnabled(value);
+}

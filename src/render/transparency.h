@@ -23,3 +23,6 @@ void Transparency_SuspendDepth(void);
 
 // Restore depth after INTZ sampling.
 void Transparency_RestoreDepth(void);
+
+// Park-then-set ZENABLE (forces cache transition): sets to !value then value.
+void Transparency_ParkSetZEnabled(bool value);
