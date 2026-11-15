@@ -2510,10 +2510,16 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 		// The PC colour filter (vanilla ColourFilter @0x703650) draws a
 		// full-screen quad with rgb1pc/rgb2pc as vertex colours. When the
 		// timecycle hands dark values the quad lands as an opaque/near-opaque
-		// black layer over the whole frame. Until the underlying timecycle/
-		// blend desync is root-caused, skip the vanilla draw entirely so
-		// the frame is not blacked out (the EnsureColorfilterVertsVisible
-		// guard at frame start handles any other code that uses the verts).
+		// black layer over the whole frame. The vanilla draw is disabled
+		// above, but the game binds shaders (gradingPS/tonemapPassPS/etc.)
+		// before calling our hook at 0x704D1E. A bare break leaves them
+		// bound, and CClouds::Render (sky dome, drawn fixed-function) executes
+		// whatever shader is currently armed -> entire sky dome shaded black.
+		// Unbind here, matching the COLORFILTER_GTAIV case below.
+		RwD3D9SetPixelShader(NULL);
+		RwD3D9SetVertexShader(NULL);
+		RwD3D9SetTexture(NULL, 0);
+		RwD3D9SetTexture(NULL, 1);
 		break;
 	case COLORFILTER_MOBILE:
 		if(!UG_mod)
