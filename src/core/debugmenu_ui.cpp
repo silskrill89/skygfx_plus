@@ -1790,7 +1790,7 @@ static const KeyDefault kKeyDefaults[] = {
 	{ "vehPBRLayers", 255 }, { "vehPrelightFallback", 0.15f }, { "vehEnvFallback", 1 },
 	{ "vehEnvStrengthMode", 1 }, { "vehEnvMask", 1 }, { "vehWetEnv", 1 }, { "vehEnvGlint", 0.0f },
 	{ "bldEnvReflect", 1 }, { "bldSkyReflect", 0.15f }, { "pbrIblAmbientWeight", 0.5f },
-	{ "pbrAmbientFloor", 0.0f }, { "ambientMult", 1.0f }, { "ambientFloor", 0.03f },
+	{ "pbrAmbientFloor", 0.0f }, { "ambientMult", 1.0f }, { "ambientFloor", 0.10f },
 	{ "normalMapEnable", 0 }, { "normalMapIntensity", 1.0f }, { "normalMapPlayerOnly", 1 },
 	{ "normalBufferEnable", 1 }, { "normalBufferOffset", 0.5f }, { "normalBufferScale", 1.0f },
 	{ "velocityBufferEnable", 1 }, { "depthHookEnable", 1 }, { "ragdollEnable", 1 },
