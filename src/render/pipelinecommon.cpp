@@ -153,32 +153,8 @@ ClampAmbientToSky(RwRGBAReal &c)
 			k, nightWeight, s, skyL, ambL);
 	}
 	}
-	// ABSOLUTE AMBIENT FLOOR (dark-collapse cause 2): outdoors the ambient
-	// must never reach true black. With the Forward+ tile list empty (legacy
-	// 7-direct-light path only — see forwardplus.cpp fp_fallback) this
-	// ambient is the only light distant unlit objects (cars, poles) get at
-	// night-ish timecycles, and the crush above can land it at near-black
-	// skyL. Lift the FINAL result to a modest luminance floor (INI:
-	// SkyGfx.ambientFloor, default 0.03 — mid of the 0.02-0.04 band, and the
-	// observed-good "final=0.034" ambient from the vehicle sky-lift dig;
-	// clamped [0..0.2] at parse). config NULL or value <= 0 skips the lift
-	// entirely. ADDITIVE lift: scale-up can never raise a
-	// zero channel (same lesson as GetTimecycleAmbientPBR's floor). Far below
-	// any daytime level so day frames no-op; intentionally overrides the sky
-	// ceiling below the floor's sky luminance (a near-black sky must not be
-	// allowed to black out geometry). The interior early-return and the
-	// no-data bail above are untouched.
-	const float ambFloor = config ? config->ambientFloor : 0.0f;
-	float outL = 0.2126f*c.red + 0.7152f*c.green + 0.0722f*c.blue;
-	if(ambFloor > 0.0f && outL < ambFloor){
-		float lift = ambFloor - outL;
-		c.red   = min(c.red   + lift, 1.0f);
-		c.green = min(c.green + lift, 1.0f);
-		c.blue  = min(c.blue  + lift, 1.0f);
-		if(dbglog_throttle("amb_floor"))
-			dbglog("[PBR-Ambient] absolute floor +%.3f (lum %.3f -> %.3f, skyL=%.3f)",
-				lift, outL, ambFloor, skyL);
-	}
+	// NOTE: absolute ambient floor moved to GetTimecycleAmbient() and
+	// GetTimecycleAmbientPBR() so it applies regardless of ambientClampEnable.
 }
 
 RwRGBAReal GetTimecycleAmbient(void)
@@ -202,7 +178,20 @@ RwRGBAReal GetTimecycleAmbient(void)
 	out.red   = (float)CTimeCycle_GetAmbientRed()   * mult * ambMult;
 	out.green = (float)CTimeCycle_GetAmbientGreen() * mult * ambMult;
 	out.blue  = (float)CTimeCycle_GetAmbientBlue()  * mult * ambMult;
-	ClampAmbientToSky(out); // night law: ambient can never exceed sky luminance
+	ClampAmbientToSky(out); // night law: ambient can never exceed sky luminance (gated by ambientClampEnable)
+	// Absolute ambient floor (applies regardless of ambientClampEnable):
+	// lift ambient to at least ambientFloor luminance so geometry never goes
+	// true-black at night. config NULL or value <= 0 skips.
+	const float ambFloor = config ? config->ambientFloor : 0.0f;
+	if(ambFloor > 0.0f){
+		float outL = 0.2126f*out.red + 0.7152f*out.green + 0.0722f*out.blue;
+		if(outL < ambFloor){
+			float lift = ambFloor - outL;
+			out.red   = min(out.red   + lift, 1.0f);
+			out.green = min(out.green + lift, 1.0f);
+			out.blue  = min(out.blue  + lift, 1.0f);
+		}
+	}
 	return out;
 }
 

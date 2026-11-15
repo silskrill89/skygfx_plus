@@ -779,7 +779,7 @@ readIniFile(const char *modulePath, Config *c)
 	// (all lanes see it), but it was introduced for the ped near-camera black
 	// fix — lane-scoped to [Ped] per source-inventory §4; [SkyGfx] fallback
 	// preserves existing INIs.
-	c->ambientFloor = readfloat2(cfg, "Ped", "ambientFloor", 0.03f);
+	c->ambientFloor = readfloat2(cfg, "Ped", "ambientFloor", 0.10f);
 	if(c->ambientFloor < 0.0f) c->ambientFloor = 0.0f;
 	if(c->ambientFloor > 0.2f) c->ambientFloor = 0.2f;
 	c->ambientClampEnable = readint2(cfg, "Ped", "ambientClampEnable", 0);
@@ -1208,7 +1208,7 @@ readIniFile(const char *modulePath, Config *c)
 		EMIT("SkyGfx", "zwriteThreshold", "128"); \
 		EMIT("SkyGfx", "zwriteThresholdGrass", "128"); \
 		EMIT("SkyGfx", "zwriteThresholdPed", "128"); \
-		EMIT("SkyGfx", "ambientFloor", "0.03"); \
+		EMIT("SkyGfx", "ambientFloor", "0.10"); \
 		EMIT("SkyGfx", "ambientClampEnable", "0"); \
 		EMIT("SkyGfx", "postfxDumpDebug", "0"); \
 		EMIT("SkyGfx", "debugOverlay", "0"); \
