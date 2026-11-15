@@ -6,7 +6,7 @@
 
 - **Modes**: one active mode at a time, selected via `[Modes] active=` in `skygfx.ini` or the always-visible chip row in the F4 menu. Six canonical switchable modes (PS2, Xbox, Legacy PC, GTA IV, GTA V, Modern) plus `Custom` (snapshot-only bookmark) and `Mobile` (legacy alias). All go through `ModeManager`; `ApplyMode()` is the only writer of mode-owned fields. Authority: `docs/modes.md`.
 - **Retired preset writers**: `ps2_mode.cpp`, `xbox_mode.cpp`, `iv_mode.cpp`, `mobile.cpp`, `pc_patched_mode.cpp`, and `custom_mode.cpp` still exist as stubs, but their `*_ApplyDefaults()` functions are retired no-ops with no call sites. `ModeManager` owns mode application.
-- **Naming**: `noiseDetail` is the canonical INI key and config field for blue-noise detail-texture jitter. `stochastic` and `stochasticTexturing` are deprecated aliases (still parsed, logged at load). The old stochastic shader family is gone; current shaders are `shaders/noiseDetailBuildingPS.hlsl` (entries `main_simpleNoiseDetail`, `main_simpleDetailNoiseDetail`, `main_xboxBuildingNoiseDetail`) plus `shaders/include/Noise.hlsl`.
+- **Naming**: `noiseDetail` is the canonical INI key and config field for blue-noise detail-texture jitter. `stochastic` and `stochasticTexturing` are deprecated aliases (still parsed, logged at load). The old hash-jitter shader family is gone; current shaders are `shaders/noiseDetailBuildingPS.hlsl` (entries `main_simpleNoiseDetail`, `main_simpleDetailNoiseDetail`, `main_xboxBuildingNoiseDetail`) plus `shaders/include/Noise.hlsl`.
 - **Build/deploy**: `python tools/fast_build.py` is the default smart incremental build. It compiles HLSL → CSO with FXC, builds with MSBuild, and deploys `build/Release/skygfx.dll` as `E:\games\gtasa_skygfx_plus\skygfx.asi`. `--rebuild`, `--shaders`, and `--launch` are the other entry points.
 
 ## Version Evolution
@@ -25,7 +25,7 @@ This document traces the complete lineage of the skygfx mod across three major c
 - 30 HLSL shaders (15 PS, 15 VS)
 - Features: colour filters (PS2/PC), radiosity (fixed-function), infrared/night vision, grain, Neo water/blood drops, env map rendering, texdb detail maps, INI cycling (F10/F11), SAMP compat
 - Config: ~40 fields
-- No SSAO, SMAA, PBR, normal maps, wind, stochastic
+- No SSAO, SMAA, PBR, normal maps, wind, noise-based variation
 
 The original aap release established the core architecture: a hook-based DLL injection model with pipeline switching for vehicles and buildings, INI-driven configuration, and a shader-based post-processing chain. The codebase was compact and self-contained — a single flat directory with no subfolder structure.
 
@@ -33,7 +33,7 @@ The original aap release established the core architecture: a hook-based DLL inj
 
 - Backed up in this repo as `backup_original/` (33 files, ~10K LOC)
 - Added CAR_ENV vehicle pipe with per-pixel Fresnel reflection
-- Added stochastic texturing (StochasticSamplerPS.hlsl + ps/2_a/ variants)
+- Added noise-based variation texturing (StochasticSamplerPS.hlsl + ps/2_a/ variants)
 - Added wind animation shaders (ps2BuildingWindVS, xboxBuildingWindVS)
 - Added EDED plugin (extendedplg.cpp) for per-atomic shader assignment
 - Added shader radiosity (radiosityPS.hlsl + blurPS.hlsl)
@@ -41,14 +41,14 @@ The original aap release established the core architecture: a hook-based DLL inj
 - Added III/VC/VCS colour filters
 - Added Mobile colour grading (gradingPS.hlsl)
 - Added contrast adjustment (contrastPS.hlsl)
-- Added texdb system (texdb.cpp) with per-texture detail maps, stochastic flags, dual-pass, z-write thresholds
+- Added texdb system (texdb.cpp) with per-texture detail maps, noise-based variation flags, dual-pass, z-write thresholds
 - Added sphere map buildings (sphereBuildingVS + simpleFogPS)
 - Added blood drops, moon alpha fix, corona z-test, YCbCr correction
 - Added per-texture z-write threshold, grass dual-ped dual-pass
-- 38 HLSL shaders (19 PS including stochastic variants, 17 VS, 2 includes)
+- 38 HLSL shaders (19 PS including noise-based variation shaders, 17 VS, 2 includes)
 - Config: ~80 fields
 
-The junior_dr fork tripled the codebase size and introduced several technologies that would become foundational: stochastic texturing for grain-free detail, wind animation for buildings, and a texdb system for per-texture material overrides. The EDED plugin allowed per-atomic shader assignment — a significant step toward per-object rendering control.
+The junior_dr fork tripled the codebase size and introduced several technologies that would become foundational: noise-based variation texturing for grain-free detail, wind animation for buildings, and a texdb system for per-texture material overrides. The EDED plugin allowed per-atomic shader assignment — a significant step toward per-object rendering control.
 
 ## skygfx_plus (expIV rewrite — historical snapshot)
 
@@ -80,7 +80,7 @@ skygfx_plus is a ground-up rewrite that merges the aap and junior_dr foundations
 | HLSL Shaders | 30 | 38 | **69 (+ 8 CSO)** |
 | Post-FX Effects | 3 | 5 | **15+** |
 | Config Fields | ~40 | ~80 | **239+** |
-| Stochastic Texturing | — | Yes | Superseded by `noiseDetail` |
+| Noise-based Variation | — | Yes | Superseded by `noiseDetail` |
 | Wind Animation | — | Yes | Yes |
 | SSAO | — | — | **Yes** |
 | SMAA | — | — | **Yes (4 levels)** |

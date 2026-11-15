@@ -95,5 +95,19 @@ bool SoftbodyWaterQuery(float x, float y, float z, float *pLevel);
 // displacement in metres (2-wave: 45 m/0.10 m + 23 m/0.06 m, time-phased).
 // SoftbodyWaterSwellVel is its time derivative (the bob velocity the physics
 // lanes follow so corpses rise/fall with the rendered surface).
+// MISSION B 2026-11-09: these now DELEGATE to the M9 single-source law in
+// src/extras/water_swell.h (WaterSwell::Height/HeightVel); the local
+// WaterSwellMakeWave/s_waveA/s_waveB duplicate was deleted. Numerically
+// unchanged (bit-for-bit port).
 float SoftbodyWaterSwell(float x, float y);
 float SoftbodyWaterSwellVel(float x, float y);
+
+// THE one shared water clock (MISSION B 2026-11-09 collapse): QPC seconds
+// since the SoftbodyInit anchor, exported so ragdoll_death.cpp's
+// RagdollWaterClockSeconds() mirror collapses onto this accessor. Direction
+// chosen: expose SOFTBODY's clock (ragdoll_death.cpp already includes this
+// header chain via SoftbodyWaterQuery; water_swell.h stays clock-free).
+// Handoff: delete s_ragdollWaterClockAnchor + the mirror body in
+// ragdoll_death.cpp and call this directly at its seeding (:348) and
+// per-frame water sample (:1048).
+double SoftbodyWaterClockSeconds(void);

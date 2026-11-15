@@ -3,6 +3,7 @@
 #include "debug_handl.h"
 #include "profiler.h"	// PF_SCOPE/PfBindPS/PfBindVS/PfNote (renderlane profiler API)
 #include "noise.h"	// SkyNoise::Init/BindAndUpload (pipeBindNoise)
+#include "renderstate_monitor.h"	// RSMon_ContractSample ([zfix2] depth-contract comparator)
 #include <d3d9types.h>
 #include <DirectXMath.h>
 
@@ -1036,8 +1037,9 @@ bool guardedIm2DRender(void *ps, RwInt32 primType, RwIm2DVertex *verts, RwInt32 
 	}
 	// Begun-camera gate: Scene.camera can exist before the first
 	// RwCameraBeginUpdate; Im2D dispatch dereferences the exe-side camera
-	// global at 0xC9BCC0 -> null deref (same Lane G gate as postfx).
-	if(*(void**)0xC9BCC0 == NULL){
+	// global pCameraBeingUpdated (0xC9BCC0) -> null deref (same Lane G gate as
+	// postfx).
+	if(pCameraBeingUpdated == NULL){
 		if(dbglog_throttle("gim2d_nobegun"))
 			dbglog("[GUARD] guardedIm2DRender: camera not begun (phase=%s)", ph);
 		return false;
@@ -1194,6 +1196,138 @@ pipeL3Set(D3DRENDERSTATETYPE state, DWORD value)
 }
 
 // ============================================================
+// pipeDeviceStateSet — cache-coherent device write (N1 master-fault
+// kill, 2026-11-08). THE single chokepoint every foreign raw
+// dev->SetRenderState(...) in the effects/postfx/sprite phase must
+// route through, so a phase write can never leave the three layers
+// disagreeing:
+//   L1 rw cache        (RwRenderStateSet  — the rw twin, if one exists)
+//   L2 RW driver cache (RwD3D9SetRenderState — pending[], flushed
+//                       pre-draw, applied[]-gated)
+//   L3 raw device      (d3d9device->SetRenderState — unconditional)
+//
+// Why: a raw L3-only write moves the device while L1/L2 keep their old
+// values. The pre-draw flush is applied[]-gated, so it value-compares
+// pending[] against a cache that already holds the world baseline and
+// skips the device write — the wrong device value survives the whole
+// scene (the [zfix2] scene_start DIVERGE signature: ALPHABLEND=1,
+// ZWRITE=0, ZTEST=0, ZFUNC=ALWAYS while both caches claim the world
+// values). Routing every write through all three layers keeps them
+// coherent on every transition, so "wrong value" (which the existing
+// pipeEnterAlphaMode / pipeEnforceDepthContract canonicalise at the
+// next pipe entry) can never become "layers disagree" (which those
+// repairs cannot catch because the flush skips).
+//
+// No park-and-set is needed here (unlike pipeRwParkSet/pipeL2ParkSet):
+// the unconditional L3 pin below is what re-syncs the device, so the
+// cache legs only need to be TOLD the truth, not transitioned. A
+// cache-hit skip on L1/L2 is therefore harmless (that layer already
+// agrees), not the divergence the park idiom guards against.
+//
+// States with no rw twin (BLENDOP, ALPHATESTENABLE, ZFUNC, LIGHTING,
+// SPECULARENABLE, ...) skip the L1 leg and go L2+L3. Blend/compare
+// values outside the rw domain (raw-only D3DBLEND extras like
+// BLENDFACTOR=14; D3DCMPFUNC outside 1..8) also skip L1 — the rw cache
+// has no representation, so the value is restored L2/L3 verbatim (same
+// rule as pipeBlendHasRwTwin).
+// ============================================================
+void
+pipeDeviceStateSet(D3DRENDERSTATETYPE state, DWORD value)
+{
+	IDirect3DDevice9 *dev = d3d9device;
+	if(!dev)
+		return;
+
+	// L1 leg: map the D3D state to its rw twin and normalize the value
+	// into the rw domain. hasRwTwin stays false when the state has no rw
+	// representation or the value is outside the rw domain.
+	RwRenderState rwState = (RwRenderState)0;
+	RwUInt32      rwValue = 0;
+	bool          hasRwTwin = false;
+
+	switch(state){
+	case D3DRS_ALPHABLENDENABLE:
+		rwState = rwRENDERSTATEVERTEXALPHAENABLE;
+		rwValue = value ? TRUE : FALSE;
+		hasRwTwin = true;
+		break;
+	case D3DRS_SRCBLEND:
+		if(value >= 1 && value <= 11){
+			rwState = rwRENDERSTATESRCBLEND;
+			rwValue = value;
+			hasRwTwin = true;
+		}
+		break;
+	case D3DRS_DESTBLEND:
+		if(value >= 1 && value <= 11){
+			rwState = rwRENDERSTATEDESTBLEND;
+			rwValue = value;
+			hasRwTwin = true;
+		}
+		break;
+	case D3DRS_ZWRITEENABLE:
+		rwState = rwRENDERSTATEZWRITEENABLE;
+		rwValue = value ? TRUE : FALSE;
+		hasRwTwin = true;
+		break;
+	case D3DRS_ZENABLE:
+		rwState = rwRENDERSTATEZTESTENABLE;
+		rwValue = value ? TRUE : FALSE;
+		hasRwTwin = true;
+		break;
+	case D3DRS_CULLMODE:
+		// D3D {NONE=1,CW=2,CCW=3} -> rw {NONE=1,BACK=2,FRONT=3} (the
+		// index-identical mapping pipeCullToD3D documents, reversed).
+		rwState = rwRENDERSTATECULLMODE;
+		if(value == D3DCULL_NONE)
+			rwValue = rwCULLMODECULLNONE;
+		else if(value == D3DCULL_CCW)
+			rwValue = rwCULLMODECULLFRONT;
+		else
+			rwValue = rwCULLMODECULLBACK;	// D3DCULL_CW -> rw BACK
+		hasRwTwin = true;
+		break;
+	case D3DRS_FOGENABLE:
+		rwState = rwRENDERSTATEFOGENABLE;
+		rwValue = value ? TRUE : FALSE;
+		hasRwTwin = true;
+		break;
+	case D3DRS_STENCILENABLE:
+		rwState = rwRENDERSTATESTENCILENABLE;
+		rwValue = value ? TRUE : FALSE;
+		hasRwTwin = true;
+		break;
+	case D3DRS_ALPHAREF:
+		rwState = rwRENDERSTATEALPHATESTFUNCTIONREF;
+		rwValue = value;
+		hasRwTwin = true;
+		break;
+	case D3DRS_ALPHAFUNC:
+		if(value >= 1 && value <= 8){
+			rwState = rwRENDERSTATEALPHATESTFUNCTION;
+			rwValue = value;	// D3DCMPFUNC 1..8 == rw func 1..8 (identity)
+			hasRwTwin = true;
+		}
+		break;
+	default:
+		// No rw twin: BLENDOP, ALPHATESTENABLE, ZFUNC, LIGHTING,
+		// SPECULARENABLE, and any other raw-only render state.
+		break;
+	}
+
+	// L1 rw cache (skipped when there is no twin / out-of-domain value).
+	if(hasRwTwin)
+		RwRenderStateSet(rwState, (void*)rwValue);
+
+	// L2 RW driver cache (pending[] = value; committed by the next
+	// pre-draw flush, which can only push value over value here).
+	RwD3D9SetRenderState((RwUInt32)state, value);
+
+	// L3 raw device — unconditional, the layer the flush can never repair.
+	pipeL3Set(state, value);
+}
+
+// ============================================================
 // Cull-scope stack storage (see the pipeCullScopeBegin/End block
 // below for the full contract). Declared here because
 // pipeEnterCullMode consults the depth: a non-zero depth means a
@@ -1326,9 +1460,14 @@ pipeForceCullMode(RwUInt32 rwCull)
 // healthy is SILENT; drift repairs ALL THREE layers so a later RW
 // flush cannot re-drift.
 //
-// Baseline = the pipeApplyWorldBaseline depth targets: Z-test ON,
-// ZFUNC LESSEQUAL. ZWRITE is deliberately NOT touched — it is
-// per-span, owned by the callbacks' own ZWRITE trio guards.
+// Baseline = the pipeApplyWorldBaseline depth targets: ZWRITE ON,
+// Z-test ON, ZFUNC LESSEQUAL. ZWRITE was historically left to the
+// callbacks' own trio guards, but the 2D/Im2D phase parks ZWRITE=FALSE
+// through ALL THREE layers (the [zfix2] full-drift signature
+// ZWRITE=0 ZTEST=0 ZFUNC=8) and no callback repair covers it, so it is
+// repaired here alongside ZTEST/ZFUNC to close the canonical depth
+// contract — matching RSMon_ContractSample's {ZWRITE=1,ZTEST=1,ZFUNC=4}
+// measurement axis (renderstate_monitor.h).
 //
 // Measured failure class ([PedOpaque] pre-entry "ZWRITE=0 ZENABLE=0
 // ZFUNC=8"): a raw L3 write parks ZENABLE=0 / ZFUNC=ALWAYS behind a
@@ -1351,41 +1490,120 @@ pipeEnforceDepthContract(void)
 	if(!dev)
 		return;
 
+	// [zfix2] contract comparator — ENTRY sample, before any repair runs.
+	// Measurement-only (orthogonal axis): never alters the repair below.
+	RSMon_ContractSample("depthct_in", -1);
+
 	// Ground truth = raw device. A failed Get is left alone.
-	DWORD devZen = TRUE, devZFunc = D3DCMP_LESSEQUAL;
-	if(FAILED(dev->GetRenderState(D3DRS_ZENABLE, &devZen)) ||
+	DWORD devZWrite = TRUE, devZen = TRUE, devZFunc = D3DCMP_LESSEQUAL;
+	if(FAILED(dev->GetRenderState(D3DRS_ZWRITEENABLE, &devZWrite)) ||
+	   FAILED(dev->GetRenderState(D3DRS_ZENABLE, &devZen)) ||
 	   FAILED(dev->GetRenderState(D3DRS_ZFUNC, &devZFunc)))
 		return;
 
-	// Cache layers for the divergence check (L1 ztest has an rw twin;
-	// ZFUNC has none — L2/L3 only). A stale cache value is a live
+	// Cache layers for the divergence check (L1 zwrite/ztest have rw
+	// twins; ZFUNC has none — L2/L3 only). A stale cache value is a live
 	// mine: the next pre-draw flush can push it back over the device.
-	RwUInt32 rwZTest = TRUE;
+	RwUInt32 rwZWrite = TRUE, rwZTest = TRUE;
+	RwRenderStateGet(rwRENDERSTATEZWRITEENABLE, &rwZWrite);
 	RwRenderStateGet(rwRENDERSTATEZTESTENABLE, &rwZTest);
-	DWORD drvZen = TRUE, drvZFunc = D3DCMP_LESSEQUAL;
+	DWORD drvZWrite = TRUE, drvZen = TRUE, drvZFunc = D3DCMP_LESSEQUAL;
+	RwD3D9GetRenderState(D3DRS_ZWRITEENABLE, &drvZWrite);
 	RwD3D9GetRenderState(D3DRS_ZENABLE, &drvZen);
 	RwD3D9GetRenderState(D3DRS_ZFUNC, &drvZFunc);
 
-	// Healthy world baseline: Z-test on, LESSEQUAL, on every layer.
-	if(devZen && devZFunc == D3DCMP_LESSEQUAL && rwZTest &&
-	   drvZen && drvZFunc == D3DCMP_LESSEQUAL)
+	// Healthy world baseline: ZWRITE on, Z-test on, LESSEQUAL, on every
+	// layer.
+	if(devZWrite && devZen && devZFunc == D3DCMP_LESSEQUAL &&
+	   rwZWrite && rwZTest && drvZWrite && drvZen &&
+	   drvZFunc == D3DCMP_LESSEQUAL)
 		return;
 
 	// Drift — park-and-set the caches (guaranteed transition, so no
 	// value-compare skip can no-op the repair), commit pending[], then
 	// pin the raw device (doctrine order: L1 pair, L2 pair, flush, L3).
+	pipeRwParkSet(rwRENDERSTATEZWRITEENABLE, FALSE, TRUE);
 	pipeRwParkSet(rwRENDERSTATEZTESTENABLE, FALSE, TRUE);
+	pipeL2ParkSet(D3DRS_ZWRITEENABLE, FALSE, TRUE);
 	pipeL2ParkSet(D3DRS_ZENABLE, D3DZB_FALSE, D3DZB_TRUE);
 	pipeL2ParkSet(D3DRS_ZFUNC, D3DCMP_ALWAYS, D3DCMP_LESSEQUAL);
 	_rwD3D9RenderStateFlushCache();
+	pipeL3Set(D3DRS_ZWRITEENABLE, TRUE);
 	pipeL3Set(D3DRS_ZENABLE, D3DZB_TRUE);
 	pipeL3Set(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
 
 	if(dbglog_once("zfix_first") || dbglog_throttle("zfix"))
-		dbglog("[zfix] pipe entry depth drift repaired -> ZENABLE=TRUE ZFUNC=LESSEQUAL: "
-		       "rw ztest=%u drv zen=%u zfunc=%u dev zen=%u zfunc=%u",
-			(unsigned)rwZTest, (unsigned)drvZen, (unsigned)drvZFunc,
-			(unsigned)devZen, (unsigned)devZFunc);
+		dbglog("[zfix] pipe entry depth drift repaired -> ZWRITE=TRUE ZENABLE=TRUE ZFUNC=LESSEQUAL: "
+		       "rw zwrite=%u ztest=%u drv zwrite=%u zen=%u zfunc=%u dev zwrite=%u zen=%u zfunc=%u",
+			(unsigned)rwZWrite, (unsigned)rwZTest,
+			(unsigned)drvZWrite, (unsigned)drvZen, (unsigned)drvZFunc,
+			(unsigned)devZWrite, (unsigned)devZen, (unsigned)devZFunc);
+
+	// [zfix2] contract comparator — EXIT sample, after any repair.
+	// Measurement-only (orthogonal axis): silent when the contract is held.
+	RSMon_ContractSample("depthct_out", -1);
+}
+
+// ============================================================
+// StateBlockEnforceCanonical — frame-end canonical contract assert
+// (curative lever, 2026-11-09). The frame-end twin of
+// pipeRepairSceneStartSync: asserts the canonical depth+blend contract
+// {ALPHABLEND=0, ZWRITE=1, ZTEST=1, ZFUNC=LESSEQUAL} on ALL THREE layers
+// after the last 2D write, so the residue the 2D/effects tail manufactures
+// can never survive to the next scene_start (the scene_start DIVERGE
+// signature ALPHABLEND rw=0 dev=1 | ZWRITE rw=1 dev=0 | ZTEST rw=1 dev=0 |
+// ZFUNC drv=4 dev=8).
+//
+// REUSE, not restatement (unify rule):
+//   depth half -> pipeEnforceDepthContract() — owns ZWRITE/ZTEST/ZFUNC on all
+//                 three layers; its own [zfix] receipt fires on drift.
+//   blend half -> the ONE state the depth enforce deliberately leaves to the
+//                 alpha block: ALPHABLENDENABLE. Park-and-set through L1+L2
+//                 (guaranteed transition) then raw L3 pin, the exact
+//                 pipeRwParkSet/pipeL2ParkSet/pipeL3Set composition the depth
+//                 enforce uses. The canonical value (off) matches the
+//                 renderstate_monitor.cpp RSMON_CT_BLEND comparator.
+//
+// Healthy = SILENT (a few cheap Gets, zero writes). The [frame_repair]
+// receipt fires only when the blend half actually repairs; the depth half
+// already reports its own [zfix] receipt.
+// ============================================================
+void
+StateBlockEnforceCanonical(void)
+{
+	IDirect3DDevice9 *dev = d3d9device;
+	if(!dev)
+		return;
+
+	// ---- blend-enable half: ALPHABLEND = 0 on all three layers ----
+	// Pre-seeded canonical so a failed Get leaves a known-good value.
+	RwUInt32 rwBlend = FALSE;
+	DWORD drvBlend = FALSE, devBlend = FALSE;
+	RwRenderStateGet(rwRENDERSTATEVERTEXALPHAENABLE, &rwBlend);
+	RwD3D9GetRenderState(D3DRS_ALPHABLENDENABLE, &drvBlend);
+	bool haveDev = SUCCEEDED(dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &devBlend));
+
+	bool blendDrift = (!!rwBlend) || (!!drvBlend) || (haveDev && !!devBlend);
+	if(blendDrift){
+		// Park-and-set (guaranteed transition, no value-compare skip can
+		// no-op it), flush, then raw pin — the pipeEnforceDepthContract
+		// doctrine. The park value TRUE is safe: no draw runs between the
+		// two sets, and blend is ALREADY on in the drift case.
+		pipeRwParkSet(rwRENDERSTATEVERTEXALPHAENABLE, TRUE, FALSE);
+		pipeL2ParkSet(D3DRS_ALPHABLENDENABLE, TRUE, FALSE);
+		_rwD3D9RenderStateFlushCache();
+		pipeL3Set(D3DRS_ALPHABLENDENABLE, FALSE);
+	}
+
+	// ---- depth half: ZWRITE/ZTEST/ZFUNC (existing shared enforce) ----
+	pipeEnforceDepthContract();
+
+	if(blendDrift &&
+	   (dbglog_once("frame_repair_first") || dbglog_throttle("frame_repair")))
+		dbglog("[frame_repair] frame-end canonical assert: ALPHABLEND re-pinned OFF "
+		       "(rw=%u drv=%u dev=%u) -> canonical depth+blend contract",
+			(unsigned)rwBlend, (unsigned)drvBlend,
+			haveDev ? (unsigned)devBlend : 0xFFFFFFFFu);
 }
 
 // ============================================================
@@ -1579,6 +1797,11 @@ RwUInt32
 pipeEnterCullMode(void)
 {
 	PF_SCOPE("Pipeline_pipeEnterCullMode");
+
+	// [zfix2] contract comparator — ENTRY sample, before any repair runs.
+	// Measurement-only (orthogonal axis): never alters the reconcile below.
+	RSMon_ContractSample("cullmode_in", -1);
+
 	// Pre-seeded so a failed Get leaves a known-good value.
 	RwUInt32 saved = (RwUInt32)rwCULLMODECULLBACK;
 	RwRenderStateGet(rwRENDERSTATECULLMODE, &saved);
@@ -1626,6 +1849,10 @@ pipeEnterCullMode(void)
 
 	// World depth contract rides the same entry (see its comment).
 	pipeEnforceDepthContract();
+
+	// [zfix2] contract comparator — EXIT sample, after the entry reconcile
+	// and depth contract. Measurement-only (orthogonal axis).
+	RSMon_ContractSample("cullmode_out", -1);
 
 	return spanCull;
 }
@@ -2141,6 +2368,41 @@ pipeExitAlphaMode(PipeAlphaState saved)
 		devOpL3 = saved.blendOpDev;
 	}
 
+	// ---- sticky rule (F1 extension): a SPLIT capture is never replayed ----
+	// When the two captured layers for a group disagree (test12: 81x
+	// "[PipeAlpha] faithful restore ... enable L2=1 L3=0"), the capture IS
+	// the leak — a foreign raw write moved one layer before entry, so
+	// replaying each layer back its OWN value re-creates the split for
+	// every later draw (see-through cars / ghost peds — the alpha twin of
+	// the ped sticky-depth rule, main.cpp). Same rule as that block: a
+	// split entry ends the canonical baseline for the group on BOTH layers
+	// (the L1 rw leg follows devEnableL2 in the SEV1 block below); a
+	// CLEAN capture keeps its verbatim restore, so legacy-parity item 6's
+	// goal (a clean test-off capture still restores test-off) is untouched
+	// — only DISAGREEMENT across the captured layers trips this. Enable
+	// ends blend OFF, test ends TRUE, op ends ADD — the entry's canonical
+	// force, the values the span itself ran with.
+	bool stickyEnable = (saved.capMask & PAACAP_BLENDENABLE) &&
+		(saved.alphaBlendEnable != saved.alphaBlendEnableDev);
+	bool stickyTest = (saved.capMask & PAACAP_TESTENABLE) &&
+		(saved.alphaTestEnable != saved.alphaTestEnableDev);
+	bool stickyOp = (saved.capMask & PAACAP_BLENDOP) &&
+		(saved.blendOp != saved.blendOpDev);
+	if(stickyEnable){ devEnableL2 = FALSE; devEnableL3 = FALSE; }
+	if(stickyTest){ devTestL2 = TRUE; devTestL3 = TRUE; }
+	if(stickyOp){ devOpL2 = (RwUInt32)D3DBLENDOP_ADD; devOpL3 = (RwUInt32)D3DBLENDOP_ADD; }
+	// Source-kill trace (N1, 2026-11-08): the L2=1/L3=0 blend-enable split
+	// this rule resolves is NOT produced by this enter/exit pair — both the
+	// entry force and this exit leave L1/L2/L3 clean. It is re-created AFTER
+	// the last pipe exit by a foreign raw dev->SetRenderState(D3DRS_
+	// ALPHABLENDENABLE, FALSE) in the effects/postfx/sprite phase (main.cpp
+	// corona/font shield, postfx.cpp classify-blend, forwardplus/particles
+	// raw pins — all OUTSIDE this file's write scope). The sticky rule is
+	// the single canonical contract that keeps that foreign split from ever
+	// being re-emitted past this exit: a divergent capture is canonicalised
+	// (resolved=sticky), a clean capture is replayed (resolved=replayed).
+	bool stickyAny = stickyEnable || stickyTest || stickyOp;
+
 	// SEV1 L1/L2 SPLIT: the blend-enable state is ONE unit across L1 (rw
 	// cache, VERTEXALPHAENABLE), L2 (driver cache, D3DRS_ALPHABLENDENABLE)
 	// and L3 (raw device). The old TRUE-only mirror could leave L1 TRUE
@@ -2194,6 +2456,16 @@ pipeExitAlphaMode(PipeAlphaState saved)
 	pipeL3Set(D3DRS_SEPARATEALPHABLENDENABLE, saved.sepAlphaBlend);
 	pipeL3Set(D3DRS_COLORWRITEENABLE, saved.colorWrite);
 
+	// Sticky receipt: proves a split capture was NOT replayed (greppable
+	// [PipeAlpha] prefix, sits next to the parity-6 line below so a grep
+	// for "faithful restore" + "sticky exit" shows the rule firing).
+	if(stickyAny &&
+	   (dbglog_once("pipe_alpha_sticky_first") || dbglog_throttle("pipe_alpha_sticky")))
+		dbglog("[PipeAlpha] sticky exit: split capture NOT replayed (enable L2=%u L3=%u, test L2=%u L3=%u, op L2=%u L3=%u) -> canonical enable=0 test=1 op=ADD resolved=sticky",
+			(unsigned)saved.alphaBlendEnable, (unsigned)saved.alphaBlendEnableDev,
+			(unsigned)saved.alphaTestEnable, (unsigned)saved.alphaTestEnableDev,
+			(unsigned)saved.blendOp, (unsigned)saved.blendOpDev);
+
 	// Instrumentation (additive, throttled): state-restore receipt —
 	// the exact values handed back to the caller's baseline.
 	if(dbglog_throttle("pipeline_alpha_exit"))
@@ -2203,12 +2475,14 @@ pipeExitAlphaMode(PipeAlphaState saved)
 			(unsigned)saved.sepAlphaBlend, (unsigned)saved.colorWrite);
 
 	// ---- divergence receipt (parity item 6) ----
-	// Fires ONLY when the faithful restore differs from what the pre-parity
-	// exit would have written (that is the observable behaviour change), or
-	// when the two captured layers disagreed with each other going in
-	// (layer-desync evidence). One-shot tag so the run's first hit is never
-	// starved by throttle-bucket collisions, then the 2s throttle. POD
-	// locals only; the compare itself is free (struct reads).
+	// Fires ONLY for a CLEAN capture that the faithful restore replayed
+	// (resolved=replayed): the capture differs from what the pre-parity exit
+	// would have derived. A SPLIT capture is excluded — it is reported under
+	// the sticky-exit receipt above (resolved=sticky), so the replayed count
+	// this line drives can reach 0 while the sticky count tracks the still-
+	// active upstream split source independently. One-shot tag so the run's
+	// first hit is never starved by throttle-bucket collisions, then the 2s
+	// throttle. POD locals only; the compare itself is free (struct reads).
 	RwUInt32 derivedEnable = saved.vtxAlpha ? TRUE : FALSE;
 	bool faithfulDiverged =
 		(saved.capMask & PAACAP_BLENDENABLE) &&
@@ -2223,12 +2497,12 @@ pipeExitAlphaMode(PipeAlphaState saved)
 		((saved.capMask & PAACAP_BLENDOP) &&
 		 (saved.blendOp != (RwUInt32)D3DBLENDOP_ADD ||
 		  saved.blendOpDev != (RwUInt32)D3DBLENDOP_ADD));
-	if(faithfulDiverged &&
+	if(!stickyAny && faithfulDiverged &&
 	   (dbglog_once("pipe_alpha_restore_first") ||
 	    dbglog_throttle("pipe_alpha_restore")))
 		dbglog("[PipeAlpha] faithful restore (parity 6): rw vtx=%u — captured "
 		       "vs pre-parity: enable L2=%u L3=%u (derived %u), "
-		       "test L2=%u L3=%u (derived 1), op L2=%u L3=%u (derived 1)",
+		       "test L2=%u L3=%u (derived 1), op L2=%u L3=%u (derived 1) resolved=replayed",
 			(unsigned)saved.vtxAlpha,
 			(unsigned)saved.alphaBlendEnable, (unsigned)saved.alphaBlendEnableDev,
 			(unsigned)derivedEnable,

@@ -16,6 +16,10 @@ D3DLIGHT9 &gCarEnvMapLight = *(D3DLIGHT9*)0xC02CB0;
 
 RwTexture *&gpWhiteTexture = *(RwTexture**)0xB4E3EC;
 
+void *&pCameraBeingUpdated = *(void**)0xC9BCC0;
+uint32 &RwD3D9RasterExtOffset = *(uint32*)0xB4E9E0;
+CPedPool *&pedPool = *(CPedPool**)0xB74490;
+
 
 float *gfLaRiotsLightMult = (float*)0x8CD060;
 float *ambientColors = (float*)0xB7C4A0;

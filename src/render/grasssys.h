@@ -473,6 +473,13 @@ void GrassResetShaderLatches(void);
 // @0xC02DC0) is rebound through L1 (park-and-set) / L2 / L3. Binding-only:
 // state-identical when healthy (one rw Get + one device Get, no writes).
 //
+// The two contracts are INDEPENDENT (N4, 2026-11-08): the texture contract
+// runs on healthy-Z frames too. The leaked-raster class differs only at
+// device stage 0 and does not imply a depth drift, so gating the texture
+// repair behind the healthy-Z early return left it unreachable on normal
+// frames (black / ghosted plant quads). Only the Z repair is skipped on the
+// healthy path; the once-per-frame gate bounds both.
+//
 // Call site: main.cpp grassRenderCallback (per-atomic plant render callback,
 // attached by CPlantMgr_Initialise @0x5BF8EA) — one line at function top.
 // See grasssys.cpp GrassEnforceDepthContract for the full root-cause block.

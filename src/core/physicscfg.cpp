@@ -111,12 +111,6 @@ backendSetRaw(const char *backend)
 		(strcmp(s_backend, "native") == 0) ? 1 : 0;
 }
 
-static int
-backendIsNative(void)
-{
-	return strcmp(s_backend, "native") == 0;
-}
-
 // ---- first-create writer: full commented default file (exact bytes,
 // ---- CRLF - the same "brand-new INI writes all defaults" contract as
 // ---- main.cpp:6906, with the comment block linb round-trips would eat) ----

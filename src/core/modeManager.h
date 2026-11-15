@@ -38,7 +38,7 @@ enum ModeId
 	MODE_GTAV,		// modern: GTA V (probe-gated, water only)
 	MODE_MODERN,		// modern: PBR / "ULTRA" profile
 	MODE_CUSTOM,		// user-defined: no profile fields, per-slot base only
-	MODE_MOBILE,		// LEGACY alias, hidden from the 6+Custom picker
+	MODE_MOBILE,		// first-class 8-chip picker mode (full vintage field set)
 
 	MODE_COUNT
 };

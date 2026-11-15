@@ -158,6 +158,11 @@ private:
 	void SetupBoneHierarchy();
 
 	CPed *m_pPed;
+	void *m_clump;	// ped's RpClump* captured AT INIT - write-time identity gate
+					// for Update's matArray writes (W0.5 lane E, family-C residue:
+					// liveness at manager loop time is not authorisation at write
+					// time - a freed+reissued slot passes RagdollPedIsLive and a
+					// new ped inherits the old overlay's hierarchy writes).
 	RagdollBone m_bones[RAGDOLL_MAX_BONES];
 	RagdollBone *m_pRootBone;
 	float m_blend;

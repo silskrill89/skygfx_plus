@@ -1,7 +1,7 @@
 ---
 tags: [index, moc, overview]
 created: 2025-01-02
-updated: 2026-07-15
+updated: 2026-11-10
 ---
 
 # SkyGFX Plus — Technical Vault
@@ -14,6 +14,7 @@ updated: 2026-07-15
 ## Map of Content
 
 ### Architecture & Design
+- [[Current Architecture (Wave 20)]] — post-extraction module map, motion_fx/wind, postfx split, address layer
 - [[Decided Architecture]] — Architecture decisions (20-question quiz with answers)
 - [[64-bit Bridge Architecture]] — 64-bit bridge for scripts/AI/assets
 - [[Signal Splitter Architecture]] — "Bigger Bus" for heavy operations
@@ -33,7 +34,9 @@ updated: 2026-07-15
 - [[Rubber Shader Merge]] — Merged rubber shader into VehiclePBR_Modern
 
 ### Build & Deployment
-- [[Build System]] — fix_build.py, MSVC/SDK setup
+- [[Status 2026-11-10]] — latest wave status, fix-wave ledger, hard rule, watch-list
+- [[Gate Chain]] — W0 → W0.5 binary identities and gate protocol
+- [[Build System]] — fast_build.py / fix_build.py, MSVC/SDK setup
 - [[SDK Dependencies]] — All external SDKs and paths
 
 ### Reference Papers
@@ -89,7 +92,24 @@ The main `docs/` directory contains project-level documentation. Use these links
 
 ## Current Status
 
-### Implemented
+### As of 2026-11-10 (wave 20, on disk — unbuilt)
+
+- **Last verified binary:** W0.5 — `2,616,832 B`, md5 `bb5d1230aba68348cb7de28f0201f7a3`. Next
+  gate is W0.6, pending the address-hygiene sweep. See [[Status 2026-11-10]] and [[Gate Chain]].
+- **Architecture:** `main.cpp` reduced to ≈4.4k lines; `shadows.cpp`, `rw_fixes.cpp`,
+  `config.cpp`, `render_callbacks.cpp` extracted; `postfx_*` split into nine units;
+  `motion_fx.cpp` + `wind.cpp` own motion and wind. See [[Current Architecture (Wave 20)]].
+- **Working fix wave:** CA contract (rainbow), far/fog restore + BldZW park guard, VCS RT-copy
+  guards, softbody TOCTOU gates, luminance cache-desync, safety-lever floors, sentinel honors,
+  black-quad white-shield, CClouds split restore.
+- **Hard rule:** game/SDK addresses live only in `src/rw/gta.h`-style named declarations; call
+  sites use names, never raw hex (2026-11-10, user m0269).
+- **Goal line:** match `C:\Users\aaaaaaaaa\Documents\ShareX\Screenshots\2026-09` (Sep-23 ~07:09)
+  with zero on-screen glitches.
+
+### Earlier snapshot (2026-07-15)
+
+#### Implemented
 - Unified PBR vehicle shader (7 entry points)
 - Parametric rubber/tire shader with dirt/wear
 - IBL tinting for env map reflections
@@ -103,13 +123,13 @@ The main `docs/` directory contains project-level documentation. Use these links
 - Subsurface scattering
 - Weather system with multi-timecyc
 
-### In Progress
+#### In Progress
 - Wheel extender render hook
 - Mismatched wheels for beater cars
 - Passenger class system
 - Region-based vehicle spawning
 
-### Planned
+#### Planned
 - Universal dirt/wear system
 - Rust texture system
 - TransFender integration
@@ -125,7 +145,7 @@ The main `docs/` directory contains project-level documentation. Use these links
 - `src/render/vehiclePipe.cpp` — Vehicle rendering pipeline
 - `src/render/buildingPipe.cpp` — Building rendering pipeline
 - `src/extras/veh_shaders.cpp` — Vehicle shader bridge
-- `src/extras/wheels_extender.cpp` — Wheel extender system
+- `archive/wheels_extender/wheels_extender.cpp` — Wheel extender system (archived)
 - `src/extras/wheels.cpp` — Wheel system implementation
 
 ### Shaders
@@ -135,8 +155,8 @@ The main `docs/` directory contains project-level documentation. Use these links
 
 ### Tools
 - `tools/fix_build.py` — Build automation
-- `tools/wheel_extractor.py` — Wheel extraction
-- `tools/wheel_pipeline.py` — Wheel processing
+- `tools/_archive/wheel_extractor.py` — Wheel extraction (archived)
+- `tools/_archive/wheel_pipeline.py` — Wheel processing (archived)
 
 ---
 

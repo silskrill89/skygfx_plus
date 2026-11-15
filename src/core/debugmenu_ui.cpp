@@ -32,6 +32,7 @@ extern int g_fpNumLights;		// forwardplus.cpp (debug readout)
 // main.cpp (pipe-conjunction fix #4) — re-derives config->pipeline/
 // colorFilter/ivMode from the actual building/vehicle pipes.
 extern void derivePipelineFromPipes(Config *c);
+extern void IniPathForSlot(int slot, char *out, int outSize);	// main.cpp: slot -> skygfx{N+1}.ini / skygfx.ini
 // main.cpp: colorFilterEnable user-intent latch (silent-write self-heal).
 // The row below records every toggle as USER INTENT so the per-frame guard
 // never fights legitimate edits and the value persists across world entry.
@@ -126,6 +127,17 @@ static void EnsureImGuiInit(IDirect3DDevice9 *device)
 	if(!device) return;
 	ImGui::CreateContext();
 	ImGuiIO &io = ImGui::GetIO();
+	// P3-8: park ImGui's own UI-state file (window size/pos, header open
+	// state) next to skygfx.ini instead of the process CWD. asipath is set
+	// by readIni before the first frame; if it is somehow empty, disable
+	// persistence rather than litter the game dir with a bare imgui.ini.
+	static char s_imguiIniPath[MAX_PATH];
+	if(asipath[0]){
+		snprintf(s_imguiIniPath, sizeof(s_imguiIniPath), "%sskygfx_imgui.ini", asipath);
+		io.IniFilename = s_imguiIniPath;
+	}else{
+		io.IniFilename = NULL;
+	}
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 	io.MouseDrawCursor = true;  // GTA SA hides OS cursor — ImGui draws its own
 	// Foundation theme (palette, metrics, ImGuiCol table). Installed
@@ -216,6 +228,9 @@ static std::string s_cfgSel;
 // Global settings filter (hides non-matching rows on every tab). The INI
 // Keys tab keeps its own input too; both filters combine there.
 static char s_settingFilter[96] = "";
+// "Changed only" (P3-1): hide rows still at their parser default. Combined
+// with the text filter inside RowMatches, so every pane gets it for free.
+static bool s_filterChanged = false;
 static char s_copyStatus[160] = "";
 static double s_copyStatusTime = 0.0;
 
@@ -346,6 +361,7 @@ enum RowKind {
 	RK_ENUM,		// int -> combo, value = base + index
 	RK_STATIC,		// int shown GREYED (no live edit path)
 	RK_STATICB,		// bool shown GREYED
+	RK_STATICF,		// float shown GREYED (stored + saved, but no consumer)
 	RK_NONE,		// no variable at all -> GREYED
 	RK_NOISEQ,		// [General] NoiseQuality -> main.cpp accessors
 	RK_INIINT		// startup-only int read from the current INI (no live variable)
@@ -557,6 +573,61 @@ treeFxRowEdit(void)
 		dbglog("[Menu] tree alpha profile=%d -> TreeAlpha_SetProfile", config->treeFx);
 }
 
+// Menu half of readIniFile's discrete-value contracts. The parser snaps
+// these keys on load; without the same snap here the slider could park a
+// value the consumer uses until the next reload rewrites it (or discards
+// it), which is exactly the "menu shows one number, next launch shows
+// another" defect class.
+//
+// envMapSize: readIniFile rounds UP to the next power of two (and clamps
+// 1..4096). The row's slider runs 4..2048, so round the live edit the same
+// way - rounding up is drag-friendly (the snapped value is always >= the
+// cursor value, so it never fights the drag).
+static void
+EnvMapSizeRowEdit(void)
+{
+	int v = config->envMapSize;
+	if(v < 4)
+		v = 4;
+	if(v > 2048)
+		v = 2048;
+	int i = 1;
+	while(i < v)
+		i *= 2;
+	if(i > 2048)
+		i = 2048;
+	if(i != config->envMapSize){
+		if(dbglog_throttle("envmap_snap"))
+			dbglog("[Menu] envMapSize %d -> %d (power of two, readIni contract)",
+				config->envMapSize, i);
+		config->envMapSize = i;
+	}
+}
+
+// reflectionMsaaLevel: readIniFile accepts only {0,2,4,8} and turns
+// anything else into 0 on load. Snap the live edit to the nearest legal
+// level (ties round UP so dragging right always climbs and dragging left
+// always descends - a parser-exact "else -> 0" would make the slider unable
+// to cross 2 -> 4 at all). Every value this row can now store is one the
+// parser keeps, so the INI round-trip is exact.
+static void
+MsaaLevelRowEdit(void)
+{
+	int v = config->reflectionMsaaLevel;
+	int snap;
+	if(v <= 0)        snap = 0;		// 0 -> 0
+	else if(v == 1)   snap = 2;		// 1 -> 2 (nearest, tie up)
+	else if(v <= 3)   snap = (v == 2) ? 2 : 4;	// 2 -> 2, 3 -> 4
+	else if(v <= 5)   snap = 4;		// 4 -> 4, 5 -> 4
+	else              snap = 8;		// 6 -> 8 (tie up), 7 -> 8, 8 -> 8
+	if(snap != config->reflectionMsaaLevel){
+		if(dbglog_throttle("msaa_snap"))
+			dbglog("[Menu] reflectionMsaaLevel %d -> %d (legal set {0,2,4,8})",
+				config->reflectionMsaaLevel, snap);
+		config->reflectionMsaaLevel = snap;
+	}
+}
+
 // ============================================================
 // Startup-only INI keys with no Config field (currently
 // forwardPlusFallback, read once by forwardplus.cpp's FpFallbackEnabled).
@@ -568,10 +639,9 @@ CurrentIniPath(char *out, int outSize)
 {
 	if(!out || outSize <= 0 || asipath[0] == '\0')
 		return false;
-	if(currentConfig > 0)
-		snprintf(out, outSize, "%sskygfx%d.ini", asipath, currentConfig);
-	else
-		snprintf(out, outSize, "%sskygfx.ini", asipath);
+	// Single slot -> filename mapping (shared with main.cpp readIni/saveConfig):
+	// numConfigs==0 -> skygfx.ini, else slot k -> skygfx{k+1}.ini.
+	IniPathForSlot(currentConfig, out, outSize);
 	if(GetFileAttributesA(out) != INVALID_FILE_ATTRIBUTES)
 		return true;
 	// Older builds only had skygfx.ini; fall back so the row still shows a
@@ -634,7 +704,8 @@ BuildSettingRows(void)
 	#define rIn(K,L,P,LO,HI,NT)			A(K,L,RK_INT,(P),(LO),(HI),NULL,0,NULL,(NT))
 	#define rFn(K,L,P,LO,HI,NT)			A(K,L,RK_FLOAT,(P),(LO),(HI),NULL,0,NULL,(NT))
 	#define rEn(K,L,P,NM,BS,NT)			A(K,L,RK_ENUM,(P),0,0,(NM),(BS),NULL,(NT))
-	#define rSn(K,L,P,NT)					A(K,L,RK_STATIC,(P),0,0,NULL,0,NULL,(NT))
+	#define rSn(K,L,P,NT)						A(K,L,RK_STATIC,(P),0,0,NULL,0,NULL,(NT))
+	#define rSFn(K,L,P,NT)						A(K,L,RK_STATICF,(P),0,0,NULL,0,NULL,(NT))
 	#define rIo(K,L,P,LO,HI,OE,NT)		A(K,L,RK_INT,(P),(LO),(HI),NULL,0,(OE),(NT))
 	#define rEo(K,L,P,NM,BS,OE,NT)		A(K,L,RK_ENUM,(P),0,0,(NM),(BS),(OE),(NT))
 
@@ -714,7 +785,9 @@ BuildSettingRows(void)
 	// feeds the motion-blur reprojection).
 	rW("detailMaps", "Detail maps", &config->detailMaps);
 	rWn("noiseDetail", "Noise-detail texturing", &config->noiseDetail,
-		"config->noiseDetail - blue-noise jitter on tiled detail textures to hide repeats.");
+		"config->noiseDetail - blue-noise jitter on tiled detail textures to hide repeats.\n"
+		"Legacy INI names are read as this key too: stochasticTexturing, then stochastic\n"
+		"(readIniFile's alias fallback); Save writes the canonical noiseDetail name.");
 	rW("depthHookEnable", "Depth buffer hook", &config->depthHookEnable);
 	// ragdollEnable retagged to the Peds section.
 	rWn("dualPass", "Dual-pass global", &config->dualPassGlobal,
@@ -722,6 +795,17 @@ BuildSettingRows(void)
 	rWn("ps2Modulate", "PS2 modulate global", &config->ps2ModulateGlobal,
 		"Master; the per-type rows are in the PS2 modulate detail group below.");
 	rW("usePCTimecyc", "PC timecyc", &config->usePCTimecyc);
+	// Coverage-gap row (same class as waterReflectionMix below): the wave-12
+	// GPU particle module parses and saves gpuParticlesEnable but the menu had
+	// no row for it, so the feature was only reachable by hand-editing the INI.
+	// particles_gpu.cpp reads the Config field at every entry point, so this
+	// checkbox is live on the next spawn/frame.
+	rWn("gpuParticlesEnable", "GPU particles (wake foam path)", &config->gpuParticlesEnable,
+		"GPU-resident particle sprite path (particles_gpu.cpp): boat-wake foam "
+		"sprites sampled from the wake flush, shaded by WakeParticlePS.\n"
+		"Default 0 (OFF) - every entry point no-ops with zero device-state "
+		"traffic (stable-config rule: new features ship inert).\n"
+		"Live gate: toggling applies to the next spawn/update, no restart.");
 
 	// State-integrity lane — render-state repairs at the frame / pipe
 	// boundaries. Started as the three keys read at main.cpp:4513-4527; the
@@ -848,7 +932,8 @@ BuildSettingRows(void)
 	G("Main", "Weather & timecycle");
 	rE("lightningIlluminatesWorld", "Lightning illuminates", &config->lightningIlluminatesWorld, s_lightning, 0);
 	rEn("coronaZtest", "Corona z-test", &config->coronaZtest, s_corona, -1,
-		"Patches game code at 0x6FB17C through resetValues() when changed.\n"
+		"No code patch is written (SilentPatchSA owns the corona z-test bytes at 0x6FB17C).\n"
+		"Drives the runtime z-test enforcement in the corona shield (CCoronas::Render):\n"
 		"-1 = leave alone, 0 = PS2 (disable z-test), 1 = PC (force z-test).\n"
 		"readIniFile clamps this key to [-1..1].");
 	rWn("altTimecycEnable", "Alternative timecyc (set 2)", &config->altTimecycEnable,
@@ -923,10 +1008,13 @@ BuildSettingRows(void)
 	rW("ssaoEnable", "SSAO on", &config->ssaoEnable);	// mirrors Main > Effects (same var; one write per click)
 	rF("ssaoRadius", "Radius", &config->ssaoRadius, 0.0f, 5.0f);
 	rF("ssaoPower", "Power", &config->ssaoPower, 0.5f, 4.0f);
-	rFn("ssaoKernelSize", "Kernel size", &config->ssaoKernelSize, 1.0f, 64.0f,
-		"Not wired to the shader - AO spread is Radius. Kept for INI compat.");
-	rIn("ssaoSampleCount", "Sample count", &config->ssaoSampleCount, 1, 64,
-		"Fixed at 16 samples in the shader. Kept for INI compat.");
+	rSFn("ssaoKernelSize", "Kernel size", &config->ssaoKernelSize,
+		"Not wired to the shader - AO spread is Radius. Parsed and saved for INI "
+		"compat only, so the row is read-only: an edit would persist and be read "
+		"back on load, but nothing consumes it.");
+	rSn("ssaoSampleCount", "Sample count", &config->ssaoSampleCount,
+		"Fixed at 16 samples in the shader. Parsed and saved for INI compat "
+		"only, so the row is read-only: nothing consumes it.");
 	rW("ssaoTemporalEnable", "Temporal", &config->ssaoTemporalEnable);
 	rF("ssaoTemporalBlend", "Temporal blend", &config->ssaoTemporalBlend, 0.01f, 0.95f);
 	rI("ssaoBlurPasses", "Blur passes", &config->ssaoBlurPasses, 0, 3);
@@ -1150,10 +1238,13 @@ BuildSettingRows(void)
 		"CMirrors composite: overdraws the mirror blit with a per-pixel\n"
 		"projective fetch (FusionFix mirrorPS1.asm port, mirrorPass.cpp).\n"
 		"0 = the game's fixed-UV fullscreen blit (vanilla).");
-	rIn("reflectionMsaaLevel", "Reflection MSAA level", &config->reflectionMsaaLevel, 0, 8,
+	rIo("reflectionMsaaLevel", "Reflection MSAA level", &config->reflectionMsaaLevel, 0, 8,
+		MsaaLevelRowEdit,
 		"0/2/4/8. RW3.6 rasters have no multisample API, so the level\n"
 		"SUPERsamples the vehicle env-map raster (envMapSize x level, cap 2048).\n"
-		"Values outside {0,2,4,8} behave as 0 (off).");
+		"readIniFile keeps only {0,2,4,8} and discards anything else on load;\n"
+		"the row's onEdit snaps your edit to the nearest legal level (mirror of\n"
+		"the Vehicle section's row - same variable, one write path).");
 	rFn("waterUnderwaterFog", "Underwater fog strength", &config->waterUnderwaterFog, 0.0f, 4.0f,
 		"Depth/blue wash when the camera is below the surface (postfx_underwater.cpp).\n0 = no underwater fog at all.");
 	// (waterFoamThreshold / waterFoamSoftness deduped: they live in the
@@ -1171,6 +1262,25 @@ BuildSettingRows(void)
 		"direction (default), 0 = legacy lerp(scene, surf, bodyOpacity) composite.\n"
 		"Live global. The menu's Save INI writer now covers this key; the old\n"
 		"saveConfigTo omitted it.");
+	// M4/M5/M7/M8 (water lane handoff 2026-11-08): parsed + saved by
+	// readIniFile/saveConfigTo, default ON (stable-config rule: new features
+	// ship enabled only because each entry point no-ops when its consumer
+	// path is absent). waterPipe.cpp reads the Config fields live, so a
+	// toggle applies to the next water draw - no restart.
+	rWn("waterRefractionValid", "Depth-validated refraction (M4)", &config->waterRefractionValid,
+		"M4: wave refraction fetch validated against the depth buffer so\n"
+		"geometry above the surface cannot smear into the refraction.\n"
+		"1 = on (default), 0 = unvalidated refraction (legacy look).");
+	rWn("waterCaustics", "Caustics sharpen (M5)", &config->waterCaustics,
+		"M5: caustics upgrade - forward 2-tap sharpen on the G-channel\n"
+		"caustics sample (utility-noise consumer in Water_Parallax.hlsl).\n"
+		"1 = on (default), 0 = unsharpened caustics.");
+	rWn("waterSss", "Crest SSS polish (M7)", &config->waterSss,
+		"M7: subsurface-scattering crest polish + sun-pierce on wave tops.\n"
+		"1 = on (default), 0 = no crest SSS.");
+	rWn("waterVolume", "Volume/surface split (M8)", &config->waterVolume,
+		"M8: interior water-volume vs surface split (INTERIOR flag path).\n"
+		"1 = on (default), 0 = surface-only shading everywhere.");
 
 	// W7-C: replaced the dead waterReflectionFarClip row (key deleted — zero
 	// consumers) with the CMirrors composite fix. (The mirrorDistortionFix
@@ -1302,23 +1412,23 @@ BuildSettingRows(void)
 
 	G("PostFX", "Vignette");
 	rFn("vignetteIntensity", "Intensity", &config->vignetteIntensity, 0.0f, 1.0f,
-		"0 = off. Binds the legacy Config vignetteIntensity field (skygfx.h) -\nthe same member postfx.cpp's FxVignette pass reads.");
-	rFn("vignetteRadius", "Radius", &config->vignetteRadius, 0.0f, 2.0f,
-		"Not wired - FxVignette hard-codes 0.85. Kept for INI compat.\n"
-		"ROUND-TRIP GAP: readIniFile never parses this key and saveConfigTo\n"
-		"never writes it, so an edit here is session-only (reverts on reload).");
-	rFn("vignetteContrast", "Contrast", &config->vignetteContrast, 0.0f, 5.0f,
-		"Not wired - FxVignette hard-codes 0.45. Kept for INI compat.\n"
-		"ROUND-TRIP GAP: readIniFile never parses this key and saveConfigTo\n"
-		"never writes it, so an edit here is session-only (reverts on reload).");
+		"0 = off. Binds the legacy Config vignetteIntensity field (skygfx.h) -\n"
+		"the same member postfx.cpp's FxVignette pass reads.\n"
+		"Radius and contrast are NOT settings: FxVignette hard-codes 0.85/0.45\n"
+		"(postfx_newfx.cpp), and vignetteRadius/vignetteContrast have no INI key\n"
+		"and no reader, so they stay out of the inventory. The IV grade has its\n"
+		"own live knobs (ivVignetteRadius/Contrast on the IV grade section).");
 
 	G("PostFX", "SSAO detail");
 	rF("ssaoRadius", "Radius", &config->ssaoRadius, 0.0f, 5.0f);
 	rF("ssaoPower", "Power", &config->ssaoPower, 0.5f, 4.0f);
-	rFn("ssaoKernelSize", "Kernel size", &config->ssaoKernelSize, 1.0f, 64.0f,
-		"Not wired to the shader - AO spread is Radius. Kept for INI compat.");
-	rIn("ssaoSampleCount", "Sample count", &config->ssaoSampleCount, 1, 64,
-		"Fixed at 16 samples in the shader. Kept for INI compat.");
+	rSFn("ssaoKernelSize", "Kernel size", &config->ssaoKernelSize,
+		"Not wired to the shader - AO spread is Radius. Parsed and saved for INI "
+		"compat only, so the row is read-only: an edit would persist and be read "
+		"back on load, but nothing consumes it.");
+	rSn("ssaoSampleCount", "Sample count", &config->ssaoSampleCount,
+		"Fixed at 16 samples in the shader. Parsed and saved for INI compat "
+		"only, so the row is read-only: nothing consumes it.");
 	rF("ssaoTemporalBlend", "Temporal blend", &config->ssaoTemporalBlend, 0.01f, 0.95f);
 	rI("ssaoBlurPasses", "Blur passes", &config->ssaoBlurPasses, 0, 3);
 	rF("ssaoBlurRadius", "Blur radius", &config->ssaoBlurRadius, 1.0f, 8.0f);
@@ -1353,8 +1463,10 @@ BuildSettingRows(void)
 	G("Vegetation", "Grass intensity variance");
 	// W8-1 per-plant intensity variance is always-on (no Config field yet):
 	// greyed so the gap is visible instead of silently missing. The exact
-	// skygfx.h / main.cpp / PC_GrassRenderer / PC_GrassInstancer diff is staged
-	// in .serena/agent-reports/dbg-menu-categories.md.
+	// skygfx.h / main.cpp / grass draw-path diff is staged in
+	// .serena/agent-reports/dbg-menu-categories.md (its PC_GrassRenderer /
+	// PC_GrassInstancer target names predate this tree's grasssys.cpp
+	// CGrassRenderer / CGrassInstancer classes; no variance block landed here).
 	rN("grassIntensityVar", "Per-plant intensity variance",
 		"STAGED - no live variable yet: W8-1 applies intensity variance per plant\n"
 		"(final_I = I + VarI*rand01()) with a vanilla guard and no INI toggle.\n"
@@ -1415,14 +1527,20 @@ BuildSettingRows(void)
 		"0 = disabled; promotes materials whose raw env-map shininess is >= this.");
 
 	G("Vehicle", "Env map / reflections");
-	rIn("envMapSize", "Env map size", &config->envMapSize, 4, 2048,
-		"readIniFile rounds the key up to the next power of two; the env-map\nraster is capped at 2048. ChangeEnvMapSize() applies the same snap.");
+	rIo("envMapSize", "Env map size", &config->envMapSize, 4, 2048, EnvMapSizeRowEdit,
+		"readIniFile rounds the key up to the next power of two; the env-map\n"
+		"raster is capped at 2048. The row's onEdit applies the same snap\n"
+		"(EnvMapSizeRowEdit), so a drag can never store a non-power-of-two\n"
+		"size that only the next reload would fix.");
 	rW("envMapUseLODs", "Env map use LODs", &config->envMapUseLODs);
 	rF("envMapFarClipMult", "Env far clip mult", &config->envMapFarClipMult, 0.1f, 10.0f);
-	rIn("reflectionMsaaLevel", "Reflection MSAA (supersample)", &config->reflectionMsaaLevel, 0, 8,
+	rIo("reflectionMsaaLevel", "Reflection MSAA (supersample)", &config->reflectionMsaaLevel, 0, 8,
+		MsaaLevelRowEdit,
 		"0/2/4/8. RW3.6 rasters have no multisample API, so the level\n"
 		"SUPERsamples the vehicle env-map raster (envMapSize x level, cap 2048).\n"
-		"Values outside {0,2,4,8} behave as 0 (off).");
+		"readIniFile keeps only {0,2,4,8} and discards anything else on load;\n"
+		"the row's onEdit snaps your edit to the nearest legal level, so what\n"
+		"you see is what the next launch loads.");
 	rF("envPower", "Env power", &config->envPower, 1.0f, 128.0f);
 	rF("envFresnel", "Env fresnel", &config->envFresnel, 0.0f, 0.4f);
 	rF("envShininessMult", "Env shininess mult", &config->envShininessMult, 0.0f, 10.0f);
@@ -1474,7 +1592,7 @@ BuildSettingRows(void)
 	// ================= TAB: Utility =================
 	G("Utility", "Utility noise texture");
 	A("NoiseQuality", "Noise quality", RK_NOISEQ, NULL, 0, 0, s_noise, 0, NULL,
-		"[General] NoiseQuality -> tile resolution 0=32, 1=128, 2=512, >=3=1024.\nStatic in main.cpp: written through the menu accessors, then the tile is\nregenerated (same path refreshIni takes on F11).");
+		"[General] NoiseQuality -> tile resolution 0=32, 1=128, 2=512, >=3=1024.\nStatic in main.cpp, written through the menu accessors. The old regen that\napplied it is gone (SkyNoise owns the tile, built lazily at first bind), so\nthe value is round-tripped through the INI only.");
 
 	G("Utility", "Hotkeys");
 	rIn("keySwitch", "Menu hotkey (scan code)", &config->keys[0], 0, 512,
@@ -1521,21 +1639,55 @@ BuildSettingRows(void)
 	#undef rFn
 	#undef rEn
 	#undef rSn
+	#undef rSFn
 	#undef rIo
 	#undef rEo
 	return v;
 }
+
+// Forward decls for the defaults audit inside GetSettingRows (both are
+// defined further down with the rest of the row helpers).
+static bool RowIsGrey(const SettingRow &r);
+static bool RowDefaultValue(const SettingRow &r, float *out);
 
 static std::vector<SettingRow> &
 GetSettingRows(void)
 {
 	static std::vector<SettingRow> rows;
 	static Config *rowsCfg = NULL;
+	static bool s_defaultsAudited = false;
 	if(!config)
 		return rows;
 	if(rows.empty() || rowsCfg != config){	// Config selector moved -> re-resolve pointers
 		rows = BuildSettingRows();
 		rowsCfg = config;
+		// P2-15 coverage audit (once per build): every live row must have a
+		// kKeyDefaults entry, otherwise its right-click menu says "No parser
+		// default" and the reset path silently skips it. Greyed rows are
+		// exempt (no edit path). Logged, not fatal - the table is
+		// hand-maintained and this line is how the next gap surfaces.
+		if(!s_defaultsAudited){
+			s_defaultsAudited = true;
+			std::string missing;
+			int live = 0;
+			for(size_t i = 0; i < rows.size(); i++){
+				const SettingRow &r = rows[i];
+				if(RowIsGrey(r) || (!r.ptr && r.kind != RK_NOISEQ))
+					continue;
+				live++;
+				float dv;
+				if(r.key && !RowDefaultValue(r, &dv)){
+					if(!missing.empty())
+						missing += ", ";
+					missing += r.key;
+				}
+			}
+			if(!missing.empty())
+				dbglog("[Menu] defaults audit: %d live rows, missing kKeyDefaults: %s",
+					live, missing.c_str());
+			else
+				dbglog("[Menu] defaults audit: %d live rows, all have parser defaults", live);
+		}
 	}
 	return rows;
 }
@@ -1559,9 +1711,12 @@ GetSettingRows(void)
 //    — padding only; SMAA has no user-tunable preset any more.
 //  * The whole Expanded Weather/Timecycle block, skyZenithR through
 //    lensChromaticAberrationCubeCoeff — 155 fields. Grep finds no reader
-//    outside skygfx.h; readIniFile has no keys for them. The three
+//    outside skygfx.h; readIniFile has no keys for them. Of the three
 //    vignette fields inside that block (vignetteIntensity/Radius/Contrast)
-//    ARE live and are exposed via the FxVignette rows.
+//    only vignetteIntensity is live and exposed (the FxVignette row):
+//    Radius/Contrast have no INI key and no reader (FxVignette hard-codes
+//    0.85/0.45), so their rows were removed instead of staying editable
+//    but inert — use ivVignetteRadius/Contrast on the IV grade section.
 //  * currentWeatherType, weatherTransition, weatherCycleEnabled,
 //    timecycleOverrideHour, timecycleOverrideEnabled — 5 fields, no reader.
 //  * lensArtefactsInten, lensArtefactsIntenMinExp, lensArtefactsIntenMaxExp
@@ -1611,7 +1766,7 @@ static const KeyDefault kKeyDefaults[] = {
 	{ "bloomEnable", 0 }, { "bloomQuality", 2 }, { "bloomThreshold", 1.0f }, { "bloomIntensity", 0.8f },
 	{ "sunShaftsEnable", 0 }, { "sunShaftsDensity", 0.84f }, { "sunShaftsDecay", 1.0f },
 	{ "fxaaEnable", 0 }, { "grainIntensity", 0.0f }, { "caIntensity", 0.0f },
-	{ "vignetteIntensity", 0.0f }, { "vignetteRadius", 0.0f }, { "vignetteContrast", 0.0f },
+	{ "vignetteIntensity", 0.0f },
 	{ "ivDesaturation", 0.15f }, { "ivGamma", 1.0f }, { "ivSaturation", 0.3f },
 	{ "ivCurves", 1.0f }, { "ivVignetteIntensity", 0.15f }, { "ivVignetteRadius", 0.70f },
 	{ "ivVignetteContrast", 1.5f }, { "ivBloomIntensity", 0.05f }, { "ivExposure", 2.5f },
@@ -1654,6 +1809,9 @@ static const KeyDefault kKeyDefaults[] = {
 	{ "waterDeepR", 0.01f }, { "waterDeepG", 0.03f }, { "waterDeepB", 0.08f },
 	{ "waterTileScale", 1.0f }, { "waterShoreFade", 2.0f }, { "waterTranslucency", 1.0f },
 	{ "waterReflectionStrength", 0.55f }, { "waterUseTimecycle", 1 },
+	// M4/M5/M7/M8 water-lane keys (readIniFile default 1).
+	{ "waterRefractionValid", 1 }, { "waterCaustics", 1 },
+	{ "waterSss", 1 }, { "waterVolume", 1 },
 	{ "treeWind", 0 }, { "treeFx", 0 }, { "grassInstancing", 0 },
 	{ "grassAddAmbient", 0 }, { "grassBackfaceCull", 1 }, { "grassFixPlacement", 0 },
 	{ "detailMaps", 1 }, { "noiseDetail", 1 }, { "usePCTimecyc", 0 },
@@ -1667,6 +1825,9 @@ static const KeyDefault kKeyDefaults[] = {
 	{ "cloudRenderFix", 1 }, { "forwardPlusEnable", 1 }, { "forwardPlusDebug", 0 },
 	{ "profilerEnable", 1 }, { "profilerGpuTimers", 0 }, { "postfxDumpDebug", 0 },
 	{ "NoiseQuality", 0 },
+	// Hotkeys: readIniFile only overwrites keys[] when the INI carries the
+	// key, so the fresh-install value is the zero-init Config (unbound).
+	{ "keySwitch", 0 }, { "keyReload", 0 },
 	{ "YCbCrCorrection", 0 }, { "lumaScale", 219.0f/255.0f }, { "lumaOffset", 16.0f/255.0f },
 	{ "CbScale", 1.23f }, { "CbOffset", 0.0f }, { "CrScale", 1.23f }, { "CrOffset", 0.0f },
 	{ "rgb1Mult", 1.0f }, { "rgb2Mult", 1.0f },
@@ -1681,6 +1842,8 @@ static const KeyDefault kKeyDefaults[] = {
 	{ "pedCullMode", -1 }, { "pedAmbientFloor", 0.20f },
 	// Coverage-gap / diagnostics rows added with the master-detail restructure.
 	{ "waterReflectionMix", 0.7f }, { "diagLevel", 0 }, { "debugOverlay", 0 },
+	// Wave-12 GPU particle module (main.cpp readint default 0).
+	{ "gpuParticlesEnable", 0 },
 };
 
 static bool
@@ -1860,6 +2023,9 @@ RowInactiveReason(const SettingRow &r)
 	    strcmp(k, "waterShoreFoam") == 0 || strcmp(k, "waterBodyClassify") == 0 ||
 	    strcmp(k, "waterTileScale") == 0 || strcmp(k, "waterShoreFade") == 0 ||
 	    strcmp(k, "waterTranslucency") == 0 || strcmp(k, "waterReflectionStrength") == 0 ||
+	    strcmp(k, "waterReflectionMix") == 0 || strcmp(k, "waterFresnelSplit") == 0 ||
+	    strcmp(k, "waterRefractionValid") == 0 || strcmp(k, "waterCaustics") == 0 ||
+	    strcmp(k, "waterSss") == 0 || strcmp(k, "waterVolume") == 0 ||
 	    strcmp(k, "waterStyle") == 0 || strcmp(k, "waterQuality") == 0 ||
 	    strcmp(k, "waterUseTimecycle") == 0) &&
 	   !config->waterParallaxEnable)
@@ -2157,8 +2323,8 @@ GetCoverageRows(void)
 static bool
 RowIsGrey(const SettingRow &r)
 {
-	return r.kind == RK_STATIC || r.kind == RK_STATICB || r.kind == RK_NONE ||
-	       r.kind == RK_INIINT;
+	return r.kind == RK_STATIC || r.kind == RK_STATICB || r.kind == RK_STATICF ||
+	       r.kind == RK_NONE || r.kind == RK_INIINT;
 }
 
 static const char *
@@ -2201,6 +2367,12 @@ RowValueStr(const SettingRow &r, char *buf, int n)
 				snprintf(buf, n, "Custom (%d)", p);
 		}else if(r.ptr)
 			snprintf(buf, n, "%d", *(int*)r.ptr);
+		else
+			snprintf(buf, n, "n/a");
+		break;
+	case RK_STATICF:
+		if(r.ptr)
+			snprintf(buf, n, "%g", (double)*(float*)r.ptr);
 		else
 			snprintf(buf, n, "n/a");
 		break;
@@ -2304,7 +2476,8 @@ DrawRowControl(const SettingRow &r, float w)
 			ImGui::EndCombo();
 		}
 		break;}
-	case RK_STATIC:{
+	case RK_STATIC:
+	case RK_STATICF:{
 		char b[32];
 		RowValueStr(r, b, sizeof(b));
 		ImGui::TextDisabled("%s", b);
@@ -2631,7 +2804,9 @@ DrawSettingRowCompact(const SettingRow &r)
 static bool
 ContainsCI(const char *hay, const char *needle)
 {
-	if(!hay || !needle || !needle[0])
+	if(!hay)
+		return false;
+	if(!needle || !needle[0])
 		return true;
 	for(const char *h = hay; *h; h++){
 		const char *a = h, *b = needle;
@@ -2645,9 +2820,45 @@ ContainsCI(const char *hay, const char *needle)
 	return false;
 }
 
+// True when the row's live value still equals its parser default (the
+// "Changed only" filter hides these). Rows with no kKeyDefaults entry are
+// always shown — we cannot prove they are unchanged.
+static bool
+RowIsChanged(const SettingRow &r)
+{
+	float d;
+	if(!RowDefaultValue(r, &d))
+		return true;
+	if(!r.ptr && r.kind != RK_NOISEQ)
+		return true;
+	double cur;
+	switch(r.kind){
+	case RK_BOOL:   cur = (*(int*)r.ptr) ? 1 : 0; break;
+	case RK_BOOL8:  cur = *(bool*)r.ptr ? 1 : 0; break;
+	case RK_INT:    cur = (double)*(int*)r.ptr; break;
+	case RK_FLOAT:  cur = (double)*(float*)r.ptr; break;
+	case RK_ENUM:   cur = (double)*(int*)r.ptr; break;
+	case RK_STATIC: cur = (double)*(int*)r.ptr; break;
+	case RK_STATICB:cur = *(bool*)r.ptr ? 1 : 0; break;
+	case RK_STATICF:cur = (double)*(float*)r.ptr; break;
+	case RK_NOISEQ: cur = (double)menuGetNoiseQuality(); break;
+	default:        return true;
+	}
+	// Ints/bools/enums compare exactly; floats allow a small epsilon so a
+	// to_string round-trip (6 significant digits) does not read as "changed".
+	if(r.kind == RK_FLOAT || r.kind == RK_STATICF){
+		double diff = cur - (double)d;
+		if(diff < 0.0) diff = -diff;
+		return diff > 1e-4;
+	}
+	return cur != (double)d;
+}
+
 static bool
 RowMatches(const SettingRow &r, const char *filter)
 {
+	if(s_filterChanged && !RowIsChanged(r))
+		return false;
 	if(filter == NULL || filter[0] == '\0')
 		return true;
 	if(ContainsCI(r.key, filter) || ContainsCI(r.label, filter) ||
@@ -2718,11 +2929,14 @@ DrawModesSection(void)
 {
 	static const struct { ModeId id; const char *label; const char *hint; } kModes[] = {
 		{ MODE_NONE,   "None",   "No mode active - the live config is yours.\nClick the active mode's row to switch it off (restores the pre-mode config)." },
-		{ MODE_PS2,    "PS2",    "PS2 pipe mapping (expand later).\nPipes: building=PS2 vehicle=PS2." },
-		{ MODE_XBOX,   "Xbox",   "Xbox pipe mapping (expand later).\nPipes: building=Xbox vehicle=Xbox." },
-		{ MODE_MOBILE, "Mobile", "Mobile pipe mapping (expand later).\nPipes: building=Xbox vehicle=Mobile." },
+		{ MODE_PS2,    "PS2",    "PS2 profile: PS2 pipes + filter, PS2 modulate,\ndetail maps off, env map 256 (modeManager kValuesPS2)." },
+		{ MODE_XBOX,   "Xbox",   "Xbox profile: Xbox pipes + PC filter,\ndetail maps on, PC timecyc (kValuesXBOX)." },
+		{ MODE_PC_VINTAGE, "Legacy PC", "Legacy PC profile: Xbox building pipe + original PC car pipe\n+ PC filter (kValuesPCVintage)." },
+		{ MODE_MOBILE, "Mobile", "Mobile profile: Xbox building pipe + Mobile car pipe\n+ Mobile filter (kValuesMobile)." },
 		{ MODE_GTAIV,  "GTAIV",  "GTA IV profile (mirrors IVMode_ApplyDefaults):\nIV pipes + filter, radiosity/SSAO/SMAA/grain off, ivMode on.\nINI-tuned IV grade sliders are kept." },
-		{ MODE_GTAV,   "GTAV",   "GTA V placeholder (expand later) - no V pipe mapping exists yet." },
+		{ MODE_GTAV,   "GTAV",   "GTA V profile: V water (style=V, Ultra, pipe on).\nNo V building/vehicle pipe exists yet - water only (kValuesGTAV)." },
+		{ MODE_MODERN, "Modern", "Modern profile: PBR pipes + Modern filter + full\npostfx set (SSAO/SMAA/bloom/DOF/motion blur on, kValuesModern)." },
+		{ MODE_CUSTOM, "Custom", "Custom: no profile fields - latches the mode over your\ncurrent settings so Restore INI has a baseline (kValuesCustom = none)." },
 	};
 
 	DrawGlassHeader("Modes", ImVec2(0.0f, 24.0f));
@@ -3589,6 +3803,9 @@ RowIniValue(const SettingRow &r, char *buf, int n)
 	case RK_STATICB:
 		if(r.ptr){ snprintf(buf, n, "%d", (*(bool*)r.ptr) ? 1 : 0); return true; }
 		return false;
+	case RK_STATICF:
+		if(r.ptr){ snprintf(buf, n, "%.6g", (double)*(float*)r.ptr); return true; }
+		return false;
 	case RK_NOISEQ:
 		snprintf(buf, n, "%d", menuGetNoiseQuality());
 		return true;
@@ -4223,6 +4440,12 @@ void DrawUnifiedDebugMenu(IDirect3DDevice9 *device)
 			if(ImGui::Button("Clear filter"))
 				s_settingFilter[0] = '\0';
 			ImGui::SameLine();
+			ImGui::Checkbox("Changed only", &s_filterChanged);
+			if(ImGui::IsItemHovered())
+				ImGui::SetTooltip(
+					"Hides rows still at their parser default (kKeyDefaults).\n"
+					"Combine with the text filter; rows with no known default always show.");
+			ImGui::SameLine();
 			ImGui::TextDisabled("Filters every section.");
 
 			// Always-visible mode selector: eight chips + one state line,
@@ -4292,9 +4515,95 @@ void DrawUnifiedDebugMenu(IDirect3DDevice9 *device)
 				reloadAllInis();
 			}
 			ImGui::SameLine();
-			if(ImGui::Button("Reset Values")){
-				PfNote("reset values");
+			// Renamed from "Reset Values" (2026-11-08 menu close-out): the
+			// action is resetValues() = push Config into the engine's legacy
+			// CPostEffects mirrors, NOT a reset-to-defaults. The old label
+			// promised a reset that never happened; the real per-setting reset
+			// is the right-click "Reset to default" on a row's label.
+			if(ImGui::Button("Apply to engine")){
+				PfNote("apply to engine");
 				resetValues();
+			}
+			if(ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
+				ImGui::SetTooltip(
+					"Pushes the values currently in the menu into the engine's cached\n"
+					"copies (the CPostEffects mirrors: radiosity, crop offsets, YCbCr,\n"
+					"grain strengths).\n"
+					"This does NOT reset anything to defaults - right-click a row's label\n"
+					"for \"Reset to default\" on that one setting.");
+			ImGui::SameLine();
+			// P2-4/P3-3 second half: reset the OPEN section's rows to their
+			// parser defaults, behind a confirmation modal (no accidental
+			// resets; the count of rows that will actually change is shown).
+			if(ImGui::Button("Reset section..."))
+				ImGui::OpenPopup("ResetSectionConfirm");
+			if(ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
+				ImGui::SetTooltip(
+					"Resets every resettable row in the section you have open to its\n"
+					"parser default (kKeyDefaults). Rows without a default are skipped.\n"
+					"Confirmation dialog shows how many values will change.");
+			if(ImGui::BeginPopupModal("ResetSectionConfirm", NULL,
+					ImGuiWindowFlags_AlwaysAutoResize)){
+				const MenuSection &sec = s_menuSections[s_activeSection];
+				// Count + collect: same walk DrawRowsFrom does, so the modal
+				// reports exactly the rows the pane shows (filter applied).
+				std::vector<const SettingRow *> targets;
+				// All Settings is retabbed by GetCoverageRows; INI Keys shows
+				// every row (deduped) regardless of its home tab — both are
+				// "whole inventory" panes, so skip the tab filter for them.
+				const bool allRows = (strcmp(sec.id, "All Settings") == 0 ||
+				                      strcmp(sec.id, "INI Keys") == 0);
+				std::vector<SettingRow> &rows =
+					(strcmp(sec.id, "All Settings") == 0) ? GetCoverageRows() : GetSettingRows();
+				std::vector<std::string> seen;
+				int considered = 0;
+				for(size_t i = 0; i < rows.size(); i++){
+					const SettingRow &r = rows[i];
+					if(!allRows && strcmp(r.tab, sec.id) != 0)
+						continue;
+					if(allRows){	// same dedup DrawReferenceTab uses
+						bool dup = false;
+						for(size_t j = 0; j < seen.size(); j++)
+							if(seen[j] == r.key){ dup = true; break; }
+						if(dup)
+							continue;
+						seen.push_back(r.key);
+					}
+					if(!RowMatches(r, s_settingFilter))
+						continue;
+					if(RowIsGrey(r) || (!r.ptr && r.kind != RK_NOISEQ))
+						continue;
+					float dv;
+					if(!RowDefaultValue(r, &dv))
+						continue;
+					considered++;
+					if(RowIsChanged(r))
+						targets.push_back(&r);
+				}
+				ImGui::Text("Reset %d changed setting(s) in \"%s\" to defaults?",
+					(int)targets.size(), sec.label);
+				ImGui::TextDisabled(
+					"Only rows shown in this pane (current filter applied) that differ\n"
+					"from their parser default are reset. Greyed rows are never touched.");
+				ImGui::Separator();
+				if(considered == 0){
+					ImGui::TextDisabled("This section has no directly resettable rows.");
+				}else if(targets.empty()){
+					ImGui::TextDisabled("Nothing to reset - every row is at its default.");
+				}else if(ImGui::Button("Reset", ImVec2(120, 0))){
+					int n = 0;
+					for(size_t i = 0; i < targets.size(); i++)
+						if(ResetRowToDefault(*targets[i]))
+							n++;
+					dbglog("[Menu] reset section %s: %d row(s) -> parser defaults",
+						sec.label, n);
+					PfNote("reset section %s (%d)", sec.label, n);
+					ImGui::CloseCurrentPopup();
+				}
+				ImGui::SameLine();
+				if(ImGui::Button("Cancel", ImVec2(120, 0)))
+					ImGui::CloseCurrentPopup();
+				ImGui::EndPopup();
 			}
 			ImGui::SameLine();
 			if(ImGui::Button("Copy settings as INI"))

@@ -305,25 +305,33 @@ GrassEnforceDepthContract(void)
 	// no-op'd the vanilla restore.
 	DWORD devZen = TRUE;
 	DWORD devZFunc = D3DCMP_LESSEQUAL;
-	if(FAILED(dev->GetRenderState(D3DRS_ZENABLE, &devZen)) ||
-	   FAILED(dev->GetRenderState(D3DRS_ZFUNC, &devZFunc)))
-		return;
+	bool zReadOk = (SUCCEEDED(dev->GetRenderState(D3DRS_ZENABLE, &devZen)) &&
+	                SUCCEEDED(dev->GetRenderState(D3DRS_ZFUNC, &devZFunc)));
 
 	// Healthy world baseline (pipeApplyWorldBaseline): Z-test on, LESSEQUAL.
-	if(devZen && devZFunc == D3DCMP_LESSEQUAL)
-		return;
+	// N4 (2026-11-08): the stage-0 TEXTURE contract below is an INDEPENDENT
+	// contract and must still run when Z is HEALTHY. The old code `return`ed
+	// here, so the texture repair was reachable only on frames where Z had
+	// already drifted — on every normal frame a leaked screen raster on
+	// device stage 0 survived unhealed (black / ghosted plant quads, the
+	// bldBindDiffuse3L class). Only the Z repair below is skipped on the
+	// healthy path; the once-per-frame gate above bounds BOTH contracts.
+	// A failed Z readback still performs no Z repair (unchanged semantics) —
+	// the texture contract has its own device ground truth and runs anyway.
+	if(zReadOk && !(devZen && devZFunc == D3DCMP_LESSEQUAL))
+	{
+		// Drifted — repair through all three layers (L1 rw cache / L2 RW
+		// driver cache / L3 raw device) so none is left disagreeing:
+		RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
+		RwD3D9SetRenderState(D3DRS_ZENABLE, TRUE);
+		RwD3D9SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+		dev->SetRenderState(D3DRS_ZENABLE, TRUE);
+		dev->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
 
-	// Drifted — repair through all three layers (L1 rw cache / L2 RW driver
-	// cache / L3 raw device) so none is left disagreeing:
-	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
-	RwD3D9SetRenderState(D3DRS_ZENABLE, TRUE);
-	RwD3D9SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
-	dev->SetRenderState(D3DRS_ZENABLE, TRUE);
-	dev->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
-
-	if(dbglog_throttle("grass_zfix"))
-		dbglog("[grass_zfix] device Z drift repaired at plant draw: ZENABLE=%u ZFUNC=%u -> TRUE/LESSEQUAL",
-		       (unsigned)devZen, (unsigned)devZFunc);
+		if(dbglog_throttle("grass_zfix"))
+			dbglog("[grass_zfix] device Z drift repaired at plant draw: ZENABLE=%u ZFUNC=%u -> TRUE/LESSEQUAL",
+			       (unsigned)devZen, (unsigned)devZFunc);
+	}
 
 	// ---- stage-0 texture contract (S6 candidate (a), the bind family) ------
 	// The plant pass is the one world-geometry draw with NO three-layer entry

@@ -15,6 +15,10 @@ static D3DMATRIX g_prevVPMatrix;
 static bool g_prevVPValid = false;
 
 extern float &CTimer__ms_fTimeStep;	// game per-frame timestep, seconds*50 (local extern, grasssys.cpp style)
+// Local extern (no header edit, grasssys.cpp style): depth-dim assertion helper
+// defined in depthhook.cpp — throttled `[depthdim]` receipt when the live
+// camera raster disagrees with the INTZ depth-texture dims.
+extern void DepthHook_AssertDepthDims(const char *site);
 
 // Tier 0 (b) cut-reset: previous-frame camera pose (world position + forward
 // vector), extracted from the D3D view matrix. Latched at every site where
@@ -24,6 +28,23 @@ static float s_prevFwdX = 0, s_prevFwdY = 1, s_prevFwdZ = 0;
 // R4 fix (perf-check 2026-11-02): camera identity latched with the pose, so a
 // skipped secondary-camera update is visible in the throttle receipt.
 static RwCamera *s_prevCamPtr = NULL;
+// Tier 0 (b) gate-resume guard: set when the menu/pause early-return skips a
+// frame. The velocity texture then keeps the last pre-skip vectors; if the
+// camera did not move while gated the pose-diff cut detector cannot see the
+// staleness, so this forces one clean (zero) frame on the first frame back.
+static int s_velocityGateSkipped = 0;
+
+// ---------------------------------------------------------------------------
+// TIER 1 (2026-10-29 motionblur-physics-research §1d.3) — NOT IN THIS FILE.
+// Tier 1 is a pure rewrite of shaders/ps/MotionBlur_Burnout.hlsl: (a)
+// bidirectional taps, (b) per-tap depth rejection (s2 + c3.x/y near/far are
+// ALREADY bound/uploaded by postfx.cpp DrawMotionBlur — no C++ change), (c)
+// texel-snap tap UVs, (d) normalise+clamp blurDir, (e) keep the small-length
+// discard, (f) single-fetch taps (drop the 3x RGB split), (g) depth-scaled
+// radial term. Register budget is unchanged (s0-s2, c0-c3); no new resource
+// ID, no new toggle — it ships behind the existing motionBlurEnable, exactly
+// as the research doc recommends. Wiring owner: the .hlsl file above.
+// ---------------------------------------------------------------------------
 
 void ReleaseVelocityBufferResources(void)
 {
@@ -31,6 +52,7 @@ void ReleaseVelocityBufferResources(void)
 	if(g_velocitySurf){ g_velocitySurf->Release(); g_velocitySurf = NULL; }
 	s_velocityW = 0; s_velocityH = 0;
 	g_prevVPValid = false;
+	s_velocityGateSkipped = 0;
 }
 
 // Tier 0 (b): clear the velocity texture to the zero-velocity value
@@ -141,8 +163,14 @@ void DrawVelocityBuffer(void)
 		return;
 	if(!CPostEffects::pRasterFrontBuffer)
 		return;
-	if(IsGameInMenuOrPaused())
+	if(IsGameInMenuOrPaused()){
+		// Tier 0 (b): remember the skip so the first frame back after
+		// menu/pause starts from zero velocity instead of smearing the
+		// frozen pre-skip vectors (the pose diff cannot detect a stale
+		// buffer if the camera did not move while gated).
+		s_velocityGateSkipped = 1;
 		return;
+	}
 
 	IDirect3DDevice9 *dev = d3d9device;
 	if(!dev)
@@ -208,6 +236,11 @@ void DrawVelocityBuffer(void)
 		return;
 	}
 
+	// Depth-dim assertion: the velocity quad is sized to the live camera
+	// raster (w x h) while s0 samples INTZ — a camRas/INTZ size mismatch
+	// stretches the reconstruction's depth taps silently. Name it (throttled).
+	DepthHook_AssertDepthDims("velocity");
+
 	// Store current VP matrix for next frame
 	D3DMATRIX curView, curProj;
 	dev->GetTransform(D3DTS_VIEW, &curView);
@@ -251,6 +284,7 @@ void DrawVelocityBuffer(void)
 	if(!g_prevVPValid){
 		if(poseMainCam){
 			VelocityHistoryLatch(curVP, Scene.camera, camPosX, camPosY, camPosZ, fwdX, fwdY, fwdZ);
+			s_velocityGateSkipped = 0;	// fresh history: resume guard satisfied
 			// One-time breadcrumb (log dig 2026-10-17): this silent return used to
 			// be invisible — the texture EXISTS at this point (created above), but
 			// its content is still the Clear() value (zero velocity) for this
@@ -272,13 +306,24 @@ void DrawVelocityBuffer(void)
 	// velocity value (so every consumer reads ZERO this frame instead of
 	// stale pre-cut vectors), re-latch VP+pose to current (GTA V "cut ->
 	// reset prev matrix", PostProcessFX.cpp:7485-7506) and skip the pass.
-	// This also covers re-entry after the menu/pause/cutscene gate: the pose
-	// across the gated stretch is stale, so the first frame back trips the
-	// detector and starts clean instead of smearing.
+	// This also covers re-entry after the menu/pause/cutscene gate when the
+	// camera moved while gated; s_velocityGateSkipped covers the no-movement
+	// case (see the flag declaration at the top of the file).
 	// Thresholds scale with dt (MotionBlurDtScale: 1.0 at 60 FPS) so real
 	// motion at low FPS (hitch to ~10 FPS while driving: ~4 units/frame)
 	// doesn't false-cut: threshold = 60FPS-value / scale keeps the speed
 	// headroom constant across framerates.
+	//
+	// Calibration (2026-11-02 test11 findings, Family F): the old
+	// posCut = 2.5 units/frame false-fired on ordinary fast flight — the
+	// Hunter produced posDelta=15..24/frame at fwdDot≈0.98 (straight-line
+	// motion, not a cut) and this reset cleared velocity every frame, so the
+	// blur flickered instead of tracking. A genuine camera CUT is a
+	// teleport/interior switch (~1000 units/frame per the postfx.cpp
+	// teleport reference), so the position branch is now TELEPORT-SCALE;
+	// ordinary fast motion belongs to the velocity buffer, not a reset.
+	// The orientation branch stays at 25 deg/frame @60 FPS (hard flicks ~6)
+	// and is the reliable signal for cutscene/interior camera switches.
 	float mbDtScale = MotionBlurDtScale();
 	float dtScaleG = max(mbDtScale, 0.1f);
 	float posDelta = sqrtf((camPosX-s_prevCamX)*(camPosX-s_prevCamX) +
@@ -286,18 +331,20 @@ void DrawVelocityBuffer(void)
 	                       (camPosZ-s_prevCamZ)*(camPosZ-s_prevCamZ));
 	float fwdDot = fwdX*s_prevFwdX + fwdY*s_prevFwdY + fwdZ*s_prevFwdZ;
 	fwdDot = max(-1.0f, min(1.0f, fwdDot));
-	float posCut = 2.5f / dtScaleG;		// units/frame @60FPS ref (driving telemetry max 0.487)
+	float posCut = 50.0f / dtScaleG;	// teleport scale, units/frame @60FPS ref
 	float angCutRad = (25.0f * 3.14159265f / 180.0f) / dtScaleG;	// deg/frame @60FPS ref (hard flicks ~6)
 	float fwdCut = cosf(angCutRad);
 	// R4 fix: the detector only fires when the pose validated as the MAIN
 	// render camera (poseMainCam above). A leaked secondary-camera matrix
 	// must neither trip the cut (false velocity clear = rotor/vehicle smear)
 	// nor re-latch (would poison the next real frame's diff).
-	if(poseMainCam && (posDelta > posCut || fwdDot < fwdCut)){
+	bool resumeCut = poseMainCam && s_velocityGateSkipped != 0;
+	if(poseMainCam && (resumeCut || posDelta > posCut || fwdDot < fwdCut)){
 		ClearVelocityToZero(dev);
 		VelocityHistoryLatch(curVP, Scene.camera, camPosX, camPosY, camPosZ, fwdX, fwdY, fwdZ);
-		dbglog("[PostFX] DrawVelocityBuffer: camera CUT reset (posDelta=%.2f/%.2f fwdDot=%.4f/%.4f) — velocity cleared, VP+pose re-latched",
-			posDelta, posCut, fwdDot, fwdCut);
+		s_velocityGateSkipped = 0;
+		dbglog("[PostFX] DrawVelocityBuffer: camera %s reset (posDelta=%.2f/%.2f fwdDot=%.4f/%.4f) — velocity cleared, VP+pose re-latched",
+			resumeCut ? "RESUME" : "CUT", posDelta, posCut, fwdDot, fwdCut);
 		return;
 	}
 

@@ -254,10 +254,523 @@ TexDefsAssignInfo(RwTexture *tex, TexInfo *info)
 	*RWPLUGINOFFSET(TexInfo*, tex, texdbOffset) = info;
 }
 
+// ---------------------------------------------------------------------------
+// N6 (FAM-T missing textures, 2026-11-08 retest): a FAILED texture lookup is
+// the root of both observed symptoms — the bright-red fallback marker (a
+// world sprite/corona near the HUD whose texture did not resolve) and the
+// milky-white untextured sprite quads (missing texture → FFP white + vertex
+// alpha). Two deliverables live here:
+//   1. TexDefsNoteMiss — a NAMING receipt so the next gate can see WHICH
+//      texture is missing, with the current TXD as context (first 32
+//      distinct names one-shot, plus a throttled rate summary).
+//   2. TexDefsTryNameVariant — the recoverable root cause this layer can
+//      actually fix: name CASE and trailing-EXTENSION mismatches (modded /
+//      converted TXDs ship both). Only runs on an ALREADY-FAILED lookup and
+//      can only turn NULL into a found texture — never the other way round.
+//   3. N8 miss-cache + cross-dict recovery (below): a name that misses is
+//      cached — the entry either pins the TXD slot that resolves it or marks
+//      it a known miss, so the cross-dict sweep runs at most once per name.
+//      The cache is invalidated on TXD push (storeTxdName) so pins/misses
+//      retry after a reload.
+//
+// DIAGNOSIS (2026-11-09, log `[texdefs] miss total=191 distinct=32`): the
+// miss class is LOD-parent-chain, NOT case/extension. All 32 distinct names
+// are FULL-DETAIL textures looked up while a LOD dictionary is current
+// (lod2_las / lod2lae1 / lodhuge_lan2 / lod_countn2 / LODjetty_SFX /
+// LOD_dem_SFXRF / lod_boxhses_SFSX / LODtnsfn / grass_pc). 31/32 exist in the
+// install (gta3.img full-detail + modloader TXDs) but are unreachable because
+// the game's find callback (0x731720) parent-walks through dict->parent (the
+// RwTexDictionary plugin at *(uint32*)0xC88018) and that link is NULL/broken
+// in the modded (ModLoader/ROSA) install. 1/32 ('fuzzygrass2') is genuinely
+// absent. The case/extension retry is provably inert for this class
+// (miss-recovered=0; the game's RwTexDictionaryFindNamedTexture (0x7F39F0) is
+// already case-insensitive). FIX (in-TU): search the loaded dictionaries
+// directly — the game's own CTxdStore pool — via TexDefsDictSweep.
+// ---------------------------------------------------------------------------
+#define TEXDEFS_MISS_LOG_MAX 32
+
+static char s_missNames[TEXDEFS_MISS_LOG_MAX][32];
+static int s_missLogged = 0;		// distinct names stored in s_missNames
+static unsigned s_missTotal = 0;	// every failed lookup (any name)
+
+static void
+TexDefsNoteMiss(const char *name)
+{
+	s_missTotal++;
+	int fresh = 1;
+	for(int i = 0; i < s_missLogged; i++){
+		if(_stricmp(s_missNames[i], name) == 0){
+			fresh = 0;
+			break;
+		}
+	}
+	if(fresh && s_missLogged < TEXDEFS_MISS_LOG_MAX){
+		strncpy(s_missNames[s_missLogged], name, sizeof(s_missNames[0]) - 1);
+		s_missNames[s_missLogged][sizeof(s_missNames[0]) - 1] = '\0';
+		s_missLogged++;
+		dbglog("[texdefs] miss #%d '%s' txd='%s' — texture lookup failed "
+		       "(draw falls back to untextured-white sprite or the red "
+		       "fallback marker)",
+		       s_missLogged, name,
+		       currentTxdName[0] ? currentTxdName : "?");
+	}
+	// Rate visibility stays alive after the distinct-name cap fills (a
+	// streamed draw loop can miss every frame for one texture).
+	if(dbglog_throttle("texdefs_miss"))
+		dbglog("[texdefs] miss total=%u distinct=%d last='%s' txd='%s'",
+		       s_missTotal, s_missLogged, name,
+		       currentTxdName[0] ? currentTxdName : "?");
+}
+
+// ---------------------------------------------------------------------------
+// N8 cross-dict miss recovery (2026-11-09): the #1 visual defect (giant
+// untextured slabs) is LOD models rendering NULL because the game's find
+// callback (0x731720) walks dict->parent and that link is NULL in the modded
+// install. The textures DO exist in already-loaded TXDs, so on a failed lookup
+// we search the game's CTxdStore pool directly (the registry the game keeps)
+// via RwTexDictionaryFindNamedTexture (0x7F39F0, case-insensitive). Pool =
+// CPool<TxdDef> at *(uint32*)0xC8800C: m_pObjects = *(pool+0), byteMap =
+// *(pool+4) ("free" = bit 0x80), m_nSize = *(pool+8); TxdDef is 12 bytes with
+// the RwTexDictionary* at +0. A (name, slot) hit is pinned so the sweep runs
+// at most once per name; TXD push (TexDefsMissCacheReset) clears pins so a
+// better/first-loaded variant can win after a reload. First exact hit wins,
+// except a hit whose dict name is a substring of the requesting TXD name is
+// preferred (LOD dicts embed their parent's name: lod2lae1 -> lae1). The hit
+// dict is always logged for diagnosability. Genuinely-absent names still miss
+// (NULL -> consumer white fallback, unchanged).
+// ---------------------------------------------------------------------------
+#define TEXDEFS_MISS_CACHE_MAX 64
+
+struct TexDefsMissEntry {
+	char name[32];
+	int  dictSlot;   // >=0 pinned TXD slot; -1 = known-miss (no dict holds it)
+};
+
+static TexDefsMissEntry s_missCache[TEXDEFS_MISS_CACHE_MAX];
+static int s_missCacheCount = 0;
+
+// game RwTexDictionaryFindNamedTexture (0x7F39F0): case-insensitive exact name
+// match within ONE dictionary (disassembled — same lowercase-fold as 0x731720).
+static RwTexture *(*RwTxdFindNamed)(RwTexDictionary*, const char*) =
+	(RwTexture *(*)(RwTexDictionary*, const char*))0x7F39F0;
+
+// true when `needle` is a case-insensitive substring of `haystack`.
+static bool
+TexDefsStrSubCI(const char *haystack, const char *needle)
+{
+	size_t hl = strlen(haystack), nl = strlen(needle);
+	if(nl == 0 || nl > hl)
+		return false;
+	for(size_t i = 0; i + nl <= hl; i++){
+		size_t j = 0;
+		for(; j < nl; j++)
+			if(tolower((unsigned char)haystack[i + j]) !=
+			   tolower((unsigned char)needle[j]))
+				break;
+		if(j == nl)
+			return true;
+	}
+	return false;
+}
+
+// Cache lookup by name (case-insensitive): index or -1.
+static int
+TexDefsCacheFind(const char *name)
+{
+	for(int i = 0; i < s_missCacheCount; i++)
+		if(_stricmp(s_missCache[i].name, name) == 0)
+			return i;
+	return -1;
+}
+
+// Upsert a cache entry (pinned slot, or -1 for a known miss). Bounded: appends
+// until full, then no-op — determinism over growth. Never allocates.
+static void
+TexDefsCacheUpsert(const char *name, int dictSlot)
+{
+	int i = TexDefsCacheFind(name);
+	if(i >= 0){
+		s_missCache[i].dictSlot = dictSlot;
+		return;
+	}
+	if(s_missCacheCount >= TEXDEFS_MISS_CACHE_MAX)
+		return;
+	strncpy(s_missCache[s_missCacheCount].name, name,
+	        sizeof(s_missCache[0].name) - 1);
+	s_missCache[s_missCacheCount].name[sizeof(s_missCache[0].name) - 1] = '\0';
+	s_missCache[s_missCacheCount].dictSlot = dictSlot;
+	s_missCacheCount++;
+}
+
+// Read + validate the CTxdStore pool. False when the game hasn't initialised
+// it yet (early boot) or a field is implausible.
+static bool
+TexDefsPoolInfo(uint32 *outObjects, uint8 **outByteMap, int *outSize)
+{
+	uint32 pool = *(uint32 *)0xC8800C;
+	if(pool < 0x10000 || (pool & 3))
+		return false;
+	uint32 objects = *(uint32 *)pool;
+	uint32 byteMap = *(uint32 *)(pool + 4);
+	uint32 size = *(uint32 *)(pool + 8);
+	if(objects < 0x10000 || (objects & 3))
+		return false;
+	if(byteMap < 0x10000)
+		return false;
+	if(size == 0 || size > 65500)
+		return false;
+	*outObjects = objects;
+	*outByteMap = (uint8 *)byteMap;
+	*outSize = (int)size;
+	return true;
+}
+
+// Look up `name` in ONE pool slot's dictionary (re-resolves a pinned slot
+// without re-sweeping). NULL when the slot is unused / dict invalid/unloaded
+// / name absent from that dict.
+static RwTexture *
+TexDefsDictResolveSlot(int slot, const char *name, uint32 objects, uint8 *byteMap, int size)
+{
+	if(slot < 0 || slot >= size)
+		return NULL;
+	// CPool byteMap: bit 0x80 SET = FREE slot, CLEAR = USED (verified in the
+	// game's GetFreeSlot / IsValidTxdSlot). Skip free slots — their TxdDef
+	// dict pointer is stale and must never be dereferenced.
+	if(byteMap[slot] & 0x80)
+		return NULL;
+	RwTexDictionary *dict = *(RwTexDictionary **)(objects + slot * 12);
+	if(!dict || (uintptr_t)dict < 0x10000 || ((uintptr_t)dict & 3))
+		return NULL;
+	return RwTxdFindNamed(dict, name);
+}
+
+// Cross-dict sweep: search every loaded dictionary for `name`. First exact hit
+// wins, EXCEPT a hit whose dict name is a substring of the requesting TXD name
+// is preferred (deterministic, no fuzzy). On success fills *outSlot and
+// *outDict (the hit TXD name, for the receipt).
+static RwTexture *
+TexDefsDictSweep(const char *name, int *outSlot, char *outDict,
+                 uint32 objects, uint8 *byteMap, int size)
+{
+	*outSlot = -1;
+	outDict[0] = '\0';
+	const char *ctx = currentTxdName[0] ? currentTxdName : "";
+	RwTexture *best = NULL;
+	int bestSlot = -1;
+	bool bestSub = false;
+	for(int slot = 0; slot < size; slot++){
+		RwTexture *tex = TexDefsDictResolveSlot(slot, name, objects, byteMap, size);
+		if(!tex)
+			continue;
+		const char *dname = (slot < 65500 && txdnames[slot]) ? txdnames[slot] : "";
+		bool sub = ctx[0] && dname[0] && TexDefsStrSubCI(ctx, dname);
+		if(!best || (sub && !bestSub)){
+			best = tex;
+			bestSlot = slot;
+			bestSub = sub;
+			if(dname[0]){
+				strncpy(outDict, dname, 31);
+				outDict[31] = '\0';
+			}
+			if(sub)
+				break;   // substring hit is the best possible — stop early
+		}
+	}
+	*outSlot = bestSlot;
+	return best;
+}
+
+// Invalidate the cache (a new TXD was pushed/registered). Clears pinned
+// fallbacks AND known-miss records so names retry under the new dict set.
+static void
+TexDefsMissCacheReset(void)
+{
+	s_missCacheCount = 0;
+}
+
+// ---------------------------------------------------------------------------
+// N9 FAIL-CLOSED MISS POLICY (2026-11-09): the #1 visual defect family — giant
+// untextured slabs / black bars / the red-yellow world-anchored marker quad —
+// is the fallback DRAW a missing texture produces. TexDefsFindCB now binds a
+// 1x1 SENTINEL texture instead of returning NULL for genuinely-absent names
+// (post pin/variant/cross-dict sweep), classified by the CURRENT TXD:
+//   world  (currentTxdName unresolved, or "lod*" ci) -> 1x1 OPAQUE dim grey
+//          (0x606060, alpha FF, name "skygfx_missgrey"): geometry KEEPS
+//          drawing — never hole the world for a data-side gap; alpha FF also
+//          survives the building pipes' GREATEREQUAL@1 alpha test.
+//   sprite (everything else) -> 1x1 FULLY TRANSPARENT magenta (FF 00 FF 00,
+//          name "skygfx_missclear"): alpha-blended / alpha-tested decoration
+//          (screen sprites, particles, the marker quad) renders invisible; an
+//          unblended consumer shows magenta — loud, bounded, diagnosable.
+// Both magenta R/B symmetry and the grey value are deliberate: they read
+// identically under either BGRA/RGBA byte order of an RW 8888 raster.
+// Sentinels are created lazily ONCE inside the find CB (RW is up whenever it
+// runs), process-lifetime, never freed; RwTexture::name is an inline char[32]
+// (rwcore.h, SA layout) filled directly so dumps identify them. The CB
+// returns a sentinel BEFORE the TexInfo/NmPair attach block — no metadata, no
+// pairing probe on it. Policy is keyed on LOOKUP-FAILURE ONLY: every
+// legitimate gpWhiteTexture resolve (NULL-extraction consumers,
+// pipeSetTexture NULL->white, the NULL-material fallback binds) is untouched.
+// Creation failure degrades to the legacy NULL return (consumer white
+// fallback). Full table + receipt contract: texdefs.h ("N9").
+// ---------------------------------------------------------------------------
+static bool s_texDefsMissPolicyOn = true;
+
+void
+TexDefsMissPolicyEnable(bool on)
+{
+	s_texDefsMissPolicyOn = on;
+}
+
+bool
+TexDefsMissPolicyIsEnabled(void)
+{
+	return s_texDefsMissPolicyOn;
+}
+
+enum TexDefsMissClass {
+	TEXDEFS_MISS_WORLD = 0,	// LOD-parent-chain geometry (lod* dict / unresolved)
+	TEXDEFS_MISS_SPRITE	// decoration, particles, markers (any non-LOD dict)
+};
+
+static TexDefsMissClass
+TexDefsMissClassify(void)
+{
+	// Unresolved dict name: unknown context — classify WORLD (conservative:
+	// keeps geometry drawing, because a hole is worse than a dim slab, and
+	// every such miss prints class=world in the policy receipt so it can be
+	// retuned).
+	if(!currentTxdName[0])
+		return TEXDEFS_MISS_WORLD;
+	// Every broken dict in the 32-name log carries the "lod" prefix
+	// (lod2_las, lod2lae1, lodhuge_lan2, lod_countn2, LODjetty_SFX,
+	// LOD_dem_SFXRF, lod_boxhses_SFSX, LODtnsfn). grass_pc — the one
+	// non-"lod" broken dict — classifies sprite, where foliage/grass cards
+	// skip cleanly.
+	if(_strnicmp(currentTxdName, "lod", 3) == 0)
+		return TEXDEFS_MISS_WORLD;
+	return TEXDEFS_MISS_SPRITE;
+}
+
+static RwTexture *s_missSentinelGrey = NULL;	// world class
+static RwTexture *s_missSentinelClear = NULL;	// sprite class
+
+static RwTexture*
+TexDefsMakeSentinel(const char *name, RwUInt8 r, RwUInt8 g, RwUInt8 b, RwUInt8 a)
+{
+	RwRaster *ras = RwRasterCreate(1, 1, 32, rwRASTERTYPETEXTURE | rwRASTERFORMAT8888);
+	if(!ras)
+		return NULL;
+	// Level 0, lockFlags 1 (write) — same pattern as postfx.cpp
+	// GetPipeChainEdgeFadeRaster. A 1x1 8888 raster holds one 4-byte texel.
+	RwUInt8 *px = RwRasterLock(ras, 0, 1);
+	if(px){
+		px[0] = r;
+		px[1] = g;
+		px[2] = b;
+		px[3] = a;
+		RwRasterUnlock(ras);
+	}
+	RwTexture *tex = RwTextureCreate(ras);
+	if(!tex){
+		RwRasterDestroy(ras);
+		return NULL;
+	}
+	// Fill the inline name array directly (rwcore.h RwTexture layout): game
+	// consumers read tex->name[0] unguarded, and the name makes the sentinel
+	// identifiable as policy output in log lines and dumps.
+	strncpy(tex->name, name, sizeof(tex->name) - 1);
+	tex->name[sizeof(tex->name) - 1] = '\0';
+	return tex;
+}
+
+RwTexture*
+TexDefsMissSentinelWorld(void)
+{
+	if(!s_missSentinelGrey)
+		s_missSentinelGrey = TexDefsMakeSentinel("skygfx_missgrey", 0x60, 0x60, 0x60, 0xFF);
+	return s_missSentinelGrey;
+}
+
+RwTexture*
+TexDefsMissSentinelSprite(void)
+{
+	if(!s_missSentinelClear)
+		s_missSentinelClear = TexDefsMakeSentinel("skygfx_missclear", 0xFF, 0x00, 0xFF, 0x00);
+	return s_missSentinelClear;
+}
+
+// ---------------------------------------------------------------------------
+// N9 CONSUMER-HANDOFF QUERY (2026-11-09): identity test against the two
+// sentinels — the ONLY safe way for a consumer to tell "this pointer is
+// POLICY OUTPUT (the texture lookup failed)" from "this material
+// legitimately has NO texture" (NULL) or "this is a real texture".
+//
+// Why not `tex == TexDefsMissSentinelWorld()` in the consumer: those
+// accessors CREATE the sentinel raster on demand, and a consumer on the draw
+// path must never allocate. This query only COMPARES the already-created
+// instances, so it is free and side-effect free.
+//
+// The discrimination the consumers rely on:
+//   NULL  -> legitimate "no texture"    -> the consumer keeps gpWhiteTexture
+//   WORLD -> action=sentinel (dim grey) -> draw / bind the grey 1x1
+//   SPRITE-> action=skip (transparent)  -> skip the draw
+// A pointer that is NONE is a real texture and must be used AS IS.
+// ---------------------------------------------------------------------------
+int
+TexDefsMissTextureKind(const RwTexture *tex)
+{
+	if(!tex)
+		return TEXDEFS_MISS_TEX_NONE;
+	if(tex == s_missSentinelGrey)
+		return TEXDEFS_MISS_TEX_WORLD;
+	if(tex == s_missSentinelClear)
+		return TEXDEFS_MISS_TEX_SPRITE;
+	return TEXDEFS_MISS_TEX_NONE;
+}
+
+// Throttled policy receipt, texdefs.h "N9". Its own tag keeps the quota
+// independent of the naming/summary miss receipts.
+static void
+TexDefsNoteMissPolicy(const char *name, TexDefsMissClass cls, RwTexture *sent)
+{
+	if(!dbglog_throttle("texdefs_misspolicy"))
+		return;
+	if(sent){
+		dbglog("[texdefs] miss-policy '%s' class=%s action=%s txd='%s' total=%u",
+		       name,
+		       cls == TEXDEFS_MISS_WORLD ? "world" : "sprite",
+		       cls == TEXDEFS_MISS_WORLD ? "sentinel" : "skip",
+		       currentTxdName[0] ? currentTxdName : "?",
+		       s_missTotal);
+	}else{
+		dbglog("[texdefs] miss-policy '%s' INACTIVE (sentinel create failed "
+		       "— legacy white fallback)", name);
+	}
+}
+
+static RwTexture *
+TexDefsTryNameVariant(const char *name)
+{
+	size_t len = strlen(name);
+	if(len == 0 || len >= 60)
+		return NULL;
+
+	char lower[64];
+	char stripped[64];
+	char lowerStripped[64];
+	const char *cand[3];
+	int nCand = 0;
+
+	// (a) lowercased name — case-mismatched lookups.
+	for(size_t i = 0; i <= len; i++)
+		lower[i] = (char)tolower((unsigned char)name[i]);
+	if(strcmp(lower, name) != 0)
+		cand[nCand++] = lower;
+
+	// (b) trailing-extension stripped ("name.txd"/"name.dff"-style requests
+	// leaking in from converted content) and (c) lowercased + stripped.
+	const char *dot = strrchr(name, '.');
+	size_t extLen = dot ? len - (size_t)(dot - name) : 0;
+	size_t keep = (dot && dot != name && extLen >= 2 && extLen <= 5)
+	              ? (size_t)(dot - name) : 0;
+	if(keep){
+		memcpy(stripped, name, keep);
+		stripped[keep] = '\0';
+		if(strcmp(stripped, name) != 0)
+			cand[nCand++] = stripped;
+		memcpy(lowerStripped, lower, keep);
+		lowerStripped[keep] = '\0';
+		if(strcmp(lowerStripped, name) != 0 &&
+		   strcmp(lowerStripped, stripped) != 0)
+			cand[nCand++] = lowerStripped;
+	}
+
+	for(int i = 0; i < nCand; i++){
+		RwTexture *tex = gameGetTexture((char *)cand[i]);
+		if(tex)
+			return tex;
+	}
+	return NULL;
+}
+
 static RwTexture*
 TexDefsFindCB(char *name)
 {
 	RwTexture *tex = gameGetTexture(name);
+	// N6: a lookup MISS must be NAMED and the recoverable root cause
+	// (case/extension mismatch) retried before declaring it. Runs only on
+	// an already-failed lookup — the hot success path above is untouched.
+	if(!tex && name && name[0]){
+		// N8: cross-dict fallback. A pinned slot re-resolves cheaply; the full
+		// sweep runs once per name; known-miss names only count. The miss
+		// receipt (TexDefsNoteMiss) still counts EVERY failed lookup, so the
+		// `[texdefs] miss` tokens stay semantically stable.
+		int ci = TexDefsCacheFind(name);
+		bool tryResolve = false;
+		if(ci >= 0 && s_missCache[ci].dictSlot >= 0){
+			uint32 objects; uint8 *byteMap; int size;
+			if(TexDefsPoolInfo(&objects, &byteMap, &size))
+				tex = TexDefsDictResolveSlot(s_missCache[ci].dictSlot, name,
+				                             objects, byteMap, size);
+			if(!tex)
+				tryResolve = true;   // pinned dict unloaded -> re-sweep
+		}else if(ci < 0){
+			tryResolve = true;       // first miss for this name
+		}else{
+			TexDefsNoteMiss(name);   // known miss (dictSlot == -1): count only
+		}
+		if(tryResolve){
+			tex = TexDefsTryNameVariant(name);
+			if(!tex){
+				uint32 objects; uint8 *byteMap; int size;
+				int hitSlot = -1;
+				char hitDict[32] = {0};
+				if(TexDefsPoolInfo(&objects, &byteMap, &size))
+					tex = TexDefsDictSweep(name, &hitSlot, hitDict,
+					                       objects, byteMap, size);
+				if(tex){
+					TexDefsCacheUpsert(name, hitSlot);
+					if(dbglog_throttle("texdefs_dictfallback"))
+						dbglog("[texdefs] dictfallback '%s' txd='%s' found-in='%s' "
+						       "(cross-dict recovery — broken LOD parent)",
+						       name,
+						       currentTxdName[0] ? currentTxdName : "?",
+						       hitDict[0] ? hitDict : "?");
+				}else{
+					TexDefsNoteMiss(name);
+					TexDefsCacheUpsert(name, -1);
+				}
+			}else{
+				dbglog("[texdefs] miss-recovered '%s' -> '%s' txd='%s' "
+				       "(case/extension mismatch — fix the request name)",
+				       name, tex->name[0] ? tex->name : "?",
+				       currentTxdName[0] ? currentTxdName : "?");
+			}
+		}
+	}
+	// N9 FAIL-CLOSED POLICY: tex is still NULL here for a genuinely absent
+	// name (pin/variant/sweep all returned nothing) — AND for an UNNAMED
+	// lookup (name == NULL / ""), which the N6/N8 block above skips
+	// entirely (no name to count, no variant to try, no sweep to run) and
+	// which therefore used to be the one path that could still hand a raw
+	// NULL to the game's draw. NEVER hand NULL to the game's draw: bind the
+	// per-class 1x1 sentinel and return EARLY — the sentinel must not enter
+	// the TexInfo/NmPair attach block below (no metadata, no pairing probe
+	// on it).
+	// Creation failure degrades to the legacy NULL return: the consumer
+	// falls back white exactly as before the policy (same failure surface,
+	// no new behavior). The policy is off-switchable
+	// (TexDefsMissPolicyEnable(false)) — then the legacy NULL return stands.
+	if(!tex && s_texDefsMissPolicyOn){
+		TexDefsMissClass cls = TexDefsMissClassify();
+		RwTexture *sent = (cls == TEXDEFS_MISS_WORLD)
+		                  ? TexDefsMissSentinelWorld()
+		                  : TexDefsMissSentinelSprite();
+		TexDefsNoteMissPolicy(name ? name : "", cls, sent);
+		if(sent)
+			return sent;
+	}
 	if(tex){
 		TexInfo *info = findTexInfo(name);
 		if(info){
@@ -347,6 +860,10 @@ storeTxdName(int ret/*return address on stack*/, char *txdname)
 	// validated before indexing txdnames[65500] / strdup.
 	if(txdslot < 0 || txdslot >= 65500)
 		return txdslot;
+	// N7: a new TXD slot is registered — invalidate the miss cache so a name
+	// that missed earlier is retried under the new context (self-heal for a
+	// transient load-order miss). Bounded, deterministic.
+	TexDefsMissCacheReset();
 	// CLASS 4: Free existing entry before overwriting (prevents memory leak)
 	if(txdnames[txdslot]) {
 		free(txdnames[txdslot]);
@@ -508,8 +1025,8 @@ readTexDbTxt(void)
 				affiliate = start+10;
 			else if(strncmp(start, "noiseDetail=", 12) == 0)
 				noiseDetail = atoi(start+12);
-			// Deprecated alias: texdb.txt spelled this key `stochastic=` before
-			// the feature was renamed. Kept so existing user files still load.
+			// Deprecated alias retained for backwards compatibility: pre-rename
+			// texdb.txt files used this legacy spelling. Kept so existing user files still load.
 			else if(strncmp(start, "stochastic=", 11) == 0)
 				noiseDetail = atoi(start+11);
 			else if(strncmp(start, "dualPass=", 9) == 0)
@@ -523,9 +1040,25 @@ readTexDbTxt(void)
 			if(isdetail){
 				// detailTextures[] has 100 slots; a negative isdetail would
 				// write before the array.
-				if(isdetail >= 0 && isdetail < 100)
-					detailTextures[isdetail] = RwTextureRead(filename, nil);
-				else
+				if(isdetail >= 0 && isdetail < 100){
+					RwTexture *dtex = RwTextureRead(filename, nil);
+					// N9 CONSUMER HONOR (inside texdefs.cpp): the detail
+					// texture is a MULTIPLY layer bound on stage 2
+					// (buildingPipe.cpp bldBindDiffuse3L), not a draw of
+					// its own. A policy sentinel (the 1x1 dim grey) bound
+					// there would multiply every detailed surface by
+					// 0x60/0xFF — a global darkening, i.e. the policy
+					// CREATING a new defect instead of closing one. A
+					// failed detail lookup therefore stays NULL: the
+					// detail layer is simply absent (legacy behavior).
+					if(TexDefsMissTextureKind(dtex) != TEXDEFS_MISS_TEX_NONE){
+						if(dbglog_once("texdefs_detail_miss"))
+							dbglog("[texdefs] detail '%s' unresolved — policy sentinel ignored (detail layer stays off)",
+							       filename);
+						dtex = NULL;
+					}
+					detailTextures[isdetail] = dtex;
+				}else
 					dbglog("texdb: isdetail=%d out of bounds (max 99), skipping", isdetail);
 			}else if(hasdetail || alphamode || hassibling || affiliate || noiseDetail){
 				std::string s = filename;

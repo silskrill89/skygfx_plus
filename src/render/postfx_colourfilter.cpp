@@ -128,7 +128,9 @@ CPostEffects::ColourFilter_Generic(RwRGBA rgb1, RwRGBA rgb2, void *ps)
 
 	// SEH-guarded choke-point: resets overrideIm2dPixelShader on every exit
 	// (incl. fault) so a faulting dispatch can't leave the override bound.
-	PfBindPS(ps, "IDR_VCTRAILSPS(164)/trails");
+	// (tag: this same entry dispatches iiiTrailsPS (III) AND vcTrailsPS
+	// (VC/VCS) — the profiler tag is the CALL SITE, not a fixed resource.)
+	PfBindPS(ps, "ColourFilter_Generic trailsPS (III/VC/VCS)");
 	PfDraw(4, 2);
 	guardedIm2DRender(ps, rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6, "cf_generic");
 

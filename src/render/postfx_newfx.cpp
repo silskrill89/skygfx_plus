@@ -5,6 +5,12 @@
 #include "postfx.h"
 #include "profiler.h"
 
+// RW render-state flush (game RW 0x7FC200 — same symbol postfx_luminance.cpp,
+// buildingPipe.cpp and envmap.cpp commit pending[] with). Needed by FxPassToRT:
+// a raw stage-0 texture bind only survives the pre-draw flush when pending[] ==
+// applied[] for rwRENDERSTATETEXTURERASTER at that moment.
+void _rwD3D9RenderStateFlushCache(void);
+
 /////
 ///// New post-effect passes (W4/W5/W6 lanes) — DOF chain, LUT tonemap branch,
 ///// bloom pyramid, sun shafts, FXAA3, film grain, chromatic aberration,
@@ -367,14 +373,34 @@ static void FxPassToRT(IDirect3DSurface9 *dst, int w, int h, void *ps,
 	dev->SetViewport(&vp);
 
 	if(srcRas){
+		// Stage-0 bind through the RW cache with a forced NULL -> raster
+		// transition (postfx_luminance.cpp RenderLumaPass doctrine, P1-3).
+		// The old code set the raster in the L1 cache then raw
+		// `dev->SetTexture(0, NULL)` on L3. When a preceding pass already left
+		// this same raster in L1 AND applied[] (the CF grade pass / a prior
+		// FxPass just drew the front buffer), the RwRenderStateSet is a value
+		// no-op, so the pre-draw flush emits nothing and the raw NULL sticks ->
+		// the shader samples an unbound stage 0 (black DOF CoC / bloom extract).
+		// Commit NULL to applied[] first so the raster set below is a real
+		// transition. No raw texture write here: the cache stays authoritative.
+		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)NULL);
+		_rwD3D9RenderStateFlushCache();
 		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)srcRas);
-		dev->SetTexture(0, NULL);
 	}else if(src0){
 		dev->GetSamplerState(0, D3DSAMP_ADDRESSU, &s0AddrU);
 		dev->GetSamplerState(0, D3DSAMP_ADDRESSV, &s0AddrV);
 		dev->GetSamplerState(0, D3DSAMP_MINFILTER, &s0Min);
 		dev->GetSamplerState(0, D3DSAMP_MAGFILTER, &s0Mag);
 		s0SampSaved = true;
+		// Same desync, mirror direction: the raw bind below must survive the
+		// pre-draw flush, so commit whatever stage-0 raster the previous pass
+		// left pending (FxPassToRT teardown sets L1 = NULL and nothing re-emits
+		// it). After the commit cache == applied == NULL, so the flush has
+		// nothing to re-emit and the raw src0 bind sticks. Sampler capture is
+		// unaffected (it reads the device, not the cache). Stage 1+ has no rw
+		// twin, so the src1 bind below needs no commit.
+		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)NULL);
+		_rwD3D9RenderStateFlushCache();
 		dev->SetTexture(0, src0);
 		dev->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
 		dev->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
@@ -756,7 +782,6 @@ void DrawBloom(void)
 //    neutral per-channel offsets with a 2.5px radial cap.
 void DrawChromaticAberration(void)
 {
-	PF_SCOPE("CAPass");
 	FxLoadShaders();
 	if(config->caIntensity <= 0.0f || !s_fx.ca)
 		return;
@@ -767,21 +792,35 @@ void DrawChromaticAberration(void)
 	if(w < 1 || h < 1)
 		return;
 
+	// Profiler scope starts only after every "pass will not run" gate above
+	// (caIntensity/shader handle, pause/menu, front-buffer, bad size). When CA
+	// is off this pass logs nothing; the receipt STRING is unchanged for
+	// existing grep recipes.
+	PF_SCOPE("CAPass");
+
 	if(dbglog_throttle("fx"))
 		dbglog("[FX] CA enable: intensity=%.3f ps=%p", config->caIntensity, s_fx.ca);
 
 	CPostEffects::UpdateFrontBuffer();   // s0 = current scene
 
-	float c0[4] = { config->caIntensity, 1.0f, 1.0f, 1.0f };
-	RwD3D9SetPixelShaderConstant(0, c0, 1);
-	float c1[4] = {
-		2.5f, 0.5f,
-		(float)w / max((float)h, 1.0f),
-		1.0f / max((float)w, 1.0f)
+	// --- CA constant contract (kept identical in CA.hlsl and postfx_newfx.cpp) ---
+	// c0 = (intensity, radialFalloff, maxOffsetUV, aspect)
+	//   intensity     : 0..1 overall strength (caIntensity)
+	//   radialFalloff : pow exponent of the radial falloff (1 = linear)
+	//   maxOffsetUV   : per-channel offset cap in UV units. The shader applies a
+	//                   raw-UV radial offset, so the worst-case screen-space
+	//                   magnitude is maxOffsetUV * max(w,h) pixels. Derived from
+	//                   the intended 2.5 px cap: 2.5 / max(w,h).
+	//   aspect        : width/height, corrects the radial falloff shape.
+	// Only c0 is part of this contract; c1/c2 are left unbound.
+	// Per-channel offsets therefore peak at caIntensity * 2.5 px and the pass is
+	// a bit-exact passthrough whenever intensity == 0 or maxOffsetUV == 0.
+	float caMaxOffsetUV = 2.5f / (float)(w > h ? w : h);
+	float c0[4] = {
+		config->caIntensity, 1.0f, caMaxOffsetUV,
+		(float)w / max((float)h, 1.0f)
 	};
-	RwD3D9SetPixelShaderConstant(1, c1, 1);
-	float c2[4] = { 1.0f / max((float)h, 1.0f), 0.0f, 0.0f, 0.0f };
-	RwD3D9SetPixelShaderConstant(2, c2, 1);
+	RwD3D9SetPixelShaderConstant(0, c0, 1);
 
 	FxFramePass(s_fx.ca, NULL, NULL, false, "fx_ca");
 }
@@ -853,7 +892,6 @@ void DrawVignette(void)
 //    Mutual exclusion: SMAA wins when both are enabled (logged once).
 void DrawFXAA3(void)
 {
-	PF_SCOPE("FXAA3Pass");
 	FxLoadShaders();
 	if(!config->fxaaEnable)
 		return;
@@ -873,6 +911,12 @@ void DrawFXAA3(void)
 	GetScreenSize(&w, &h);
 	if(w < 1 || h < 1)
 		return;
+
+	// Profiler scope starts only after every "pass will not run" gate above
+	// (fxaaEnable, SMAA suppression, missing shader handle, pause/menu, bad
+	// size). When FXAA3 is off this pass logs nothing; the receipt STRING is
+	// unchanged for existing grep recipes.
+	PF_SCOPE("FXAA3Pass");
 
 	if(dbglog_throttle("fx"))
 		dbglog("[FX] FXAA3 enable: %dx%d ps=%p", w, h, s_fx.fxaa3);

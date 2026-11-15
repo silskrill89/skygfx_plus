@@ -4,6 +4,32 @@
 
 GTA San Andreas graphics mod (ASI plugin). Replaces building/vehicle rendering pipelines with PBR shaders. DLL loaded via ASI loader. Hooks into RW 3.6 D3D9 pipeline baked into the game exe.
 
+## Agents (8-agent roster)
+
+8 specialized agents for swarm-style orchestration. Definitions: `.mimocode/agents/*.md` (all 8 verified on disk).
+
+| Agent | Tier | Purpose |
+|-------|------|---------|
+| shader-expert | ultra | HLSL/SM3.0, FXC compilation, register layout |
+| pbr-specialist | ultra | PBR pipeline (building/vehicle/ped), BRDF, materials |
+| postfx-specialist | standard | PostFX chain (tonemap, SMAA, SSAO, motion blur) |
+| crash-debugger | standard | Diagnostic log analysis, crash zone detection |
+| knowledge-manager | lite | Sadie/serena/harness-memory orchestration |
+| build-deploy | lite | fast_build.py, shader compilation, deployment |
+| researcher | standard | Web search, paper analysis, reference gathering |
+| render-auditor | ultra | Cross-pipeline consistency audit, state leak detection |
+
+Routing (verified: `tools/agent_coordinator.py`):
+
+```bash
+python tools/agent_coordinator.py route "<task>" <scope>   # scopes: shader, pipeline, postfx, audit, research, crash, build, full
+python tools/agent_coordinator.py status                   # agent + memory-layer health
+```
+
+Swarm dispatch: `.mimocode/workflows/swarm-dispatch.js` → `workflow({ name: "swarm-dispatch", args: { task: "...", scope: "pipeline" } })`.
+
+Routing scopes → agents: shader → shader-expert, build-deploy · pipeline → pbr-specialist, render-auditor · postfx → postfx-specialist, crash-debugger · audit → render-auditor, pbr-specialist, postfx-specialist · research → researcher, knowledge-manager · crash → crash-debugger, knowledge-manager · build → build-deploy, crash-debugger · full → shader-expert, pbr-specialist, postfx-specialist, build-deploy.
+
 ## Build
 
 ```bash
@@ -18,8 +44,8 @@ python tools/fast_build.py --launch     # Build + launch game
 - **MSBuild**: VS2022 Enterprise at `C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe`
 - **Deploy target**: `E:\games\gtasa_skygfx_plus\skygfx.asi`
 - **Game dir**: `E:\games\gtasa_skygfx_plus`
-- **Build output**: `build\Release\skygfx.dll` → renamed to `skygfx.asi`
-- **Build log**: `premake_log.txt`
+- **Build output**: `build\Release\skygfx.dll` (searched by `fast_build.py`; also `bin\Release\skygfx.dll`) → renamed to `skygfx.asi`
+- **Build log**: `.cache/msbuild_last.log` (written by `fast_build.py`; `premake_log.txt` only exists after a premake run via `tools/doctor.py`)
 - **Diag log**: `E:\games\gtasa_skygfx_plus\skygfx_dbg.log`
 
 ## Shader Pipeline
@@ -116,7 +142,7 @@ PIPELINE_GTAIV(4) → buildingPipe=BUILDING_GTAIV(2), vehiclePipe=CAR_GTAIV(9)
 ### Token Efficiency Rules
 - **AGGRESSIVE COMPRESSION**: This project hits context limits extremely fast. Compress early, compress often. Every 5-8 tool calls, evaluate whether older ranges are stale and compress them. Do NOT wait for the max context warning. When the user asks to compress, do it IMMEDIATELY — compress the widest stale range possible in one pass.
 - **LSAI First**: Use LSAI for all symbol lookup (saves 90%+ tokens). Never grep/glob for symbol search. Use lsai_source instead of Read for method bodies. Use lsai_outline instead of reading entire files.
-- **Specialist Routing**: Single-file mechanical fix → @fixer (1/2 cost). Symbol lookup → @explorer (2x faster, 1/2 cost). External research → @librarian (2x faster, 1/2 cost). Architecture decisions → @oracle (5x better decisions).
+- **Specialist Routing**: Project work routes through the 8-agent roster — `python tools/agent_coordinator.py route "<task>" <scope>` (see Agents section). Built-in task-tool types (@fixer, @explorer, @librarian, @oracle) still work for quick dispatch; cluster edits by subsystem per directive §0.3 (no single-file lane slicing).
 - **Parallel Execution**: Independent tasks → Parallel background specialists. Dependent tasks → Sequential with dependency tracking. Write conflicts → Never parallelize overlapping writes.
 - **Session Reuse**: Reuse available sessions when context fits. Fresh sessions when too much unrelated context. Track session IDs for background tasks.
 - **Minimal Context**: Reference paths/lines instead of pasting files. Brief delegation notices instead of verbose explanations. Concise status updates instead of narrating work.
@@ -182,17 +208,20 @@ python tools/skytool.py research <url>          # Ingest URL to research docs
 | Science Pillars | `memory-bank/.cache/science-pillars/` | 3 docs |
 | Research | `docs/research/youtube/` | 6 transcripts |
 
-### Memory Layers (7 total)
+### Memory Layers (8 total — per `.serena/memories/project.md`, paths verified on disk 2026-11-07)
 
 | # | Layer | Location | Purpose |
 |---|-------|----------|---------|
-| 1 | Conversation | Current session | Working context |
-| 2 | Memory Bank | `.opencode/memory-bank/*.md` | Structured project state (6 files) |
-| 3 | Serena | `.serena/memories/*.md` | Curated knowledge notes (6 files) |
-| 4 | Sadie | `.sadie/sadie.db` | Queryable SQLite index of ALL layers (371 items) |
-| 5 | Harness-memory | `.harness-memory/memory.sqlite` | Dream-consolidated memories |
-| 6 | Obsidian RE Vault | `GTA SA Reverse Engineering Documentation` | RW/SA reference library (128 notes) |
-| 7 | Obsidian SkyGFX Docs | `SKYGFXPLUS_DOCS` | SkyGFX-specific documentation (195 notes) |
+| 1 | Serena | `.serena/memories/*.md` | Curated knowledge notes + wave records |
+| 2 | Sadie | `.sadie/sadie.db` | Queryable SQLite index of all sources |
+| 3 | Harness-Memory | `.harness-memory/memory.sqlite` | Dream-consolidated memories |
+| 4 | MiMoCode Checkpoint | `~/.local/share/mimocode/memory/sessions/*/checkpoint.md` | Session state (project-root `memory/` does not exist) |
+| 5 | MiMoCode Memory | `~/.local/share/mimocode/memory/projects/*/MEMORY.md` | Project memory |
+| 6 | Obsidian Vault | `E:/dev(dave)/SKYGFXPLUS_DOCS/` | SkyGFX documentation vault |
+| 7 | Git History | `git log` | Commit messages as knowledge |
+| 8 | Agent Outputs | `.serena/agent-reports/*.md` | Per-task findings (`tasks/*/progress.md` does not exist — reports live here) |
+
+Working memory on top of these: `.opencode/memory-bank/*.md` (6 files — `activeContext.md` is top = newest). Standing directive §0.5: every lane/wave writes its summary to **memory-bank + serena**, never chat-only.
 
 ### Sadie Knowledge Librarian
 
@@ -215,3 +244,21 @@ Two Obsidian vault MCP servers configured in `~/.config/mimocode/mimocode.jsonc`
 - `obsidian-skygfx-docs` — SKYGFXPLUS_DOCS vault
 
 Both use `obsidian-mcp-server.exe` via Obsidian Local REST API plugin.
+
+## Standing directives 2026-11-02
+
+User order (§0), source: `.serena/memories/standing-directives-2026-11-02.md`. These EXTEND, not replace, older standing orders (lanes never build; one integrated build by orchestrator; NEVER-REVERT wave records; stable-config acceptance).
+
+1. **ASAP pacing** — work the remaining list (peds_pipe Phase 3 skin absorb, water M4-M9, gibs render fix, address migration, menu overhaul, RpAtomic layout resolution, RSMon metric bug) without idle gaps. No deadline active; goal line = stable-config baseline (`docs/baseline/2026-11-02-stable-config/README.md`).
+2. **Unify** — prefer one shared implementation over per-call-site copies: one upload path, one noise system, registry-driven addresses. If the same constant/fix exists twice, it is wrong.
+3. **File limit lifted** — multi-file clustered passes are allowed; stop slicing lanes to single-file edits. Cluster by subsystem instead. Never parallelize overlapping writes.
+4. **Per-system .cpp targets** — end state is one file per system: a skin system .cpp owning ped/skin absorption from peds_pipe; ONE noise.cpp feeding wind + water + trees; physics engines connecting systems (softbody/ragdoll linking into tree/water/vehicle work).
+5. **Write summaries to memory** — every lane/wave writes its summary into the memory layers (memory-bank + serena), never chat-only.
+
+## Hard rules (2026-11-10)
+
+Source: `.serena/memories/standing-directives-2026-11-10.md` (EXTENDS the 2026-11-02 directives; dated-addendum family is NEVER-REVERT).
+
+- **Named variables, no raw address call sites.** Always use proper variable names. Game/SDK addresses live ONLY in the named declaration layer — `src/rw/gta.h` named externs/constants, precedent the `gta.h:391-527` layout contract. Call sites use the name; raw hex at a call site is a violation unless it is a disassembly-only constant documented inline as `// no symbol; verified <date>`.
+- **Address-hygiene sweep** (targets: `.serena/memories/wave-20-record.md` §6): `main.cpp:1677` `0xC9BCC0` first, then `rw_fixes.cpp` `0xB4E9E0`, begun-camera sites (`postfx_smaa.cpp:237-241` / `postfx.cpp:3197` / `pipelinecommon.cpp:1041`), ped-pool `0xB74490`/`0x7C4`/`0x800`, `0x804EF0`.
+- **Workflow**: deploy agents as needed to keep moving; update all documentation layers every wave (Obsidian priority → Serena → Sadie); keep fixing until the game matches the September references (`C:\Users\aaaaaaaaa\Documents\ShareX\Screenshots\2026-09`, ~Sep-23 07:09 batch) with zero on-screen glitches.

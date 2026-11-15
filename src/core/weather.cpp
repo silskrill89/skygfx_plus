@@ -1,6 +1,6 @@
 // weather.cpp — Multi-timecyc weather system
 // Sits on top of game's CTimeCycle, overrides m_CurrentColours
-// Pattern: hash-based deterministic set selection (same as veh_shaders paint/tire)
+// Pattern: fixed set selection — always weathers2.dat (see Weather_SelectSet)
 // RW-style: reads game's CColourSet arrays, blends between two timecyc sets
 
 #include "skygfx.h"
@@ -40,8 +40,10 @@ struct TimecycEntry {
 };
 
 // 23 weather types × 8 time slots = 184 entries
-static TimecycEntry g_altTimecyc[184];
+static TimecycEntry g_altTimecyc[184];    // set 2 — weathers2.dat
+static TimecycEntry g_baseTimecyc[184];   // set 1 — data\timecyc.dat (vanilla)
 static bool g_altLoaded = false;
+static bool g_baseLoaded = false;
 static bool g_weatherInitialized = false;
 
 // Current blend state (smooth transition)
@@ -70,17 +72,18 @@ float Weather_GetBlendFactor(int weatherType, int timeSlot){
 }
 
 // ============================================================
-// Timecyc parser — reads weathers2.dat into g_altTimecyc
+// Timecyc parser — reads a timecycle file (weathers2.dat or timecyc.dat)
+// into a TimecycEntry[184] block supplied by the caller.
 // Format matches game's timecyc.dat exactly (tab-separated values)
 // ============================================================
 
-static bool ParseTimecycFile(const char *path){
+static bool ParseTimecycFile(const char *path, TimecycEntry *dst){
 	FILE *f = fopen(path, "r");
 	if(!f) return false;
 
 	char line[1024];
 	int entryIdx = 0;
-	memset(g_altTimecyc, 0, sizeof(g_altTimecyc));
+	memset(dst, 0, sizeof(TimecycEntry) * 184);
 
 	while(fgets(line, sizeof(line), f)){
 		// Skip comments and empty lines
@@ -97,7 +100,7 @@ static bool ParseTimecycFile(const char *path){
 
 		// Parse data line
 		if(entryIdx < 184){
-			TimecycEntry *e = &g_altTimecyc[entryIdx];
+			TimecycEntry *e = &dst[entryIdx];
 			int r, g, b;
 			int ambObjR, ambObjG, ambObjB;
 			int dirR, dirG, dirB;
@@ -234,9 +237,20 @@ void Weather_Init(const char *gameDir){
 
 	// Load alternate timecyc (weathers2.dat)
 	snprintf(path, sizeof(path), "%s\\data\\weathers2.dat", gameDir);
-	g_altLoaded = ParseTimecycFile(path);
+	g_altLoaded = ParseTimecycFile(path, g_altTimecyc);
 	dbglog("Weather_Init: weathers2=%s (%d entries)", g_altLoaded ? "OK" : "FAIL",
 	       g_altLoaded ? 184 : 0);
+
+	// Load the vanilla timecyc (data\timecyc.dat) too — READ-ONLY use of the
+	// shipped file, nothing in data/ is modified. We need it for the "Dir"
+	// column, which the GAME throws away at load (CTimeCycle::Initialise
+	// parses dirR/dirG/dirB into stack locals and never stores them) — see
+	// Weather_ApplyDirColumn for the full root-cause chain. Without our own
+	// copy there is no way to recover the authored sun colour at runtime.
+	snprintf(path, sizeof(path), "%s\\data\\timecyc.dat", gameDir);
+	g_baseLoaded = ParseTimecycFile(path, g_baseTimecyc);
+	dbglog("Weather_Init: timecyc=%s (%d entries)", g_baseLoaded ? "OK" : "FAIL",
+	       g_baseLoaded ? 184 : 0);
 }
 
 // ============================================================
@@ -246,35 +260,156 @@ void Weather_Init(const char *gameDir){
 // Runs unconditionally — no weather blend or alt-timecyc checks.
 // ============================================================
 
+// Byte-valued CColourSet fields (sunCore/sunCorona are `short` 0..255 in
+// gta.h): scale, then clamp to the byte range in BOTH directions.
+// The old code clamped only the >255 side, so a negative
+// sunCoreIntensity/sunCoronaIntensity INI value pushed negative shorts
+// straight into every consumer (corona/core sprites, tonemap sun term).
+// Truncation on the way back to short is unchanged (same `(short)` cast as
+// before for any value that already fits). `!(v >= 0.0f)` also folds NaN
+// into 0 instead of letting the cast produce an undefined short.
+static short ScaleColourByte(short value, float mult){
+	float v = (float)value * mult;
+	if(!(v >= 0.0f)) return 0;      // negative or NaN -> 0
+	if(v > 255.0f) return 255;
+	return (short)v;
+}
+
 void Weather_ApplySunConfig(void){
 	extern CColourSet &CTimeCycle__m_CurrentColours;
 	CColourSet &tc = CTimeCycle__m_CurrentColours;
 
 	// Scale sun corona color (PS2→PC conversion fix)
 	if(config->sunCoronaIntensity != 1.0f){
-		tc.sunCoronaR = (short)(tc.sunCoronaR * config->sunCoronaIntensity);
-		tc.sunCoronaG = (short)(tc.sunCoronaG * config->sunCoronaIntensity);
-		tc.sunCoronaB = (short)(tc.sunCoronaB * config->sunCoronaIntensity);
-		if(tc.sunCoronaR > 255) tc.sunCoronaR = 255;
-		if(tc.sunCoronaG > 255) tc.sunCoronaG = 255;
-		if(tc.sunCoronaB > 255) tc.sunCoronaB = 255;
+		tc.sunCoronaR = ScaleColourByte(tc.sunCoronaR, config->sunCoronaIntensity);
+		tc.sunCoronaG = ScaleColourByte(tc.sunCoronaG, config->sunCoronaIntensity);
+		tc.sunCoronaB = ScaleColourByte(tc.sunCoronaB, config->sunCoronaIntensity);
 	}
 	// Scale sun core color
 	if(config->sunCoreIntensity != 1.0f){
-		tc.sunCoreR = (short)(tc.sunCoreR * config->sunCoreIntensity);
-		tc.sunCoreG = (short)(tc.sunCoreG * config->sunCoreIntensity);
-		tc.sunCoreB = (short)(tc.sunCoreB * config->sunCoreIntensity);
-		if(tc.sunCoreR > 255) tc.sunCoreR = 255;
-		if(tc.sunCoreG > 255) tc.sunCoreG = 255;
-		if(tc.sunCoreB > 255) tc.sunCoreB = 255;
+		tc.sunCoreR = ScaleColourByte(tc.sunCoreR, config->sunCoreIntensity);
+		tc.sunCoreG = ScaleColourByte(tc.sunCoreG, config->sunCoreIntensity);
+		tc.sunCoreB = ScaleColourByte(tc.sunCoreB, config->sunCoreIntensity);
 	}
-	// Scale lens flare streak intensity and size
+	// Scale lens flare streak intensity and size. These are floats, not byte
+	// fields, so the [0,255] clamp does not apply — but a negative multiplier
+	// would still push an invalid negative sprite value, so clamp the lower
+	// bound too. Valid (non-negative) configs are unchanged.
 	if(config->sunStreakIntensity != 1.0f){
-		tc.spriteBrightness *= config->sunStreakIntensity;
+		float v = tc.spriteBrightness * config->sunStreakIntensity;
+		tc.spriteBrightness = (v >= 0.0f) ? v : 0.0f;
 	}
 	if(config->sunStreakSize != 1.0f){
-		tc.spriteSize *= config->sunStreakSize;
+		float v = tc.spriteSize * config->sunStreakSize;
+		tc.spriteSize = (v >= 0.0f) ? v : 0.0f;
 	}
+}
+
+// Push a corrected directional colour into the game's live sun light.
+//
+// The game caches m_CurrentColours.directional* into
+// DirectionalLightColourForFrame (0xC886B4) and pDirect inside
+// SetLightsWithTimeOfDayColour (0x7354E0), called at 0x53E997 in CScene::Render.
+// That happens BEFORE our RenderScene hook (0x53EABF, see main.cpp
+// installDeferredHooks), i.e. before Weather_Update can repair the field — so
+// writing m_CurrentColours alone fixes waterPipe/colourfilter/underwater (they
+// read the struct during drawing) but leaves buildingPipe's pDirect black/red
+// for the whole frame. Re-push the corrected value here, mirroring exactly what
+// the game's own light update would have produced from the authored Dir column.
+// Only the directional colour is touched; pAmbient and every other light cached
+// by SetLightsWithTimeOfDayColour keep the game's values.
+static void Weather_SyncDirectionalLight(const CColourSet &tc){
+	// Interiors run the game's extra-colour/interior lighting path; the sun term
+	// is legitimately ~0 there. Never inject the outdoor Dir column indoors.
+	if(CGame__currArea && *CGame__currArea != 0) return;
+
+	extern RwRGBAReal &DirectionalLightColourForFrame;	// main.cpp:2981 (0xC886B4)
+	DirectionalLightColourForFrame.red   = tc.directionalR;
+	DirectionalLightColourForFrame.green = tc.directionalG;
+	DirectionalLightColourForFrame.blue  = tc.directionalB;
+	if(pDirect)
+		RpLightSetColor(pDirect, &DirectionalLightColourForFrame);
+}
+
+// ============================================================
+// Dir-column restore (the m_CurrentColours.directional fix)
+//
+// ROOT CAUSE (traced 2026-11-08, see report):
+//   1. SA's CTimeCycle::Initialise (0x5BBAC0) sscanf's the timecyc "Dir"
+//      column into stack locals dirR/dirG/dirB and NEVER stores them
+//      (gta-reversed TimeCycle.cpp: sscanf comment "Direct light color -
+//      NOP"; the store is absent — "// code dir RGB?"). There is no
+//      m_nDirectionalRed-style array in the game at all (only
+//      m_nDirectionalMult = the trailing DirMult column).
+//   2. CColourSet's third float triplet (offset 0x18) — the field gta.h:303
+//      names directionalR/G/B — is the slot gta-reversed documents as
+//      m_fAmbientBeforeBrightness* (// m_fDirectional); plugin-sdk hedges by
+//      naming it m_fDirectionalRed while also exposing
+//      CTimeCycle::GetAmbient*_BeforeBrightness for the same value. The game
+//      fills it from the AMBIENT column (before-brightness ambient), never
+//      from Dir: EXTRASUNNY_LA Midday has Amb=11 0 0 / Dir=255 255 255, yet
+//      the live slot reports (0.039, 0, 0) — G=B exactly 0, tracking Amb, not
+//      the white Dir column. Verified in skygfx_dbg.log line 9095:
+//      "[Tonemap] TC ... dir=(0.039,0.000,0.000) ... hour=12".
+//   3. Hence data Amb=11 0 0 + Dir=255 255 255 at EXTRASUNNY_LA Midday
+//      reports tc.directional = (0.039, 0.000, 0.000) at hour 12 — a
+//      near-black RED "sun term" — for every consumer that reads it as
+//      the directional sun colour (waterPipe.cpp:2145, colourfilter
+//      sceneLuma at postfx_colourfilter.cpp:363, postfx_underwater.cpp:412).
+//
+// The alt (weathers2.dat) path already re-applies Dir in the directional
+// block of Weather_Update below; this helper does the same for the vanilla
+// (altTimecycEnable=0) path from data\timecyc.dat, which previously left
+// the game's ambient-derived value in place. It writes ONLY
+// tc.directionalR/G/B — every other CColourSet field keeps whatever the
+// game produced — so ambient/sky/water/postfx behaviour is untouched.
+// ============================================================
+static void Weather_ApplyDirColumn(const TimecycEntry *set, int oldW, int newW, int slot, float wInterp){
+	// 23 weathers × 8 slots, same indexing as the rest of this file
+	if(oldW < 0 || oldW >= 23 || newW < 0 || newW >= 23) return;
+	if(slot < 0 || slot >= 8) return;
+	// Interiors (shops, safehouses, mission rooms) run on the game's interior /
+	// extra-colour path, not the outdoor weather cycle, and their sun term is
+	// legitimately ~0. Leave the game's value untouched there; garages have
+	// currArea==0 and still receive the authored sun, which is correct.
+	if(CGame__currArea && *CGame__currArea != 0) return;
+	// Defensive: CWeather::InterpolationValue should be [0,1]; `!(v >= 0)`
+	// also folds NaN so a bad game value can never poison the lerp.
+	if(!(wInterp >= 0.0f)) wInterp = 0.0f;
+	if(wInterp > 1.0f) wInterp = 1.0f;
+
+	const TimecycEntry *a = &set[oldW * 8 + slot];
+	const TimecycEntry *b = &set[newW * 8 + slot];
+
+	// Same old/new-weather blend the alt path uses for every other column
+	float r = (float)a->dirR * (1.0f - wInterp) + (float)b->dirR * wInterp;
+	float g = (float)a->dirG * (1.0f - wInterp) + (float)b->dirG * wInterp;
+	float bl = (float)a->dirB * (1.0f - wInterp) + (float)b->dirB * wInterp;
+
+	// byte -> 0..1 float, the convention CColourSet ambient/directional use
+	// (the game itself divides by 255). Clamp BOTH directions so a bad file
+	// value can never push the field outside [0,1].
+	r /= 255.0f; g /= 255.0f; bl /= 255.0f;
+	if(!(r >= 0.0f)) r = 0.0f; else if(r > 1.0f) r = 1.0f;
+	if(!(g >= 0.0f)) g = 0.0f; else if(g > 1.0f) g = 1.0f;
+	if(!(bl >= 0.0f)) bl = 0.0f; else if(bl > 1.0f) bl = 1.0f;
+
+	extern CColourSet &CTimeCycle__m_CurrentColours;
+	CColourSet &tc = CTimeCycle__m_CurrentColours;
+	tc.directionalR = r;
+	tc.directionalG = g;
+	tc.directionalB = bl;
+
+	// m_CurrentColours is not enough for the RpLight consumer — re-push the
+	// corrected colour into pDirect too (see Weather_SyncDirectionalLight).
+	Weather_SyncDirectionalLight(tc);
+
+	extern uint8 &CClock__ms_nGameClockHours;
+	extern uint8 &CClock__ms_nGameClockMinutes;
+	if(dbglog_throttle("wx_dir"))
+		dbglog("[wx_dir] h=%d:%02d slot=%d w=%d/%d wi=%.2f dir=(%.3f,%.3f,%.3f) src=timecyc.dat",
+		       (int)CClock__ms_nGameClockHours, (int)CClock__ms_nGameClockMinutes,
+		       slot, oldW, newW, wInterp, tc.directionalR, tc.directionalG, tc.directionalB);
 }
 
 // ============================================================
@@ -283,20 +418,9 @@ void Weather_ApplySunConfig(void){
 // ============================================================
 
 void Weather_Update(void){
-	if(!g_altLoaded) return;
-
-	// altTimecycEnable=0 (default): vanilla behavior. The weathers2.dat
-	// set-2 overwrite below forces g_currentBlend=1.0 and replaces the
-	// game's CColourSet ambient (near-black daytime) — skip the entire
-	// overwrite block so the game's own ambient/direct values flow through.
-	if(!config->altTimecycEnable){
-		static bool s_loggedDisabled = false;
-		if(!s_loggedDisabled){
-			s_loggedDisabled = true;
-			dbglog("[wx_amb] alt timecyc DISABLED (altTimecycEnable=0) - vanilla ambient in use");
-		}
-		return;
-	}
+	// Need at least one parsed set: weathers2.dat (alt path) or
+	// timecyc.dat (Dir-column-only path below).
+	if(!g_altLoaded && !g_baseLoaded) return;
 
 	// Get current weather state from game
 	extern int16 &CWeather__OldWeatherType;
@@ -324,6 +448,28 @@ void Weather_Update(void){
 			break;
 		}
 	}
+
+	// altTimecycEnable=0 (default): vanilla behavior. The weathers2.dat
+	// set-2 overwrite below forces g_currentBlend=1.0 and replaces the
+	// game's CColourSet ambient (near-black daytime) — skip the entire
+	// overwrite block so the game's own ambient/sky/water values flow through.
+	// EXCEPTION: directional. The game NEVER carries the timecyc Dir column
+	// into m_CurrentColours (CalcColoursForPoint leaves ambient-before-
+	// brightness in that slot — see Weather_ApplyDirColumn), so "flowing
+	// through" here shipped the black/red sun term (0.039,0,0 at noon).
+	// Restore ONLY the Dir column from data\timecyc.dat for that field.
+	if(!config->altTimecycEnable){
+		static bool s_loggedDisabled = false;
+		if(!s_loggedDisabled){
+			s_loggedDisabled = true;
+			dbglog("[wx_amb] alt timecyc DISABLED (altTimecycEnable=0) - vanilla ambient in use");
+		}
+		if(g_baseLoaded)
+			Weather_ApplyDirColumn(g_baseTimecyc, oldW, newW, curSlot, wInterp);
+		return;
+	}
+
+	if(!g_altLoaded) return;
 
 	// Get blend target from hash-based selector
 	// Use old weather type for selection (the "current" weather)
@@ -407,6 +553,9 @@ void Weather_Update(void){
 	if(tc.directionalR < 0.0f) tc.directionalR = 0.0f; if(tc.directionalR > 1.0f) tc.directionalR = 1.0f;
 	if(tc.directionalG < 0.0f) tc.directionalG = 0.0f; if(tc.directionalG > 1.0f) tc.directionalG = 1.0f;
 	if(tc.directionalB < 0.0f) tc.directionalB = 0.0f; if(tc.directionalB > 1.0f) tc.directionalB = 1.0f;
+	// The RpLight path runs before this hook; re-push so buildingPipe's pDirect
+	// sees the same corrected value (interior-guarded inside the helper).
+	Weather_SyncDirectionalLight(tc);
 
 	// Discriminating log for the "outdoor cutscene dark" dig: what the
 	// overwrite did to ambient/directional this frame (2s throttle).

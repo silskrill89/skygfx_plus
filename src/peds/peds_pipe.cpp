@@ -1,6 +1,5 @@
-// peds_pipe.cpp — ped pipe control point, Phase 1 skeleton (INERT until wired).
-//
-// Design authority: docs/plans/2026-10-31-peds-pipe-design.md
+// peds_pipe.cpp — ped pipe control point (Phase 1 skeleton + Phase 3 SKIN
+// state plumbing). Design authority: docs/plans/2026-10-31-peds-pipe-design.md
 // Registry discipline copied from texdefs.cpp:285-317 (TexDefsPluginAttach):
 //   - guarded one-shot registration (offset <= 0 re-try pattern),
 //   - ctor zeroes the slot at clump creation (recycled-address safety),
@@ -9,11 +8,14 @@
 //
 // RW touchpoints: exactly ONE — RpClumpRegisterPlugin (WRAPPER/EAXJMP into
 // the exe-baked RW 3.6, address from plugin-sdk RenderWare.cpp:2375). No
-// D3D9 state writes, no device calls, no per-frame RW work in Phase 1.
+// D3D9 state writes, no device calls, no per-frame RW work here.
 //
 // State storage: fixed static pool of 64 POD entries with an index
 // free-list. No heap churn: acquire = pop index + zero fill, release =
 // push index (done by the plugin destructor callback at clump destruction).
+// Phase 3 grew PedPipeState with the SkinEntryContract/SkinExitContract and
+// SkinAmbientOverride span state (peds_pipe.h) — the pool's memset zero-fill
+// covers every new field, so no acquire-path change was needed.
 
 #include "peds_pipe.h"
 #include <string.h>		// memset

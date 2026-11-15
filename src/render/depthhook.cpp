@@ -554,6 +554,34 @@ void DepthHook_Install(IDirect3DDevice9 *dev) {
 	       depthHookOn ? "on" : "off", g_intzSupported ? "yes" : "no");
 }
 
+// ============================================================
+// Depth-dim assertion (H5 front-buffer / depth UV-stretch guard)
+// ============================================================
+// The front buffer (CPostEffects::pRasterFrontBuffer, exe address 0xC402D8) is
+// the game's padded 2048² raster, while INTZ is created at the TRUSTED screen
+// dims (RsGlobal — see DepthHook_Install / CreateINTZResources) and the camera
+// raster is the real 1920x1080 screen. Depth-consuming passes draw a
+// screen-space quad sized to the LIVE camera raster and sample INTZ with UV
+// 0..1; if the live camera raster ever disagrees with the INTZ dims (transient
+// non-screen raster live mid-pass), those depth taps stretch silently —
+// motion-blur/velocity/smaa/ssao edge garbage with no log trace. This helper
+// turns that mismatch into a throttled, named receipt. It is a cheap no-op
+// (one surface GetDesc + one camera-raster read) whenever the dims agree.
+void DepthHook_AssertDepthDims(const char *site)
+{
+	if(!g_intzSurf) return;
+	D3DSURFACE_DESC izd;
+	if(FAILED(g_intzSurf->GetDesc(&izd))) return;
+	RwRaster *camRas = Scene.camera ? RwCameraGetRaster(Scene.camera) : NULL;
+	if(!camRas) return;
+	if(camRas->width == (int)izd.Width && camRas->height == (int)izd.Height)
+		return;
+	if(dbglog_throttle("depthdim"))
+		dbglog("[depthdim] %s: camRas=%dx%d != INTZ=%dx%d (depth UV stretch risk)",
+			site ? site : "?", camRas->width, camRas->height,
+			(int)izd.Width, (int)izd.Height);
+}
+
 void DepthHook_Suspend(void) {
 	if(!g_hookInstalled || !g_intzSurf) return;
 	if(g_depthSuspended) {
@@ -563,6 +591,11 @@ void DepthHook_Suspend(void) {
 
 	IDirect3DDevice9 *dev = d3d9device;
 	if(!dev) return;
+
+	// Depth-dim assertion: at the universal pre-sample choke point every INTZ
+	// consumer passes through (velocity, SSAO, SMAA edge, pipe chain, height
+	// fog, underwater, motion blur), name any live-camRas/INTZ size mismatch.
+	DepthHook_AssertDepthDims("suspend");
 
 	// Save the authoritative device ZENABLE (layer 3).
 	dev->GetRenderState(D3DRS_ZENABLE, &g_savedZenable);

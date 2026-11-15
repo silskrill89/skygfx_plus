@@ -1,15 +1,20 @@
-{
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": [
-    "harness-memory/plugin"
-  ],
+﻿{
+  "$schema": "https://opencode.ai",
   "mcp": {
-    "codebase-memory-mcp": {
-      "enabled": true,
+    "fsx": {
       "type": "local",
-      "command": [
-        "C:/Users/aaaaaaaaa/.local/bin/codebase-memory-mcp.exe"
-      ]
+      "command": ["python", "E:/dev(dave)/skygfx_plus_expIV/tools/fsx.py", "--serve"],
+      "enabled": true
+    },
+    "codebase-memory-mcp": {
+      "type": "local",
+      "command": ["C:/Users/aaaaaaaaa/.local/bin/codebase-memory-mcp.exe"],
+      "enabled": true
+    },
+    "obsidian-mcp": {
+      "type": "local",
+      "command": ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "E:/dev(dave)/skygfx_plus_expIV/tools/obsidian-mcp-wrapper.ps1"],
+      "enabled": true
     }
   }
 }

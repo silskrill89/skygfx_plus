@@ -39,16 +39,17 @@
 //   rs_mon: FIRST_DIVERGE site=<site> pipe=<id> n=<site count> | CULL rw=2 drv=2 dev=1 | ...
 //   rs_mon: DIVERGE site=<site> pipe=<id> n=<site count> | ...
 //   rs_mon_report: samples=<n> agree=<n> diverge=<n> pct=<n> bad=<n> sites=<n>
-//                  top=<site> top_n=<n> transient=<n>
+//                  top=<site> top_n=<n> transient=<n> cache=<n>
 //
 //   Only mismatching states are printed. States with no rw-cache twin print
-//   rw=- (ZFUNC, BLENDOP). `n=` is omitted when the 16-site table is full and
+//   rw=- (ZFUNC, BLENDOP). `n=` is omitted when the per-site table is full and
 //   the site is untracked. The first divergence for a site is always
-//   unthrottled (16-site table); later divergences share the single
+//   unthrottled (per-site table); later divergences share the single
 //   "rs_mon" 2 s bucket. Report uses its own 5 s gate (the shared
 //   dbglog_throttle interval is 2 s, and a shared bucket can be starved).
 //
-// CLASSIFICATION (aggregate semantics — 2026-11-02 fix)
+// CLASSIFICATION (aggregate semantics — 2026-11-02 fix, recalibrated
+// 2026-11-08 for N1/N2 verdict accuracy)
 //   The per-sample lines above are the RAW truth: any cross-layer difference
 //   logs. The aggregate report classifies instead of raw-counting, because
 //   the two frame-edge sites legitimately differ in steady state:
@@ -58,17 +59,27 @@
 //     state only before a draw). Raw-counting that as "diverged" made every
 //     healthy gameplay session report 100% diverge (13885/13885, bad=0 —
 //     every line showed rw==drv with only dev at the postfx tail values).
-//   Verdict rule (the FLUSH-LAG NOTE's entry/exit comparison, automated):
+//   Verdict rule (the FLUSH-LAG NOTE's entry/exit comparison, automated,
+//   with the layer split that the N1/N2 receipts depend on):
 //     agree      sample where all three layers match (raw, per sample).
-//     transient  entry-sample diff that is GONE by the paired exit sample
-//                (healed within its frame), or an entry diff that never got
-//                an exit verdict (unpaired — loading screen, early out).
-//                Mid-frame sites (if any are added later) are transient by
-//                definition: diffs between writes carry no verdict.
-//     diverge    diff still present at the EXIT sample of the paired frame
-//                — the state the next frame inherits with nothing healing
-//                it. This is the persistent-desync failure class the
-//                monitor exists to detect ([FxAlpha]/[PED] class).
+//     transient  DEVICE-ONLY entry diff that is GONE by the paired exit
+//                sample (flush-lag/postfx tail healed within its frame), or
+//                an entry diff that never got an exit verdict (unpaired —
+//                loading screen, early out). Mid-frame DEVICE-ONLY diffs
+//                between writes carry no verdict and are transient.
+//     diverge    (a) any diff still present at the EXIT sample; OR
+//                (b) an L1<->L2 CACHE SPLIT at entry, or at any mid-frame
+//                site. The rw cache (L1) and the RW D3D9 driver cache (L2)
+//                are BOTH value-compare caches: a disagreement between them
+//                has no self-healing path (the next matching Set is a
+//                no-op), so the split survives until an explicit
+//                park-and-set repair. That makes re-created-every-frame
+//                drift persistent even when the frame's exit repair hides
+//                it — the [PipeAlpha]/[zfix] repair-receipt class (N1/N2).
+//                A cache split is counted ONCE per entry frame: the paired
+//                exit resolves it, or a missing exit resolves it at the
+//                next entry. ZFUNC/BLENDOP have no rw twin, so their only
+//                comparison (L2 vs L3) stays device-class.
 //     bad        capture faults (failed Get) — never classified as
 //                agreement or divergence.
 //   Entry/exit pairing uses the shared 1-in-30 frame latch in main.cpp:
@@ -98,7 +109,10 @@
 #include <stdio.h>
 #include <string.h>
 
-#define RSMON_MAX_SITES  16
+// 32 (was 16): the recalibrated verdict is meant to be sampled at pipe /
+// postfx edges too (2026-10-25 log-divergence-timeline §8.4), which greatly
+// increases how many distinct sites reach the first-divergence table.
+#define RSMON_MAX_SITES  32
 #define RSMON_SITE_LEN   32
 #define RSMON_MSG_LEN    1024
 #define RSMON_REPORT_MS  5000
@@ -133,13 +147,16 @@ static int s_initialized = 0;
 static uint32 s_total = 0;
 static uint32 s_agree = 0;
 static uint32 s_diverged = 0;	// REAL divergence: survived the exit verdict
-static uint32 s_transient = 0;	// entry-only diff: healed by exit (or unpaired)
+static uint32 s_transient = 0;	// device-only entry diff: healed by exit (or unpaired)
 static uint32 s_faults = 0;
+static uint32 s_cacheSplits = 0;	// samples whose raw diff held an L1<->L2 split
 
 // Entry-diff stash: 1 while a scene_start diff awaits its frame_end verdict.
-// Resolved by the paired exit sample (real/transient) or by the next entry
-// sample if no exit ever came (transient). At most one sample is in flight.
+// s_entryCacheMask remembers the L1<->L2 subset of that diff: a cache split
+// is the persistent class even when a repair hides it before the exit. At
+// most one entry sample is in flight (see the frame-edge pairing in main.cpp).
 static int s_frameEntryPending = 0;
+static uint32 s_entryCacheMask = 0;
 
 static struct RMonSite s_sites[RSMON_MAX_SITES];
 static int s_siteCount = 0;
@@ -297,6 +314,118 @@ rsmonDiffMask(const struct RMonCapture *c)
 	return m;
 }
 
+// ---------------------------------------------------------------------------
+// Cache-split mask — the subset of the diff that is an L1<->L2 disagreement.
+//
+// Recalibration (2026-11-08, N1/N2 verdict accuracy): not every cross-layer
+// difference means the same thing. The rw cache (L1) and the RW D3D9 driver
+// cache (L2) are both value-compare caches; when THEY disagree there is no
+// self-healing path — the next matching Set is a no-op and the split survives
+// until an explicit park-and-set repair. That is the persistent-desync class
+// (`[PipeAlpha]` L2=1/L3=0 replays, `[zfix]` drift repairs). A diff between
+// the caches and the raw device (L3) may instead be the driver's pending
+// state waiting for the next draw flush (FLUSH-LAG NOTE) and is benign at an
+// entry sample. Keeping the two apart is what stops a repaired-but-
+// re-created split from being reported as transient.
+//
+// ZFUNC/BLENDOP have no rw twin: their only comparison is L2 vs L3, so they
+// stay out of this mask (device-class, verdict at the exit sample).
+// ---------------------------------------------------------------------------
+static uint32
+rsmonCacheSplitMask(const struct RMonCapture *c)
+{
+	uint32 m = 0;
+	uint32 rwB = c->rwBlend ? 1u : 0u, drvB = c->drvBlend ? 1u : 0u;
+	uint32 rwW = c->rwZWrite ? 1u : 0u, drvW = c->drvZWrite ? 1u : 0u;
+	uint32 rwT = c->rwZTest ? 1u : 0u, drvT = c->drvZEnable ? 1u : 0u;
+	uint32 rwF = c->rwFog ? 1u : 0u, drvF = c->drvFog ? 1u : 0u;
+
+	if(c->rwCull != c->drvCull)
+		m |= RSMON_CULL;
+	if(rwB != drvB)
+		m |= RSMON_ALPHABLEND;
+	if(c->rwSrc != c->drvSrc)
+		m |= RSMON_SRCBLEND;
+	if(c->rwDst != c->drvDst)
+		m |= RSMON_DESTBLEND;
+	if(rwW != drvW)
+		m |= RSMON_ZWRITE;
+	if(rwT != drvT)
+		m |= RSMON_ZTEST;
+	if(c->rwAlphaFunc != c->drvAlphaFunc)
+		m |= RSMON_ALPHAFUNC;
+	if(c->rwAlphaRef != c->drvAlphaRef)
+		m |= RSMON_ALPHAREF;
+	if(rwF != drvF)
+		m |= RSMON_FOG;
+
+	return m;
+}
+
+// ---------------------------------------------------------------------------
+// Canonical depth contract (ORTHOGONAL axis — [zfix2] receipt).
+//
+// The diff/cache-split masks above compare the three layers against EACH
+// OTHER and answer "which layer moved?". They are blind to a state where all
+// three layers AGREE on a WRONG value — the N2 "zfunc=8 dead-depth" signature
+// (rw ztest=0, drv zen=0 zfunc=8, dev zen=0 zfunc=8) has rsmonDiffMask()==0
+// yet is broken depth. This comparator checks each layer against a FIXED
+// canonical contract instead:
+//     ALPHABLEND = 0   ZWRITE = 1   ZTEST = 1   ZFUNC = LESSEQUAL (=4)
+// ZTEST reads D3DRS_ZENABLE on L2/L3 (the ZTEST row's D3D twin); ZFUNC has no
+// rw twin so L1 is excluded. Booleans are normalised to truthiness (the same
+// rule as rsmonBoolDiff) so the contract is "on/off", not a raw register
+// value. This is a distinct axis from diverge/transient/cache-split and is
+// never folded into those counters.
+// ---------------------------------------------------------------------------
+#define RSMON_CT_BLEND  0u               // ALPHABLEND canonical: off
+#define RSMON_CT_ZWRITE 1u               // ZWRITE canonical: on
+#define RSMON_CT_ZTEST  1u               // ZTEST canonical: on
+#define RSMON_CT_ZFUNC  D3DCMP_LESSEQUAL // ZFUNC canonical: LESSEQUAL (=4)
+
+static uint32
+rsmonContractMask(const struct RMonCapture *c, uint32 *rwMask, uint32 *drvMask,
+                  uint32 *devMask)
+{
+	uint32 rwB = c->rwBlend ? 1u : 0u, drvB = c->drvBlend ? 1u : 0u, devB = c->devBlend ? 1u : 0u;
+	uint32 rwW = c->rwZWrite ? 1u : 0u, drvW = c->drvZWrite ? 1u : 0u, devW = c->devZWrite ? 1u : 0u;
+	uint32 rwT = c->rwZTest ? 1u : 0u, drvT = c->drvZEnable ? 1u : 0u, devT = c->devZEnable ? 1u : 0u;
+	uint32 rw = 0, drv = 0, dev = 0;
+
+	if(rwB != RSMON_CT_BLEND)  rw  |= RSMON_ALPHABLEND;
+	if(drvB != RSMON_CT_BLEND) drv |= RSMON_ALPHABLEND;
+	if(devB != RSMON_CT_BLEND) dev |= RSMON_ALPHABLEND;
+	if(rwW != RSMON_CT_ZWRITE)  rw  |= RSMON_ZWRITE;
+	if(drvW != RSMON_CT_ZWRITE) drv |= RSMON_ZWRITE;
+	if(devW != RSMON_CT_ZWRITE) dev |= RSMON_ZWRITE;
+	if(rwT != RSMON_CT_ZTEST)  rw  |= RSMON_ZTEST;
+	if(drvT != RSMON_CT_ZTEST) drv |= RSMON_ZTEST;
+	if(devT != RSMON_CT_ZTEST) dev |= RSMON_ZTEST;
+	if(c->drvZFunc != (DWORD)RSMON_CT_ZFUNC) drv |= RSMON_ZFUNC;
+	if(c->devZFunc != (DWORD)RSMON_CT_ZFUNC) dev |= RSMON_ZFUNC;
+
+	if(rwMask)  *rwMask  = rw;
+	if(drvMask) *drvMask = drv;
+	if(devMask) *devMask = dev;
+	return rw | drv | dev;
+}
+
+// Resolve the stashed entry diff once the frame's verdict is known.
+// `persistent` = the frame did not heal it, OR it was an L1<->L2 split
+// (structural: re-created until repaired).
+static void
+rsmonResolveEntry(int persistent)
+{
+	if(!s_frameEntryPending)
+		return;
+	if(persistent)
+		s_diverged++;
+	else
+		s_transient++;
+	s_frameEntryPending = 0;
+	s_entryCacheMask = 0;
+}
+
 static int
 rsmonAppend(char *buf, size_t cap, int len, const char *fmt, ...)
 {
@@ -375,6 +504,46 @@ rsmonFormat(char *buf, size_t cap, const char *kind, const char *site,
 #undef RSMON_APPEND2
 
 // ---------------------------------------------------------------------------
+// [zfix2] receipt — canonical-contract violations, per layer. Only fields
+// violated on ANY layer are printed, with the canonical value in parentheses.
+// rw=/drv=/dev= are per-layer violation bitmasks (RSMON_* bits); ZFUNC shows
+// rw=- (no rw twin). Order matches the STATE MAP at the top of the file.
+// ---------------------------------------------------------------------------
+static void
+rsmonContractFormat(char *buf, size_t cap, const char *site, int pipeId,
+                    uint32 rwMask, uint32 drvMask, uint32 devMask,
+                    const struct RMonCapture *c)
+{
+	int len;
+	uint32 total;
+
+	if(cap == 0 || !buf)
+		return;
+	len = snprintf(buf, cap, "[zfix2] CONTRACT site=%s pipe=%d rw=%02X drv=%02X dev=%02X",
+	               site, pipeId, (unsigned)rwMask, (unsigned)drvMask, (unsigned)devMask);
+	if(len < 0){
+		buf[0] = 0;
+		return;
+	}
+	if((size_t)len >= cap)
+		len = (int)(cap - 1);
+
+	total = rwMask | drvMask | devMask;
+	if(total & RSMON_ALPHABLEND)
+		len = rsmonAppend(buf, cap, len, " | ALPHABLEND(0) rw=%u drv=%u dev=%u",
+			(unsigned)c->rwBlend, (unsigned)c->drvBlend, (unsigned)c->devBlend);
+	if(total & RSMON_ZWRITE)
+		len = rsmonAppend(buf, cap, len, " | ZWRITE(1) rw=%u drv=%u dev=%u",
+			(unsigned)c->rwZWrite, (unsigned)c->drvZWrite, (unsigned)c->devZWrite);
+	if(total & RSMON_ZTEST)
+		len = rsmonAppend(buf, cap, len, " | ZTEST(1) rw=%u drv=%u dev=%u",
+			(unsigned)c->rwZTest, (unsigned)c->drvZEnable, (unsigned)c->devZEnable);
+	if(total & RSMON_ZFUNC)
+		len = rsmonAppend(buf, cap, len, " | ZFUNC(4) rw=- drv=%u dev=%u",
+			(unsigned)c->drvZFunc, (unsigned)c->devZFunc);
+}
+
+// ---------------------------------------------------------------------------
 // Per-site table (16 entries; site name truncated to 31 chars).
 // ---------------------------------------------------------------------------
 static int
@@ -421,7 +590,7 @@ RSMon_Init(void)
 	s_initialized = 1;
 	RSMon_Reset();
 	if(RSMON_ENABLED)
-		dbglog("rs_mon: init enabled=%d — L1 rw cache / L2 RW D3D9 driver / L3 raw device, 11 states; entry-only diff=transient, exit-persistent=diverged",
+		dbglog("rs_mon: init enabled=%d — L1 rw cache / L2 RW D3D9 driver / L3 raw device, 11 states; device-only entry diff=transient, L1<->L2 cache split or exit-persistent=diverged",
 			s_enabled);
 }
 
@@ -430,7 +599,7 @@ RSMon_Sample(const char *site, int pipeId)
 {
 	const char *name;
 	struct RMonCapture c;
-	uint32 mask;
+	uint32 mask, cacheMask;
 	uint32 siteCount;
 	int si, first;
 	int isEntry, isExit;
@@ -451,6 +620,9 @@ RSMon_Sample(const char *site, int pipeId)
 	}
 
 	mask = rsmonDiffMask(&c);
+	cacheMask = rsmonCacheSplitMask(&c);
+	if(cacheMask)
+		s_cacheSplits++;
 
 	// --- classification (see CLASSIFICATION note at the top of the file) ---
 	// The exit sample is the verdict point for the entry sample's stash.
@@ -459,33 +631,44 @@ RSMon_Sample(const char *site, int pipeId)
 	if(isExit){
 		if(mask == 0){
 			s_agree++;
-			if(s_frameEntryPending){
-				s_frameEntryPending = 0;
-				s_transient++;	// entry diff healed within its frame
-			}
+			// Clean exit: resolve the stashed entry diff. A device-only
+			// entry diff is transient; an L1<->L2 cache split is persistent
+			// even though a repair hid it before this sample.
+			if(s_frameEntryPending)
+				rsmonResolveEntry(s_entryCacheMask != 0);
 			return;	// healthy exit: no formatting, no log I/O
 		}
 		// Divergence survived the whole frame — the persistent-desync class.
-		// The pending entry diff is subsumed by this verdict (one frame,
-		// one classification; no transient double-count).
-		s_diverged++;
-		s_frameEntryPending = 0;
+		// One frame, one verdict: a pending entry diff resolves through the
+		// same increment instead of being counted again.
+		if(s_frameEntryPending)
+			rsmonResolveEntry(1);
+		else
+			s_diverged++;
 	}else{
 		// Entry (or mid-frame) sample. An unresolved stash from a previous
-		// frame means its exit verdict never came (loading screen, early
-		// out) — resolve it as transient before stashing a new one.
-		if(s_frameEntryPending){
-			s_frameEntryPending = 0;
-			s_transient++;
-		}
+		// ENTRY means its exit verdict never came (loading screen, early
+		// out) — resolve it before stashing a new one. A mid-frame sample
+		// must not consume the frame's pending entry verdict.
+		if(isEntry && s_frameEntryPending)
+			rsmonResolveEntry(s_entryCacheMask != 0);
 		if(mask == 0){
 			s_agree++;
 			return;	// healthy sample: no formatting, no log I/O
 		}
-		if(isEntry)
-			s_frameEntryPending = 1;	// await the paired exit verdict
-		else
-			s_transient++;	// mid-frame diff between writes: transient class
+		if(isEntry){
+			// Stash the entry diff; the paired exit (or the next entry if
+			// the exit never came) supplies the verdict. Remember the
+			// cache-split subset — that one is the persistent class.
+			s_frameEntryPending = 1;
+			s_entryCacheMask = cacheMask;
+		}else if(cacheMask){
+			// Mid-frame L1<->L2 split: no self-healing path -> persistent.
+			s_diverged++;
+		}else{
+			// Mid-frame device-only diff between writes: flush-lag class.
+			s_transient++;
+		}
 	}
 
 	si = rsmonFindSite(name);
@@ -497,8 +680,10 @@ RSMon_Sample(const char *site, int pipeId)
 	}
 	if(si >= 0){
 		s_sites[si].diverged++;
-		if(isExit)
-			s_sites[si].persistent++;	// real divergence observed at exit
+		// Persistent observation: the exit verdict, or any L1<->L2 split
+		// (structural, re-created until repaired).
+		if(isExit || cacheMask)
+			s_sites[si].persistent++;
 	}
 	siteCount = (si >= 0) ? s_sites[si].diverged : 0u;
 
@@ -513,6 +698,44 @@ RSMon_Sample(const char *site, int pipeId)
 }
 
 void
+RSMon_ContractSample(const char *site, int pipeId)
+{
+	const char *name;
+	struct RMonCapture c;
+	uint32 rwMask, drvMask, devMask;
+	static uint32 s_contractCalls = 0;
+
+	if(!RSMON_ENABLED || !s_enabled)
+		return;
+	if(!s_initialized)
+		RSMon_Init();
+
+	// Hot-path call divisor (2026-11-08): the 4 pipe-edge sites fire per pipe
+	// entry and every call costs the full 31-Get capture. Sample 1-in-16 calls
+	// (first call always sampled) — still denser than main.cpp's 1-in-30 frame
+	// gate on RSMon_Sample, at ~6% of the per-entry cost.
+	if((s_contractCalls++ & 15u) != 0)
+		return;
+
+	name = site ? site : "null";
+
+	// Measurement-only: a capture fault drops the sample; a held contract is
+	// silent. Violations log under their own [zfix2] bucket and never touch
+	// the diverge/transient/cache-split counters (orthogonal axis).
+	if(!rsmonCapture(&c))
+		return;
+	if(!rsmonContractMask(&c, &rwMask, &drvMask, &devMask))
+		return;
+
+	if(dbglog_once("zfix2_first") || dbglog_throttle("zfix2")){
+		char msg[RSMON_MSG_LEN];
+		rsmonContractFormat(msg, sizeof(msg), name, pipeId,
+		                    rwMask, drvMask, devMask, &c);
+		dbglog("%s", msg);
+	}
+}
+
+void
 RSMon_Report(void)
 {
 	DWORD now;
@@ -520,6 +743,7 @@ RSMon_Report(void)
 	uint32 topCount = 0;
 	uint32 persistentSites = 0;
 	uint32 pct;
+	uint32 classified;
 	int i;
 
 	if(!RSMON_ENABLED || !s_enabled)
@@ -536,9 +760,10 @@ RSMon_Report(void)
 	if(s_total == 0)
 		return;	// no samples yet: stay silent instead of a zero heartbeat
 
-	// top= scans PERSISTENT divergence only (exit-verdict survivors). A site
-	// with raw-but-healed diffs must not appear here — that is exactly the
-	// benign frame-edge pattern the transient bucket exists for.
+	// top= scans PERSISTENT divergence only (exit-verdict survivors and
+	// L1<->L2 cache splits). A site with raw-but-healed device-only diffs
+	// must not appear here — that is exactly the benign frame-edge pattern
+	// the transient bucket exists for.
 	for(i = 0; i < s_siteCount; i++){
 		if(s_sites[i].persistent > 0){
 			persistentSites++;
@@ -548,13 +773,17 @@ RSMon_Report(void)
 			}
 		}
 	}
-	pct = s_total ?
-		(uint32)(((unsigned long long)s_diverged * 100ull) / s_total) : 0u;
+	// pct over CLASSIFIED samples (agree+diverge+transient), not over raw
+	// sample count: faults and still-pending entry stashes are not verdicts,
+	// so including them understated the rate (recalibrated 2026-11-08).
+	classified = s_agree + s_diverged + s_transient;
+	pct = classified ?
+		(uint32)(((unsigned long long)s_diverged * 100ull) / classified) : 0u;
 
-	dbglog("rs_mon_report: samples=%u agree=%u diverge=%u pct=%u bad=%u sites=%d top=%s top_n=%u transient=%u",
+	dbglog("rs_mon_report: samples=%u agree=%u diverge=%u pct=%u bad=%u sites=%d top=%s top_n=%u transient=%u cache=%u",
 		(unsigned)s_total, (unsigned)s_agree, (unsigned)s_diverged, (unsigned)pct,
 		(unsigned)s_faults, persistentSites, topName, (unsigned)topCount,
-		(unsigned)s_transient);
+		(unsigned)s_transient, (unsigned)s_cacheSplits);
 }
 
 void
@@ -565,7 +794,9 @@ RSMon_Reset(void)
 	s_diverged = 0;
 	s_transient = 0;
 	s_faults = 0;
+	s_cacheSplits = 0;
 	s_frameEntryPending = 0;
+	s_entryCacheMask = 0;
 	s_siteCount = 0;
 	memset(s_sites, 0, sizeof(s_sites));
 	s_reportPrimed = 0;

@@ -15,6 +15,7 @@
 #include "skygfx.h"
 #include "debug_handl.h"
 #include <windows.h>
+#include <tlhelp32.h>
 #include <DbgHelp.h>
 #include <stdio.h>
 #include <stdarg.h>
@@ -46,6 +47,19 @@ const char* diag_getLogPath(void) { return s_logPath; }
 // Diagnostic verbosity latch (decl + docs: debug_handl.h).  Default 0 =
 // current behavior; nothing changes until a lane or config raises it.
 int g_diagLevel = 0;
+
+// ============================================================
+// Crash-relevant counters (log dissection; see diag_dumpStats)
+// ============================================================
+// Deliberately tiny: only the families a crash review actually branches on.
+// The VEH can fire on any thread, so every increment is interlocked.  No
+// per-log-line counting — that would cost more than it explains.
+static volatile LONG s_statVehCatch = 0;    // non-guarded VEH catches
+static volatile LONG s_statAvRead = 0;
+static volatile LONG s_statAvWrite = 0;
+static volatile LONG s_statAvDep = 0;
+static volatile LONG s_statAvOther = 0;
+static volatile LONG s_statGuardFault = 0;  // faults inside the Im2D pass guard
 
 // ============================================================
 // Log ring buffer — lock-free, single writer (main thread)
@@ -344,9 +358,162 @@ void
 dbglog_loc(LogLevel level, const char *file, int line, const char *func, const char *fmt, ...)
 {
 	va_list ap;
-	va_start(ap, level);
+	va_start(ap, fmt);
 	dbglog_internal(level, file, line, func, fmt, ap);
 	va_end(ap);
+}
+
+// ============================================================
+// CRASH FORENSICS PRIMITIVES (module map, SEH-guarded probes)
+// ============================================================
+// Shared by the first-chance VEH (one-line receipt enrichment) and the
+// fatal unhandled filter (multi-line FORENSICS block).  Everything here is
+// POD-only and bounded: no allocation, no C++ unwinding objects, so it stays
+// safe to call from an arbitrary crashed thread.  The module list is
+// snapshotted once lazily via Toolhelp (kernel32, 32-bit safe).
+
+#define CRASH_MOD_MAX 96
+struct CrashModuleInfo { DWORD base; DWORD size; char name[40]; };
+static CrashModuleInfo s_crashMods[CRASH_MOD_MAX];
+static int s_crashModCount = 0;
+static int s_crashModsReady = 0;
+
+static void crashSnapshotModules(void)
+{
+	// Latch BEFORE the first risky API call: if Toolhelp (or a re-entered VEH)
+	// runs this again mid-snapshot, the second caller sees ready and scans
+	// the (possibly partial) list instead of recursing into Toolhelp.
+	if(s_crashModsReady) return;
+	s_crashModsReady = 1;
+	s_crashModCount = 0;
+	HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, GetCurrentProcessId());
+	if(snap != INVALID_HANDLE_VALUE){
+		// W-variant only: the 10.0.19041 um/tlhelp32.h declares no
+		// MODULEENTRY32A/Module32FirstA at all (A names are C2065 there).
+		// Module names are ASCII; wchar->char truncation is safe.
+		MODULEENTRY32W me;
+		me.dwSize = sizeof(me);
+		if(Module32FirstW(snap, &me)){
+			do {
+				if(s_crashModCount >= CRASH_MOD_MAX) break;
+				CrashModuleInfo *m = &s_crashMods[s_crashModCount];
+				m->base = (DWORD)(uintptr_t)me.modBaseAddr;
+				m->size = (DWORD)me.modBaseSize;
+				int i = 0;
+				for(; me.szModule[i] && i < (int)sizeof(m->name) - 1; i++)
+					m->name[i] = (char)me.szModule[i];
+				m->name[i] = 0;
+				s_crashModCount++;
+			} while(Module32NextW(snap, &me));
+		}
+		CloseHandle(snap);
+	}
+	// s_crashModsReady was latched at entry; never retried per stack dword.
+}
+
+// Resolve addr to "module+offset".  out/outOff may be NULL.  Returns 1 when
+// the address lands inside a snapshotted module image, 0 otherwise.
+static int crashFindModule(DWORD addr, char *out, int cap, DWORD *outOff)
+{
+	if(!s_crashModsReady) crashSnapshotModules();
+	for(int i = 0; i < s_crashModCount; i++){
+		DWORD base = s_crashMods[i].base;
+		DWORD end = base + s_crashMods[i].size;
+		if(end < base) end = 0xFFFFFFFFu;   // size overflow guard
+		if(addr >= base && addr < end){
+			if(out && cap > 0){
+				int j = 0;
+				for(; s_crashMods[i].name[j] && j < cap - 1; j++)
+					out[j] = s_crashMods[i].name[j];
+				out[j] = 0;
+			}
+			if(outOff) *outOff = addr - base;
+			return 1;
+		}
+	}
+	if(out && cap > 0) out[0] = 0;
+	if(outOff) *outOff = 0;
+	return 0;
+}
+
+static void crashFormatMod(DWORD addr, char *out, int cap)
+{
+	if(!out || cap <= 0) return;
+	char mn[40];
+	DWORD off = 0;
+	if(crashFindModule(addr, mn, sizeof(mn), &off))
+		_snprintf(out, cap, "%s+0x%X", mn, (unsigned)off);
+	else
+		_snprintf(out, cap, "(unmapped)");
+	out[cap - 1] = 0;
+}
+
+// Classify an arbitrary dword from the stack window: module+offset when it is
+// a code/data address inside an image, else the VirtualQuery region kind.
+static void crashClassifyAddr(DWORD addr, char *out, int cap)
+{
+	if(!out || cap <= 0) return;
+	char mn[40];
+	DWORD off = 0;
+	if(crashFindModule(addr, mn, sizeof(mn), &off)){
+		_snprintf(out, cap, "%s+0x%X", mn, (unsigned)off);
+		out[cap - 1] = 0;
+		return;
+	}
+	MEMORY_BASIC_INFORMATION mbi = {};
+	if(VirtualQuery((LPCVOID)(uintptr_t)addr, &mbi, sizeof(mbi)) == sizeof(mbi)){
+		if(mbi.State == MEM_FREE)
+			_snprintf(out, cap, "[free]");
+		else if(mbi.Type == MEM_IMAGE)
+			_snprintf(out, cap, "[image]");
+		else if(mbi.Type == MEM_MAPPED)
+			_snprintf(out, cap, "[mapped]");
+		else
+			_snprintf(out, cap, "[private]");
+	} else {
+		_snprintf(out, cap, "[unmapped]");
+	}
+	out[cap - 1] = 0;
+}
+
+// SEH-guarded byte reader: copies up to n bytes, stops at the first faulting
+// byte (page-boundary safe) and returns the count actually copied.  POD-only
+// body with a per-byte try so a fault mid-window still yields the prefix.
+static int crashSafeRead(const void *src, void *dst, int n)
+{
+	int got = 0;
+	const unsigned char *s = (const unsigned char *)src;
+	unsigned char *d = (unsigned char *)dst;
+	for(int i = 0; i < n; i++){
+		int ok = 0;
+		__try {
+			d[i] = s[i];
+			ok = 1;
+		} __except(EXCEPTION_EXECUTE_HANDLER) {
+			ok = 0;
+		}
+		if(!ok) break;
+		got++;
+	}
+	return got;
+}
+
+// Decode the first 12 bytes at eip as "instr=AA BB ..." (partial on fault).
+static void crashFormatInstr(DWORD eip, char *out, int cap)
+{
+	if(!out || cap <= 0) return;
+	unsigned char ib[12];
+	int got = crashSafeRead((const void *)(uintptr_t)eip, ib, (int)sizeof(ib));
+	int p = _snprintf(out, cap, "instr=");
+	if(p < 0) p = 0;
+	for(int i = 0; i < got && p < cap - 1; i++){
+		int w = _snprintf(out + p, cap - p, "%02X ", (unsigned)ib[i]);
+		if(w <= 0) break;
+		p += w;
+	}
+	if(got < (int)sizeof(ib) && p < cap - 1)
+		_snprintf(out + p, cap - p, "(partial)");
+	out[cap - 1] = 0;
 }
 
 // ============================================================
@@ -386,8 +553,11 @@ diag_crashHandler(EXCEPTION_POINTERS *ep)
 			(long)g_guardDepth);
 		gmsg[sizeof(gmsg) - 1] = 0;
 		diag_ringPut(gmsg);
+		InterlockedIncrement(&s_statGuardFault);   // stats: guarded-phase faults
 		return EXCEPTION_CONTINUE_SEARCH;
 	}
+
+	InterlockedIncrement(&s_statVehCatch);   // stats: all non-guarded catches
 
 	static int crashCount = 0;
 	if(++crashCount > 20) return EXCEPTION_CONTINUE_SEARCH;
@@ -416,6 +586,19 @@ diag_crashHandler(EXCEPTION_POINTERS *ep)
 	// frame-id read was unguarded.  Regs/scope are folded inline; the
 	// greppable CRASH[N] token and the zone/type/access fields survive.
 	// The ring dump belongs to the fatal path only (crashUnhandledFilter).
+
+	// Forensics folded into the ONE receipt line (log dissection): the
+	// faulting EIP is resolved to module+offset and the first 12 instruction
+	// bytes are decoded in place.  Both are APPENDED after the existing
+	// fields so every current grep token (CRASH[, zone=, accessing, scope=)
+	// stays byte-stable.  The full 24-dword stack window is reserved for the
+	// fatal filter path (crashAppendForensics) so recovered first-chance
+	// catches remain one line each.
+	char crashModTag[64];
+	crashFormatMod(eip, crashModTag, sizeof(crashModTag));
+	char crashInstrTag[96];
+	crashFormatInstr(eip, crashInstrTag, sizeof(crashInstrTag));
+
 	if(code == 0xC0000005){
 		DWORD accessType = ep->ExceptionRecord->ExceptionInformation[0];
 		DWORD accessAddr = ep->ExceptionRecord->ExceptionInformation[1];
@@ -423,18 +606,24 @@ diag_crashHandler(EXCEPTION_POINTERS *ep)
 			accessType == 0 ? "READ" :
 			accessType == 1 ? "WRITE" :
 			accessType == 8 ? "DEP" : "ACCESS_VIOLATION";
-		dbglog("CRASH[%d]: %s at 0x%08X (zone=%s) accessing 0x%08X%s EAX=%08X EBX=%08X ECX=%08X EDX=%08X ESI=%08X EDI=%08X EBP=%08X ESP=%08X scope=%s(+0x%X)",
+		if(accessType == 0)      InterlockedIncrement(&s_statAvRead);
+		else if(accessType == 1) InterlockedIncrement(&s_statAvWrite);
+		else if(accessType == 8) InterlockedIncrement(&s_statAvDep);
+		else                     InterlockedIncrement(&s_statAvOther);
+		dbglog("CRASH[%d]: %s at 0x%08X (zone=%s) accessing 0x%08X%s EAX=%08X EBX=%08X ECX=%08X EDX=%08X ESI=%08X EDI=%08X EBP=%08X ESP=%08X scope=%s(+0x%X) mod=%s %s",
 			crashCount, crashType, eip, crashZone, accessAddr,
 			accessAddr < 0x1000 ? " NULLDEREF" : "",
 			ctx->Eax, ctx->Ebx, ctx->Ecx, ctx->Edx, ctx->Esi, ctx->Edi,
 			ctx->Ebp, esp,
-			scopeName[0] ? scopeName : "(none)", scopeOff);
+			scopeName[0] ? scopeName : "(none)", scopeOff,
+			crashModTag, crashInstrTag);
 	} else {
-		dbglog("CRASH[%d]: code=0x%08X at 0x%08X (zone=%s) EAX=%08X EBX=%08X ECX=%08X EDX=%08X ESI=%08X EDI=%08X EBP=%08X ESP=%08X scope=%s(+0x%X)",
+		dbglog("CRASH[%d]: code=0x%08X at 0x%08X (zone=%s) EAX=%08X EBX=%08X ECX=%08X EDX=%08X ESI=%08X EDI=%08X EBP=%08X ESP=%08X scope=%s(+0x%X) mod=%s %s",
 			crashCount, code, eip, crashZone,
 			ctx->Eax, ctx->Ebx, ctx->Ecx, ctx->Edx, ctx->Esi, ctx->Edi,
 			ctx->Ebp, esp,
-			scopeName[0] ? scopeName : "(none)", scopeOff);
+			scopeName[0] ? scopeName : "(none)", scopeOff,
+			crashModTag, crashInstrTag);
 	}
 
 	// NO per-catch diag_ringDump() here — recovered catches must not
@@ -463,6 +652,17 @@ static volatile LONG s_heartbeat = 0;
 void diag_heartbeat(void)
 {
 	InterlockedExchange(&s_heartbeat, GetTickCount());
+}
+
+// One-line end-of-session summary (log dissection).  Cheap and idempotent:
+// intended as the last diagnostic line of a run so a log's crash families are
+// visible without scanning the whole file.  Safe to call at any time.
+void
+diag_dumpStats(void)
+{
+	dbglog("[STATS] session summary: veh_catch=%ld av_read=%ld av_write=%ld av_dep=%ld av_other=%ld guard_fault=%ld",
+		(long)s_statVehCatch, (long)s_statAvRead, (long)s_statAvWrite,
+		(long)s_statAvDep, (long)s_statAvOther, (long)s_statGuardFault);
 }
 
 // ============================================================
@@ -510,6 +710,19 @@ diag_init(const char *logPath)
 	HANDLE hLog = CreateFileA(s_logPath, GENERIC_WRITE, FILE_SHARE_READ,
 		NULL, TRUNCATE_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 	if(hLog != INVALID_HANDLE_VALUE) CloseHandle(hLog);
+
+	// Session-start banner (log dissection).  The 64-bit FILETIME id is
+	// monotonic across boots (100 ns ticks since 1601) and makes multiple
+	// captured logs trivially orderable/distinguishable; pid + compiler
+	// date/time pin the exact build even if a later [BUILD] fingerprint line
+	// is missing (early failure).  One line, logged once per process.
+	{
+		FILETIME ft = {};
+		GetSystemTimeAsFileTime(&ft);
+		dbglog("=== SESSION-START === id=%08X%08X pid=%u built=%s %s",
+			(unsigned)ft.dwHighDateTime, (unsigned)ft.dwLowDateTime,
+			(unsigned)GetCurrentProcessId(), __DATE__, __TIME__);
+	}
 }
 
 void
@@ -694,6 +907,107 @@ crashAppendLog(EXCEPTION_POINTERS *ep)
 }
 
 // ------------------------------------------------------------
+// (a2) Deep forensics: faulting module, instruction bytes, stack window
+// ------------------------------------------------------------
+// FATAL path only.  The VEH receipt already carries mod=/instr= inline; this
+// block adds the 24-dword stack window (with module-range / return-address
+// annotations) that is too noisy for recovered first-chance catches.  Runs
+// inside the caller's own SEH scope; every probe here is bounded and
+// fault-tolerant, so a hostile stack cannot take the handler down.
+static void
+crashAppendForensics(EXCEPTION_POINTERS *ep)
+{
+	if(!ep || !ep->ContextRecord)
+		return;
+	CONTEXT *ctx = ep->ContextRecord;
+	DWORD eip = ctx->Eip;
+	DWORD esp = ctx->Esp;
+	DWORD ebp = ctx->Ebp;
+
+	char path[MAX_PATH];
+	if(!selfDir(path, sizeof(path)))
+		return;
+	strncat(path, "skygfx_dbg.log", sizeof(path) - strlen(path) - 1);
+
+	crashSnapshotModules();
+
+	HANDLE h = CreateFileA(path, FILE_APPEND_DATA,
+		FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
+		OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+	if(h == INVALID_HANDLE_VALUE)
+		return;
+
+	char line[256];
+	int n;
+	DWORD w;
+
+	// (a) faulting EIP -> which module + offset
+	char mod[48];
+	crashFormatMod(eip, mod, sizeof(mod));
+	n = _snprintf(line, sizeof(line),
+		"--- FORENSICS ---\n[FORENSIC] eip=0x%08X mod=%s\n", eip, mod);
+	if(n > 0) WriteFile(h, line, (DWORD)((n < (int)sizeof(line)) ? n : (int)sizeof(line) - 1), &w, NULL);
+
+	// (c) instruction bytes at EIP (SEH-guarded probe)
+	char instr[96];
+	crashFormatInstr(eip, instr, sizeof(instr));
+	n = _snprintf(line, sizeof(line), "[FORENSIC] %s\n", instr);
+	if(n > 0) WriteFile(h, line, (DWORD)((n < (int)sizeof(line)) ? n : (int)sizeof(line) - 1), &w, NULL);
+
+	// (b) raw stack window: 24 dwords from ESP, each annotated with the
+	// module+offset it points into (ret? = candidate return address) or the
+	// VirtualQuery region kind for non-image values.
+	const int dwords = 24;
+	n = _snprintf(line, sizeof(line),
+		"[FORENSIC] stack esp=0x%08X ebp=0x%08X dwords=%d\n", esp, ebp, dwords);
+	if(n > 0) WriteFile(h, line, (DWORD)((n < (int)sizeof(line)) ? n : (int)sizeof(line) - 1), &w, NULL);
+
+	for(int i = 0; i < dwords; i++){
+		DWORD addr = esp + (DWORD)(i * 4);
+		DWORD val = 0;
+		if(crashSafeRead((const void *)(uintptr_t)addr, &val, 4) != 4){
+			n = _snprintf(line, sizeof(line),
+				"[FORENSIC]   esp+%02X: <unreadable>\n", i * 4);
+		} else {
+			char cls[64];
+			crashClassifyAddr(val, cls, sizeof(cls));
+			int isRet = crashFindModule(val, NULL, 0, NULL) ? 1 : 0;
+			n = _snprintf(line, sizeof(line),
+				"[FORENSIC]   esp+%02X=0x%08X %s%s\n",
+				i * 4, val, cls, isRet ? " ret?" : "");
+		}
+		if(n > 0) WriteFile(h, line, (DWORD)((n < (int)sizeof(line)) ? n : (int)sizeof(line) - 1), &w, NULL);
+	}
+
+	n = _snprintf(line, sizeof(line), "--- END FORENSICS ---\n");
+	if(n > 0) WriteFile(h, line, (DWORD)((n < (int)sizeof(line)) ? n : (int)sizeof(line) - 1), &w, NULL);
+
+	CloseHandle(h);
+}
+
+// ------------------------------------------------------------
+// (a3) Flush the log tail BEFORE the minidump write
+// ------------------------------------------------------------
+// The minidump can be expensive (or stall on a broken disk).  FlushFileBuffers
+// on the append handle forces the crash receipt + ring + forensics out of the
+// kernel cache first, so the log tail survives even if the dump write hangs.
+static void
+crashFlushLog(void)
+{
+	char path[MAX_PATH];
+	if(!selfDir(path, sizeof(path)))
+		return;
+	strncat(path, "skygfx_dbg.log", sizeof(path) - strlen(path) - 1);
+	HANDLE h = CreateFileA(path, FILE_APPEND_DATA,
+		FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
+		OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+	if(h == INVALID_HANDLE_VALUE)
+		return;
+	FlushFileBuffers(h);
+	CloseHandle(h);
+}
+
+// ------------------------------------------------------------
 // (b) Minidump: <exe dir>\skygfx_crash_YYYY-MM-DD_HHMMSS.dmp
 // ------------------------------------------------------------
 
@@ -764,11 +1078,26 @@ crashUnhandledFilter(EXCEPTION_POINTERS *ep)
 	} __except(EXCEPTION_EXECUTE_HANDLER) {
 	}
 
+	// 2.2 (a2) deep forensics — module+offset, instruction bytes, stack
+	// window, each probe fault-tolerant.  Own SEH scope so a hostile stack
+	// still lets the ring dump + minidump run.
+	__try {
+		crashAppendForensics(ep);
+	} __except(EXCEPTION_EXECUTE_HANDLER) {
+	}
+
 	// 2.5 Ring dump — FATAL path only.  Moved out of the per-catch VEH
 	// receipt, where it re-emitted every recent ring line bare on each
 	// recovered first-chance catch.  Own SEH scope like the steps above.
 	__try {
 		diag_ringDump();
+	} __except(EXCEPTION_EXECUTE_HANDLER) {
+	}
+
+	// 2.8 Flush the log tail to disk BEFORE the (potentially slow/stalling)
+	// minidump write, so the receipt + ring + forensics survive regardless.
+	__try {
+		crashFlushLog();
 	} __except(EXCEPTION_EXECUTE_HANDLER) {
 	}
 

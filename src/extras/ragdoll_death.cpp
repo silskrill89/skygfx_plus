@@ -6,6 +6,7 @@
 #include "../rw/rtquat.h"
 #include "../rw/rtslerp.h"
 #include "../core/physicscfg.h"	// softbodyBudget (task 4: max-active cap)
+#include "water_swell.h"	// M9 shared (x,y,t)->height swell law (single source)
 // Bullet Physics headers
 #include <BulletCollision/CollisionShapes/btCapsuleShape.h>
 #include <BulletCollision/CollisionShapes/btStaticPlaneShape.h>
@@ -147,11 +148,6 @@ static float ReadIniFloat(const char *section, const char *key, float defaultVal
 		return (float)atof(buf);
 	}
 	return defaultVal;
-}
-
-// Helper: read int from INI
-static int ReadIniInt(const char *section, const char *key, int defaultVal) {
-	return GetPrivateProfileIntA(section, key, defaultVal, ".\\ragdoll.ini");
 }
 
 // Load joint config from INI
@@ -342,6 +338,14 @@ static void BoneToBulletTransform(const float pos[3], const float rot[4], btTran
 // ============================================================
 
 void Ragdoll_Init(void) {
+	// Anchor the shared water clock NOW, before the early-return guard.
+	// SoftbodyWaterClockSeconds() (softbody.h:113, softbody.cpp:190) is THE
+	// single QPC clock, seeded by SoftbodyInit in the same startup burst, so
+	// the Bullet lane and the native softbody lane share one epoch and a
+	// sub-frame phase offset. The former RagdollWaterClockSeconds mirror was
+	// deleted (single-clock collapse).
+	SoftbodyWaterClockSeconds();
+
 	if (g_bulletWorld) return; // already initialized
 
 	g_collisionConfig = new btDefaultCollisionConfiguration();
@@ -435,7 +439,8 @@ bool Ragdoll_Activate(void *pPed) {
 	// Get ped clump (RpClump*)
 	// SA v1.0 US: CEntity::m_pRwObject (or m_pRwClump) at offset 0x18
 	// Verified: plugin-sdk CEntity.h:154 VALIDATE_OFFSET(CEntity, m_pRwObject, 0x18)
-	//           existing ragdoll.cpp:480 reads ped+0x18 for clump
+	//           (the pre-merge ragdoll.cpp:480 — merged into
+	//           entities/sftbdyphsx.cpp — read ped+0x18 for clump)
 	void *clump = *(void**)((uintptr_t)pPed + 0x18);
 	if (!clump) {
 		dbglog("Ragdoll_Activate: no clump for ped %p", pPed);
@@ -873,7 +878,8 @@ bool Ragdoll_Activate(void *pPed) {
 
 	// ---- Extension point: partial hit-reaction ----
 	// To add per-limb hit-reaction on alive (not dead) peds:
-	// 1. Keep the alive-ped Ragdoll_c (src/entities/ragdoll.cpp) running
+	// 1. Keep the alive-ped Ragdoll_c (src/entities/sftbdyphsx.cpp — the
+	//    pre-merge ragdoll.cpp lives there now) running
 	//    for blend-target computation.
 	// 2. Define `Ragdoll_HitReaction(void *pPed, int ePedBone, btVector3 impulse)`:
 	//    - Find or create a RagdollDeathInstance for the ped.
@@ -982,7 +988,8 @@ void Ragdoll_Deactivate(void *pPed) {
 //   - linear + angular drag scaled by the submersion fraction
 //   - wave force: follow the SAME swell law as the water VS
 //     (Water_VS.hlsl c11: 2-wave 45 m/0.10 m + 23 m/0.06 m vertical,
-//     time-phased - SoftbodyWaterSwell/SwellVel) plus a bounded drift
+//     time-phased - water_swell.h WaterSwell::Height/HeightVel, the M9
+//     single-source law) plus a bounded drift
 //     toward the wave surface height ("wave height as target y-drift"),
 //     so corpses bob with the rendered water.
 // SoftbodyWaterQuery returning false (the 0.0/no-water fallback) means no
@@ -1012,8 +1019,18 @@ void Ragdoll_Deactivate(void *pPed) {
 
 static bool RgFinite(float v) { return (v == v) && v > -1e30f && v < 1e30f; }
 
+// Water clock: softbody.cpp owns the one QPC clock (SoftbodyWaterClockSeconds,
+// softbody.h:113). The former RagdollWaterClockSeconds mirror and its private
+// s_ragdollWaterClockAnchor were deleted (single-clock collapse) so every lane
+// samples exactly one epoch; Ragdoll_Init seeds it above.
+
 static void RagdollWaterForces(RagdollDeathInstance *inst, float dt) {
 	if (!inst || dt <= 0.0f) return;
+
+	// Single water-clock sample for the whole frame: every body reads the same
+	// instant (the old per-body SoftbodyWaterSwell calls each re-queried QPC -
+	// a sub-microsecond scatter with no visible effect; one sample is cleaner).
+	float tWater = (float)SoftbodyWaterClockSeconds();
 
 	int total = 0, wet = 0;
 	float fracSum = 0.0f, fracMax = 0.0f;
@@ -1034,7 +1051,7 @@ static void RagdollWaterForces(RagdollDeathInstance *inst, float dt) {
 		// game water surface; false = the 0.0/no-water fallback -> no water
 		float level;
 		if (!SoftbodyWaterQuery(x, y, z, &level)) continue;
-		float surf = level + SoftbodyWaterSwell(x, y);
+		float surf = level + WaterSwell::Height(x, y, tWater);
 		if (!RgFinite(surf)) continue;
 
 		// capsule-equivalent radius (sphere approximation of the capsule):
@@ -1065,7 +1082,7 @@ static void RagdollWaterForces(RagdollDeathInstance *inst, float dt) {
 		// wave follow: match the swell's vertical velocity ("wave force
 		// using the same swell law as the water VS")
 		btVector3 vel = body->getLinearVelocity();
-		float dv = (SoftbodyWaterSwellVel(x, y) - vel.z()) * SOFTBODY_WATER_COUPLING *
+		float dv = (WaterSwell::HeightVel(x, y, tWater) - vel.z()) * SOFTBODY_WATER_COUPLING *
 			frac * SOFTBODY_WATER_WAVE_FORCE_SCALE;
 		if (dv > SOFTBODY_WATER_VZ_MAX) dv = SOFTBODY_WATER_VZ_MAX;
 		else if (dv < -SOFTBODY_WATER_VZ_MAX) dv = -SOFTBODY_WATER_VZ_MAX;
@@ -1119,6 +1136,25 @@ static void RagdollWaterForces(RagdollDeathInstance *inst, float dt) {
 #define CURRENT_RENDER_FRAME RWSRCGLOBAL(renderFrame)
 
 void Ragdoll_Simulate(void) {
+	// ============================================================
+	// Gib lifecycle + render: must run in BOTH backends, BEFORE the A/B
+	// exclusivity early-return (W0.5 lane E, item 3). The former placement
+	// at the END of this function sat behind `if (SoftbodyGetEnabled())
+	// return` - so when the native backend owns corpses
+	// (softbodyBackend=native, the W0.5 session default), any gib spawned in
+	// an earlier bullet-mode stint was FROZEN: its lifetime clock never
+	// ticked (Dismember_Update unreachable -> gib lifetime unbounded -> the
+	// gib clump's frames leak into the RW frame pool for the whole session)
+	// and its renders vanished. Dismember_Update reaps expired gibs
+	// (GibFree -> RpClumpDestroy, retire receipt
+	// "[ragdoll] gib retire") and Dismember_Render renders whatever is
+	// still alive - both are no-ops on an empty gib pool.
+	// ============================================================
+	if (g_ragdollDeathEnable && g_bulletWorld) {
+		Dismember_Update();
+		Dismember_Render();
+	}
+
 	if (!g_ragdollDeathEnable || !g_bulletWorld) return;
 
 	// A/B exclusivity (softbody.h): when the native softbody backend is
@@ -1145,20 +1181,14 @@ void Ragdoll_Simulate(void) {
 	//   CEntity.m_pRwClump (+0x18) — RpClump* for skinned peds
 	//   CPed.m_ePedState (+0x530)  — ePedState (PEDSTATE_DEAD=66)
 	// ============================================================
-	struct PoolIter {
-		void *storage;          // +0
-		unsigned char *flags;   // +4
-		int size;               // +8
-	};
 	static int s_activatedTotal = 0;
 	static int s_throttleCounter = 0;
 	s_throttleCounter++;
 
-	PoolIter *pool = *(PoolIter**)0xB74490;
+	CPedPool *pool = pedPool;
 	int scanned = 0, deadCount = 0;
 
-	if (pool && pool->storage && pool->flags && pool->size > 0) {
-		static const int kPedStride = 0x7C4;
+	if (pool && pool->m_pSlots && pool->m_pSlotInfos && pool->m_nNumSlots > 0) {
 
 		// live budget (sky_physics.ini softbodyBudget, physicscfg owns the
 		// key) - task 4: max-active cap in this lane too, same semantics as
@@ -1171,10 +1201,10 @@ void Ragdoll_Simulate(void) {
 			if (g_ragdollDeathPool[pi].state != RAGDOLL_DEATH_INACTIVE)
 				activeNow++;
 
-		for (int i = 0; i < pool->size; i++) {
-			if (pool->flags[i] & 0x80) continue;
+		for (int i = 0; i < pool->m_nNumSlots; i++) {
+			if (pool->m_pSlotInfos[i] & PED_SLOT_FREE_BIT) continue;
 			scanned++;
-			unsigned char *ped = (unsigned char*)pool->storage + i * kPedStride;
+			unsigned char *ped = (unsigned char*)pool->m_pSlots + i * PED_POOL_STRIDE;
 			if (!ped) continue;
 
 			int pedState = *(int*)(ped + 0x530);
@@ -1329,10 +1359,6 @@ void Ragdoll_Simulate(void) {
 			}
 		}
 	}
-
-	// Gib lifetime management
-	Dismember_Update();
-	Dismember_Render();
 }
 
 // ============================================================
@@ -1340,6 +1366,31 @@ void Ragdoll_Simulate(void) {
 // Called from RenderScene_before so matrices are live for render.
 // V7: Separated from Simulate to avoid 1-frame stale poses.
 // ============================================================
+
+// Churn-hole close (2026-11-09): Dismember_ApplyZeroScale/Dismember_SpurtBlood
+// write through inst->pClump, but ApplyPose only checked pClump non-null - it
+// never verified the owning ped is still a live ped-pool slot. A ped freed
+// inside camera range leaves a stale pPed/pClump whose RwClump/frame memory
+// the RW pools may already have reissued (floating-props family). This is the
+// same gate shape as sftbdyphsx.cpp's static RagdollPedIsLive (:461-481):
+// pedPool / PED_POOL_STRIDE / PED_SLOT_FREE_BIT. Kept file-local -
+// that symbol is static there, and this file must not export across lanes.
+static bool RagdollPedIsLive(void *ped) {
+	CPedPool *pool = pedPool;
+	if (!pool || !pool->m_pSlots || !pool->m_pSlotInfos) return false;
+	int n = pool->m_nNumSlots;
+	if (n <= 0) return false;
+	uintptr_t base = (uintptr_t)pool->m_pSlots;
+	uintptr_t p = (uintptr_t)ped;
+	if (p < base) return false;
+	uintptr_t offset = p - base;
+	if (offset % PED_POOL_STRIDE != 0) return false;		// not slot-aligned - not a CPed
+	int idx = (int)(offset / PED_POOL_STRIDE);
+	if (idx >= n) return false;					// pool shrank
+	if (pool->m_pSlotInfos[idx] & PED_SLOT_FREE_BIT) return false;	// slot freed (stream-out)
+	return true;
+}
+
 void Ragdoll_ApplyPose(void) {
 	if (!g_ragdollDeathEnable) return;
 
@@ -1349,16 +1400,43 @@ void Ragdoll_ApplyPose(void) {
 		if (inst->state == RAGDOLL_DEATH_DONE) continue;
 
 		// ---- Write-back to hierarchy ----
+		// Recycled-slot gate, TOCTOU-tight (2026-11-09): a live pool slot is
+		// NOT proof the ped is still ours. If the slot was freed and reissued,
+		// inst->pPed now points at a DIFFERENT ped while inst->pClump is the
+		// OLD captured clump - possibly already reaped and recycled by the
+		// RwClump/frame pools. A liveness-only gate returns true (the address
+		// is a live slot) and we write A's matrices into whatever memory
+		// reused A's clump. Require the live ped to still OWN the exact clump
+		// captured at activation: ped+0x18 == inst->pClump. Identity, not
+		// liveness. This also protects GetAnimHierarchyFromSkinClump itself,
+		// which dereferences the clump before any inner check could run.
+		void *clump = inst->pClump;
+		bool ownsClump = clump && RagdollPedIsLive(inst->pPed) &&
+		                 *(void**)((uintptr_t)inst->pPed + 0x18) == clump;
+		if (clump && !ownsClump && dbglog_throttle("ragdoll_stale_write")) {
+			dbglog("[ragdoll] stale-write skip ped=%p clump=%p", inst->pPed, clump);
+		}
 		{
-			void *clump = inst->pClump;
-			if (clump) {
+			if (ownsClump) {
 				void *hier = GetAnimHierarchyFromSkinClump(clump);
 				if (hier) {
+					// A churned/reissued hierarchy can carry a stale/shorter
+					// numNodes; boneIndices captured at activation are then
+					// out of range and matArray[idx] would write past the
+					// node array. Validate every index before use.
+					RpHAnimHierarchy *animHier = (RpHAnimHierarchy*)hier;
+					int numNodes = animHier->numNodes;
 					RwMatrix *matArray = (RwMatrix*)RpHAnimHierarchyGetMatrixArray(hier);
 					if (matArray) {
 						for (int bi = 0; bi < RAGDOLL_DEATH_BONES; bi++) {
 							int idx = inst->boneIndices[bi];
 							if (idx < 0) continue;
+							if (idx >= numNodes) {
+								if (dbglog_throttle("ragdoll_boneidx_oob"))
+									dbglog("[ragdoll] boneidx oob ped=%p bi=%d idx=%d numNodes=%d",
+									       inst->pPed, bi, idx, numNodes);
+								continue;
+							}
 
 							float qx = inst->boneWorldRot[bi][0];
 							float qy = inst->boneWorldRot[bi][1];
@@ -1393,10 +1471,13 @@ void Ragdoll_ApplyPose(void) {
 			}
 		}
 
-		// Dismemberment: zero-scale severed bones + blood spurts
-		if (inst->dismemberState && inst->pClump) {
-			Dismember_ApplyZeroScale(inst->pClump, (DismemberState*)inst->dismemberState);
-			Dismember_SpurtBlood(inst->pClump, (DismemberState*)inst->dismemberState);
+		// Dismemberment: zero-scale severed bones + blood spurts.
+		// Write gate: same TOCTOU-tight ownsClump predicate as the write-back
+		// above - these write through pClump into RW pool memory and must be
+		// refused unless the live ped still owns the captured clump.
+		if (inst->dismemberState && ownsClump) {
+			Dismember_ApplyZeroScale(clump, (DismemberState*)inst->dismemberState);
+			Dismember_SpurtBlood(clump, (DismemberState*)inst->dismemberState);
 		}
 	}
 }

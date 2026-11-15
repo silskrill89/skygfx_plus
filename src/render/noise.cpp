@@ -4,7 +4,7 @@
 // One deterministic CPU noise core. Produces:
 //   * scalar generators (Perlin/fBm/Worley/white/blue) usable with no device
 //   * one packed RGBA utility tile for the GPU (R=Perlin G=Worley B=white
-//     A=blue) so a cloud/stochastic shader needs 1 sampler + 3 fetches
+//     A=blue) so a cloud/noise-based-variation shader needs 1 sampler + 3 fetches
 //
 // "Infinite detail" recipe the shader side uses:
 //   sample the same tile at 3 scales and sum -> 3 fetches instead of 100+ ALU.
@@ -631,6 +631,23 @@ float BlueNoise2(int x, int y)
 	int xi = x & (n - 1);
 	int yi = y & (n - 1);
 	return (float)s_blueValue[yi * n + xi] * (1.0f / 255.0f);
+}
+
+float NoiseMaterialVariation(unsigned materialId, float u, float v)
+{
+	ensureTables();
+	// Material id -> two decorrelated lattice offsets in [0,4) tile space.
+	// hashCell is the same avalanche hash the tileable noise uses, so the
+	// offsets are stable; spanning a full base period (4 cells) means adjacent
+	// ids land on unrelated regions of the field. The fBm here is the same
+	// family and period as the packed tile's R channel, so a CPU variation and
+	// a GPU read of the same surface stay in one value-noise language.
+	unsigned hx = hashCell(materialId, 0x9E3779B1u);
+	unsigned hy = hashCell(materialId, 0x85EBCA6Bu);
+	float ox = (float)(hx & 0xFFFFu) * (4.0f / 65535.0f);
+	float oy = (float)(hy & 0xFFFFu) * (4.0f / 65535.0f);
+	// 3-octave tileable fBm over a 4-cell base period.
+	return FbmTileable2(u * 4.0f + ox, v * 4.0f + oy, 3, 4);
 }
 
 // ---------------------------------------------------------------------------

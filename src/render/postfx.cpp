@@ -33,6 +33,10 @@ struct PostfxPerfGate {
 // instrumentation logs below reference these handles.
 extern void *radiosityPS, *blurPS;
 extern void ForwardPlus_DrawClusterDebug(void);
+// pipelinecommon.cpp — cache-coherent device write (N1 master-fault kill):
+// routes a raw dev->SetRenderState through L1/L2/L3 so a phase write can
+// never leave the rw cache / RW driver cache / raw device disagreeing.
+extern void pipeDeviceStateSet(D3DRENDERSTATETYPE state, DWORD value);
 
 // Peds pipe device-reset latch invalidation (peds/peds_pipe.cpp:188, declared
 // in peds/peds_pipe.h:78 — header not included here; chars.h precedent is a
@@ -664,6 +668,64 @@ CPostEffects::UpdateFrontBuffer(void)
 	}
 }
 
+// ============================================================
+// VCS trails / VCS colour-filter blur — PROVENANCE + DOCTRINE
+// (junior-rewrite wave, 2026-11-09; plan row J6/R6).
+//
+// Lineage: Radiosity_VCS / Radiosity_VCS_init / Blur_VCS / makequad /
+// radiosity_vcs_vertices / vcsIndices1 are JuniorDjjr's "SkyGfx
+// Extended" VCS-trails implementation (E:\SDKs\skygfx_junior
+// postfx.cpp), itself lifted from aap/skygfx's #ifdef VCS_POSTFX /
+// #ifdef VCS guards (E:\SDKs\skygfx_original postfx.cpp) and made
+// unconditional. Junior wrote the state machine as raw
+// RwD3D9SetRenderState (L2 driver cache) + RwRenderStateSet (L1 rw
+// cache); this wave folds those D3DRS_* writes into the postfx
+// three-layer doctrine via pipeDeviceStateSet.
+//
+// Our adaptations (behaviour-preserving):
+//   * Null guards + deferred CAMERATEXTURE raster init (SMAATryInit-
+//     Rasters) replacing junior's unchecked mid-frame creates.
+//   * SaveRawGeomStates/RestoreRawGeomStates bracket around the raw
+//     blend/cull/atest writes (junior leaked them past its own
+//     ImmediateModeRenderStatesReStore).
+//   * D3DRS_* writes route through pipeDeviceStateSet (L1 rw-cache +
+//     L2 driver-cache + L3 raw-device) instead of junior's L2-only
+//     RwD3D9SetRenderState — the three-layer coherence the N1
+//     master-fault doctrine requires.
+//   * Texture-stage RW states (TEXTURERASTER / TEXTUREADDRESS* /
+//     TEXTUREFILTER) have no D3DRS twin and stay RwRenderStateSet;
+//     their device side is pushed by the Im2D draw flush.
+//
+// Selection: config->vcsTrails -> Radiosity_VCS(trailsLimit,
+// trailsIntensity); colorFilter==COLORFILTER_VCS -> + Blur_VCS.
+// ============================================================
+//
+// ============================================================
+// VCS state-write KILL-SWITCH (W0.5 rainbow bisect lever).
+//   s_vcsStateSync = true  -> pipeDeviceStateSet (L1 rw-cache + L2
+//                             driver-cache + L3 raw-device; the W0.4
+//                             junior-rewrite doctrine).
+//   s_vcsStateSync = false -> legacy junior L2-only
+//                             RwD3D9SetRenderState (the exact
+//                             pre-conversion path).
+// Flip to false and rebuild to bisect the rainbow channel-shred against
+// the pre-conversion state machine. When off, a one-shot receipt
+// "[PF] VCS statesync=0" fires on the first state write.
+// ============================================================
+static bool s_vcsStateSync = true;
+
+static void
+VcsDeviceStateSet(D3DRENDERSTATETYPE state, DWORD value)
+{
+	if(!s_vcsStateSync){
+		if(dbglog_once("vcs_statesync_off"))
+			dbglog("[PF] VCS statesync=0 (legacy L2-only state writes)");
+		RwD3D9SetRenderState((RwUInt32)state, value);
+		return;
+	}
+	pipeDeviceStateSet(state, value);
+}
+
 RwRaster *vcs_radiosity_target1, *vcs_radiosity_target2;
 static int s_vcsRadLastWidth = 0, s_vcsRadLastHeight = 0, s_vcsRadLastConfigRes = 0;
 bool s_vcsRadPendingInit = false;
@@ -754,6 +816,19 @@ CPostEffects::Radiosity_VCS_init(void)
 		{ UntrackRaster(vcs_radiosity_target2); RwRasterDestroy(vcs_radiosity_target2); }
 	vcs_radiosity_target2 = RwRasterCreate(256 * resMult, 128 * resMult, RwCameraGetRaster(Scene.camera)->depth, rwRASTERTYPECAMERATEXTURE);
 
+	// VCS RT channel-order parity (verified, 2026-11-10): both CAMERATEXTURE
+	// targets are created at Scene.camera's raster depth, so the RW 3.6 D3D9
+	// driver selects its raster format from the 32bpp display class
+	// (X8R8G8B8 / A8R8G8B8). Those two share the RGB byte order 00BBGGRR —
+	// A8 vs X8 differs ONLY in the alpha bits (sampling X8 yields alpha=1),
+	// so an A8<->X8 mismatch CANNOT produce a BGRA/RGBA channel swap. A
+	// rainbow-quadrant look would require an RGB-order break (e.g. an
+	// R/B-swapped A8B8G8R8 target or a 16bpp R5G6B5 class); the runtime
+	// one-shot "[PF] VCS RT parity" receipt in Radiosity_VCS (bound RT
+	// desc vs backbuffer desc) proves format parity per session.
+	// (The D3D surfaces themselves are created later/lazily — see the NOTE
+	// above and SMAATryInitRasters.)
+
 	// NOTE: D3D9 surface for CAMERATEXTURE rasters is NOT created here.
 	// It is created lazily by SMAATryInitRasters() (called from
 	// RenderScene_before, outside the main camera's BeginUpdate).
@@ -836,6 +911,29 @@ CPostEffects::Radiosity_VCS(int limit, int intensity)
 	fb = RwCameraGetRaster(Scene.camera);
 	if(!fb)
 		return;
+	// Screen-size doctrine (UpdateFrontBuffer ufb_mismatch twin): fb is NOT
+	// a stable screen-size source mid-chain. When a geometry sub-pass
+	// (envmap/reflection/mirror) transiently re-points Scene.camera at a
+	// non-screen raster (field evidence: [FxAlpha] Coronas.Reflections
+	// camRas=2048x1024 != screen), the RwRasterRenderScaled(fb,&r) further
+	// below would scale those foreign pixels into the vcs_radiosity_target2
+	// accumulation — trails then bake the garbage retroactively for as long
+	// as the padded accumulation persists. Same receipt semantics as
+	// ufb_mismatch (probe only with a valid cache; skip-and-return); the
+	// next postfx entry re-syncs.
+	// NOTE this also keeps s_vcsRadLastWidth/Height and the recreate branch
+	// below from thrashing on transient dims (targets are fixed-size
+	// 256*resMult x 128*resMult and never derive from fb dims).
+	{
+		int radScrW = 0, radScrH = 0;
+		if(GetScreenSize(&radScrW, &radScrH) &&
+		   (fb->width != radScrW || fb->height != radScrH)){
+			if(dbglog_throttle("radvcs_srcmismatch"))
+				dbglog("[PF] Radiosity_VCS SKIP: camRas %dx%d != screen %dx%d (transient raster, not scaled into trails)",
+					fb->width, fb->height, radScrW, radScrH);
+			return;
+		}
+	}
 	if(s_vcsRadLastWidth != fb->width || s_vcsRadLastHeight != fb->height || s_vcsRadLastConfigRes != resMult){
 		Radiosity_VCS_init();
 		s_vcsRadLastWidth = fb->width;
@@ -874,9 +972,9 @@ CPostEffects::Radiosity_VCS(int limit, int intensity)
 	bool rawGeomSaved = SaveRawGeomStates(rawGeom); // before Store (raw Set below)
 	CPostEffects::ImmediateModeRenderStatesStore();
 	CPostEffects::ImmediateModeRenderStatesSet();
-	RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+	VcsDeviceStateSet(D3DRS_ALPHATESTENABLE, FALSE);
 	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
-	RwD3D9SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	VcsDeviceStateSet(D3DRS_CULLMODE, D3DCULL_NONE);
 
 	RwCameraEndUpdate(Scene.camera);
 
@@ -888,10 +986,10 @@ CPostEffects::Radiosity_VCS(int limit, int intensity)
 	RwCameraBeginUpdate(Scene.camera);
 
 	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, NULL);
-	RwD3D9SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_REVSUBTRACT);
-	RwD3D9SetRenderState(D3DRS_SRCBLEND, D3DBLEND_BLENDFACTOR);
-	RwD3D9SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
-	RwD3D9SetRenderState(D3DRS_BLENDFACTOR, D3DCOLOR_ARGB(0xFF, limit/2, limit/2, limit/2));
+	VcsDeviceStateSet(D3DRS_BLENDOP, D3DBLENDOP_REVSUBTRACT);
+	VcsDeviceStateSet(D3DRS_SRCBLEND, D3DBLEND_BLENDFACTOR);
+	VcsDeviceStateSet(D3DRS_DESTBLEND, D3DBLEND_ONE);
+	VcsDeviceStateSet(D3DRS_BLENDFACTOR, D3DCOLOR_ARGB(0xFF, limit/2, limit/2, limit/2));
 	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, radiosity_vcs_vertices, 4, radiosityIndices, 6);
 
 	fb1 = vcs_radiosity_target1;
@@ -899,17 +997,44 @@ CPostEffects::Radiosity_VCS(int limit, int intensity)
 	for(i = 0; i < 4; i++){
 		RwD3D9SetRenderTarget(0, fb1);
 
+		// One-shot format-parity proof ("[PF] VCS RT parity"): record the D3D
+		// format the driver actually gave this VCS CAMERATEXTURE target vs
+		// the backbuffer. Healthy = one MATCH line per session (see the
+		// parity comment in Radiosity_VCS_init); a MISMATCH — especially a
+		// non-32bpp or R/B-swapped format — names the rainbow-quadrant
+		// creator in the create path and is NOT throttled away (one-shot).
+		if(i == 0 && dbglog_once("vcs_rt_parity")){
+			IDirect3DSurface9 *vcsRtS = NULL;
+			if(SUCCEEDED(d3d9device->GetRenderTarget(0, &vcsRtS)) && vcsRtS){
+				D3DSURFACE_DESC vcsRtDesc = {};
+				vcsRtS->GetDesc(&vcsRtDesc);
+				vcsRtS->Release();
+				IDirect3DSurface9 *vcsBbS = NULL;
+				if(SUCCEEDED(d3d9device->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &vcsBbS)) && vcsBbS){
+					D3DSURFACE_DESC vcsBbDesc = {};
+					vcsBbS->GetDesc(&vcsBbDesc);
+					vcsBbS->Release();
+					dbglog("[PF] VCS RT parity: rt %dx%d fmt=%d backbuf fmt=%d %s",
+						(int)vcsRtDesc.Width, (int)vcsRtDesc.Height,
+						(int)vcsRtDesc.Format, (int)vcsBbDesc.Format,
+						vcsRtDesc.Format == vcsBbDesc.Format ? "MATCH" : "MISMATCH");
+				}else
+					dbglog("[PF] VCS RT parity: rt %dx%d fmt=%d backbuffer desc unavailable",
+						(int)vcsRtDesc.Width, (int)vcsRtDesc.Height, (int)vcsRtDesc.Format);
+			}
+		}
+
 		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, NULL);
-		RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+		VcsDeviceStateSet(D3DRS_ALPHABLENDENABLE, FALSE);
 		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, radiosity_vcs_vertices+8, 4, radiosityIndices, 6);
 
 		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, fb2);
 		RwRenderStateSet(rwRENDERSTATETEXTUREADDRESSU, (void*)rwTEXTUREADDRESSCLAMP);
 		RwRenderStateSet(rwRENDERSTATETEXTUREADDRESSV, (void*)rwTEXTUREADDRESSCLAMP);
-		RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-		RwD3D9SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
-		RwD3D9SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
-		RwD3D9SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
+		VcsDeviceStateSet(D3DRS_ALPHABLENDENABLE, TRUE);
+		VcsDeviceStateSet(D3DRS_BLENDOP, D3DBLENDOP_ADD);
+		VcsDeviceStateSet(D3DRS_SRCBLEND, D3DBLEND_ONE);
+		VcsDeviceStateSet(D3DRS_DESTBLEND, D3DBLEND_ONE);
 		if((i % 2) == 0)
 			RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, radiosity_vcs_vertices+12, 4*4, vcsIndices1, 6*7);
 		else
@@ -927,15 +1052,15 @@ CPostEffects::Radiosity_VCS(int limit, int intensity)
 	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, fb2);
 	RwRenderStateSet(rwRENDERSTATETEXTUREADDRESSU, (void*)rwTEXTUREADDRESSCLAMP);
 	RwRenderStateSet(rwRENDERSTATETEXTUREADDRESSV, (void*)rwTEXTUREADDRESSCLAMP);
-	RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-	RwD3D9SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
-	RwD3D9SetRenderState(D3DRS_SRCBLEND, D3DBLEND_BLENDFACTOR);
-	RwD3D9SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
-	RwD3D9SetRenderState(D3DRS_BLENDFACTOR, D3DCOLOR_ARGB(0xFF, intensity*4, intensity*4, intensity*4));
+	VcsDeviceStateSet(D3DRS_ALPHABLENDENABLE, TRUE);
+	VcsDeviceStateSet(D3DRS_BLENDOP, D3DBLENDOP_ADD);
+	VcsDeviceStateSet(D3DRS_SRCBLEND, D3DBLEND_BLENDFACTOR);
+	VcsDeviceStateSet(D3DRS_DESTBLEND, D3DBLEND_ONE);
+	VcsDeviceStateSet(D3DRS_BLENDFACTOR, D3DCOLOR_ARGB(0xFF, intensity*4, intensity*4, intensity*4));
 	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, radiosity_vcs_vertices+4, 4, radiosityIndices, 6);
 	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, radiosity_vcs_vertices+4, 4, radiosityIndices, 6);
 
-	RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
+	VcsDeviceStateSet(D3DRS_ALPHATESTENABLE, TRUE);
 	CPostEffects::ImmediateModeRenderStatesReStore();
 	if(rawGeomSaved){
 		RestoreRawGeomStates(rawGeom); // BLENDOP/SRCBLEND/DESTBLEND/BLENDFACTOR leak past ReStore
@@ -1002,6 +1127,30 @@ CPostEffects::Blur_VCS(void)
 		return;
 	screenw = blurCamRas->width;
 	screenh = blurCamRas->height;
+	// Transient-raster guard (ufb_mismatch / Radiosity_VCS doctrine twin):
+	// when a geometry sub-pass transiently re-points Scene.camera at a
+	// non-screen raster, both the quad DEST extents and the feedback UVs
+	// below would be built to that foreign size — the VCS front-buffer
+	// 2048x1024 padded reply would then be sampled across its full (stale)
+	// extent instead of only the top-left screen content rect, and the
+	// composite itself would draw into the foreign raster. Bail;
+	// next postfx entry re-syncs (receipt additive: blurvcs_srcmismatch).
+	{
+		int blurScrW = 0, blurScrH = 0;
+		if(GetScreenSize(&blurScrW, &blurScrH) &&
+		   (blurCamRas->width != blurScrW || blurCamRas->height != blurScrH)){
+			if(dbglog_throttle("blurvcs_srcmismatch"))
+				dbglog("[PF] Blur_VCS SKIP: camRas %dx%d != screen %dx%d (transient raster)",
+					blurCamRas->width, blurCamRas->height, blurScrW, blurScrH);
+			return;
+		}
+	}
+	// CONTENT-RECT dims (H5 fbScale doctrine, UpdateFrontBuffer convention:
+	// screen content maps 1:1 into the padded front buffer's top-left).
+	// The makequad calls below map the quad UV extents as
+	// (screen+0.5)/paddedBuf — correct ONLY with the TRUSTED screen size.
+	// The live camRas above is the pre-capture fallback; the cache wins.
+	GetScreenSize(&screenw, &screenh);
 
 	makequad(blur_vcs_vertices, screenw, screenh, bufw, bufh);
 	for(i = 0; i < 4; i++)
@@ -1026,13 +1175,13 @@ CPostEffects::Blur_VCS(void)
 	bool rawGeomSaved = SaveRawGeomStates(rawGeom); // before Store (raw Set below)
 	CPostEffects::ImmediateModeRenderStatesStore();
 	CPostEffects::ImmediateModeRenderStatesSet();
-	RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+	VcsDeviceStateSet(D3DRS_ALPHATESTENABLE, FALSE);
 	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
 
 	// get current frame (guarded copy: never sample a stale/black FB)
 	UpdateFrontBuffer();
 	if(!PfFrontBufferReady("Blur_VCS")){
-		RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
+		VcsDeviceStateSet(D3DRS_ALPHATESTENABLE, TRUE);
 		CPostEffects::ImmediateModeRenderStatesReStore();
 		if(rawGeomSaved){
 			RestoreRawGeomStates(rawGeom);
@@ -1043,15 +1192,15 @@ CPostEffects::Blur_VCS(void)
 
 	// blur frame
 	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, CPostEffects::pRasterFrontBuffer);
-	RwD3D9SetRenderState(D3DRS_SRCBLEND, D3DBLEND_BLENDFACTOR);
-	RwD3D9SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVBLENDFACTOR);
+	VcsDeviceStateSet(D3DRS_SRCBLEND, D3DBLEND_BLENDFACTOR);
+	VcsDeviceStateSet(D3DRS_DESTBLEND, D3DBLEND_INVBLENDFACTOR);
 	intensity = BLURINTENSITY*0.8f;
-	RwD3D9SetRenderState(D3DRS_BLENDFACTOR, D3DCOLOR_ARGB(0xFF, intensity, intensity, intensity));
+	VcsDeviceStateSet(D3DRS_BLENDFACTOR, D3DCOLOR_ARGB(0xFF, intensity, intensity, intensity));
 	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, blur_vcs_vertices, 12, blur_vcs_Indices, 3*6);
 
 	// add colour filter color
-	RwD3D9SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
-	RwD3D9SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
+	VcsDeviceStateSet(D3DRS_SRCBLEND, D3DBLEND_ONE);
+	VcsDeviceStateSet(D3DRS_DESTBLEND, D3DBLEND_ONE);
 	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, blur_vcs_vertices+12, 4, blur_vcs_Indices, 6);
 
 	// blend with last frame
@@ -1059,9 +1208,9 @@ CPostEffects::Blur_VCS(void)
 		s_blurVCS_justInitialized = 0;
 	else{
 		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, lastFrameBuffer);
-		RwD3D9SetRenderState(D3DRS_SRCBLEND, D3DBLEND_BLENDFACTOR);
-		RwD3D9SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVBLENDFACTOR);
-		RwD3D9SetRenderState(D3DRS_BLENDFACTOR, D3DCOLOR_ARGB(0xFF, 32, 32, 32));
+		VcsDeviceStateSet(D3DRS_SRCBLEND, D3DBLEND_BLENDFACTOR);
+		VcsDeviceStateSet(D3DRS_DESTBLEND, D3DBLEND_INVBLENDFACTOR);
+		VcsDeviceStateSet(D3DRS_BLENDFACTOR, D3DCOLOR_ARGB(0xFF, 32, 32, 32));
 		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, blur_vcs_vertices+16, 4, blur_vcs_Indices, 6);
 	}
 
@@ -1080,7 +1229,7 @@ if(0){
 	RwRasterPopContext();
 	RwCameraBeginUpdate(Scene.camera);
 
-	RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
+	VcsDeviceStateSet(D3DRS_ALPHATESTENABLE, TRUE);
 	CPostEffects::ImmediateModeRenderStatesReStore();
 	if(rawGeomSaved){
 		RestoreRawGeomStates(rawGeom); // SRCBLEND/DESTBLEND/BLENDFACTOR leak past ReStore
@@ -2395,7 +2544,12 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 	}
 
 	if(dbglog_throttle("pf_cf_branch"))
-		dbglog("[PF] CF switch branch executed: colorFilter=%d (0=NONE 1=PS2 2=PC 3=MOBILE 6=III 7=VC 8=VCS 9=MODERN)",
+		// P2-1 (comment truth): the OLD string "8=VCS 9=MODERN" was wrong.
+		// Enum truth skygfx.h:1056-1064: NONE=0 PS2=1 PC=2 MOBILE=3
+		// III=4 VC=5 VCS=6 GTAIV=7 MODERN=8 (there is no 9). The dispatch
+		// cases below are symbolic (case COLORFILTER_VCS / COLORFILTER_-
+		// MODERN), so the log value maps through this comment.
+		dbglog("[PF] CF switch branch executed: colorFilter=%d (0=NONE 1=PS2 2=PC 3=MOBILE 4=III 5=VC 6=VCS 7=GTAIV 8=MODERN)",
 			colorFilter);
 
 	// ColourFilter_Modern performs its own mid-pass UpdateFrontBuffer (pass 1
@@ -2509,7 +2663,7 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 		DumpCurrentRT("cf_m_ivgrade");
 	}
 
-	// Motion blur: after colour filter + SMAA, before final front buffer sync
+	// Motion blur: after colour filter, before SMAA (SMAA runs in DrawFinalEffects later), before final front buffer sync
 	{
 		PERF_SCOPE("MotionBlur");
 		PF_SCOPE("MotionBlur");
@@ -3038,9 +3192,10 @@ void RenderIBLBuffer(void)
 	}
 
 	// Lane G gate: Scene.camera exists on frame 1 but the exe-side camera global
-	// at 0xC9BCC0 is still NULL before the first RwCameraBeginUpdate. Existence
-	// != begun. RwIm2DRenderIndexedPrimitive dereferences it → null deref fault.
-	if(*(void**)0xC9BCC0 == NULL){
+	// pCameraBeingUpdated (0xC9BCC0) is still NULL before the first
+	// RwCameraBeginUpdate. Existence != begun. RwIm2DRenderIndexedPrimitive
+	// dereferences it → null deref fault.
+	if(pCameraBeingUpdated == NULL){
 		if(dbglog_throttle("ibl_nobegun"))
 			dbglog("RenderIBL: skip, camera not begun");
 		return;
@@ -3768,15 +3923,11 @@ bool PipeChain_ClassifyBegin(float surfaceType, float gloss, float spec, float m
 		// through ALL THREE layers: L1 RwRenderStateSet, L2 RwD3D9SetRenderState,
 		// L3 raw device (pipeEnterAlphaMode raw writes can desync the caches,
 		// and a cache-hit skip at L2 leaves the pack draw blended).
-		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
-		RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
-		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
-		RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
-		RwD3D9SetRenderState(D3DRS_FOGENABLE, FALSE);
-		RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
-		d3d9device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
-		d3d9device->SetRenderState(D3DRS_FOGENABLE, FALSE);
-		d3d9device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+		// [N1] Blend-off forced through the shared coherent writer (L1/L2/L3
+		// together) so the pack draw's unblended state can never desync a layer.
+		pipeDeviceStateSet(D3DRS_ALPHABLENDENABLE, FALSE);
+		pipeDeviceStateSet(D3DRS_FOGENABLE, FALSE);
+		pipeDeviceStateSet(D3DRS_ZWRITEENABLE, FALSE);
 
 		// RAW FIRST, then RW: HeightFog/GodRays/underwater/mirror restore
 		// c0-c7 via the RAW device (postfx.cpp:3957/:4002,
@@ -3856,12 +4007,14 @@ void PipeChain_ClassifyEnd(void)
 			dbglog("[PipeChain] ClassifyEnd L1/L2 fault 0x%08X — L3 raw still restores",
 				GetExceptionCode());
 	}
-	// L3 RAW completion (unconditional — outside the SEH scope above):
-	// bypasses every cache layer, so the blend state lands on the device no
-	// matter what the caches believe.
-	d3d9device->SetRenderState(D3DRS_ALPHABLENDENABLE, s_classifyBlendDev);
-	d3d9device->SetRenderState(D3DRS_FOGENABLE, s_classifyFogDev);
-	d3d9device->SetRenderState(D3DRS_ZWRITEENABLE, s_classifyZWriteDev);
+	// [N1] L3 completion through the shared coherent writer (unconditional —
+	// outside the SEH scope above): pipeDeviceStateSet re-asserts L1/L2/L3
+	// together from the device-captured values, so the restore can never
+	// leave the layers disagreeing (the old raw L3-only completion could
+	// re-create an L1-vs-L2/L3 split when the Begin capture was split).
+	pipeDeviceStateSet(D3DRS_ALPHABLENDENABLE, s_classifyBlendDev);
+	pipeDeviceStateSet(D3DRS_FOGENABLE, s_classifyFogDev);
+	pipeDeviceStateSet(D3DRS_ZWRITEENABLE, s_classifyZWriteDev);
 	// L3 RAW PS-constant restore (c0/c1 saved in Begin): must go through the
 	// raw device — a RW cache-hit skip would leave the bracket's flagP/packP
 	// live on the device. The next RW consumer of c0/c1 re-syncs the cache
@@ -4173,9 +4326,11 @@ void DrawPipeChain(void)
 					RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
 					RwD3D9SetRenderState(D3DRS_SRCBLEND, D3DBLEND_DESTCOLOR);
 					RwD3D9SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ZERO);
-					dev->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-					dev->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_DESTCOLOR);
-					dev->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ZERO);
+					// [N1] blend-on through the shared coherent writer (the
+					// L1/L2 sets above are re-asserted L1/L2/L3 together).
+					pipeDeviceStateSet(D3DRS_ALPHABLENDENABLE, TRUE);
+					pipeDeviceStateSet(D3DRS_SRCBLEND, D3DBLEND_DESTCOLOR);
+					pipeDeviceStateSet(D3DRS_DESTBLEND, D3DBLEND_ZERO);
 					overrideIm2dPixelShader = nil; // FF: the stage ops below apply
 					overrideColorMod = D3DTOP_SELECTARG1; // colour = mask texel
 					overrideAlphaMod = D3DTOP_SELECTARG1; // mask alpha = 1
@@ -4184,16 +4339,14 @@ void DrawPipeChain(void)
 						0xFFu, 0xFFu, 0xFFu, 0xFF, fadeRas);
 					overrideColorMod = -1;
 					overrideAlphaMod = -1;
-					// hand pass 3 the pre-fade blend/address state back
-					dev->SetRenderState(D3DRS_ALPHABLENDENABLE, prevAB);
-					dev->SetRenderState(D3DRS_SRCBLEND, prevSB);
-					dev->SetRenderState(D3DRS_DESTBLEND, prevDB);
-					RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, prevAB);
-					RwD3D9SetRenderState(D3DRS_SRCBLEND, prevSB);
-					RwD3D9SetRenderState(D3DRS_DESTBLEND, prevDB);
-					RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)prevSB);
-					RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)prevDB);
-					RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
+					// hand pass 3 the pre-fade blend/address state back —
+					// through the shared coherent writer so L1/L2/L3 agree
+					// (the old hardcoded VERTEXALPHAENABLE=FALSE left L1
+					// claiming blend-off while L2/L3 restored prevAB — an
+					// L1-vs-L2/L3 split whenever the pre-fade blend was on).
+					pipeDeviceStateSet(D3DRS_ALPHABLENDENABLE, prevAB);
+					pipeDeviceStateSet(D3DRS_SRCBLEND, prevSB);
+					pipeDeviceStateSet(D3DRS_DESTBLEND, prevDB);
 					RwRenderStateSet(rwRENDERSTATETEXTUREADDRESS, prevAddr);
 				}
 			}

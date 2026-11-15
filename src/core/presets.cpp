@@ -17,6 +17,7 @@ const char *presetNames[NUM_PRESETS + 1] = {
 	"IV Xbox 360",
 	"IV PC",
 	"Best PC (Default)",
+	"skygfxplusultramaxdeluxe",
 	NULL
 };
 
@@ -123,10 +124,16 @@ void ApplyPreset(Config *c, int preset)
 	const PresetConfig *p = &presetConfigs[preset];
 	c->preset = preset;
 
-	// pipes owned by ApplyMode: buildingPipe/vehiclePipe are authoritative
-	// mode state and must never be overwritten by this whole-Config preset
-	// path (doc E1-E4). The colour filter / feature toggles below stay
-	// preset-owned while no mode is active (the latch was cleared above).
+	// Pipes ARE written here: the debug-menu "Pipeline presets" section
+	// promises "set pipes + colour filter", and presetConfigs carries
+	// buildingPipe/vehiclePipe for exactly that. The mode latch was cleared
+	// above, so no mode owns the live pipes at this point; writing the pipe
+	// pair alongside the filter keeps them coherent so
+	// derivePipelineFromPipes() derives the matching family instead of the
+	// PBR lock (rule 3) stomping a preset filter left over a foreign pipe
+	// (and the IV preset's ivMode=1 lands on IV pipes, not foreign ones).
+	c->buildingPipe = p->buildingPipe;
+	c->vehiclePipe = p->vehiclePipe;
 	c->colorFilter = p->colorFilter;
 	c->ps2ModulateGlobal = p->ps2ModulateGlobal;
 	c->dualPassGlobal = p->dualPassGlobal;

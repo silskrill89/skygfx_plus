@@ -23,10 +23,17 @@
 
 #include "particles_gpu.h"
 #include "skygfx.h"
+#include "texalpha.h"	// TexAlpha_Classify — the ONE classification entry point
+#include "texdefs.h"	// N9 miss policy — the sentinel/miss discriminator
 #include "rw/gta.h"
 
 #include <string.h>
 #include <math.h>
+
+// pipelinecommon.cpp — cache-coherent device write (N1 master-fault kill):
+// routes a raw dev->SetRenderState through L1/L2/L3 so a phase write can
+// never leave the rw cache / RW driver cache / raw device disagreeing.
+extern void pipeDeviceStateSet(D3DRENDERSTATETYPE state, DWORD value);
 
 // WakeParticlePS.cso handle (IDR_WAKEPARTICLEPS) — created by CreateShaders
 // (pipelinecommon.cpp), device-reset-safe via Pipeline_InvalidateShaders.
@@ -55,6 +62,37 @@ static DWORD
 TimeInMs(void)
 {
 	return *(DWORD*)0xB7CB84;
+}
+
+// ---------------------------------------------------------------------------
+// N9 FAIL-CLOSED MISS POLICY — CONSUMER HONOR (sprite-class consumer).
+//
+// A texture pointer reaches this lane in exactly three shapes:
+//   1. a REAL texture — draw it, unchanged.
+//   2. NULL — the harvest found nothing (the name is not in effectsPC.txd).
+//      Nothing to draw: the sprite is skipped (the pre-existing behavior,
+//      unchanged).
+//   3. a POLICY SENTINEL (skygfx_missgrey / skygfx_missclear) — the texture
+//      LOOKUP failed and TexDefsFindCB bound the 1x1 sentinel instead of
+//      handing NULL to the game. A NULL test cannot see this case.
+//
+// A sprite-class consumer honors the policy by SKIPPING the draw: the
+// sentinel is not foam. Binding the dim-grey world sentinel would stretch a
+// solid 1x1 grey texel over the quad — a grey blob on the sea, i.e. exactly
+// the "slab" artifact family the N9 policy exists to remove; the magenta
+// sentinel is transparent, so drawing it is a no-op that still costs the
+// sprite's draw. Either way the quad must NOT be drawn with a substitute
+// texture — and never as an untextured white quad (the milky-square
+// signature this lane already refuses at the alpha gate below).
+//
+// The discrimination is by POINTER IDENTITY, never by "is it NULL": a NULL
+// texture keeps the legacy "no sprite -> skip" path, only a real sentinel is
+// treated as a policy miss. TexDefsMissTextureKind never allocates.
+// ---------------------------------------------------------------------------
+static bool
+gpuPartPolicyMiss(const RwTexture *tex)
+{
+	return TexDefsMissTextureKind(tex) != TEXDEFS_MISS_TEX_NONE;
 }
 
 // ---------------------------------------------------------------------------
@@ -136,6 +174,18 @@ HarvestTextures(void)
 	int found = 0;
 	for(int i = 0; i < s_texCount; i++){
 		RwTexture *tex = HarvestFind(s_tex[i].name);
+		// N9: a policy sentinel is a FAILED lookup, not a texture. Keep it
+		// OUT of the harvested table — a sentinel in the table would be
+		// picked as the wake sprite and drawn as a 1x1 slab. The sprite is
+		// then simply absent (the same end state as a NULL harvest).
+		if(gpuPartPolicyMiss(tex)){
+			if(!s_tex[i].logged){
+				s_tex[i].logged = true;
+				dbglog("[gpu_part] tex-miss '%s' — texture lookup failed (policy sentinel) — sprite not used",
+				       s_tex[i].name);
+			}
+			tex = NULL;
+		}
 		if(tex && tex->raster)
 			found++;
 		if(tex && !s_tex[i].logged){
@@ -154,9 +204,13 @@ static RwTexture *
 WakeSprite(void)
 {
 	// primary wake sprite, gensplash fallback
-	if(s_tex[0].tex && s_tex[0].tex->raster)
+	// N9: a policy sentinel (a failed lookup) is NEVER a usable sprite —
+	// the draw gate below skips it. Belt and braces: the harvest already
+	// keeps sentinels out of the table, so this only fires if a sentinel
+	// is somehow bound in place.
+	if(s_tex[0].tex && s_tex[0].tex->raster && !gpuPartPolicyMiss(s_tex[0].tex))
 		return s_tex[0].tex;
-	if(s_tex[2].tex && s_tex[2].tex->raster)
+	if(s_tex[2].tex && s_tex[2].tex->raster && !gpuPartPolicyMiss(s_tex[2].tex))
 		return s_tex[2].tex;
 	return NULL;
 }
@@ -257,6 +311,15 @@ GPUParticles_WakeSpawnFromTempBuffer(int site)
 		return;
 
 	HarvestTextures();
+
+	// N3 (FAM-Q milky sprites): a particle that can never draw must not
+	// spawn. Without a wake sprite (fx harvest failed / texture missing)
+	// there is nothing valid to render — the sprite path below refuses to
+	// draw untextured, so spawning would only churn the pool.
+	// N9: a policy sentinel (a failed lookup) is rejected by WakeSprite()
+	// too — a miss-classified sprite neither spawns nor draws.
+	if(!WakeSprite())
+		return;
 
 	DWORD now = TimeInMs();
 	if(s_spawnTick != now){
@@ -480,6 +543,56 @@ GPUParticles_FrameFlush(const char *tag)
 	if(!tex || !tex->raster)
 		return;
 
+	// N9 policy honor at the DRAW gate: a miss-classified sprite (the
+	// texture lookup failed and the find CB bound a 1x1 sentinel) is
+	// SKIPPED here — never drawn with a substitute texture, and never as an
+	// untextured white quad (the milky-square signature this lane exists to
+	// remove). A NULL sprite (nothing harvested) already returned above.
+	if(gpuPartPolicyMiss(tex)){
+		static int s_policyLogged = 0;
+		if(!s_policyLogged){
+			s_policyLogged = 1;
+			dbglog("[gpu_part] sprite '%s' is a policy sentinel (texture lookup failed) — sprite skipped (no white quad)",
+			       tex->name[0] ? tex->name : "?");
+		}
+		return;
+	}
+
+	// N3 (FAM-Q milky sprites, 2026-11-08 retest): a sprite whose texture
+	// has NO usable alpha (TAC_OPAQUE — alpha channel unused/all-opaque)
+	// blends SRCALPHA at the vertex-alpha envelope over its whole QUAD: a
+	// flat milky-white square with hard edges — exactly the retest
+	// specimens. ONE classification entry point decides (TexAlpha_Classify,
+	// never a local histogram); with no soft mask to modulate there is
+	// nothing sane to draw, so the sprite is skipped and NAMED once. (A
+	// TAC_UNKNOWN sprite still draws with texture alpha preserved — that is
+	// the safe fallback: worst case it fades out, never a solid milky fill.)
+	int tac = TexAlpha_Classify(tex);
+	if(tac == TAC_OPAQUE){
+		static int s_noAlphaLogged = 0;
+		if(!s_noAlphaLogged){
+			s_noAlphaLogged = 1;
+			dbglog("[gpu_part] sprite '%s' has no usable alpha (tac=OPAQUE) "
+			       "— not drawn (would paint a solid milky quad)",
+			       tex->name[0] ? tex->name : "?");
+		}
+		return;
+	}
+
+	// N3: never fall back to the fixed-function path. The wake PS owns the
+	// foam alpha envelope; with it missing and the raster bind failing, an
+	// FFP modulate draw degenerates to UNTEXTURED WHITE x vertex alpha —
+	// the milky-square signature. No PS, no draw.
+	if(!wakeParticlePS){
+		static int s_noPsLogged = 0;
+		if(!s_noPsLogged){
+			s_noPsLogged = 1;
+			dbglog("[gpu_part] wakeParticlePS missing — sprite draw skipped "
+			       "(FPF fallback would paint untextured white quads)");
+		}
+		return;
+	}
+
 	D3DVIEWPORT9 vp;
 	if(FAILED(dev->GetViewport(&vp)))
 		return;
@@ -604,14 +717,17 @@ GPUParticles_FrameFlush(const char *tag)
 	*(void**)0x8E244C = wakeParticlePS;
 	*(void**)0x8E2440 = (void*)0x144;
 	*(void**)0x8E2444 = NULL;
-	dev->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
-	dev->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-	dev->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
-	dev->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
-	dev->SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
-	dev->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
-	dev->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
-	dev->SetRenderState(D3DRS_FOGENABLE, FALSE);
+	// [N1] Blend/z/depth forced through the shared coherent writer so the
+	// particle pass can never leave L1/L2/L3 disagreeing (the old raw L3-only
+	// writes desynced the rw + driver caches — the master-fault source).
+	pipeDeviceStateSet(D3DRS_ZWRITEENABLE, FALSE);
+	pipeDeviceStateSet(D3DRS_ALPHABLENDENABLE, TRUE);
+	pipeDeviceStateSet(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+	pipeDeviceStateSet(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+	pipeDeviceStateSet(D3DRS_BLENDOP, D3DBLENDOP_ADD);
+	pipeDeviceStateSet(D3DRS_ALPHATESTENABLE, FALSE);
+	pipeDeviceStateSet(D3DRS_CULLMODE, D3DCULL_NONE);
+	pipeDeviceStateSet(D3DRS_FOGENABLE, FALSE);
 	dev->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
 	dev->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
 	dev->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
@@ -634,14 +750,16 @@ GPUParticles_FrameFlush(const char *tag)
 	dev->SetSamplerState(0, D3DSAMP_MAGFILTER, oMag);
 	dev->SetSamplerState(0, D3DSAMP_MINFILTER, oMin);
 	dev->SetSamplerState(0, D3DSAMP_MIPFILTER, oMip);
-	dev->SetRenderState(D3DRS_FOGENABLE, oFog);
-	dev->SetRenderState(D3DRS_CULLMODE, oCull);
-	dev->SetRenderState(D3DRS_ALPHATESTENABLE, oAt);
-	dev->SetRenderState(D3DRS_BLENDOP, oBo);
-	dev->SetRenderState(D3DRS_DESTBLEND, oDb);
-	dev->SetRenderState(D3DRS_SRCBLEND, oSb);
-	dev->SetRenderState(D3DRS_ALPHABLENDENABLE, oAb);
-	dev->SetRenderState(D3DRS_ZWRITEENABLE, oZw);
+	// [N1] Restore through the shared coherent writer (same L1/L2/L3 unit as
+	// the set above; values were read from the raw device at capture).
+	pipeDeviceStateSet(D3DRS_FOGENABLE, oFog);
+	pipeDeviceStateSet(D3DRS_CULLMODE, oCull);
+	pipeDeviceStateSet(D3DRS_ALPHATESTENABLE, oAt);
+	pipeDeviceStateSet(D3DRS_BLENDOP, oBo);
+	pipeDeviceStateSet(D3DRS_DESTBLEND, oDb);
+	pipeDeviceStateSet(D3DRS_SRCBLEND, oSb);
+	pipeDeviceStateSet(D3DRS_ALPHABLENDENABLE, oAb);
+	pipeDeviceStateSet(D3DRS_ZWRITEENABLE, oZw);
 	dev->SetVertexDeclaration(oDecl);
 	dev->SetFVF(oFVF);
 	dev->SetVertexShader(oVS);

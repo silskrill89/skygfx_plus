@@ -217,6 +217,7 @@ static const ModeValue kValuesPS2[] = {
 	MV_I(pedOpaqueContract, 1),
 	MV_I(texAlphaClassify, 1),
 	MV_I(defaultCbShaderHygiene, 1),
+	MV_I(spriteStateShield, 1),
 
 	// FPS / perf
 	MV_I(grassInstancing, 0),
@@ -297,7 +298,9 @@ static const ModeValue kValuesXBOX[] = {
 	MV_F(ivVignetteIntensity, 0.0f),
 	MV_F(ivBloomIntensity, 0.0f),
 
-	// Coronas (PC z-test on; identity sun-corona gains — doc TBD-probe)
+	// Coronas (PC z-test on). Deliberate look rows (audit P2-5): the vintage
+	// profiles run IDENTITY sun-corona gains (1.0) while Modern/GTAIV own 0.0
+	// (off). These values are profile look choices — do not "fix" to match.
 	MV_I(coronaZtest, 1),
 	MV_F(sunCoronaIntensity, 1.0f),
 	MV_F(sunCoreIntensity, 1.0f),
@@ -326,6 +329,7 @@ static const ModeValue kValuesXBOX[] = {
 	MV_I(pedOpaqueContract, 1),
 	MV_I(texAlphaClassify, 1),
 	MV_I(defaultCbShaderHygiene, 1),
+	MV_I(spriteStateShield, 1),
 
 	// FPS / perf
 	MV_I(grassInstancing, 0),
@@ -414,6 +418,7 @@ static const ModeValue kValuesPCVintage[] = {
 	MV_I(stateBaselineEnable, 1),
 	MV_I(texAlphaClassify, 1),
 	MV_I(defaultCbShaderHygiene, 1),
+	MV_I(spriteStateShield, 1),
 
 	// FPS / perf
 	MV_I(forwardPlusEnable, 0),
@@ -520,7 +525,7 @@ static const ModeValue kValuesGTAIV[] = {
 	// COLORFILTER_GTAIV bypasses it, but owning them keeps IV from inheriting
 	// an unrelated preset if/when the IV path gets its own tonemap (audit P7).
 	MV_I(tonemapAutoExposure, 1),
-	MV_I(tonemapOperator, 1),	// IV probe — ACES 1.3 (0=filmic .. 5=GT7)
+	MV_I(tonemapOperator, 1),	// deliberate look row (P2-5): ACES 1.3 (0=filmic .. 5=GT7); Modern owns 0
 
 	// IV grade sliders (DrawIVGrade, live every frame; ivMode=1 above makes
 	// the pass run). Owned so the grade never reads a leaked ULTRA base.
@@ -555,6 +560,16 @@ static const ModeValue kValuesGTAIV[] = {
 	MV_I(texAlphaClassify, 1),
 	MV_I(pedOpaqueContract, 1),
 	MV_I(defaultCbShaderHygiene, 1),
+	MV_I(spriteStateShield, 1),
+	// Deliberate look rows (audit P2-5, docs/plans/2026-11-09-modern-mode-
+	// breakage.md §5): IV keeps the sun-corona/streak stack OFF (gains 0) —
+	// its lens/atmosphere look comes from the bloom/sun-shafts stack owned
+	// above. Profile look choice, not an oversight. Owned so audits stop
+	// re-flagging the 0.
+	MV_F(sunCoronaIntensity, 0.0f),
+	MV_F(sunCoreIntensity, 0.0f),
+	MV_F(sunStreakIntensity, 0.0f),
+	MV_F(sunStreakSize, 0.0f),
 	MV_IK(doglare, "sunGlare", 0),
 	MV_I(neoWaterDrops, 0),
 };
@@ -572,6 +587,12 @@ static const ModeValue kValuesGTAIV[] = {
 // make the mode look "owned" would change the look, not preserve it. V mode
 // means "current renderer + V water", and the legacy-effect gates inherit for
 // the same reason.
+//   NOTE (H1 resolution, 2026-11-09): because GTAV owns no safety flags, a
+//   switch-away from a flag-owning mode (e.g. Xbox) reverts stateBaselineEnable
+//   to the per-slot base snapshot. That revert is only safe because the parse
+//   now floors the field to 1 (main.cpp readIniFile), so the base is always ON;
+//   with the old [0..1] clamp an INI-authored 0 leaked back through this path
+//   and re-created the frame-boundary depth drift.
 // ------------------------------------------------------------
 static const ModeValue kValuesGTAV[] = {
 	MV_I(waterStyle, 2),	// 2 = GTA V (Water_V)
@@ -691,6 +712,17 @@ static const ModeValue kValuesModern[] = {
 	MV_F(vehEnvGlint, 0.0f),
 	MV_F(vehChromeEnvThreshold, 0.0f),
 
+	// Deliberate look rows (audit P2-5, docs/plans/2026-11-09-modern-mode-
+	// breakage.md §5): Modern runs the FILMIC tonemap operator (0; GTAIV owns
+	// 1 = ACES 1.3) and keeps the sun-corona/streak stack OFF (gains 0; the
+	// vintage profiles own 1.0 = identity). These are profile look choices,
+	// not ownership oversights — owned so future audits stop re-flagging the 0.
+	MV_I(tonemapOperator, 0),	// filmic
+	MV_F(sunCoronaIntensity, 0.0f),
+	MV_F(sunCoreIntensity, 0.0f),
+	MV_F(sunStreakIntensity, 0.0f),
+	MV_F(sunStreakSize, 0.0f),
+
 	MV_I(vcsTrails, 0),
 	// Legacy extras the preset writer pinned off (sun glare, water drops)
 	MV_IK(doglare, "sunGlare", 0),
@@ -712,6 +744,7 @@ static const ModeValue kValuesModern[] = {
 	MV_I(texAlphaClassify, 1),
 	MV_I(pedOpaqueContract, 1),
 	MV_I(defaultCbShaderHygiene, 1),
+	MV_I(spriteStateShield, 1),
 
 	// FPS / perf
 	MV_I(forwardPlusEnable, 1),
@@ -821,6 +854,7 @@ static const ModeValue kValuesMobile[] = {
 	MV_I(texAlphaClassify, 1),
 	MV_I(pedOpaqueContract, 1),
 	MV_I(defaultCbShaderHygiene, 1),
+	MV_I(spriteStateShield, 1),
 
 	// FPS / perf
 	MV_I(grassInstancing, 0),
@@ -1195,6 +1229,24 @@ copyLiveField(const ModeValue *v, Config *base, const Config *live)
 		base->*(v->bField) = live->*(v->bField);
 }
 
+// Safety-lever fields (H1 pattern, docs/plans/2026-11-09-modern-mode-
+// breakage.md §4/§5). These are NOT user-opt-in look knobs: the parse floors
+// them to 1 (config.cpp readIniFile) and every field-owning profile forces
+// them ON. A live menu toggle must therefore stay session-scoped, so
+// adoptLiveEdits must never fold a live 0 into the per-slot base — otherwise
+// the next mode switch's restoreProfile replays the 0 (the same mechanism that
+// re-created the device-only depth drift, this time via the menu, not the INI).
+static bool
+isSafetyLeverField(const ModeValue *v)
+{
+	return v && v->iField && (
+		v->iField == &Config::stateBaselineEnable ||
+		v->iField == &Config::defaultCbShaderHygiene ||
+		v->iField == &Config::spriteStateShield ||
+		v->iField == &Config::pedOpaqueContract ||
+		v->iField == &Config::texAlphaClassify);
+}
+
 // Fold the user's live values into the slot base right before a switch, so the
 // base stays "the user's pre-mode state" even when a mode is already latched:
 //   - an OUTGOING-owned field whose live value differs from the outgoing
@@ -1207,6 +1259,8 @@ copyLiveField(const ModeValue *v, Config *base, const Config *live)
 //     fields must land in the base, not stay at pre-reload values).
 // Fields still holding the outgoing profile's value are residue: the base is
 // left untouched for them and restoreProfile() reverts them.
+// Safety-lever fields are the one exception: isSafetyLeverField() skips them
+// in BOTH loops, so a live menu toggle never folds into the base (P2-4).
 static void
 adoptLiveEdits(Config *base, const Config *live,
 	const ModeProfile *outgoing, const ModeProfile *incoming)
@@ -1216,6 +1270,8 @@ adoptLiveEdits(Config *base, const Config *live,
 	if(outgoing && outgoing->values){
 		for(int i = 0; i < outgoing->numValues; i++){
 			const ModeValue *v = &outgoing->values[i];
+			if(isSafetyLeverField(v))
+				continue;	// safety defaults never fold into the base
 			if(!fieldMatchesProfile(v, live))
 				copyLiveField(v, base, live);
 		}
@@ -1223,6 +1279,8 @@ adoptLiveEdits(Config *base, const Config *live,
 	if(incoming && incoming->values){
 		for(int i = 0; i < incoming->numValues; i++){
 			const ModeValue *v = &incoming->values[i];
+			if(isSafetyLeverField(v))
+				continue;	// safety defaults never fold into the base
 			bool outgoingOwns = false;
 			if(outgoing && outgoing->values){
 				for(int j = 0; j < outgoing->numValues && !outgoingOwns; j++)

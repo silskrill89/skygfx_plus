@@ -5,6 +5,13 @@
 #include "profiler.h"
 void *luminanceReducePS, *luminanceAdaptPS;
 
+// P1-3: RenderWare render-state flush (game RW 0x7FC200, same symbol
+// buildingPipe/envmap commit pending[] with). The RW flush only re-emits a
+// state when applied[] differs from the cache; committing here lets us clear
+// a pending stage-0 NULL *before* a raw texture bind so the draw flush does
+// not clobber it.
+void _rwD3D9RenderStateFlushCache(void);
+
 // --- Unified tonemap: frame-adaptive exposure resources ---
 // 8x8 luminance measure target + two 1x1 temporal eye-adaptation targets.
 // Allocated lazily, released in ReleaseDefaultPoolResources().
@@ -115,6 +122,19 @@ static void PollAdaptedLum(IDirect3DSurface9 *adaptSurf)
 	float lum = max(adapted, 1e-4f);
 	float key = 1.03f - 2.0f / (2.0f + logf(lum + 1.0f) / logf(2.0f));
 	s_autoExpRaw = key / lum;
+	// [exposure] P1-3 mode-loud receipt: a healthy chain tracks scene content.
+	// A texel at/below the 1e-4 measured floor (or the +-1e30 Inf/NaN sentinel
+	// LumaHalfToFloat emits) means the reduce read a degenerate (0/NaN) frame —
+	// historically a NULL stage-0 front-buffer sample — and autoExpRaw then
+	// pins at key(1e-4)/1e-4 = 300.72 with exposure never adapting. Emit a
+	// throttled diagnostic so the next log states WHY exposure is stuck instead
+	// of silently pinning. Token: AUTOEXP_DEGENERATE (additive, byte-stable).
+	if(adapted <= 1.0e-4f || adapted >= 1.0e29f || adapted <= -1.0e29f){
+		if(dbglog_throttle("pf_autoexp_degen"))
+			dbglog("[PF] AUTOEXP_DEGENERATE: adapted=%.6f (measured floor=1e-4) "
+			       "autoExpRaw=%.3f -> reduce texel 0/NaN; stage-0 FB sample empty",
+				adapted, s_autoExpRaw);
+	}
 	s_adaptedStamp = now;
 	s_adaptedValid = true;
 }
@@ -251,8 +271,19 @@ static void RenderLumaPass(IDirect3DSurface9 *dst, int w, int h,
 	dev->SetViewport(&vp);
 
 	if(sceneRaster){
+		// P1-3: bind the FB raster through the RW L1 cache with a forced
+		// NULL -> raster transition. The preceding CF grade pass leaves the
+		// cache already pointing at this same front-buffer raster, so a plain
+		// RwRenderStateSet is a value no-op. The old raw
+		// `dev->SetTexture(0, NULL)` here then set D3D stage 0 to NULL while
+		// RW never re-emitted, so the reduce shader sampled an unbound (black)
+		// stage 0 every frame -> measured=0 -> adapt clamped to 1e-4 ->
+		// autoExpRaw = key(1e-4)/1e-4 = 300.72 (log:6366 P1-3 signature).
+		// No raw write here, so the RW cache stays authoritative.
+		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)NULL);
+		_rwD3D9RenderStateFlushCache();   // commit NULL -> applied, so the
+		                                  // raster set below is a real change
 		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)sceneRaster);
-		dev->SetTexture(0, NULL);
 	} else if(tex0){
 		dev->GetSamplerState(0, D3DSAMP_ADDRESSU, &s0AddrU);
 		dev->GetSamplerState(0, D3DSAMP_ADDRESSV, &s0AddrV);
@@ -264,6 +295,16 @@ static void RenderLumaPass(IDirect3DSurface9 *dst, int w, int h,
 		   dbglog_throttle("pf_luma_samp"))
 			dbglog("[PF] luma sampler capture != WRAP/LINEAR: u=%lu v=%lu min=%lu mag=%lu (restored after pass)",
 				s0AddrU, s0AddrV, s0Min, s0Mag);
+		// P1-3: commit the pending stage-0 NULL left by the previous pass's
+		// teardown BEFORE the raw texture bind. The teardown's
+		// RwRenderStateSet(TEXTURERASTER, NULL) is still pending here (RW only
+		// re-emits when applied[] differs), so without this commit the draw
+		// flush emits NULL and clobbers the raw measTex -> the adapt pass
+		// samples a NULL measTex -> measured=0 -> 1e-4 / autoExpRaw=300.72
+		// pin. After the commit cache==applied==NULL, so the raw bind survives
+		// the draw (no re-emit). (0x7FC200 = _rwD3D9RenderStateFlushCache.)
+		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)NULL);
+		_rwD3D9RenderStateFlushCache();
 		dev->SetTexture(0, tex0);
 		dev->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
 		dev->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);

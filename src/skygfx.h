@@ -111,17 +111,18 @@ extern int g_diagLevel;
 //
 // Cost: the hot path is a pointer-identity memo (string literals are
 // stable addresses) — a multiply, one probe, one compare and GetTickCount;
-// no per-character hash walk.  The canonical FNV-1a slot (256 buckets;
-// the old 64-bucket x31 hash collided across the project's ~276 tags,
-// permanently starving critical per-frame tags) remains the source of
-// truth, so the interval stays GLOBAL per tag text even when two call
-// sites pass equal literals from different addresses.  A pointer-hash
-// collision just evicts the memo — that call falls back to the canonical
-// walk (old cost) and re-installs.
+// no per-character hash walk.  The canonical FNV-1a slot (1024 buckets;
+// was 256 — 108 of those buckets carried >=2 distinct tags and starved
+// each other, and the old 64-bucket x31 hash collided across the
+// project's ~276 tags, permanently starving critical per-frame tags)
+// remains the source of truth, so the interval stays GLOBAL per tag text
+// even when two call sites pass equal literals from different addresses.
+// A pointer-hash collision just evicts the memo — that call falls back to
+// the canonical walk (old cost) and re-installs.
 inline bool dbglog_throttle(const char *tag) {
 	struct ThrottleSlot { const char *lit; DWORD last; int canon; };
-	static ThrottleSlot s_fast[256] = {};
-	static DWORD s_lastTick[256] = {};
+	static ThrottleSlot s_fast[256] = {};	// pointer-memo: 256 slots UNCHANGED
+	static DWORD s_lastTick[1024] = {};		// FNV canonical: 256 -> 1024 (FNV collision fix)
 
 	if(g_diagLevel >= 2) return false;
 
@@ -145,7 +146,7 @@ inline bool dbglog_throttle(const char *tag) {
 		h ^= (uint32)(unsigned char)*p;
 		h *= 16777619u;
 	}
-	int idx = (int)(h & 255u);
+	int idx = (int)(h & 1023u);
 	if(now - s_lastTick[idx] < interval) return false;
 	s_lastTick[idx] = now;
 	f.lit = tag;      // (re)install the pointer memo
@@ -639,6 +640,21 @@ struct Config {
 	// WbClassifyFlush entirely -> TEXCOORD5 stays 0, c14/c15 0 -> the PS's
 	// WaterBodyContract pins every scale to exactly 1.0 (vanilla identity).
 	RwBool waterBodyClassify;
+	// Water milestone toggles (M4/M5/M7/M8, spec 2026-10-30-water-overhaul).
+	// All default 1 = the milestone ON (current always-on behaviour).
+	// Technically-gated like M1-M3: each ANDs onto the capability gates the
+	// water pipe already applies (waterPipe.cpp c17: refractValidGain when
+	// the s2 depth copy is live, causticsScale when depth copy + foam
+	// texture are live; c18: M7 SSS further gated by tier>=2 + depth copy +
+	// day + above-water, M8 volume by INTERIOR bodies code 2) — 0 forces
+	// that milestone's term to its pre-milestone identity (bit-identical to
+	// the pre-M4/M5/M7/M8 pipe), 1 leaves the technical gate in charge.
+	// INI keys (SkyGfx): waterRefractionValid / waterCaustics / waterSss /
+	// waterVolume. Menu rows pending (designer lane owns the menu).
+	RwBool waterRefractionValid;   // M4 depth-validated wave refraction
+	RwBool waterCaustics;          // M5 caustics upgrade (forward 2-tap sharpen)
+	RwBool waterSss;               // M7 SSS + sun-pierce crest polish
+	RwBool waterVolume;            // M8 water-volume vs surface split (INTERIOR)
 	// W8-2 tree lane
 	RwBool treeWind;               // 1 (default) = install the ModifyMatrixForTreeInWind port; 0 = stock routine
 	int    treeFx;                 // 0=Off 1=PC 2=PC+ 3=Console (TreeAlpha_SetProfile)
@@ -997,6 +1013,9 @@ struct Config {
 							// pipeForceAlphaBlock (cutout marks).
 	int pedTexResync;		// 1 = ped stage-0 texture-raster resync in
 							// myDefaultCallback (cache<->device split repair).
+	int rwFixesEnable;		// 1 = install the RW fix machines (corona/flush/font/
+							// pointlight shields, rw_fixes.cpp) at DllMain.
+							// 0 = skip every install (attribution bisect lever).
 };
 static_assert(offsetof(Config, version) == 0, "pinned: asm reads in main.cpp");
 static_assert(offsetof(Config, fixGrassPlacement) == 8, "pinned: fixSeed asm in main.cpp");

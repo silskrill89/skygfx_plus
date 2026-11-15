@@ -58,6 +58,15 @@ float WorleyFbm2(float x, float y, int octaves);
 float White2(int x, int y);                             // deterministic integer hash -> [0,1]
 float BlueNoise2(int x, int y);                         // tiled blue-noise lookup -> [0,1]
 
+// per-material variation ---------------------------------------------------
+// Deterministic [0,1] variation keyed by a material id and a surface UV.
+// Same (materialId, u, v) => bit-identical value on every run/machine; a
+// different materialId hashes into a different lattice offset, so two materials
+// never share a pattern. The field is tileable fBm — the same value-noise
+// family the packed tile's R channel uses — so it stays seamless across a
+// tiled texture. Uses the current seed: same seed => same field.
+float NoiseMaterialVariation(unsigned materialId, float u, float v);
+
 // packed texture --------------------------------------------------------
 // Layout: R=Perlin fBm (tileable) | G=Worley F1 | B=white | A=blue noise
 // Built at Init/SetSeed/SetQuality. Returned data is BGRA-ordered bytes

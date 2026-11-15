@@ -107,6 +107,25 @@
 //       softIsecGain: M3 Cry softIsec shallow-intersection feather gain (0 = off)
 //       reflMix: reflection mix weight (INI waterReflectionMix, default 0.7;
 //                0/unset = authored per-style strength — mismatch guard)
+// c17 = (refractValidGain, causticsScale, causticsSpeed, isecFoamGain)
+//       <- M4/M5/M6 (the c16/c11 contracts above are untouched)
+//       refractValidGain: M4 depth-validated refraction — fade the refracted
+//              sample to the base water colour on depth mismatch / off-screen
+//              (RAGE cannotRefract validity mask). 0 = pre-M4 bit-identical.
+//       causticsScale: M5 Cry WaterCausticsPass.cfi caustic web intensity
+//              (0 = off, the term is exactly 0)
+//       causticsSpeed: M5 anim scroll-rate multiplier (default 1)
+//       isecFoamGain: M6 per-texel softIsec foam-mask blend (0 = pre-M6
+//              bit-identical isec term; also gated by c16.x foamTexValid)
+//       ALL-ZERO c17 (stale pipe / older binary) -> every M4/M5/M6 term is
+//       exactly 0/neutral -> pre-M4/M5/M6 output bit-identical.
+// c18 = (sssScale, reserved, volumeDensity, volumeFresnelBias) <- M7/M8
+//       sssScale: M7 Cry crest-scatter scale (Water.cfx:1202; 2.0, 0 = off)
+//       reserved: unused (0)
+//       volumeDensity: M8 INTERIOR volume-fog density (WaterVolume.cfx;
+//              0 = off -> interior bodies keep the ocean sheet)
+//       volumeFresnelBias: M8 interior reflection Schlick F0 (0.05)
+//       c18 all-zero (stale pipe) -> M7/M8 terms exactly 0/neutral.
 //
 // s0 = scene colour (refraction capture)            [tier >= 2]
 // s1 = water detail normal map (RGB=normal, A=height; mip-mapped)
@@ -117,11 +136,16 @@
 //      flag rides c7.w: 0 -> mix is exactly 0 (analytic-only, pre-G1
 //      bit-identical); the fetch itself is unconditional per SM3.0
 //      gradient rules (uniform-tier gated like every other fetch here).
-// s4 = M2 foam texture (tiling white-noise + cellular, procedural,
-//      generated CPU-side in waterPipe.cpp — same recipe family as the
-//      detail map, no new asset). [tier >= 2, c16.x-gated: 0 = the blend
-//      term is exactly 0 even though the fetch runs (SM3.0 gradient
-//      rules), so an unbound/failed s4 can never change the output.]
+// s4 = M2/M5/M6 foam + caustic texture (tiling white-noise + cellular +
+//      ridged-Perlin web channels, procedural, generated CPU-side in
+//      waterPipe.cpp — same recipe family as the detail map, no new asset):
+//        .r = foam mask      (M2 WaterFoamTexture + M6 WaterIsecFoamMask)
+//        .g = ridged Perlin "caustic web" field (M5 WaterCaustics)
+//        .b = second ridged Perlin scale (M5 detail modulation)
+//        .a = 255 (unused)
+//      [tier >= 2, c16.x-gated for the M2/M6 blends: 0 = the blend terms are
+//      exactly 0 even though the fetches run (SM3.0 gradient rules), so an
+//      unbound/failed s4 can never change the output. M5 rides c17.y.]
 
 sampler2D sceneTex   : register(s0);
 sampler2D detailTex  : register(s1);
@@ -146,6 +170,8 @@ uniform float4 timeLight1    : register(c13);   // (directional rgb, dayFactor)
 uniform float4 bodyParams0   : register(c14);   // W7-B contract: (bodyType, edgeBlend, foamScale, shoreScale)
 uniform float4 bodyParams1   : register(c15);   // W7-B contract: (normScale, opacityScale, glitterScale, spare)
 uniform float4 waterFxParams : register(c16);   // M2/M3/refl-mix: (foamTexValid, foamTexWeight, softIsecGain, reflMix)
+uniform float4 waterFxParams2 : register(c17);  // M4/M5/M6: (refractValidGain, causticsScale, causticsSpeed, isecFoamGain)
+uniform float4 waterFxParams3 : register(c18);  // M7/M8: (sssScale, reserved, volumeDensity, volumeFresnelBias)
 
 struct VS_OUTPUT {
     float4 position  : POSITION;
@@ -370,6 +396,148 @@ float WaterSoftIsec(float thickness, float range)
 float WaterReflMix(float fallback)
 {
     return waterFxParams.w > 1e-4 ? saturate(waterFxParams.w) : fallback;
+}
+
+// ============================================================================
+// M4 — depth-validated wave refraction (RAGE water_common.fxh:877-900
+// `cannotRefract` port, screen-space form — spec M4)
+// ============================================================================
+// The refract UV is only CLAMPED to the screen today: at screen edges the
+// clamp stretches the last texel row/column across the whole offset (the
+// edge-smear defect), and an offset sample that lands on geometry IN FRONT of
+// the water surface bleeds that geometry into the sheet (foreground bleed —
+// the classic failure the spec's cannotRefract gate exists to kill). RAGE
+// validates its refraction against its refraction depth copy; here the s2
+// scene depth copy is that source (zero new samplers). Returns 1 = the
+// refracted sample is a valid scene sample, 0 = the caller fades refraction
+// to the base water colour. Smooth in both failure modes:
+//   * OFF-SCREEN: fade over the distance the clamp had to move the sample
+//     (~4% of the screen -> fully invalid).
+//   * DEPTH MISMATCH: the scene at the (clamped) refracted position sits in
+//     FRONT of the water surface -> fully invalid 0.2 m in front of it. At
+//     and behind the surface (incl. the waterline, thickness ~ 0) the sample
+//     stays VALID so the junction keeps reproducing the scene behind — the
+//     seam-fix contract is untouched.
+// The depth term only runs when the s2 depth copy is live (clipPlanes.z —
+// uniform branch, same precedent as SampleWaterColumn; s2 is unbound when the
+// copy failed, so an ungated fetch would read a null sampler). Without the
+// copy the off-screen term alone still kills the edge smear.
+// Bit-identity: the CALLER scales the fade by the c17.x gate — gate 0 (stale
+// pipe) -> the fade is exactly 0 -> pre-M4 sample bit-identical.
+float WaterRefractValid(float2 rawUV, float waterViewZ)
+{
+    float2 clamped = clamp(rawUV, float2(0.001, 0.001), float2(0.999, 0.999));
+    float2 off = abs(rawUV - clamped);
+    float offT = saturate(max(off.x, off.y) * 24.0);
+    float depthOK = 1.0;
+    if(clipPlanes.z > 0.5){
+        float z = LinearizeDepth(tex2D(depthTex, clamped).x,
+                                 clipPlanes.x, clipPlanes.y);
+        // valid at/behind the surface, fully invalid 0.2 m in front of it.
+        depthOK = saturate(1.0 + (z - waterViewZ) * 5.0);
+    }
+    return saturate((1.0 - offT) * depthOK);
+}
+
+// ============================================================================
+// M5 — caustics (CryEngine WaterCausticsPass.cfi port — spec M5)
+// ============================================================================
+// Animated caustic web on the shallow/soft-intersection band. Cry's recipe:
+// 2 scrolling taps + sharpen `c = saturate(5.65*c - 4.66); c *= c` + the
+// PB_time rate stack (1/0.5/0.25/0.125) + RGB dispersion. The milestone's
+// fetch budget is one: BOTH caustic fields ride the s4 foam texture's Perlin
+// channels (.g = ridged fBm "web", .b = a second ridged scale — the texture's
+// Perlin channels, CPU-baked in waterPipe.cpp) and come back in ONE fetch at
+// a world-anchored scrolling UV. The spec M5 resolution fix (the old blocky
+// look) is the source change itself: real mip-mapped texture + world-space
+// UVs instead of the old low-res/screen-space pattern. The Cry anim rate
+// stack becomes a single scroll (c17.z speed); the RGB dispersion
+// (refract(vSunTS, normal, 0.9) offsets 0/0.05/0.1) would triple the fetches
+// and is folded into the fixed warm caustic tint at the call sites. The
+// sharpen is the Cry curve verbatim on the .g web field. Callers gate the
+// result by tier >= 2 + depthValid + day + the shallow band; c17.y = 0 ->
+// exactly 0 (pre-M5 bit-identical).
+float WaterCaustics(float2 wxy, float time, float speed)
+{
+    float2 uv = wxy * 0.065 + float2(0.028, -0.017) * (time * speed);
+    float2 n = tex2D(foamTex, uv).gb;
+    float c = saturate(5.65 * n.x - 4.66);   // Cry sharpen
+    c = c * c;                               // Cry squaring
+    return c * (0.55 + 0.45 * n.y);          // second baked scale = breakup
+}
+
+// ============================================================================
+// M6 — soft-intersection foam texture blend (RAGE water_terrainfoam.fx
+// PSFoamDeferred port — task M6)
+// ============================================================================
+// RAGE's terrain foam multiplies its per-geometry intersection intensity
+// (foamIntensity = max(height - WaterHeight, 0) * HeightOpacity — the M3
+// WaterSoftIsec term's shape) by a PER-TEXEL foam mask (its animated x static
+// x opacity texture chain). This is that per-texel mask: the s4 foam texture
+// at its own slow drift, raw .r, applied as a straight multiply to the isec
+// term at the call sites. The affine 0.30 + 1.40*m is mean-1, so the per-texel
+// breakup does not rescale the band's overall strength (RAGE's raw [0,1]
+// multiply would halve it against our fixed c16.z gain). The fetch runs
+// unconditionally inside the caller's tier >= 2 block (SM3.0 gradient rules,
+// same precedent as WaterFoamTexture); the modulation resolves to EXACTLY 1.0
+// (pre-M6 bit-identical isec term) when the texture is absent (c16.x
+// foamTexValid = 0) or the gain is off (c17.w = 0, stale-pipe guard).
+float WaterIsecFoamMask(float2 fuv)
+{
+    float m = saturate(tex2D(foamTex, fuv).r);
+    return lerp(1.0, 0.30 + 1.40 * m,
+                saturate(waterFxParams.x) * saturate(waterFxParams2.w));
+}
+
+// ============================================================================
+// M7 — SSS crest scatter (Cry Water.cfx:1202-1210) — spec M7
+// ============================================================================
+// Cry: refract += SSS * (EdotL^2) * (fog*Sun) * waveHeight * softIsec, with
+// SubSurfaceScatteringScale = 2.0. Crests glow toward the sun when the view
+// aligns with the light: V and L are both surface-outward, so EdotL =
+// dot(V, L) peaks when the camera looks toward the sun. Pure ALU (saturate /
+// pow-free; dot + WaterSoftIsec), no fetches, no divides. The CALLER gates on
+// tier >= 2 + depth copy + day + above-water and tints with the timecycle
+// directional (timeLight1.xyz); c18.x = 0 -> the term is exactly 0 (pre-M7
+// bit-identical).
+float WaterSSS(float3 V, float3 L, float waveH, float thickness, float range)
+{
+    float edotl = saturate(dot(V, L));
+    float crest = saturate(waveH);
+    float isec  = WaterSoftIsec(thickness, range);
+    return waterFxParams3.x * edotl * edotl * crest * isec;
+}
+
+// ============================================================================
+// M8 — INTERIOR volume/surface split (Cry WaterVolume.cfx) — spec M8
+// ============================================================================
+// INTERIOR bodies (code 2, pools z>950) want opaque-tinted volume fog, not
+// the ocean sheet. WaterInteriorWeight returns the exclusive per-code weight
+// (the same c2 = isPool - isRiver WaterBodyContract uses) so quad borders
+// blend instead of stepping; it is 0 for every non-interior pixel AND when
+// M8 is off (c18.z = 0) so the application lerps stay identity there
+// (pre-M8 bit-identical). WaterApplyInterior applies, branchlessly, Cry's
+//   waterVolumeFog = exp2(-density * volumeDepth)          (opaque within ~1 m)
+//   bias-Schlick fresnel F0 = volumeFresnelBias            (calm, anti-chrome)
+// to the body colour + body-opacity + reflection lobes in place (inout).
+float WaterInteriorWeight(VS_OUTPUT IN)
+{
+    float type = abs(IN.bodyData.x) > 1e-4 ? IN.bodyData.x : bodyParams0.x;
+    float w = saturate(type - 1.0) - saturate(type - 2.0);   // peaks at code 2
+    return w * step(1e-4, waterFxParams3.z);                  // 0 when M8 off
+}
+
+float3 WaterApplyInterior(float3 waterCol, float thickness, float NdotV,
+                          inout float bodyT, inout float F, float w)
+{
+    float density = max(waterFxParams3.z, 1e-4);
+    float volOp   = saturate(1.0 - exp2(-density * max(thickness, 0.0)));
+    float3 volCol = lerp(waterCol, deepColor.rgb, volOp);
+    float f0      = saturate(waterFxParams3.w);
+    float volFres = saturate(f0 + (1.0 - f0) * pow(saturate(1.0 - NdotV), 5.0)) * 0.85;
+    bodyT = lerp(bodyT, volOp,   w);
+    F     = lerp(F,     volFres, w);
+    return lerp(waterCol, volCol, w);
 }
 
 // 2-lobe sun glitter (water-refs.md V/CryEngine SunSpecular port, V style):
@@ -929,8 +1097,12 @@ float4 WaterXbox(VS_OUTPUT IN)
                                          length(flatXY)) * saturate(waterFxParams.x);
         float isec = WaterSoftIsec(thickness, specParams.w * B.shore);
         float pattern = saturate(procFoam + texFoam * saturate(waterFxParams.y) * 0.75);
+        // M6: per-texel foam mask on the isec term (WaterIsecFoamMask — RAGE
+        // water_terrainfoam.psFoamDeferred port). c16.x/c17.w both 0 -> the
+        // mask resolves to exactly 1.0 -> the pre-M6 line bit-identical.
+        float isecMask = WaterIsecFoamMask(tuv1 * 0.22 + float2(-0.003, 0.004) * time);
         foam = (band * pattern
-              + isec * saturate(waterFxParams.z) * pattern * (1.0 - band) * 0.5)
+              + isec * saturate(waterFxParams.z) * pattern * isecMask * (1.0 - band) * 0.5)
               * 0.25 * B.foam * WaterFoamGate();
     }
 
@@ -939,11 +1111,24 @@ float4 WaterXbox(VS_OUTPUT IN)
     if(tier >= 3 && below < 0.5)
         pierce = SunPierce(S.V, N, S.L, thickness) * qualityParams.z * dayF;
 
+    // ---- M5 caustics (Cry WaterCausticsPass.cfi port — WaterCaustics) ----
+    // Shallow/soft-intersection band only (fades out by the deepRange colour
+    // ramp and at the exact junction via RefractGate), tier >= 2 + depth copy
+    // (the band keys off the real thickness), day-gated (there is no light to
+    // focus at night), above-water only. c17.y = 0 -> exactly 0 (pre-M5).
+    float caus = 0.0;
+    if(tier >= 2 && below < 0.5 && clipPlanes.z > 0.5)
+        caus = WaterCaustics(IN.worldPos.xy, time, waterFxParams2.z)
+             * saturate(1.0 - thickness / max(shallowColor.w, 1e-3))
+             * RefractGate(thickness)
+             * saturate(waterFxParams2.y) * dayF;
+
     // ---- Composite -------------------------------------------------------
     // Both lobes of the fresnel split, plus the night-gated white highlights.
     float3 highlights = spec * float3(1.0, 0.97, 0.9) * WaterSpecTint()
                       + float3(0.85, 0.9, 0.95) * foam
                       + float3(1.0, 0.97, 0.85) * pierce
+                      + float3(1.0, 0.97, 0.88) * caus
                       + float3(0.85, 0.92, 1.0) * WaterUnderShimmer(S.V, N, tuv1, time, below);
 
     // Reflection lobe: raw style fresnel, TIR curve from below, and zeroed at
@@ -960,6 +1145,12 @@ float4 WaterXbox(VS_OUTPUT IN)
     float bodyT = saturate(WaterBodyOpacity(thickness, NdotV, frontFade, S.vtxA, below)
                            * B.opac);
 
+    // M8: INTERIOR bodies (pools, z>950) — Cry WaterVolume.cfx volume-fog
+    // shading instead of the ocean sheet. Branchless lerps (w = 0 outside
+    // pools -> identity); c18.z = 0 -> interiorW = 0 -> pre-M8 bit-identical.
+    waterCol = WaterApplyInterior(waterCol, thickness, NdotV, bodyT, F,
+                                  WaterInteriorWeight(IN));
+
     // Legacy composite (INI waterFresnelSplit = 0): the pre-split
     // lerp(scene, surf, bodyOpacity) form, kept as a per-user rollback.
     float3 legacySurf = waterCol * (1.0 - reflAmt) + skyReflect * reflAmt + highlights;
@@ -971,8 +1162,16 @@ float4 WaterXbox(VS_OUTPUT IN)
     if(tier >= 2){
         float2 refractOffset = N.xy * clipPlanes.w * RefractGate(thickness)
                              * (1.0 - 0.7 * distFactor);
-        float2 refractUV = clamp(S.screenUV + refractOffset, float2(0.001, 0.001), float2(0.999, 0.999));
+        float2 rawUV = S.screenUV + refractOffset;
+        float2 refractUV = clamp(rawUV, float2(0.001, 0.001), float2(0.999, 0.999));
         float3 behind = tex2D(sceneTex, refractUV).rgb;
+        // M4: depth-validated refraction (RAGE cannotRefract port) — fade the
+        // refracted sample to the base water colour when it falls off-screen
+        // (clamp smear) or onto scene depth in front of the water (foreground
+        // bleed). c17.x = 0 -> the fade is exactly 0 -> pre-M4 bit-identical.
+        behind = lerp(behind, waterCol,
+                      (1.0 - WaterRefractValid(rawUV, S.viewZ))
+                      * saturate(waterFxParams2.x));
         if(split < 0.5)
             return float4(saturate(lerp(behind, legacySurf, legacyOp)), 1.0);
         // Reflection AND refraction in the same pixel: F of the env, the rest
@@ -1113,8 +1312,12 @@ float4 WaterIV(VS_OUTPUT IN)
                                          length(dN * nFade)) * saturate(waterFxParams.x);
         float isec = WaterSoftIsec(thickness, specParams.w * B.shore);
         float pattern = saturate(procFoam + texFoam * saturate(waterFxParams.y) * 0.75);
+        // M6: per-texel foam mask on the isec term (WaterIsecFoamMask — RAGE
+        // water_terrainfoam.psFoamDeferred port). c16.x/c17.w both 0 -> the
+        // mask resolves to exactly 1.0 -> the pre-M6 line bit-identical.
+        float isecMask = WaterIsecFoamMask(uv1 * 0.22 + float2(-0.003, 0.004) * time);
         foam = (band * pattern
-              + isec * saturate(waterFxParams.z) * pattern * (1.0 - band) * 0.5)
+              + isec * saturate(waterFxParams.z) * pattern * isecMask * (1.0 - band) * 0.5)
               * 0.25 * B.foam * WaterFoamGate();
     }
 
@@ -1122,16 +1325,40 @@ float4 WaterIV(VS_OUTPUT IN)
     if(tier >= 3 && below < 0.5)
         pierce = SunPierce(S.V, N, S.L, thickness) * qualityParams.z * dayF;
 
+    // ---- M5 caustics (Cry WaterCausticsPass.cfi port — WaterCaustics) ----
+    // Shallow/soft-intersection band, tier >= 2 + depth copy, day-gated,
+    // above-water only (see WaterXbox for the full note). c17.y = 0 -> 0.
+    float caus = 0.0;
+    if(tier >= 2 && below < 0.5 && clipPlanes.z > 0.5)
+        caus = WaterCaustics(IN.worldPos.xy, time, waterFxParams2.z)
+             * saturate(1.0 - thickness / max(shallowColor.w, 1e-3))
+             * RefractGate(thickness)
+             * saturate(waterFxParams2.y) * dayF;
+
+    // ---- M7 SSS crest scatter (Cry Water.cfx:1202-1210): crests glow toward
+    //      the sun when the view aligns with the light. tier >= 2 + depth
+    //      copy + day + above-water gated (branchless); c18.x = 0 -> exactly 0.
+    float sss = WaterSSS(S.V, S.L, t1.w, thickness, specParams.w * B.shore)
+              * dayF * (1.0 - below) * saturate((float)tier - 1.0) * saturate(clipPlanes.z);
+
     // ---- Composite (fresnel split — see the block comment by WaterSplitOpaque)
     float3 highlights = spec * float3(1.0, 0.97, 0.9) * WaterSpecTint()
                       + float3(0.85, 0.9, 0.95) * foam
                       + float3(1.0, 0.97, 0.85) * pierce
+                      + float3(1.0, 0.97, 0.88) * caus
+                      + timeLight1.xyz * sss
                       + float3(0.85, 0.92, 1.0) * WaterUnderShimmer(S.V, N, uv1, time, below);
 
     float F = (below > 0.5) ? WaterBelowOpacity(NdotV) : reflAmt;
     F *= RefractGate(thickness) * saturate(1.0 - frontFade * lerp(0.85, 0.5, below));
     float bodyT = saturate(WaterBodyOpacity(thickness, NdotV, frontFade, S.vtxA, below)
                            * B.opac);
+
+    // M8: INTERIOR bodies (pools, z>950) — Cry WaterVolume.cfx volume-fog
+    // shading instead of the ocean sheet. Branchless lerps (w = 0 outside
+    // pools -> identity); c18.z = 0 -> interiorW = 0 -> pre-M8 bit-identical.
+    waterCol = WaterApplyInterior(waterCol, thickness, NdotV, bodyT, F,
+                                  WaterInteriorWeight(IN));
 
     // ---- G1 screen-space reflection (IV core): blend the flipped scene
     //      capture over the analytic sky tint by F before any composite
@@ -1154,8 +1381,16 @@ float4 WaterIV(VS_OUTPUT IN)
     if(tier >= 2){
         float2 refractOffset = N.xy * clipPlanes.w * RefractGate(thickness)
                              * (1.0 - 0.7 * S.distFactor);
-        float2 refractUV = clamp(S.screenUV + refractOffset, float2(0.001, 0.001), float2(0.999, 0.999));
+        float2 rawUV = S.screenUV + refractOffset;
+        float2 refractUV = clamp(rawUV, float2(0.001, 0.001), float2(0.999, 0.999));
         float3 behind = tex2D(sceneTex, refractUV).rgb;
+        // M4: depth-validated refraction (RAGE cannotRefract port) — fade the
+        // refracted sample to the base water colour when it falls off-screen
+        // (clamp smear) or onto scene depth in front of the water (foreground
+        // bleed). c17.x = 0 -> the fade is exactly 0 -> pre-M4 bit-identical.
+        behind = lerp(behind, waterCol,
+                      (1.0 - WaterRefractValid(rawUV, S.viewZ))
+                      * saturate(waterFxParams2.x));
         if(split < 0.5)
             return float4(saturate(lerp(behind, legacySurf, legacyOp)), 1.0);
         return float4(saturate(WaterSplitOpaque(behind, skyReflect, waterCol,
@@ -1334,15 +1569,29 @@ float4 WaterV(VS_OUTPUT IN)
         float texFoam = WaterFoamTexture(uv1 * 0.31 + float2(0.004, -0.003) * time,
                                          length(dN)) * saturate(waterFxParams.x);
         float isec = WaterSoftIsec(thickness, specParams.w * B.shore);
+        // M6: per-texel foam mask on the isec term (WaterIsecFoamMask — RAGE
+        // water_terrainfoam.psFoamDeferred port). c16.x/c17.w both 0 -> the
+        // mask resolves to exactly 1.0 -> the pre-M6 line bit-identical.
+        float isecMask = WaterIsecFoamMask(uv1 * 0.22 + float2(-0.003, 0.004) * time);
         foam = foamBand * foamTex * shoreFade
              + texFoam * saturate(waterFxParams.y) * foamBand * shoreFade * 0.75
-             + isec * saturate(waterFxParams.z) * foamTex * (1.0 - shoreFade) * 0.35;
+             + isec * saturate(waterFxParams.z) * foamTex * isecMask * (1.0 - shoreFade) * 0.35;
         foam *= B.foam * WaterFoamGate();
     }
 
     float pierce = 0.0;
     if(tier >= 3 && below < 0.5)
         pierce = SunPierce(S.V, N, S.L, thickness) * qualityParams.z * dayF;
+
+    // ---- M5 caustics (Cry WaterCausticsPass.cfi port — WaterCaustics) ----
+    // Shallow/soft-intersection band, tier >= 2 + depth copy, day-gated,
+    // above-water only (see WaterXbox for the full note). c17.y = 0 -> 0.
+    float caus = 0.0;
+    if(tier >= 2 && below < 0.5 && clipPlanes.z > 0.5)
+        caus = WaterCaustics(IN.worldPos.xy, time, waterFxParams2.z)
+             * saturate(1.0 - thickness / max(shallowColor.w, 1e-3))
+             * RefractGate(thickness)
+             * saturate(waterFxParams2.y) * dayF;
 
     // ---- 2-lobe sun glitter (V style; water-refs.md CryEngine SunSpecular
     //      port). ALU only, no fetches; night-gated by dayF and WaterFoamGate
@@ -1353,18 +1602,32 @@ float4 WaterV(VS_OUTPUT IN)
         glitter = WaterGlitter(S.V, N, S.L, specPow) * specParams.y * 0.35
                 * dayF * WaterFoamGate() * B.glitter;
 
+    // ---- M7 SSS crest scatter (Cry Water.cfx:1202-1210): crests glow toward
+    //      the sun when the view aligns with the light. tier >= 2 + depth
+    //      copy + day + above-water gated (branchless); c18.x = 0 -> exactly 0.
+    float sss = WaterSSS(S.V, S.L, t1.w, thickness, specParams.w * B.shore)
+              * dayF * (1.0 - below) * saturate((float)tier - 1.0) * saturate(clipPlanes.z);
+
     // ---- Composite: fresnel split (V's exp depth colour blend becomes the
     //      BODY colour of the transmission lobe — see WaterSplitOpaque) ----
     float3 highlights = spec * float3(1.0, 0.97, 0.9) * WaterSpecTint()
                       + float3(0.85, 0.9, 0.95) * foam
                       + float3(1.0, 0.97, 0.85) * pierce
+                      + float3(1.0, 0.97, 0.88) * caus
                       + float3(1.0, 0.98, 0.92) * glitter
+                      + timeLight1.xyz * sss
                       + float3(0.85, 0.92, 1.0) * WaterUnderShimmer(S.V, N, uv1, time, below);
 
     float F = (below > 0.5) ? WaterBelowOpacity(NdotV) : reflAmt;
     F *= RefractGate(thickness) * saturate(1.0 - frontFade * lerp(0.85, 0.5, below));
     float bodyT = saturate(WaterBodyOpacity(thickness, NdotV, frontFade, S.vtxA, below)
                            * B.opac);
+
+    // M8: INTERIOR bodies (pools, z>950) — Cry WaterVolume.cfx volume-fog
+    // shading instead of the ocean sheet. Branchless lerps (w = 0 outside
+    // pools -> identity); c18.z = 0 -> interiorW = 0 -> pre-M8 bit-identical.
+    waterCol = WaterApplyInterior(waterCol, thickness, NdotV, bodyT, F,
+                                  WaterInteriorWeight(IN));
 
     // ---- G1 screen-space reflection (V core): the flipped scene capture is
     //      sampled along V's OWN damped anti-chrome normal (Nrefl — the
@@ -1388,13 +1651,24 @@ float4 WaterV(VS_OUTPUT IN)
     if(tier >= 2){
         float2 refractOffset = N.xy * clipPlanes.w * RefractGate(thickness)
                              * (1.0 - 0.7 * S.distFactor);
-        float2 refractUV = clamp(S.screenUV + refractOffset, float2(0.001, 0.001), float2(0.999, 0.999));
+        float2 rawUV = S.screenUV + refractOffset;
+        float2 refractUV = clamp(rawUV, float2(0.001, 0.001), float2(0.999, 0.999));
         float3 refr = tex2D(sceneTex, refractUV).rgb;
+        // M4: depth-validated refraction (RAGE cannotRefract port) — fade the
+        // refracted sample to the base water colour when it falls off-screen
+        // (clamp smear) or onto scene depth in front of the water (foreground
+        // bleed). V's exp translucency mix gets the SAME fade on its
+        // refraction weight (depthBlend.x), so at full invalidity baseCol is
+        // exactly waterCol. c17.x = 0 -> the fade is exactly 0 -> pre-M4
+        // bit-identical.
+        float refrInval = (1.0 - WaterRefractValid(rawUV, S.viewZ))
+                        * saturate(waterFxParams2.x);
+        refr = lerp(refr, waterCol, refrInval);
 
         float2 depthBlend = exp(float2(-20.0, -60.0 * abs(S.V.z))
                                 * deepColor.w * thickness * 0.25);
         float3 litRefr = lerp(2.0 * waterCol * refr, refr, depthBlend.y);
-        float3 baseCol = lerp(waterCol, litRefr, depthBlend.x);
+        float3 baseCol = lerp(waterCol, litRefr, depthBlend.x * (1.0 - refrInval));
 
         if(split < 0.5){
             float3 surfV = baseCol * (1.0 - reflAmt)

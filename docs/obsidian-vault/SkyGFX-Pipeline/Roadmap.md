@@ -1,7 +1,7 @@
 ---
 tags: [roadmap, planning, milestones]
 created: 2025-01-02
-updated: 2026-07-15
+updated: 2026-11-10
 ---
 
 # SkyGFX Plus Roadmap
@@ -19,7 +19,7 @@ Full forward+ rendering with all original aap/junior features preserved, platfor
 
 - Verify all 9 aap car pipes work
 - Verify all 2 aap building pipes work
-- Verify all junior features (stochastic, wind, radiosity, trails, grading)
+- Verify all junior features (noise-based variation, wind, radiosity, trails, grading)
 - Fix dead code stubs:
   - `UploadUnifiedConstants` (debugmenu_ui.cpp:301) — returns immediately
   - Wheel extender (wheels_extender.cpp:330-348) — swap disabled, install empty
@@ -65,7 +65,7 @@ Features that fit in ps_3_0/vs_3_0:
 | SSAO | Done |
 | Motion blur | Done |
 | SSS | Done |
-| Stochastic sampling | Done |
+| Noise-based variation | Done |
 | Wind animation | Done |
 | Parallax water | Done |
 
@@ -82,3 +82,20 @@ Features that fit in ps_3_0/vs_3_0:
 
 - `docs/Future Features.md` — deferred features list
 - `docs/Implemented Features.md` — what's done
+
+---
+
+## Status Addendum — 2026-11-10 (wave 20)
+
+- Phases 1–3 are largely realized in the current tree: the aap/junior pipe families are present,
+  platform/game-style selection is mode-driven (`modeManager.cpp`), and the settings/debug menu
+  exists. Phase 4 (`unifiedPipe.hlsl` forward+) remains the structural end-state; the current
+  effort is **stabilization toward the goal line**, not new pipeline work.
+- The 2026-11-09/10 waves are fix waves: CA contract (rainbow), far/fog restore, VCS RT-copy
+  guards, softbody TOCTOU, luminance cache-desync, safety-lever floors, sentinel honors,
+  black-quad white-shield, CClouds split restore.
+- Extraction campaign is done on disk (see [[Current Architecture (Wave 20)]]). Last gate build is
+  W0.5; W0.6 is pending the address-hygiene sweep ([[Gate Chain]]).
+- Current status, watch-list and open backlog: [[Status 2026-11-10]].
+- Goal line: match `C:\Users\aaaaaaaaa\Documents\ShareX\Screenshots\2026-09` (Sep-23 ~07:09)
+  with zero on-screen glitches.

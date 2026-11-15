@@ -1,7 +1,7 @@
 ---
 tags: [build, toolchain, msbuild, sdk]
 created: 2025-01-02
-updated: 2026-07-15
+updated: 2026-11-10
 ---
 
 # Build System
@@ -127,3 +127,20 @@ Shader pointers are loaded at runtime in `pipelinecommon.cpp` via `makePS()`.
 - [[Rubber Shader Merge]] — How rubber shader was merged
 - [[IBL Env Map Decision]] — IBL env map approach
 - Full docs: `docs/Build System.md`, `docs/File Inventory.md`, `docs/Shader Architecture.md`
+
+---
+
+## Addendum — 2026-11-10 (wave 20)
+
+- Gate runs from wave 17 onward use `python tools/fast_build.py --no-deploy`. `fix_build.py`
+  remains the original all-in-one path; both drive shader compilation and
+  `build/skygfx.vcxproj`.
+- The build **target directory is the game directory**, so the produced
+  `E:\games\gtasa_skygfx_plus\skygfx.asi` is the deployed artifact. `--no-deploy` only skips a
+  redundant copy.
+- **Lanes never build.** One integrated build per gate, run by the orchestrator; a gate is only
+  accepted after binary token verification and a user retest.
+- Every new translation unit needs an explicit `ClCompile` entry in `build/skygfx.vcxproj`;
+  premake globs do not auto-pick it.
+- Identity ledger, token counts and the current pending gate: [[Gate Chain]].
+- Current wave status and watch-list: [[Status 2026-11-10]].

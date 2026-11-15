@@ -6,7 +6,7 @@ Full forward+ rendering with all original aap/junior features preserved, platfor
 ## Phase 1: Restore Full Compatibility
 - Verify all 9 aap car pipes work
 - Verify all 2 aap building pipes work
-- Verify all junior features (stochastic, wind, radiosity, trails, grading)
+- Verify all junior features (noise-based variation, wind, radiosity, trails, grading)
 - Fix dead code stubs:
   - UploadUnifiedConstants (debugmenu_ui.cpp) — returns immediately
   - Wheel extender (wheels_extender.cpp) — swap disabled, install empty
@@ -51,7 +51,7 @@ Features that fit in ps_3_0/vs_3_0:
 - SSAO — done
 - Motion blur — done
 - SSS — done
-- Stochastic sampling — done (junior inherited)
+- Noise-based variation — done (junior inherited)
 - Wind animation — done (junior inherited)
 - Parallax water — done
 - Normal buffer — done

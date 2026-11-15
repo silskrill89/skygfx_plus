@@ -7,6 +7,11 @@
 #include <string.h>
 #include <stdio.h>     // _snprintf (ForwardPlus_StatsText)
 
+// pipelinecommon.cpp — cache-coherent device write (N1 master-fault kill):
+// routes a raw dev->SetRenderState through L1/L2/L3 so a phase write can
+// never leave the rw cache / RW driver cache / raw device disagreeing.
+extern void pipeDeviceStateSet(D3DRENDERSTATETYPE state, DWORD value);
+
 // Tile grid constants
 #define FP_TILE_SIZE     16     // pixels per tile edge
 #define FP_GRID_W        128    // tile grid width (power of 2, covers up to 2048px)
@@ -1883,8 +1888,8 @@ void ForwardPlus_DrawClusterDebug(void)
 	_rwD3D9SetPixelShader(NULL);
 	_rwD3D9SetVertexShader(NULL);
 	RwD3D9SetFVF(FP_DBG_FVF);
-	dev->SetRenderState(D3DRS_LIGHTING, FALSE);
-	dev->SetRenderState(D3DRS_SPECULARENABLE, FALSE);
+	pipeDeviceStateSet(D3DRS_LIGHTING, FALSE);
+	pipeDeviceStateSet(D3DRS_SPECULARENABLE, FALSE);
 	// Z off — all three layers (vegImposter.cpp:544-551 / depthhook.cpp:448-453
 	// doctrine). The old raw-only write left the rw cache + driver pending[]
 	// holding stale TRUEs while the device went FALSE: a later vanilla
@@ -1892,19 +1897,20 @@ void ForwardPlus_DrawClusterDebug(void)
 	// device kept Z off — the exact mechanism that made coronas draw through
 	// geometry. L1 first (real cache transition re-pushes L2+L3), then the
 	// explicit L2/L3 re-asserts defeat pending[]/applied[] gating.
-	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
-	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
-	RwD3D9SetRenderState(D3DRS_ZENABLE, FALSE);
-	RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
-	dev->SetRenderState(D3DRS_ZENABLE, FALSE);
-	dev->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
-	dev->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-	dev->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
-	dev->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
-	dev->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
-	dev->SetRenderState(D3DRS_FOGENABLE, FALSE);
-	dev->SetRenderState(D3DRS_STENCILENABLE, FALSE);
-	dev->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+	// [N1] Every state through the shared coherent writer: pipeDeviceStateSet
+	// writes L1/L2/L3 together so the overlay phase can never leave the rw
+	// cache / driver cache / device disagreeing (the old raw L3-only
+	// blend/fog/cull/alphatest writes desynced the caches — the exact
+	// mechanism that made coronas draw through geometry).
+	pipeDeviceStateSet(D3DRS_ZENABLE, FALSE);
+	pipeDeviceStateSet(D3DRS_ZWRITEENABLE, FALSE);
+	pipeDeviceStateSet(D3DRS_ALPHABLENDENABLE, TRUE);
+	pipeDeviceStateSet(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+	pipeDeviceStateSet(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+	pipeDeviceStateSet(D3DRS_CULLMODE, D3DCULL_NONE);
+	pipeDeviceStateSet(D3DRS_FOGENABLE, FALSE);
+	pipeDeviceStateSet(D3DRS_STENCILENABLE, FALSE);
+	pipeDeviceStateSet(D3DRS_ALPHATESTENABLE, FALSE);
 	// Vertex DIFFUSE straight through (no modulation by a bound texture)
 	dev->SetTexture(0, NULL);
 	dev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
@@ -1938,29 +1944,25 @@ void ForwardPlus_DrawClusterDebug(void)
 	if(prevVB) prevVB->Release();
 	if(prevPS) prevPS->Release();
 
-	dev->SetRenderState(D3DRS_LIGHTING, srLighting);
-	dev->SetRenderState(D3DRS_SPECULARENABLE, srSpecular);
-	// Z restore — all three layers, mirror of the set above. srZEnable/srZWrite
-	// were read from the raw device at entry, so pushing them through the rw
-	// cache + driver cache + raw device re-syncs every layer to the pre-draw
-	// value (the old L3-only restore left cache!=device). L1 values normalized
-	// to TRUE/FALSE like DepthHook_Restore (depthhook.cpp:481) so the rw cache
-	// never holds a non-boolean raw DWORD.
-	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)(srZEnable ? TRUE : FALSE));
-	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)(srZWrite ? TRUE : FALSE));
-	RwD3D9SetRenderState(D3DRS_ZENABLE, srZEnable);
-	RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, srZWrite);
-	dev->SetRenderState(D3DRS_ZENABLE, srZEnable);
-	dev->SetRenderState(D3DRS_ZWRITEENABLE, srZWrite);
-	dev->SetRenderState(D3DRS_ALPHABLENDENABLE, srAlphaBlend);
-	dev->SetRenderState(D3DRS_SRCBLEND, srSrcBlend);
-	dev->SetRenderState(D3DRS_DESTBLEND, srDstBlend);
-	dev->SetRenderState(D3DRS_CULLMODE, srCull);
-	dev->SetRenderState(D3DRS_FOGENABLE, srFog);
-	dev->SetRenderState(D3DRS_STENCILENABLE, srStencil);
-	dev->SetRenderState(D3DRS_ALPHATESTENABLE, srAlphaTest);
-	dev->SetRenderState(D3DRS_ALPHAREF, srAlphaRef);
-	dev->SetRenderState(D3DRS_ALPHAFUNC, srAlphaFunc);
+	// [N1] Restore through the shared coherent writer: each state's L1/L2/L3
+	// are written together so the overlay exit can never leave the caches
+	// disagreeing with the device. Values were read from the raw device at
+	// entry; pipeDeviceStateSet normalizes booleans to TRUE/FALSE and maps
+	// cull/blend/compare into the rw domain for the L1 leg (the old L3-only
+	// blend restore desynced L1/L2).
+	pipeDeviceStateSet(D3DRS_LIGHTING, srLighting);
+	pipeDeviceStateSet(D3DRS_SPECULARENABLE, srSpecular);
+	pipeDeviceStateSet(D3DRS_ZENABLE, srZEnable);
+	pipeDeviceStateSet(D3DRS_ZWRITEENABLE, srZWrite);
+	pipeDeviceStateSet(D3DRS_ALPHABLENDENABLE, srAlphaBlend);
+	pipeDeviceStateSet(D3DRS_SRCBLEND, srSrcBlend);
+	pipeDeviceStateSet(D3DRS_DESTBLEND, srDstBlend);
+	pipeDeviceStateSet(D3DRS_CULLMODE, srCull);
+	pipeDeviceStateSet(D3DRS_FOGENABLE, srFog);
+	pipeDeviceStateSet(D3DRS_STENCILENABLE, srStencil);
+	pipeDeviceStateSet(D3DRS_ALPHATESTENABLE, srAlphaTest);
+	pipeDeviceStateSet(D3DRS_ALPHAREF, srAlphaRef);
+	pipeDeviceStateSet(D3DRS_ALPHAFUNC, srAlphaFunc);
 	dev->SetTextureStageState(0, D3DTSS_COLOROP, srColorOp);
 	dev->SetTextureStageState(0, D3DTSS_COLORARG1, srColorArg1);
 	dev->SetTextureStageState(0, D3DTSS_COLORARG2, srColorArg2);

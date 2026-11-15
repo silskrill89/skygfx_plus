@@ -183,7 +183,7 @@ void RagdollBone::Limit() {
 
 // ---- Ragdoll_c ----
 
-Ragdoll_c::Ragdoll_c() : m_pPed(nullptr), m_pRootBone(nullptr), m_blend(1.0f) {
+Ragdoll_c::Ragdoll_c() : m_pPed(nullptr), m_clump(nullptr), m_pRootBone(nullptr), m_blend(1.0f) {
 	m_prevPos.x = m_prevPos.y = m_prevPos.z = 0.0f;
 	m_velocity.x = m_velocity.y = m_velocity.z = 0.0f;
 	m_acceleration.x = m_acceleration.y = m_acceleration.z = 0.0f;
@@ -193,6 +193,7 @@ Ragdoll_c::~Ragdoll_c() {}
 
 bool Ragdoll_c::Init(CPed *ped) {
 	m_pPed = ped;
+	m_clump = nullptr;
 	m_blend = 0.5f;
 	m_prevPos.x = m_prevPos.y = m_prevPos.z = 0.0f;
 	m_velocity.x = m_velocity.y = m_velocity.z = 0.0f;
@@ -207,10 +208,13 @@ bool Ragdoll_c::Init(CPed *ped) {
 	// slot on that ped until it leaves render range.
 	void *rwObject = *(void**)((uint32)m_pPed + 0x18);
 	if (!rwObject) { m_pPed = nullptr; return false; }
+	// Capture the clump identity at Init (W0.5 lane E): Update's matArray
+	// writes must later prove the ped still owns THIS clump before writing.
+	m_clump = rwObject;
 	RpClump *clump = (RpClump*)rwObject;
 	RpHAnimHierarchy *hier = GetAnimHierarchyFromSkinClump(clump);
-	if (!hier) { m_pPed = nullptr; return false; }
-	if (hier->numNodes < 1) { m_pPed = nullptr; return false; }
+	if (!hier) { m_pPed = nullptr; m_clump = nullptr; return false; }
+	if (hier->numNodes < 1) { m_pPed = nullptr; m_clump = nullptr; return false; }
 
 	// Reset per-bone state: a reused pool slot carries the PREVIOUS ped's
 	// parent/children links (SetupBoneHierarchy only appends, never clears),
@@ -230,13 +234,29 @@ bool Ragdoll_c::Init(CPed *ped) {
 void Ragdoll_c::Exit() {
 	if (!m_pPed) return;
 	m_pPed = nullptr;
+	m_clump = nullptr;	// stale RpClump* must not outlive the instance
 }
 
 void Ragdoll_c::Update(float deltaTime) {
 	if (!m_pPed) return;
 
+	// W0.5 lane E (family-C residue): the manager checks RagdollPedIsLive at
+	// LOOP time only. A freed+reissued ped SLOT passes it (same address,
+	// different ped), and Update would then write matArray deltas into
+	// whatever clump ped+0x18 holds NOW - a foreign ped's hierarchy, or a
+	// reissued RW frame pool block (floating-props family). Identity, not
+	// liveness: re-derive the clump from the ped at write time and require
+	// it to be the one captured at Init (same ownsClump shape as
+	// ragdoll_death.cpp:1401-1418). Recycled clump => retire the overlay.
 	void *rwObject = *(void**)((uint32)m_pPed + 0x18);
 	if (!rwObject) return;
+	if (m_clump && rwObject != m_clump) {
+		if (dbglog_throttle("ragdoll_stale_write"))
+			dbglog("[ragdoll] stale-write skip ped=%p clump=%p captured=%p",
+				m_pPed, rwObject, m_clump);
+		Exit();
+		return;
+	}
 	RpClump *clump = (RpClump*)rwObject;
 	RpHAnimHierarchy *hier = GetAnimHierarchyFromSkinClump(clump);
 	if (!hier) return;
@@ -443,6 +463,37 @@ void Ragdoll_c::SetupBoneHierarchy() {
 
 // ---- RagdollManager_c ----
 
+// MISSION A frame-transform audit (2026-11-09): RagdollManager_c::Update
+// stepped every active overlay WITHOUT checking whether m_pPed still belongs
+// to a live ped-pool slot. Removal was distance-only in ProcessAllPeds, which
+// walks CURRENT pool slots only - a ped streamed out (slot freed) inside
+// camera range left its ragdoll active forever, and Update then dereferenced
+// the FREED CPed: ped+0x18 -> reaped clump pointer, and whatever RW pool
+// reuses the clump/frames/hierarchy memory gets hierarchy-matrix writes
+// (Ragdoll_c::Update matArray writes + RpHAnimHierarchyUpdateMatrices). The
+// RNW frame/clump free-list reuses those slots, so a reused slot (bottle/
+// plant prop clumps, CJ interior props) inherits the writes - the floating-
+// props (bottle at the ceiling / bottle in the crowd, visual-triage
+// 2026-11-09 family-C: frame-transform) residual AFTER the family-C atomic
+// offset fixes. This gate refuses to step a ragdoll whose ped pointer is not
+// a live, non-free, slot-aligned CPed pool member (same pool evidence used by
+// ProcessAllPeds/softbody.cpp: 0xB74490, stride 0x7C4, free bit 0x80).
+static bool RagdollPedIsLive(void *ped) {
+	CPedPool *pool = pedPool;
+	if (!pool || !pool->m_pSlots || !pool->m_pSlotInfos) return false;
+	int n = pool->m_nNumSlots;
+	if (n <= 0) return false;
+	uintptr_t base = (uintptr_t)pool->m_pSlots;
+	uintptr_t p = (uintptr_t)ped;
+	if (p < base) return false;
+	uintptr_t offset = p - base;
+	if (offset % PED_POOL_STRIDE != 0) return false;		// not slot-aligned - not a CPed
+	int idx = (int)(offset / PED_POOL_STRIDE);
+	if (idx >= n) return false;					// pool shrank
+	if (pool->m_pSlotInfos[idx] & PED_SLOT_FREE_BIT) return false;	// slot freed (stream-out)
+	return true;
+}
+
 RagdollManager_c::RagdollManager_c() {}
 RagdollManager_c::~RagdollManager_c() {}
 
@@ -463,10 +514,23 @@ void RagdollManager_c::Reset() {
 }
 
 void RagdollManager_c::Update(float deltaTime) {
+	// MISSION A gate: a retired/freed ped pointer must never be stepped.
+	// ProcessAllPeds only removes ragdolls for peds it SEES in the live pool
+	// walk (distance rule); freed-inside-range peds never match again, so the
+	// overlay's Update would deref the dead CPed and write through whatever
+	// the RW pools recycled its clump/hierarchy memory into (floating props,
+	// frame-transform family). Plain Exit() is safe here - this overlay is
+	// motion-only (Init verifies, never captures anim bits), nothing to
+	// restore on the old ped.
 	for (int i = 0; i < MAX_RAGDOLLS; i++) {
-		if (m_ragdolls[i].IsActive()) {
-			m_ragdolls[i].Update(deltaTime);
+		if (!m_ragdolls[i].IsActive()) continue;
+		if (!RagdollPedIsLive(m_ragdolls[i].GetPed())) {
+			m_ragdolls[i].Exit();
+			continue;
 		}
+		// Ragdoll_c::Update itself enforces write-time identity (m_clump,
+		// W0.5 lane E): its Exit on identity mismatch happens inside Update.
+		m_ragdolls[i].Update(deltaTime);
 	}
 }
 
@@ -502,13 +566,7 @@ void RagdollManager_c::RemoveRagdoll(Ragdoll_c *ragdoll) {
 void RagdollManager_c::ProcessAllPeds(float deltaTime) {
 	// GTA SA v1.0 US: CPool<CPed>* at 0xB74490
 	// CPool layout: m_pSlots (T*), m_pSlotInfos (union with m_bFree bit), m_nNumSlots
-	struct PedSlotInfo { unsigned char id : 7; bool free : 1; };
-	struct PedPool {
-		void *m_pSlots;
-		PedSlotInfo *m_pSlotInfos;
-		int m_nNumSlots;
-	};
-	PedPool *pool = *(PedPool**)0xB74490;
+	CPedPool *pool = pedPool;
 	if (!pool || !pool->m_pSlots || !pool->m_pSlotInfos) return;
 
 	// Camera/player position for distance check
@@ -522,9 +580,9 @@ void RagdollManager_c::ProcessAllPeds(float deltaTime) {
 
 	// Iterate all peds in pool
 	for (int i = 0; i < pool->m_nNumSlots; i++) {
-		if (pool->m_pSlotInfos[i].free) continue;
+		if (pool->m_pSlotInfos[i] & PED_SLOT_FREE_BIT) continue;
 
-		CPed *ped = (CPed*)((uint8*)pool->m_pSlots + i * 0x7C4);
+		CPed *ped = (CPed*)((uint8*)pool->m_pSlots + i * PED_POOL_STRIDE);
 
 		// CPed+0x18 = RwObject* (RpClump* for skinned peds)
 		void *rwObject = *(void**)((uint32)ped + 0x18);
@@ -763,7 +821,11 @@ static void GibFree(GibInstance *g) {
 	delete g->shape;
 	if (g->clump) RpClumpDestroy(g->clump);
 	g->active = false; s_gibCount--;
+	// W0.5 lane E receipts: legacy line kept byte-stable; additive retire line
+	// marks the route a gib takes back out of the RW pools (clump + body gone
+	// in the same breath; keeps a frozen-backend gib's lifetime observable).
 	dbglog("Dismember: gib freed, remaining=%d", s_gibCount);
+	dbglog("[ragdoll] gib retire clump=%p remaining=%d", g->clump, s_gibCount);
 }
 
 // ============================================================
@@ -959,17 +1021,25 @@ static void *BuildGibClump(void *pedClump, int boneTag) {
 	void *atomic = RpAtomicCreate();
 	if (!atomic) { RpGeometryDestroy(newGeo); free(vertInSet); free(vertRemap); free(triRemap); return nullptr; }
 
-	// Create frame
-	void *frame = RwFrameCreate();
-	if (!frame) { RpAtomicDestroy(atomic); RpGeometryDestroy(newGeo); free(vertInSet); free(vertRemap); free(triRemap); return nullptr; }
+	// MISSION A audit fix (2026-11-09): creation order was atomic -> frame ->
+	// clump, and the clump-failure path leaked the freshly created RwFrame
+	// (no RwFrameDestroy macro available with a verified address here, so a
+	// leaked frame would sit in the RW frame free-list forever and skew the
+	// pool the game draws from). Reordered to atomic -> clump -> frame so
+	// every failure path destroys exactly the objects it owns with the
+	// byte-verified RpAtomicDestroy / RpClumpDestroy macros - no leaked
+	// frame, no leaked clump, no dangling slot in the RW frame free-list.
 
 	// Create clump
 	void *clump = RpClumpCreate();
 	if (!clump) { RpAtomicDestroy(atomic); RpGeometryDestroy(newGeo); free(vertInSet); free(vertRemap); free(triRemap); return nullptr; }
 
+	// Create frame
+	RwFrame *frame = (RwFrame *)RwFrameCreate();
+	if (!frame) { RpAtomicDestroy(atomic); RpClumpDestroy(clump); RpGeometryDestroy(newGeo); free(vertInSet); free(vertRemap); free(triRemap); return nullptr; }
+
 	// Wire up: atomic->frame via _rwObjectHasFrameSetFrame
-	typedef void (*ObjFrameSet_t)(void*, void*);
-	((ObjFrameSet_t)0x804EF0)(atomic, frame);
+	_rwObjectHasFrameSetFrame(atomic, frame);
 
 	// V5 FIX: Use the game's RpAtomicSetGeometry (0x749D40) instead of raw
 	// pointer write. This builds the D3D9 ResEntry properly so the atomic
@@ -978,21 +1048,32 @@ static void *BuildGibClump(void *pedClump, int boneTag) {
 
 	// GIB RENDER FIX: the atomic was never spliced into the clump, so
 	// RpClumpForAllAtomics found zero atomics and gibs never rendered.
-	// Share the frame with the clump too (canonical single-atomic-clump
-	// pattern: clump frame == atomic frame).
+	// NOTE (2026-11-02 byte-verified): do NOT _rwObjectHasFrameSetFrame the
+	// CLUMP. RpClump is a plain RwObject (rpworld.h): object.parent at +4,
+	// atomicList at +8. The old "share the frame with the clump" call
+	// spliced the atomicList HEAD (clump+8) into frame->objectList (+0x90)
+	// and rewrote head.next/prev, so RpClumpForAllAtomics (0x749B70)
+	// returned node-0x40 garbage atomics -> Dismember_Render wrote physics
+	// transforms through random pointers and poisoned the engine dirty-list
+	// (build-11 CJ inside-out / transform corruption).
 	RpClumpAddAtomic(clump, atomic);
-	((ObjFrameSet_t)0x804EF0)(clump, frame);
 
 	// Set render callback to the default atomic renderer.
-	// VERIFIED LAYOUT (2026-11-02, exe byte-evidence): renderCallBack is at
-	// +0x10 — RpAtomicCreate (0x749C50) stores the default callback there,
-	// and the field order object 0x00-0x0F / cb 0x10 / repEntry 0x14 /
-	// geometry 0x18 / boundingSphere 0x1C / worldBoundingSphere 0x2C /
-	// clump 0x3C / inClumpLink 0x40 only closes arithmetically with cb at
-	// 0x10. The SDK struct member resolves to a different offset in this
-	// game (the old +0x48 claim) — writing through it corrupted +0x48.
-	// Write the verified offset directly.
-	*(void**)((uintptr_t)atomic + 0x10) = (void*)AtomicDefaultRenderCallBack;
+	// VERIFIED LAYOUT (2026-11-02, gta_sa.exe byte-evidence): renderCallBack
+	// is at +0x48 — RpAtomicCreate (0x749C50) stores AtomicDefaultRenderCallBack
+	// (0x7491C0) there, and the clump render walk (0x749B20) calls
+	// [atomic+0x48](atomic) (re-instancing path 0x74BF7A too). Full layout:
+	// hasFrame object 0x00-0x13 (type/subType/flags/privateFlags +0x00,
+	// frame=object.parent +0x04, lFrame +0x08, sync +0x10), repEntry +0x14,
+	// geometry +0x18, boundingSphere +0x1C, worldBoundingSphere +0x2C,
+	// clump +0x3C, inClumpLink +0x40, renderCallBack +0x48,
+	// interpolator +0x4C, llWorldSectorsInAtomic +0x64, pipeline +0x6C.
+	// +0x10 is RwObjectHasFrame.sync (RpAtomicCreate's 0x749D20 store) —
+	// the old +0x10 write clobbered the frame-sync path with a render
+	// callback (and rerouted sync through the hooked 0x7491C0). The SDK
+	// member atomic->renderCallBack resolves to +0x48 and was right all
+	// along; write the verified offset explicitly.
+	*(void**)((uintptr_t)atomic + 0x48) = (void*)AtomicDefaultRenderCallBack;
 
 	free(vertInSet); free(vertRemap); free(triRemap);
 	return clump;
@@ -1112,6 +1193,11 @@ void Dismember_ApplyZeroScale(void *clump, DismemberState *state) {
 		if (!*list[i].flag) continue;
 		int idx = RpHAnimIDGetIndex(hier, list[i].tag);
 		if (idx < 0) continue;
+		// Write-time bounds: a repaired/reissued clump can hand back a
+		// hierarchy with fewer nodes than the tags resolve against; writing
+		// ma[idx] past numNodes scribbles the adjacent RW pool block. Bound
+		// immediately before the write, not just at capture time.
+		if (idx >= ((RpHAnimHierarchy*)hier)->numNodes) continue;
 		ma[idx].right.x = 0; ma[idx].right.y = 0; ma[idx].right.z = 0;
 		ma[idx].up.x = 0;    ma[idx].up.y = 0;    ma[idx].up.z = 0;
 		ma[idx].at.x = 0;    ma[idx].at.y = 0;    ma[idx].at.z = 0;
@@ -1163,17 +1249,23 @@ void Dismember_Render(void) {
 		((ForAllAtomics_t)0x749B70)(g->clump, cbRend, &firstAtomic);
 		if (!firstAtomic) continue;
 
-		// Get frame from atomic: _rwObjectGetFrame at +0x08
-		void *frame = *(void**)((uintptr_t)firstAtomic + 0x08);
+		// Frame from atomic: object.parent at +0x04 (_rwObjectHasFrameSetFrame
+		// 0x804EF0 writes it; clump render walk 0x749B20 reads [atomic+4]).
+		// +0x08 is lFrame.next, NOT the frame (old code read the frame's
+		// objectList head and then walked off the struct below).
+		void *frame = *(void**)((uintptr_t)firstAtomic + 0x04);
 		if (!frame) continue;
 
-		// RwFrame+0x14 = pointer to the MODELLING matrix (NOT LTM).
-		// Writing to the modelling matrix and then calling
-		// RwFrameUpdateObjects will correctly recompute the LTM.
-		// Verified: RwFrameGetMatrix/GetLTM at 0x7F0990 reads from
-		// frame+0x18 (the actual LTM cache slot).
-		RwMatrix *modMat = *(RwMatrix**)((uintptr_t)frame + 0x14);
-		if (!modMat) continue;
+		// RwFrame modelling matrix is EMBEDDED at +0x10 (0x40 bytes); the
+		// LTM is embedded at +0x50 (byte-verified: LTM flush 0x8097D0 does
+		// rep movsd +0x10 -> +0x50; RwFrameGetLTM 0x7F0990 returns +0x50).
+		// There is NO matrix pointer at +0x14 (those are right.y/right.z)
+		// floats — the old *(RwMatrix**)(frame+0x14) read them as a pointer:
+		// NULL with a good frame (gib silently skipped), random with a bad
+		// one (random writes). Write the modelling matrix, then
+		// RwFrameUpdateObjects (0x7F0910 = mark root dirty) so the next LTM
+		// flush recomputes +0x50 for rendering.
+		RwMatrix *modMat = (RwMatrix*)((uintptr_t)frame + 0x10);
 
 		// Write Bullet body transform as the modelling matrix
 		modMat->right.x = basis[0][0]; modMat->right.y = basis[1][0]; modMat->right.z = basis[2][0];
@@ -1220,6 +1312,10 @@ void Dismember_SpurtBlood(void *clump, DismemberState *state) {
 
 	int idx = RpHAnimIDGetIndex(hier, bleedBone);
 	if (idx < 0) return;
+	// Same write-time bounds as Dismember_ApplyZeroScale: a reissued hierarchy
+	// may be shorter than the tag's resolved index; ma[idx].pos would read the
+	// adjacent RW pool block.
+	if (idx >= ((RpHAnimHierarchy*)hier)->numNodes) return;
 
 	typedef void (*AddParticle_t)(int, void*, void*, void*, float, void*, void*);
 	AddParticle_t addPart = (AddParticle_t)0x4A9B50;

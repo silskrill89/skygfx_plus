@@ -1,5 +1,22 @@
 // Burnout Paradise-Style Motion Blur (ps_3_0)
-// Inspired by GTA V's directional motion blur with jitter and velocity clamping
+// Inspired by GTA V's directional motion blur with velocity clustering.
+//
+// TIER 1 (2026-10-29 motionblur-physics-research §1d.3): pure shader rewrite,
+// no C++/register change. (a) bidirectional taps, (b) per-tap depth rejection
+// using the already-bound depth sampler s2 + c3.x/y, (c) texel-snapped tap
+// UVs, (d) normalised + clamped blur direction, (e) small-length early discard,
+// (f) one fetch per tap (the old 3x RGB split is gone), (g) depth-scaled
+// attenuation (weight falls off with depth distance).
+//
+// N7 (2026-11-08 family-F rotor smear): per-pixel velocity sanity on top of
+// Tier 1, still s0-s2 / c0-c3 only. (h) blur length capped at 4x the pixel's
+// own reconstructed velocity (rotor blades have a short per-pixel vector even
+// while the helicopter flies fast) and per-tap velocity-variance rejection
+// (taps whose s1 velocity disagrees with the centre are faded out, so rotor
+// interior cannot drag background across its silhouette).
+//
+// Register budget unchanged: s0-s2 and c0-c3 only. Ships behind the existing
+// motionBlurEnable gate (C++ never dispatches this pass when it is off).
 //
 // Constants:
 //   c0 = (blurStrength, radialStrength, maxSamples, speedFactor)
@@ -46,6 +63,61 @@ float2 Jitter(float2 tex, float2 color)
     // Simple hash-based noise
     float noise = frac(sin(dot(jitterLookup, float2(12.9898, 78.233))) * 43758.5453);
     return float2(noise - 0.5, noise - 0.5);
+}
+
+// Linear eye-space depth from the INTZ depth buffer (NormalBuffer.hlsl formula,
+// same one the pre-Tier-1 centre fetch used).
+float LinearDepth(float z)
+{
+    return depthFov.x * depthFov.y / max(depthFov.y - z * (depthFov.y - depthFov.x), 1e-7);
+}
+
+// Snap a screen-space UV to the centre of its source texel. Keeps tap fetches
+// off sub-texel positions so the blur stops shimmering as the view moves.
+float2 SnapToTexel(float2 uv)
+{
+    return (floor(uv * screenSize.xy) + 0.5) * screenSize.zw;
+}
+
+// Accumulate one depth-aware tap, fetching colour exactly once (f).
+//   (b) taps in front of the centre surface are rejected outright: an occluder
+//       closer to the camera must not bleed into this pixel.
+//   (g) remaining taps are attenuated by their relative depth distance; this
+//       is what fades background taps that sit behind a foreground surface, so
+//       background colour cannot smear through a silhouette either.
+//   (h) N7 per-pixel velocity sanity: a tap whose reconstructed velocity
+//       disagrees with the centre pixel's velocity is down-weighted. A fast
+//       per-object surface (helicopter rotor blade) sits against a background
+//       moving very differently; without this the blade's blur drags that
+//       background across its silhouette as a milky sheet.
+void AccumTap(float2 screenUV, float baseWeight, float centerLin, float depthTol,
+              float2 centerVel, inout float3 result, inout float totalWeight)
+{
+    float2 uv = SnapToTexel(screenUV);
+
+    float tapLin = LinearDepth(tex2D(depthTex, uv).r);
+    if(tapLin < centerLin - depthTol)
+        return; // in front of the surface: reject occluder bleed
+
+    float depthDist = abs(tapLin - centerLin) / max(centerLin, 1e-4);
+    float depthAtten = saturate(1.0 - depthDist * 1.5);
+    if(depthAtten <= 0.0)
+        return;
+
+    // (h) Velocity-variance rejection. Tolerance = 2 screen texels (8-bit
+    // velocity-quantisation headroom) plus 1.5x the centre speed, so coherent
+    // motion is never rejected while wildly disagreeing taps (rotor interior
+    // vs. background) fade to zero weight. s1 is screen-sized -> direct UV.
+    float2 tapVel = tex2D(motionTex, uv).rg * 2.0 - 1.0;
+    float velTol = 2.0 * max(screenSize.z, screenSize.w) + length(centerVel) * 1.5;
+    float velAtten = saturate(1.0 - length(tapVel - centerVel) / max(velTol, 1e-6));
+
+    float weight = baseWeight * depthAtten * velAtten;
+    if(weight <= 0.0)
+        return;
+
+    result += tex2D(currentTex, uv * cameraParams.zw).rgb * weight;
+    totalWeight += weight;
 }
 
 float4 main(PS_INPUT IN) : COLOR
@@ -95,61 +167,62 @@ float4 main(PS_INPUT IN) : COLOR
     // (NormalBuffer.hlsl pattern). Far surfaces keep full blur; near surfaces
     // (lin -> near) fade toward 0 so the global camera-velocity term doesn't
     // smear close geometry.
-    float z = tex2D(depthTex, tex).r;
-    float lin = depthFov.x * depthFov.y / max(depthFov.y - z * (depthFov.y - depthFov.x), 1e-7);
-    float depthW = saturate(lin / depthFov.y * 1.5);
+    float centerLin = LinearDepth(tex2D(depthTex, tex).r);
+    float depthW = saturate(centerLin / depthFov.y * 1.5);
     blurAmount *= depthW;
 
     // Clamp to max blur in pixels (c3.w), converted to UV units via 1/screenW
     blurAmount = min(blurAmount, depthFov.w * pixel.x);
+
+    // (h) N7 per-pixel length sanity: cap the blur at a small multiple of this
+    // pixel's OWN reconstructed velocity. The cinematic camera term can inflate
+    // blurAmount far beyond the per-pixel motion of a fast per-object surface
+    // (rotor blades barely move per-pixel even while the helicopter flies), and
+    // an uncapped blur then drags the blade across the frame as a milky sheet.
+    // 4x keeps genuine camera-driven blur; the 2-texel floor stops near-zero
+    // (quantised) velocities from collapsing the camera term to nothing while
+    // still keeping the blur short enough to stay inside the object's edge.
+    float velFloor = 2.0 * max(screenSize.z, screenSize.w);
+    float velCap = 4.0 * length(motionVector) + velFloor;
+    blurAmount = min(blurAmount, velCap);
     
     // Early exit if no blur needed (GTA V technique: discard when velocity near zero)
     if(blurAmount < 0.001)
         return float4(color, 1.0);
-    
-    // Normalize blur direction (NaN-safe: guard against zero-length when motionVector cancels radialDir)
-    float blurLen = max(length(blurDir), 1e-7);
-    float2 blurStep = (blurDir / blurLen) * blurAmount;
-    
-    // Apply jitter to reduce banding (GTA V technique)
-    float2 jitterOffset = Jitter(tex, color.rg);
-    tex += blurStep * jitterOffset * 0.5;
-    
-    // Multi-sample blur with chromatic aberration (8 samples unrolled)
-    float3 result = float3(0, 0, 0);
-    float totalWeight = 0;
-    
-    // Center sample (highest weight)
-    float centerWeight = 1.0;
-    result += color * centerWeight;
-    totalWeight += centerWeight;
-    
-    // Directional samples with chromatic aberration
-    for(int i = 1; i <= 8; i++)
-    {
-        float t = (float)i / 8.0;
-        float2 offset = blurStep * t;
-        
-        // Sample with slight RGB separation for chromatic aberration.
-        // Scale into the front-buffer content region AFTER combining screen
-        // UV + offset (fbScale, see header) so taps stay screen-aligned.
-        float2 sampleCoordR = (tex + offset * 1.0) * cameraParams.zw;
-        float2 sampleCoordG = (tex + offset * 0.98) * cameraParams.zw;
-        float2 sampleCoordB = (tex + offset * 0.96) * cameraParams.zw;
 
-        float3 sampleR = tex2D(currentTex, sampleCoordR).rgb;
-        float3 sampleG = tex2D(currentTex, sampleCoordG).rgb;
-        float3 sampleB = tex2D(currentTex, sampleCoordB).rgb;
-        
-        // Combine with per-channel separation
-        float3 sample = float3(sampleR.r, sampleG.g, sampleB.b);
-        
+    // (d) Normalise then clamp the blur direction before it is used
+    // (NaN-safe: guard against zero length when motionVector cancels radialDir).
+    float dirLen = length(blurDir);
+    float2 unitDir = dirLen > 1e-7 ? blurDir / dirLen : float2(0.0, 0.0);
+    unitDir = clamp(unitDir, -1.0, 1.0);
+    float2 blurStep = unitDir * blurAmount;
+
+    // Depth tolerance for the in-front rejection: scale with distance so a
+    // near pixel keeps tight rejection while a far one tolerates its own slope.
+    float depthTol = max(centerLin * 0.05, 0.01);
+
+    // Bidirectional taps: 4 each side (8 total, same tap count as the old
+    // one-sided loop) so the blur is symmetric around the pixel. The old
+    // sub-texel jitter is intentionally dropped — it defeats the texel snap
+    // in (c); symmetric snapped taps already suppress the banding it hid.
+    float3 result = float3(0, 0, 0);
+    float totalWeight = 0.0;
+
+    // Center sample (highest weight)
+    result += color;
+    totalWeight += 1.0;
+
+    const int kHalfTaps = 4;
+    for(int i = 1; i <= kHalfTaps; i++)
+    {
+        float t = (float)i / (float)kHalfTaps;
+
         // Weight falloff (sharper center, softer edges)
         float weight = 1.0 - t;
         weight *= weight; // Quadratic falloff
-        
-        result += sample * weight;
-        totalWeight += weight;
+
+        AccumTap(tex + blurStep * t, weight, centerLin, depthTol, motionVector, result, totalWeight);
+        AccumTap(tex - blurStep * t, weight, centerLin, depthTol, motionVector, result, totalWeight);
     }
     
     // Normalize

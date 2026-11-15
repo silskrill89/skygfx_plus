@@ -45,13 +45,33 @@
 //   slots ever filled, 1.95M-2.11M budget skips). Four ways per set remove that
 //   ping-pong while keeping the memory static (no heap).
 //   Extraction-failure UNKNOWN is cached too, so a texture that cannot be
-//   extracted is not re-probed every frame. At most TAC_CLASSIFY_BUDGET (256)
-//   NEW textures are inspected per render frame (RWSRCGLOBAL(renderFrame)); a
-//   miss past the budget returns TAC_UNKNOWN and is retried on a later frame.
+//   extracted is not re-probed every frame.
+//
+// STABILITY CONTRACT (build-11 fix — "textures classifying differently per
+//   draw" / angle-dependent transparency): a raster's class must be IDENTICAL
+//   on every draw of that raster. The old per-frame budget (256 new scans per
+//   RWSRCGLOBAL(renderFrame) tick; a miss past the budget returned TAC_UNKNOWN
+//   uncached and was "retried on a later frame") made the RETURN VALUE
+//   frame- and draw-order-dependent: budget-skipped draws of a texture took
+//   the pipes' TAC_UNKNOWN safe default (empty-alpha solids alpha-tested to
+//   invisible, soft decals painted solid with ZWRITE on — the black
+//   road-decal / giant-black-quad family) while later draws of the SAME
+//   texture, or the same draw next frame, got the real class — and WHICH
+//   textures saw a scan slot depended on the camera-angle draw order.
+//   First-sight scans now always run (the scan is a bounded CPU read — caps
+//   below — on a MANAGED-pool texture: no GPU sync), so the class is
+//   per-raster stable from the first draw. TAC_CLASSIFY_BUDGET is kept only
+//   as a per-tick SCAN-RATE TARGET: ticks that exceed it bump
+//   s_tacBudgetSkips (perf telemetry, printed in the summary "budget=" slots)
+//   and still classify — the count never gates classification again.
+//   Cache HIT promotion (TacCacheFind): the touched way is parked LAST in its
+//   set's round-robin eviction order (cyclic LRU), so every-frame textures
+//   (ped skins, roads, buildings) survive streaming churn and cannot re-enter
+//   the scan path at all.
 //   NULL-TEXTURE draws (!texture || !texture->raster) are special-cased
-//   BEFORE the budget: there is no cache key and nothing to probe, so they are
-//   neither cached nor counted against the budget. Call
-//   TexAlpha_ResetCache() to retry everything after a fix.
+//   BEFORE the scan: there is no cache key and nothing to probe, so they are
+//   neither cached nor counted. Call TexAlpha_ResetCache() to retry
+//   everything after a fix.
 //
 // FAULT SAFETY
 //   The whole extraction + scan runs inside __try/__except. The function has
@@ -67,14 +87,26 @@
 #define TAC_CACHE_SETS      1024
 #define TAC_CACHE_WAYS      4
 #define TAC_CACHE_SIZE      (TAC_CACHE_SETS * TAC_CACHE_WAYS)
-// Per-frame NEW-texture classification budget. 256 ≈ a 4k-texture level warms
-// up in ~16 frames; one LockRect+scan is cheap next to the draw it protects
-// and the scan caps below are unchanged, so the old 32/frame starved real
-// textures into TAC_UNKNOWN for a whole session (26k budget skips per run).
+// Per-tick SCAN-RATE TARGET (telemetry only since the build-11 stability fix —
+// it NO LONGER gates classification, see the stability contract in the CACHE
+// block above: a budget-skip fallback made the returned class frame/draw-order
+// dependent). Ticks whose first-sight scans exceed the target bump
+// s_tacBudgetSkips (summary "budget=" slots). 256 ≈ a 4k-texture level warms
+// up in ~16 renderFrame ticks; one LockRect+scan is a bounded CPU read (caps
+// below) on a MANAGED-pool texture — cheap next to the draw it protects. The
+// old 32/frame gate starved real textures into TAC_UNKNOWN for a whole
+// session (26k budget skips per run); the 256 gate still let the flip reach
+// draws whenever evictions + streaming arrivals outran the budget.
 #define TAC_CLASSIFY_BUDGET 256
 #define TAC_MAX_BLOCKS      4096
 #define TAC_MAX_ALPHA_BYTES 262144
 #define TAC_EXT_OFF_UNREAD  0xFFFFFFFFu
+// BOUNDED RETRY (build-12): how many times a cached TAC_UNKNOWN from a
+// TRANSIENT extraction failure may be re-scanned before it sticks. Small on
+// purpose — the scan is a bounded CPU read, and a permanently unextractable
+// texture must not be re-probed every frame (the cache contract); 4 retries
+// cover "D3D object realized a frame or two late" with room to spare.
+#define TAC_UNKNOWN_RETRY_MAX 4
 
 // FADED is a FRACTION, not "any intermediate texel". SA stores DXT3/DXT5
 // alpha on car paint and foliage atlases with broad 1-texel antialiased
@@ -189,7 +221,7 @@
 #define TAC_CUTOUT_HI_FRINGE_PERCENT  60
 
 // ---------------------------------------------------------------------------
-// Cache + per-frame budget.
+// Cache + per-tick scan-rate telemetry.
 // ---------------------------------------------------------------------------
 //
 // Set-associative layout: set = index / TAC_CACHE_WAYS, so a set's 4 entries
@@ -215,6 +247,15 @@
 	uint32 nTotal;
 	int fmt;		// D3DFORMAT the scan saw (int; -1 = not read)
 	uint8 logged;		// diagnostic sample already printed for this entry
+	// BOUNDED RETRY (build-12, N6): 1 when cls is TAC_UNKNOWN produced by a
+	// TRANSIENT failure (D3D texture not realized yet, stream-out mid-scan,
+	// lock/leveldesc hiccup — TacReasonIsRetryable). Such an entry is
+	// re-probed at most TAC_UNKNOWN_RETRY_MAX times (`tries`) instead of
+	// being cached as UNKNOWN for the rest of the session (the old policy
+	// stuck a texture whose D3D object appeared one frame late on the
+	// fallback path forever — the "real texture, tac=0" family).
+	uint8 retryable;
+	uint8 tries;
 };
 
 static TacCacheEntry s_tacCache[TAC_CACHE_SIZE];
@@ -222,6 +263,12 @@ static uint8 s_tacVictim[TAC_CACHE_SETS];	// next way to evict per set
 static uint32 s_tacFrame = 0xFFFFFFFF;
 static int s_tacBudget = 0;
 static int s_tacUsed = 0;
+// `tries` carried across a bounded-retry drop -> re-scan -> re-install within
+// one TexAlpha_Classify call (single-threaded render — same one-call static
+// pattern as s_tacAAGate/s_tacVegHint). Keeps the TAC_UNKNOWN_RETRY_MAX
+// bound intact across the re-install: a permanently unextractable texture
+// must not reset its counter by installing a fresh entry every probe.
+static int s_tacRetryCarry = 0;
 
 // Failure reasons. Every path that cannot classify returns one of these so the
 // summary line names the exact pipeline step that broke. NO_EXT_PTR is the
@@ -251,6 +298,28 @@ static const char * const s_tacReasonName[TACR_COUNT] = {
 	"LOCK_FAILED",
 	"UNSUPPORTED_FORMAT"
 };
+
+// Which TAC_UNKNOWN outcomes are TRANSIENT and may be re-probed (bounded by
+// TAC_UNKNOWN_RETRY_MAX): the D3D texture may not be realized yet (NO_D3D_TEX
+// / NO_EXT_PTR on a streamed raster), the scan may have raced a stream-out
+// (SEH fault returns reason TACR_NONE), or the device returned a one-frame
+// hiccup (NO_LEVELDESC / LOCK_FAILED). NOT retryable: BAD_EXT_OFFSET (the
+// 0xB4E9E0 offset word is broken for EVERY texture — retrying cannot help)
+// and UNSUPPORTED_FORMAT (a permanent property of the format). NO_TEXTURE /
+// NO_RASTER never reach the cache (handled before the probe).
+static int TacReasonIsRetryable(int reason)
+{
+	switch(reason){
+	case TACR_NONE:		// SEH fault during extract/scan
+	case TACR_NO_EXT_PTR:
+	case TACR_NO_D3D_TEX:
+	case TACR_NO_LEVELDESC:
+	case TACR_LOCK_FAILED:
+		return 1;
+	default:
+		return 0;
+	}
+}
 
 // Summary counters (diagnostics only).
 static unsigned s_tacOpaque = 0;
@@ -294,16 +363,19 @@ static unsigned s_tacCutoutVeg = 0;
 static unsigned s_tacUnknown = 0;
 // Split of the UNKNOWN mass for the summary line: texnull = texture/raster
 // NULL at the call (expected for untextured materials, NOT a classifier
-// failure); budget = real textures skipped past the per-frame budget. Budget
-// skips return BEFORE classify and are not counted in s_tacUnknown, so
-// unknown_budget mirrors s_tacBudgetSkips (also printed as budget=%u below)
-// and texnull + budget does not have to equal the unknown figure — the rest
-// are cached extraction-failure UNKNOWNs broken out in unknown_reasons.
+// failure). The legacy budget split is gone with the build-11 stability fix:
+// budget-skipped UNKNOWNs no longer exist (first-sight scans always run), so
+// the "unknown_budget=" / "budget=" summary slots both print
+// s_tacBudgetSkips, which now counts first-sight scans that EXCEEDED the
+// per-tick scan-rate target (pure perf telemetry — those textures were
+// classified normally). texnull does not have to equal the unknown figure —
+// the rest are cached extraction-failure UNKNOWNs broken out in
+// unknown_reasons.
 static unsigned s_tacUnknownTexNull = 0;
 static unsigned s_tacFaults = 0;
 static unsigned s_tacReasons[TACR_COUNT] = {};
 static uint8 s_tacReasonLogged[TACR_COUNT] = {};
-static unsigned s_tacBudgetSkips = 0;
+static unsigned s_tacBudgetSkips = 0;	// over-rate first-sight scans (telemetry)
 static int s_tacExtOffLogged = 0;
 static int s_tacNameLog = 0;
 // One-shot cap for the uniform-alpha demotion names (first 8 demotions).
@@ -333,14 +405,30 @@ static uint32 TacHashKey(const RwRaster *ras)
 }
 
 // Set-associative probe: at most TAC_CACHE_WAYS (4) pointer compares, no
-// LockRect, no scan, no logging on the caller's hot path.
+// LockRect, no scan, no logging on the caller's hot path. A hit promotes the
+// touched way to the LAST eviction slot of its set (cyclic LRU, build-11
+// stability fix).
 static TacCacheEntry *TacCacheFind(RwRaster *ras, uint32 hash)
 {
-	uint32 base = (hash & (uint32)(TAC_CACHE_SETS - 1)) * TAC_CACHE_WAYS;
+	uint32 set = hash & (uint32)(TAC_CACHE_SETS - 1);
+	uint32 base = set * TAC_CACHE_WAYS;
 	for(int w = 0; w < TAC_CACHE_WAYS; w++){
 		TacCacheEntry *e = &s_tacCache[base + (uint32)w];
-		if(e->raster == ras)
+		if(e->raster == ras){
+			// Cyclic-LRU promotion: park the round-robin victim cursor just
+			// AFTER the touched way, so the next eviction of this set takes
+			// some other way and the just-hit entry is evicted LAST. Without
+			// this a set whose 4 ways all hold live rasters round-robins its
+			// hot entries (ped skins, roads, buildings — drawn every frame)
+			// out to streaming churn, and each eviction re-opened the scan
+			// path at a camera-angle-dependent draw position (pre-fix: a
+			// TAC_UNKNOWN window on exactly the textures the player stares
+			// at). Trade-off, accepted: in a set with fewer hot ways than
+			// ways, the cold ways rotate less evenly than plain round-robin
+			// — stale cold entries can linger in the parked-over slots.
+			s_tacVictim[set] = (uint8)(((uint32)w + 1u) & (TAC_CACHE_WAYS - 1));
 			return e;
+		}
 	}
 	return NULL;
 }
@@ -827,6 +915,109 @@ static int TacScanA4R4G4B4(const uint8 *bits, uint32 pitch, uint32 width, uint32
 	return TacClassFromHist(outHist);
 }
 
+// FORMAT COVERAGE (N6 follow-up, 2026-11-08): the original scannable set
+// missed the alpha-bearing formats PS2-converted / modded TXDs actually ship
+// (A1R5G5B5 is the classic PS2->PC mask format — fences, wires, foliage
+// cards; A8/A8L8 are alpha-only masks). Those fell through to
+// TACR_UNSUPPORTED_FORMAT -> TAC_UNKNOWN for EVERY draw of a real texture
+// ("real-world textures resolve to UNKNOWN"), which is exactly the mass the
+// retest log showed once the classifier was enabled again. The three scans
+// below bin into the SAME shared rule (TacClassFromHist) as every other
+// format — no per-format decision fork.
+
+// A1R5G5B5: 16-bit texels, alpha is bit 15. Alpha is BINARY (0/255), so the
+// histogram carries only the extremes — like DXT1, the shared rule can only
+// answer CUTOUT (hard mask) or OPAQUE (alpha unused), which is the correct
+// semantics for a 1-bit mask either way.
+static int TacScanA1R5G5B5(const uint8 *bits, uint32 pitch, uint32 width, uint32 height,
+                           TacHist *outHist)
+{
+	uint32 nZero = 0, nFull = 0, nTotal = 0;
+	uint32 scanned = 0;
+	for(uint32 y = 0; y < height && scanned < TAC_MAX_ALPHA_BYTES; y++){
+		const uint8 *row = bits + (size_t)y * pitch;
+		uint32 px = width;
+		uint32 room = (TAC_MAX_ALPHA_BYTES - scanned) / 2;
+		if(px > room)
+			px = room;
+		for(uint32 x = 0; x < px; x++){
+			uint16 v = TacU16(row + x * 2);
+			if(v & 0x8000u) nFull++;
+			else            nZero++;
+			nTotal++;
+		}
+		scanned += px * 2;
+	}
+	outHist->nZero = nZero;
+	outHist->nFull = nFull;
+	outHist->nMid = 0;
+	outHist->nMidLo = 0;
+	outHist->nMidCore = 0;
+	outHist->nMidHi = 0;
+	outHist->nTotal = nTotal;
+	return TacClassFromHist(outHist);
+}
+
+// A8: one byte per texel, the byte IS the alpha.
+static int TacScanA8Single(const uint8 *bits, uint32 pitch, uint32 width, uint32 height,
+                           TacHist *outHist)
+{
+	uint32 nZero = 0, nFull = 0, nMid = 0, nMidLo = 0, nMidCore = 0, nMidHi = 0;
+	uint32 nTotal = 0;
+	uint32 scanned = 0;
+	for(uint32 y = 0; y < height && scanned < TAC_MAX_ALPHA_BYTES; y++){
+		const uint8 *row = bits + (size_t)y * pitch;
+		uint32 px = width;
+		uint32 room = TAC_MAX_ALPHA_BYTES - scanned;
+		if(px > room)
+			px = room;
+		for(uint32 x = 0; x < px; x++){
+			TacBinAlpha8(row[x], &nZero, &nFull, &nMidLo, &nMidCore, &nMidHi);
+			nTotal++;
+		}
+		scanned += px;
+	}
+	nMid = nMidLo + nMidCore + nMidHi;
+	outHist->nZero = nZero;
+	outHist->nFull = nFull;
+	outHist->nMid = nMid;
+	outHist->nMidLo = nMidLo;
+	outHist->nMidCore = nMidCore;
+	outHist->nMidHi = nMidHi;
+	outHist->nTotal = nTotal;
+	return TacClassFromHist(outHist);
+}
+
+// A8L8: 16-bit texels (A<<8 | L); alpha is the high byte.
+static int TacScanA8L8(const uint8 *bits, uint32 pitch, uint32 width, uint32 height,
+                       TacHist *outHist)
+{
+	uint32 nZero = 0, nFull = 0, nMid = 0, nMidLo = 0, nMidCore = 0, nMidHi = 0;
+	uint32 nTotal = 0;
+	uint32 scanned = 0;
+	for(uint32 y = 0; y < height && scanned < TAC_MAX_ALPHA_BYTES; y++){
+		const uint8 *row = bits + (size_t)y * pitch;
+		uint32 px = width;
+		uint32 room = (TAC_MAX_ALPHA_BYTES - scanned) / 2;
+		if(px > room)
+			px = room;
+		for(uint32 x = 0; x < px; x++){
+			TacBinAlpha8(row[x * 2 + 1], &nZero, &nFull, &nMidLo, &nMidCore, &nMidHi);
+			nTotal++;
+		}
+		scanned += px * 2;
+	}
+	nMid = nMidLo + nMidCore + nMidHi;
+	outHist->nZero = nZero;
+	outHist->nFull = nFull;
+	outHist->nMid = nMid;
+	outHist->nMidLo = nMidLo;
+	outHist->nMidCore = nMidCore;
+	outHist->nMidHi = nMidHi;
+	outHist->nTotal = nTotal;
+	return TacClassFromHist(outHist);
+}
+
 // Formats handled by a scan (after TacFormatHasNoAlpha). Anything else is a
 // real failure: report UNSUPPORTED_FORMAT instead of silently going UNKNOWN.
 static bool TacFormatScannable(D3DFORMAT fmt)
@@ -840,6 +1031,9 @@ static bool TacFormatScannable(D3DFORMAT fmt)
 	case D3DFMT_A8R8G8B8:
 	case D3DFMT_A8B8G8R8:
 	case D3DFMT_A4R4G4B4:
+	case D3DFMT_A1R5G5B5:	// 1-bit alpha (PS2-converted masks) — N6 coverage
+	case D3DFMT_A8:		// single-channel alpha mask — N6 coverage
+	case D3DFMT_A8L8:	// alpha+luminance — N6 coverage
 		return true;
 	default:
 		return false;
@@ -928,7 +1122,7 @@ static int TacClassifyTex(const RwTexture *tex, int *outReason,
 			// whole session). The class is UNCHANGED: the shared rule on an
 			// all-full histogram is OPAQUE by (e) (no zero texel to test,
 			// no mid to blend). Still one-shot per texture (cached by
-			// raster) and budget-friendly: no LockRect is needed — the
+			// raster) and scan-friendly: no LockRect is needed — the
 			// histogram comes from the format, not the pixels.
 			outHist->nZero = 0;
 			outHist->nMid = 0;
@@ -982,6 +1176,18 @@ static int TacClassifyTex(const RwTexture *tex, int *outReason,
 		case D3DFMT_A4R4G4B4:
 			cls = TacScanA4R4G4B4((const uint8 *)lr.pBits, (uint32)lr.Pitch,
 			                      desc.Width, desc.Height, outHist);
+			break;
+		case D3DFMT_A1R5G5B5:
+			cls = TacScanA1R5G5B5((const uint8 *)lr.pBits, (uint32)lr.Pitch,
+			                      desc.Width, desc.Height, outHist);
+			break;
+		case D3DFMT_A8:
+			cls = TacScanA8Single((const uint8 *)lr.pBits, (uint32)lr.Pitch,
+			                      desc.Width, desc.Height, outHist);
+			break;
+		case D3DFMT_A8L8:
+			cls = TacScanA8L8((const uint8 *)lr.pBits, (uint32)lr.Pitch,
+			                  desc.Width, desc.Height, outHist);
 			break;
 		default:
 			// TacFormatScannable guarantees one of the cases above.
@@ -1194,21 +1400,36 @@ static void TacLogSummary(void)
 
 int TexAlpha_Classify(const RwTexture *tex)
 {
-	// Global kill-switch, checked BEFORE anything else (cache probe, budget,
-	// D3D access, counters). The PBR pipes already gate their calls on
-	// config->texAlphaClassify, but main.cpp's ped probe and any out-of-tree
+	// Global kill-switch, checked BEFORE anything else (cache probe, scan-rate
+	// accounting, D3D access, counters). The PBR pipes already gate their calls
+	// on config->texAlphaClassify, but main.cpp's ped probe and any out-of-tree
 	// caller reach this function directly; with the feature off they must get
 	// TAC_UNKNOWN at the cost of one load + branch and no state at all.
-	if(!config || !config->texAlphaClassify)
+	if(!config || !config->texAlphaClassify){
+		// N3/N6 root-cause visibility (2026-11-08 retest): with the
+		// classifier INI-off EVERY call returns TAC_UNKNOWN and this module
+		// logs NOTHING else — the live log reads as "classification broken"
+		// (every [BldOpacity]/[BldZW] receipt shows tac=0(UNKNOWN), zero
+		// texalpha: lines) when the feature is simply disabled. Name the
+		// cause once per session so the next gate sees it immediately.
+		static int s_tacDisabledLogged = 0;
+		if(!s_tacDisabledLogged){
+			s_tacDisabledLogged = 1;
+			dbglog("texalpha: DISABLED (config->texAlphaClassify=0) — every "
+			       "TexAlpha_Classify call returns TAC_UNKNOWN and the pipes "
+			       "take the TAC_UNKNOWN safe default; set "
+			       "texAlphaClassify=1 to classify");
+		}
 		return TAC_UNKNOWN;
+	}
 
 	// Null texture / null raster: no cache key and nothing to resolve, so this
-	// path must NOT consume the per-frame budget and must not be cached. Live
-	// log (23:04): all 15,282 UNKNOWNs were tex= (null-texture draws) and they
-	// burned the per-frame classification budget, starving real textures
-	// (vehicletyres128 stayed UNKNOWN). Count the reason + unknown and return
-	// BEFORE the frame-budget check (null-RASTER case only; a null texture is
-	// now OPAQUE — see below).
+	// path must NOT be scanned, NOT consume the scan-rate counter and must not
+	// be cached. Live log (23:04): all 15,282 UNKNOWNs were tex= (null-texture
+	// draws) and they burned the old per-frame classification budget, starving
+	// real textures (vehicletyres128 stayed UNKNOWN). Count the reason +
+	// unknown and return BEFORE the scan-rate accounting (null-RASTER case
+	// only; a null texture is now OPAQUE — see below).
 	if(!tex){
 		// No diffuse texture at all: a valid SA state (flat/untextured geometry,
 		// car paint, light/trim). The pipes bind gpWhiteTexture, so there is no
@@ -1234,6 +1455,23 @@ int TexAlpha_Classify(const RwTexture *tex)
 	// Hit path: at most 4 pointer compares inside TacCacheFind. No LockRect,
 	// no re-scan, and the only possible logging is the once-per-entry sample.
 	TacCacheEntry *e = TacCacheFind(ras, hash);
+	// BOUNDED RETRY (build-12): a cached TAC_UNKNOWN from a TRANSIENT
+	// extraction failure is re-scanned instead of served, at most
+	// TAC_UNKNOWN_RETRY_MAX times. The slot is freed and the scan path below
+	// re-installs it with `tries` carried forward (s_tacRetryCarry), so a
+	// texture whose D3D object appears after its first draw stops being
+	// UNKNOWN, while a permanently unextractable texture probes only that
+	// many times and then sticks — the cache contract ("not re-probed every
+	// frame") holds below the bound.
+	if(e && e->cls == TAC_UNKNOWN && e->retryable &&
+	   e->tries < TAC_UNKNOWN_RETRY_MAX){
+		e->tries++;
+		s_tacRetryCarry = e->tries;
+		e->raster = NULL;
+		if(s_tacUsed > 0)
+			s_tacUsed--;
+		e = NULL;
+	}
 	if(e){
 		// Cached path: print the STORED histogram once per entry (first 8 of
 		// the class), marked (cached), so a hit is never mistaken for a
@@ -1254,26 +1492,32 @@ int TexAlpha_Classify(const RwTexture *tex)
 		return e->cls;
 	}
 
-	// Frame budget: cap how many NEW textures are inspected per render frame,
-	// so a cold cache (level load / device reset) cannot stall a frame. Misses
-	// past the budget are NOT cached and are retried on a later frame.
+	// Scan-rate telemetry (build-11 stability fix): count first-sight scans
+	// per RWSRCGLOBAL(renderFrame) tick against TAC_CLASSIFY_BUDGET and bump
+	// s_tacBudgetSkips when a tick exceeds the target. The count is PERF
+	// TELEMETRY ONLY — it never gates classification and never changes the
+	// returned class. The old gate here ("a miss past the budget returns
+	// TAC_UNKNOWN and is retried on a later frame") made the class a function
+	// of the frame's draw order: budget-skipped draws took the TAC_UNKNOWN
+	// safe default while later draws of the SAME texture took the real class
+	// (the "textures classifying differently per draw" / angle-dependent
+	// transparency symptom — empty-alpha solids alpha-tested to invisible,
+	// soft decals painted solid black with ZWRITE on). First-sight scans
+	// always run now, so a raster's class is identical on every draw.
 	//
 	// ORDER IS THE CONTRACT (cost audit 2026-10-25): cache probe (above) ->
-	// budget rollover/check -> TacClassifyTex. Everything D3D (GetLevelDesc,
-	// LockRect) lives inside TacClassifyTex, so an over-budget frame makes
-	// ZERO D3D calls and a cached texture never locks either. Do not move any
-	// D3D access above this check.
+	// rate accounting -> TacClassifyTex. Everything D3D (GetLevelDesc,
+	// LockRect) lives inside TacClassifyTex; a cached texture never locks,
+	// and TacCacheFind's hit promotion keeps every-frame textures cached.
+	// Do not move any D3D access above this block.
 	uint32 frame = RWSRCGLOBAL(renderFrame);
 	if(frame != s_tacFrame){
 		s_tacFrame = frame;
 		s_tacBudget = 0;
 	}
-	if(s_tacBudget >= TAC_CLASSIFY_BUDGET){
-		s_tacBudgetSkips++;
-		return TAC_UNKNOWN;	// not cached — retried on a later frame
-	}
-
 	s_tacBudget++;
+	if(s_tacBudget > TAC_CLASSIFY_BUDGET)
+		s_tacBudgetSkips++;	// over-rate tick: classified anyway (stability)
 
 	int reason = TACR_NONE;
 	uint32 extOff = TAC_EXT_OFF_UNREAD;
@@ -1282,7 +1526,7 @@ int TexAlpha_Classify(const RwTexture *tex)
 	int cls = TacClassifyTex(tex, &reason, &extOff, &fmt, &hist);
 
 	// UNKNOWN is cached together with its reason: a broken extraction must not
-	// burn the per-frame budget re-probing the same texture forever. Install
+	// burn scan budget re-probing the same texture forever. Install
 	// picks an empty way first, else the per-set round-robin victim, and sets
 	// the key; every other field is overwritten below.
 	e = TacCacheInstall(ras, hash);
@@ -1297,6 +1541,13 @@ int TexAlpha_Classify(const RwTexture *tex)
 	e->nTotal = hist.nTotal;
 	e->fmt = fmt;
 	e->logged = 1;
+	// Bounded-retry bookkeeping: a retryable UNKNOWN keeps its `tries` count
+	// across the drop -> re-scan -> re-install cycle (s_tacRetryCarry), so
+	// the TAC_UNKNOWN_RETRY_MAX bound survives re-installs. A successful (or
+	// permanent) classification resets both fields.
+	e->retryable = (cls == TAC_UNKNOWN && TacReasonIsRetryable(reason)) ? 1 : 0;
+	e->tries = (uint8)s_tacRetryCarry;
+	s_tacRetryCarry = 0;
 
 	TacLogExtOffOnce(tex, extOff);
 	TacNoteReason(reason, tex, extOff, fmt);
@@ -1356,6 +1607,7 @@ void TexAlpha_ResetCache(void)
 	memset(s_tacCache, 0, sizeof(s_tacCache));
 	memset(s_tacVictim, 0, sizeof(s_tacVictim));
 	s_tacUsed = 0;
+	s_tacRetryCarry = 0;
 	s_tacFrame = 0xFFFFFFFF;
 	s_tacBudget = 0;
 	s_tacOpaque = 0;

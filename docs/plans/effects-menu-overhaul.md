@@ -134,3 +134,64 @@ re3/revc do, hosting skygfx effects/settings there.
 - **Wave 2 (after 1A/1B):** godrays postfx (postfx.cpp + new shader + resources); clouds recon
   (explorer) then prototype; channel wiring (water G, SSAO B, transparency A, vehicle dirt R+G).
 - Each wave: build via `python tools/fast_build.py`; NO commits; report ASI size/timestamp.
+
+## 8. Menu close-out log (2026-11-08 crash-resume lane)
+
+Status of the menu/UI items this plan tracks, after the master-detail restructure shipped
+(30 sections in `s_menuSections`, build 11) and the 2026-11-08 close-out lane. §0 above is
+untouched. Coverage-plan cross-reference: `2026-10-24-imgui-settings-coverage.md` P-items.
+
+**Closed in this lane (src/core/debugmenu_ui.cpp):**
+
+- P1-5 discrete-value round-trip: `envMapSize` and `reflectionMsaaLevel` rows now snap live
+  edits through `EnvMapSizeRowEdit` / `MsaaLevelRowEdit` (menu half of readIniFile's pow2 /
+  {0,2,4,8} contracts) — a stored value can never disagree with the next reload.
+- P2-2 `vignetteRadius` / `vignetteContrast` rows removed (no INI key, no reader; FxVignette
+  hard-codes 0.85/0.45 — `ivVignette*` on the IV grade section are the live knobs).
+- P2-3 `ssaoKernelSize` / `ssaoSampleCount` are read-only (`RK_STATICF` / `RK_STATIC`) in both
+  their homes — no editable control remains for keys with zero consumers.
+- P2-4 + P3-3 "Reset Values" renamed **"Apply to engine"** (it pushes Config into the legacy
+  CPostEffects mirrors; it never reset anything) with an explanatory tooltip, and a real
+  **"Reset section..."** action behind a confirmation modal that counts the rows which would
+  actually change (parser defaults via `kKeyDefaults` / `ResetRowToDefault`, filter applied).
+- P2-15 one-shot defaults audit: first build of the row table logs every live row lacking a
+  `kKeyDefaults` entry (`[Menu] defaults audit: ...`); `keySwitch` / `keyReload` entries added
+  (fresh-install value = unbound 0), so no live row shows "No parser default".
+- P3-1 global search already shipped in the master-detail header; **"Changed only"** checkbox
+  added next to it — hides rows still at their parser default (`RowIsChanged`, float epsilon
+  for to_string round-trips), combined with the text filter inside `RowMatches` so every pane
+  and the INI Keys / All Settings views get it from one implementation.
+- P3-8 `io.IniFilename` now points at `<game>\skygfx_imgui.ini` (absolute, next to
+  skygfx.ini) instead of littering the process CWD with `imgui.ini`.
+- §6-adjacent menu truth: the Presets pane's Modes radio list now covers all nine `ModeId`s
+  (was missing Legacy PC / Modern / Custom — the chip row already had them) and every hint
+  describes the landed `modeManager.cpp` profile instead of the old "expand later" placeholder.
+- Handoff (water lane M4/M5/M7/M8): `waterRefractionValid`, `waterCaustics`, `waterSss`,
+  `waterVolume` toggle rows added to **Water / Water feature switches** (keys verified against
+  readIniFile + saveConfigTo, default 1, `kKeyDefaults` entries added, inactive-reason wired
+  to `waterParallaxEnable` like the rest of the water block).
+
+**Verified already closed before this lane** (no action needed): P1-1 `stateBaselineEnable`
+consumer gates in main.cpp/depthhook.cpp; P1-2 persistence via `MenuWriteMissingIniKeys` +
+saveConfigTo additions (`waterStyle`/`waterQuality`/`NoiseQuality`/hotkeys/diagLevel/
+debugOverlay); P1-3 `tonemapMinExposure` reconciled to [-0.5..0.5] everywhere; P1-4 `envPower`
+[1..128]; P1-6 ImGui device-reset via `UI_ImGuiInvalidate/CreateDeviceObjects` (depthhook);
+P1-7 All Settings section; P1-8 PBR colour-filter `RowHardOverride` + disabled combo; P1-9
+`cloudRenderFix`/`waterFresnelSplit` round-trip; P2-12 `waterUseTimecycle` inactive badge;
+P2-14 `forwardPlusFallback` reads `skygfxN.ini`; P3-4 restart badges; P3-5 copy-as-INI;
+P3-6 live diagnostics; P3-7 section ON/OFF pills + off-hints; P3-11 All Settings counts.
+
+**Still open (with reason):**
+
+- §1 white blown-out ground — render lane (buildingPipe/postfx/SSAO), not menu scope.
+- §4 clouds architecture / §5 godrays shader + resources — render lanes, not menu scope.
+- §6 native-SA-menu (re3/revc CMenuManager) research — deliberately deferred by §6 itself
+  ("do not start Phase 2 before Phase 1 report"); the ImGui menu is the shipped settings surface.
+- P2-7 `skygfx.h` comment drift + P2-8/P2-9 parser default self-fallbacks — `skygfx.h` /
+  `main.cpp` are sibling-lane files.
+- P3-2 table/clipper layout for the wide rows — cosmetic; current fixed columns are correct
+  at the enforced 1120px minimum window width.
+- P3-9 `io.DisplaySize` / DPI and P3-10 WndProc restore + `WantCapture*` input gating —
+  needs hooks in the Win32 subclass lifecycle owned with the render/input lanes.
+- Mode-manager `TODO(M1b)` sparse `[Mode.<alias>]` overrides — modeManager persistence lane.
+

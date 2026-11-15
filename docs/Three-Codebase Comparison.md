@@ -128,7 +128,7 @@ aap (original v4.2b) → junior_dr (fork, backup_original/) → skygfx_plus (exp
 |-------------|------|---------|--------------|--------------|---------|
 | simplePS.hlsl | Y (inline) | Y | Y | `main_simple` | Basic texture * color |
 | buildingPipePS.hlsl | — | — | Y | `main_simple`, `main_simpleDetail`, `main_simpleFog`, `main_xboxBuilding`, `main_normMapBuilding` | Consolidated building PS (5 entry points) |
-| stochasticBuildingPS.hlsl | — | — | Y | `main_simpleStochastic`, `main_simpleDetailStochastic`, `main_xboxBuildingStochastic` | Consolidated stochastic building PS (3 entry points) |
+| stochasticBuildingPS.hlsl | — | — | Y | `main_simpleStochastic`, `main_simpleDetailStochastic`, `main_xboxBuildingStochastic` | Consolidated noise-based variation building PS (3 entry points) |
 | grassPS.hlsl | — | — | Y | `main_grass` | Grass rendering |
 | VehiclePBR_Modern.hlsl | — | — | Y | `main`, `main_envCar`, `main_ps2EnvSpecFx`, `main_specCarFx`, `main_mobileVehicle`, `main_normMapVehicle` | Unified vehicle PBR (6 entry points) |
 | Glass_Vehicle.hlsl | — | — | Y | `main_glass` | Vehicle glass rendering |
@@ -257,7 +257,7 @@ aap (original v4.2b) → junior_dr (fork, backup_original/) → skygfx_plus (exp
 | `ps2Modulate` | 0 | 0 | 0 | Global PS2 modulate |
 | `dualPass` | 0 | 0 | 0 | Global dual-pass |
 | `detailMaps` | 0 | 1 | 1 | Detail map rendering |
-| `stochasticTexturing` | — | 1 | — (in config) | Stochastic sampling |
+| `stochasticTexturing` | — | 1 | — (in config) | Noise-based variation |
 | `sunGlare` | -1 | 0 | -1 | Sun glare effect |
 | `neoWaterDrops` | -1 | 0 | -1 | Neo water drops |
 | `neoBloodDrops` | 0 | 0 | 0 | Neo blood drops |
@@ -470,7 +470,7 @@ aap (original v4.2b) → junior_dr (fork, backup_original/) → skygfx_plus (exp
 | GTAIV Building Pipe | — | — | Y | GTA IV forward pass |
 | PBR Building Pipe | — | — | Y | Physically-based |
 | Wind Animation | — | Y | Y | Building wind |
-| Stochastic Texturing | — | Y | Y | Grain-free detail |
+| Noise-based Variation | — | Y | Y | Grain-free detail |
 | Normal Mapping | — | — | Y | Per-pixel normals |
 | Environment Mapping | Y | Y | Y | Reflection maps |
 | Sphere Map Buildings | — | Y | Y | Sphere-mapped env |

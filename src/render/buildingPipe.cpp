@@ -6,6 +6,7 @@
 #include "profiler.h"	// PF_SCOPE / PfBindVS / PfBindPS — instrumentation only
 #include "texdefs.h"	// texdb.txt TexInfo + NM lane: <diffuse>_n pairing lookup (s8 bind)
 #include "texalpha.h"	// per-texture alpha classification (solid vs cutout/faded)
+#include "noise.h"	// SkyNoise::NoiseMaterialVariation — per-material noise-based variation
 //#include <fstream>
 
 void *ps2BuildingVS;
@@ -107,7 +108,11 @@ enum {
 //     #define surfDiff (surfProps.z)   <- xboxBuildingVS / buildingPBRVS /
 //                                         GTAIVBuilding_vs / vehicleVS alike
 // (buildingPBRVS additionally reads .y as surfLightScale — the dynamic-light
-//  scale; none of the other building VS reads .y.)
+//  scale; none of the other building VS reads .y. buildingPBRVS also reads
+//  .w as the N5 baked-prelight strength — 1.0 = real baked prelight keeps the
+//  trace-scale ambient, 0.0 = weak/zero prelight gets FULL ambient. Only the
+//  PBR cb packs it (surfUpload/surfW <- bldPrelightFactor); every other
+//  uploader leaves .w at 0 and every other building VS ignores .w.)
 //
 // RwSurfaceProperties' MEMORY layout is { ambient, specular, diffuse }
 // (external/d3d9/rwplcore.h:1492-1497 — NOT the "ambient, diffuse, specular"
@@ -323,9 +328,29 @@ TagRenderCB(RpAtomic *atomic, RxD3D9ResEntryHeader *resEntryHeader, RxD3D9Instan
 {
 	int alpha, alpharef;
 	RwRenderStateGet(rwRENDERSTATEALPHATESTFUNCTIONREF, (void*)&alpharef);
+	// FAM-N leaf-card REPLACE-inheritance plug (test12): the ONE/ZERO
+	// (REPLACE) tag pair and its SRCALPHA/INVSRCALPHA restore used to be
+	// L1 (rw cache) ONLY — the exact applied[]-gated cache-only write class
+	// the decal park / FX leg write three layers for. A device that drifted
+	// behind an unchanged cache (postfx Save/RestoreRawGeomStates raw-
+	// restores D3DRS_SRCBLEND/DESTBLEND from a snapshot that can already
+	// hold ONE/ZERO, pipeForceAlphaBlock :475-477) made the L1 restore a
+	// cache-hit no-op while the device kept REPLACE — and the NEXT mesh in
+	// the loop, which for a WIND atomic is a blended leaf card
+	// (R2-07: matA!=255 blends at SRCALPHA/INVSRCALPHA), inherited REPLACE:
+	// src*1+dst*0 paints the leaf-card atlas' black background solid —
+	// "near-black palms". Every write below is now L1+L2+L3 paired, same
+	// idiom as the PS2 env FX leg (:1822-1836): the set brackets the tag
+	// draw, the restore hands the canonical blend pair back to the loop.
 	if(config->buildingPipe == BUILDING_PS2){
 		RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDONE);
 		RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDZERO);
+		RwD3D9SetRenderState(D3DRS_SRCBLEND, (RwUInt32)D3DBLEND_ONE);
+		RwD3D9SetRenderState(D3DRS_DESTBLEND, (RwUInt32)D3DBLEND_ZERO);
+		if(d3d9device){
+			d3d9device->SetRenderState(D3DRS_SRCBLEND, (DWORD)D3DBLEND_ONE);
+			d3d9device->SetRenderState(D3DRS_DESTBLEND, (DWORD)D3DBLEND_ZERO);
+		}
 	}
 
 	alpha = CVisibilityPlugins::GetUserValue(atomic);
@@ -334,6 +359,12 @@ TagRenderCB(RpAtomic *atomic, RxD3D9ResEntryHeader *resEntryHeader, RxD3D9Instan
 
 	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
 	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
+	RwD3D9SetRenderState(D3DRS_SRCBLEND, (RwUInt32)D3DBLEND_SRCALPHA);
+	RwD3D9SetRenderState(D3DRS_DESTBLEND, (RwUInt32)D3DBLEND_INVSRCALPHA);
+	if(d3d9device){
+		d3d9device->SetRenderState(D3DRS_SRCBLEND, (DWORD)D3DBLEND_SRCALPHA);
+		d3d9device->SetRenderState(D3DRS_DESTBLEND, (DWORD)D3DBLEND_INVSRCALPHA);
+	}
 	RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTIONREF, (void*)alpharef);
 }
 
@@ -977,16 +1008,42 @@ buildingPipe_selectPS(TexInfo *texinfo, bool hasEnvMap)
 // these PSes clear the latch on entry): one upload per callback, never per mesh.
 static bool s_noiseDetailBoundCB = false;
 
-static void
-buildingPipe_bindNoiseFor(void *ps)
+// Stable per-material id for the noise-based-variation field: FNV-1a over the
+// texture name. Names are stable across runs, so the same material always maps
+// to the same id and therefore the same SkyNoise::NoiseMaterialVariation field.
+// A NULL/unnamed texture folds to 0 (a valid, deterministic id).
+static unsigned
+buildingPipe_materialId(RpMaterial *material)
 {
-	if(s_noiseDetailBoundCB || ps == NULL)
+	const char *name = (material && material->texture && material->texture->name)
+	                 ? material->texture->name : "";
+	unsigned h = 2166136261u;
+	for(const unsigned char *p = (const unsigned char *)name; *p; p++)
+		h = (h ^ *p) * 16777619u;
+	return h;
+}
+
+static void
+buildingPipe_bindNoiseFor(void *ps, RpMaterial *material)
+{
+	if(ps == NULL)
 		return;
 	if(ps != simpleNoiseDetailPS && ps != simpleDetailNoiseDetailPS &&
 	   ps != xboxBuildingNoiseDetailPS)
 		return;
-	pipeBindNoise(9);	// skygfx.h — sampler s9 (+ c49-c52), idempotent
-	s_noiseDetailBoundCB = true;
+	if(!s_noiseDetailBoundCB){
+		pipeBindNoise(9);	// skygfx.h — sampler s9 (+ c49-c52), idempotent
+		s_noiseDetailBoundCB = true;
+	}
+	// Per-material noise-based variation (NOT latched): each mesh uploads its
+	// own c3.x so two materials in the same callback never share a pattern.
+	// c3 is free across the whole simple/detail/xbox/noise-detail PS family
+	// (detailtile owns c1, the noise block owns c49-c52) and is read only by
+	// noiseDetailBuildingPS.hlsl as the per-material blue-noise phase.
+	unsigned materialId = buildingPipe_materialId(material);
+	float matVar = SkyNoise::NoiseMaterialVariation(materialId, 0.0f, 0.0f);
+	float c3[4] = { matVar, 0.0f, 0.0f, 0.0f };
+	RwD3D9SetPixelShaderConstant(3, c3, 1);
 }
 
 // =============================================================================
@@ -1015,7 +1072,7 @@ buildingPipe_bindSimplePS(RpAtomic *atomic, RpMaterial *material, TexInfo *texin
 	// throttled [BPIPE] report can name the PS this helper selected
 	// (evaluation order and value are unchanged).
 	void *selPS = buildingPipe_selectPS(texinfo, hasEnvMap);
-	buildingPipe_bindNoiseFor(selPS);	// s9 live before the PS bind
+	buildingPipe_bindNoiseFor(selPS, material);	// s9 + per-material variation live before the PS bind
 	RwD3D9SetPixelShader(selPS);
 	bpipeBindPS(*bTraceCur, selPS);
 	if(selPS && selPS == simpleNoiseDetailPS){
@@ -1183,15 +1240,18 @@ bpipeElideChanged4(bool &valid, float *last, const float *cur)
 // [bind-elision] stage-0 last-bound D3D texture pointer cache (POD statics),
 // building twin of vehiclePipe.cpp s_vehLastBoundD3D0. bldBindDiffuse3L's L1
 // park-and-set forces two real driver texture transitions per write; the
-// cache elides the whole three-layer write when the device PROVABLY already
-// holds the target: because L3 (d3d9device->SetTexture) is always written on
-// the miss path below, a valid cache entry with a matching pointer proves the
-// device holds that texture — skipping L1/L2 as well is then state-identical
-// (zero driver calls). The cache is invalidated at every building cb entry
-// (bldEntryContractTex0 -> bldBindElideInvalidate): postfx/water/other pipes
-// write foreign rasters onto device s0 between callbacks, so a cache that
-// survived a callback boundary could prove nothing. Only stage 0 (diffuse)
-// is wired; stage 1+ keep the plain L2 bind.
+// cache CLAIMS the device already holds the target (because L3
+// (d3d9device->SetTexture) is always written on the miss path below) — but a
+// mid-callback raw stage-0 writer (postfx/water/text/sprite flush, the TAC
+// classify draw, an FX leg) breaks that claim, so the Site A hit path
+// grounds the claim every hit via the ALWAYS-reached device contract
+// (bldStage0DevContract below, the grasssys.cpp:336-394 pattern): diverged ->
+// in-place three-layer repair, receipt [BldBind]. The cache is additionally
+// invalidated at every building cb entry (bldEntryContractTex0 ->
+// bldBindElideInvalidate): postfx/water/other pipes write foreign rasters
+// onto device s0 between callbacks, so a cache that survived a callback
+// boundary could prove nothing. Only stage 0 (diffuse) is wired; stage 1+
+// keep the plain L2 bind.
 static IDirect3DBaseTexture9 *s_bldLastBoundD3D0 = NULL;
 static bool                   s_bldLastBoundD3D0Valid = false;
 
@@ -1200,7 +1260,7 @@ static bool                   s_bldLastBoundD3D0Valid = false;
 // leak repairs and genuine texture changes.
 static int  s_bldBindElideSkips  = 0;
 static int  s_bldBindElideWrites = 0;
-static int  s_bldElideMismatch   = 0;	// hits whose readback proved the cache stale
+static int  s_bldElideMismatch   = 0;	// elided binds the device readback proved stale ([BldBind] repairs)
 static bool s_bldBindElideActive = false;
 
 static void
@@ -1211,8 +1271,9 @@ bldBindElideInvalidate(void)
 }
 
 // Throttled skip/write receipt (same cheap-gate idiom as bpipeElideSummary).
-// dev_mismatch counts elide hits the g_diagLevel>=1 readback verify found
-// stale (tags: bld_elide_mismatch at the site, bld_bindelide for this line).
+// dev_mismatch counts elided binds the ALWAYS-reached device readback
+// (bldStage0DevContract) found stale and repaired (tags: bld_bind_repair /
+// [BldBind] at the repair sites, bld_bindelide for this line).
 static void
 bldBindElideLog(void)
 {
@@ -1230,10 +1291,106 @@ bldBindElideLog(void)
 	s_bldElideMismatch = 0;
 }
 
+// -----------------------------------------------------------------------------
+// bldStage0DevContract — [BldBind] ALWAYS-reached stage-0 texture contract
+// (the grasssys.cpp:336-394 plant-draw repair pattern ported to the building
+// 3L bind sites).
+//
+// Both building-side stage-0 elisions — bldBindDiffuse3L's cache-hit skip and
+// buildingPipe_bindTexStage's same-texture skip — can no-op every layer while
+// a mid-callback raw writer (postfx Save/RestoreRawGeomStates, the TAC
+// classify draw, a TagRenderCB FX leg) left a leaked/NULL/wrong-family raster
+// on device stage 0: the mesh then samples garbage -> hard-edged giant black
+// blotches on pavement/world meshes (the N3 family). Ground truth is the RAW
+// DEVICE (GetTexture readback) vs the INTENDED bind — never the caches that
+// just proved stale. Diverged -> park-and-set repair through all three layers
+// (the bldBindDiffuse3L write) and re-arm the elision cache with the pointer
+// the repair pinned. Healthy binds cost one device Get + one Release, no
+// writes — same healthy-frame cost as the grasssys contract. The repair is
+// gated on a real extracted d3d target (grasssys `wantD3D` rule): extraction
+// failure means there is nothing provable to pin. Returns true when repaired.
+static bool
+bldStage0DevContract(RwTexture *resolved)
+{
+	if(!d3d9device || !resolved)
+		return false;
+	IDirect3DBaseTexture9 *dev0 = NULL;
+	if(FAILED(d3d9device->GetTexture(0, &dev0)))
+		return false;
+	IDirect3DTexture9 *want = TexDefsGetD3DTexture(resolved);
+	bool diverged = dev0 != (IDirect3DBaseTexture9*)want;
+	if(dev0)
+		dev0->Release();	// GetTexture AddRefs
+	if(!diverged || !want)
+		return false;
+	// L1 rw cache — PARK-AND-SET (park on a guaranteed-different raster
+	// first so the real set is always a transition, never a cache-hit no-op).
+	if(resolved->raster){
+		RwRaster *whiteRas = (gpWhiteTexture && gpWhiteTexture->raster)
+			? gpWhiteTexture->raster : NULL;
+		RwRaster *parkRas = (resolved->raster == whiteRas) ? NULL : whiteRas;
+		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)parkRas);
+		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)resolved->raster);
+	}
+	// L2 RW driver cache / texture apply.
+	RwD3D9SetTexture(resolved, 0);
+	// L3 raw device — the only layer a cache-hit skip can never hold back.
+	// `want` is a BORROWED TexDefsGetD3DTexture pointer (never released).
+	d3d9device->SetTexture(0, want);
+	// Re-arm the elision cache: this write just pinned `want` on the device.
+	s_bldLastBoundD3D0 = (IDirect3DBaseTexture9*)want;
+	s_bldLastBoundD3D0Valid = true;
+	s_bldElideMismatch++;
+	if(dbglog_throttle("bld_bind_repair"))
+		dbglog("[BldBind] stage-0 drift repaired: device held %p, wanted %p tex='%s' (RW cache already named the bind — cache-hit no-op class)",
+		       (void*)dev0, (void*)want,
+		       resolved->name ? resolved->name : "");
+	return true;
+}
+
+// ===========================================================================
+// N9 FAIL-CLOSED MISS POLICY — CONSUMER HONOR (world-geometry consumer).
+// Twin of vehiclePipe.cpp vehPolicyTexture (:843-878); the discrimination is
+// by POINTER IDENTITY via TexDefsMissTextureKind (texdefs.h:136-147) — never
+// by "is it NULL", never by `tex == TexDefsMissSentinel*()` (those accessors
+// CREATE their raster on demand; TexDefsMissTextureKind never allocates).
+//   NULL                                  -> keep NULL (caller resolves to
+//                                            gpWhiteTexture exactly as
+//                                            before the policy: the
+//                                            legitimate "no diffuse map")
+//   TEXDEFS_MISS_TEX_SPRITE               -> TexDefsMissSentinelWorld()
+//                                            (the transparent-magenta sprite
+//                                            sentinel is a 1x1 alpha=0
+//                                            sample: under the building
+//                                            GREATEREQUAL@1 alpha test every
+//                                            texel fails and the LOD
+//                                            building ERASES — the
+//                                            world-holing class the policy
+//                                            exists to prevent)
+//   TEXDEFS_MISS_TEX_WORLD / NONE         -> bind AS-IS (grey warrior or a
+//                                            real texture)
+// ===========================================================================
+static RwTexture *
+bldPolicyTexture(RwTexture *tex)
+{
+	if(!tex)
+		return NULL;	// legitimate "no diffuse map" (resolved -> white)
+	if(TexDefsMissTextureKind(tex) == TEXDEFS_MISS_TEX_SPRITE)
+		return TexDefsMissSentinelWorld();	// sprite class -> world action
+	return tex;			// real texture, or the world sentinel already
+}
+
 static void
 bldBindDiffuse3L(RwTexture *tex, int stage)
 {
-	RwTexture *resolved = tex ? tex : gpWhiteTexture;
+	// N9 policy honor: map BEFORE the [bind-elision] key resolution (the L3
+	// target `d3d` below is extracted from `resolved`, and the cache keys on
+	// that resolved pointer) so a sprite-class sentinel can never become a
+	// cache entry or reach the device. Same shape as vehiclePipe.cpp
+	// vehBindDiffuse3L (:968-970).
+	RwTexture *resolved = bldPolicyTexture(tex);
+	if(!resolved)
+		resolved = gpWhiteTexture;
 
 	// [bind-elision] resolve the L3 target FIRST so the elision check can run
 	// before ANY driver call. A NULL extraction leaves the device state
@@ -1248,38 +1405,26 @@ bldBindDiffuse3L(RwTexture *tex, int stage)
 			s_bldBindElideActive = true;
 			dbglog("[bind-elision] bld active");
 		}
-		// Hit: the device provably holds this exact texture (L3 was the last
-		// stage-0 writer on the previous miss) — skip all three layers,
-		// zero driver calls. Same-texture rebind stays a no-op, now a
-		// zero-call no-op.
-		//
-		// [verify lever] The proof only holds while nothing else wrote device
-		// s0 since the arm. Any raw stage-0 writer (postfx/water/text/sprite
-		// flush or an in-callback raw bind) breaks it. With g_diagLevel>=1
-		// read the device back on every hit; a mismatch is counted/logged
-		// (tag bld_elide_mismatch), the cache is dropped and the FULL
-		// three-layer write runs instead of the hit (self-heal). Lever off =
-		// untouched zero-call fast path.
+		// Hit: the cache claims the device already holds this exact texture
+		// (L3 was the last stage-0 writer on the previous miss) — a skip is
+		// only safe while that claim is TRUE. The proof only holds while
+		// nothing else wrote device s0 since the arm: any raw stage-0 writer
+		// (postfx/water/text/sprite flush, the TAC classify draw, an FX leg)
+		// breaks it and the skip would leave the leaked raster sampling on a
+		// pavement/world mesh (the N3 blotch class). ALWAYS ground-truth the
+		// device against the intended bind (bldStage0DevContract — the
+		// grasssys.cpp:336-394 pattern); a mismatch is repaired in place
+		// (counted in s_bldElideMismatch, receipt [BldBind], throttle
+		// bld_bind_repair) and this call is done — the repair wrote the same
+		// full three-layer state the miss path would.
 		if(d3d && s_bldLastBoundD3D0Valid &&
 		   s_bldLastBoundD3D0 == (IDirect3DBaseTexture9*)d3d){
-			bool mismatch = false;
-			if(g_diagLevel >= 1 && d3d9device){
-				IDirect3DBaseTexture9 *dev0 = NULL;
-				if(SUCCEEDED(d3d9device->GetTexture(0, &dev0))){
-					mismatch = dev0 != (IDirect3DBaseTexture9*)d3d;
-					if(dev0)
-						dev0->Release();	// GetTexture AddRefs
-				}
-			}
-			if(!mismatch){
+			if(!bldStage0DevContract(resolved)){
 				s_bldBindElideSkips++;
 				return;
 			}
-			s_bldElideMismatch++;
-			if(dbglog_throttle("bld_elide_mismatch"))
-				dbglog("[bind-elision] bld elide HIT mismatch: cached s0=%p but device holds a different texture — invalidating + full rebind",
-				       (void*)d3d);
-			bldBindElideInvalidate();
+			s_bldBindElideWrites++;
+			return;
 		}
 	}
 
@@ -1358,8 +1503,36 @@ bldEntryContractTex0(void)
 static void
 buildingPipe_bindTexStage(RwTexture *tex, int stage, RwTexture **last, bool *valid, int elideSlot)
 {
-	RwTexture *resolved = tex ? tex : gpWhiteTexture;
+	// N9 policy honor (bldPolicyTexture above, twin vehPolicyTexture): map a
+	// sprite-class MISS sentinel to the grey world sentinel BEFORE the
+	// resolved-pointer elision key below — the tracker then keys on the
+	// pointer actually bound, and a once-mapped material re-uses the same
+	// resolved pointer on subsequent meshes. NULL still resolves to
+	// gpWhiteTexture exactly as before the policy (legitimate "no diffuse
+	// map"). Without the remap the transparent-magenta 1x1 bound on stage 0
+	// alpha-fails GREATEREQUAL@1 and the LOD building vanishes.
+	RwTexture *resolved = bldPolicyTexture(tex);
+	if(!resolved)
+		resolved = gpWhiteTexture;
 	if(last && valid && *valid && *last == resolved){
+		// Site B ([BldBind] ALWAYS-reached contract, twin of bldBindDiffuse3L's
+		// Site A hit): the same-texture RESOLVED-pointer tracker only proves
+		// THIS callback last bound that texture — not that the DEVICE still
+		// holds it (a mid-callback raw stage-0 writer — postfx
+		// Save/RestoreRawGeomStates, the TAC classify draw, an FX leg — can
+		// leave a leaked/NULL/wrong-family raster behind; proving "I bound it
+		// before" would then SKIP the bind and the mesh samples garbage — the
+		// N3 black-blotch class). Ground-truth the raw device vs the intended
+		// bind exactly like Site A; a diverged device is repaired in place
+		// through all three layers inside bldStage0DevContract (receipt
+		// [BldBind], throttle bld_bind_repair) and this call returns — the
+		// repair wrote the full state the miss path would. Only stage 0 (the
+		// diffuse lane, the raster families the leaks land on) pays the read.
+		// Repair counter: s_bldElideMismatch/[bind-elision] bld line owns the
+		// number, so the repair path does NOT increment the elide-skip
+		// counter (a repair is not a skip).
+		if(stage == 0 && bldStage0DevContract(resolved))
+			return;
 		s_bpipeElideSkip[elideSlot]++;
 		return;
 	}
@@ -1584,6 +1757,12 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PS2(RwResEntry *repEntry, void *ob
 	// unconditional on every path out of this cb (see treeWind.h).
 	TreeAlpha_ApplyAlphaRef(atomic, rs.alpharef);
 
+	// Per-callback decal depth tracking (Xbox :2147-2151 / PBR :2983-2986):
+	// set when a blended mesh forced ZWRITE off, so the next non-decal mesh
+	// gets the callback baseline (ZWRITE TRUE, forced by the Switch guard)
+	// back before it draws.
+	bool decalZWriteOff = false;
+
 	// Per-mesh write elision (POD locals, reset every callback): the L1 blend
 	// enable is skipped only when THIS callback already pushed the same value,
 	// the sentinel forces the first mesh to write, and stage 0 only re-binds a
@@ -1591,6 +1770,7 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PS2(RwResEntry *repEntry, void *ob
 	// (buildingAmbient is refreshed once per frame), so its compare is
 	// exact-bitwise and the first mesh always uploads.
 	int elideLastVtxAlpha = -1;
+	int elideLastZWrite = -1;
 	RwTexture *elideLastTex0 = NULL;
 	bool elideTex0Valid = false;
 	bool elideAmbientValid = false;
@@ -1987,6 +2167,35 @@ static RwUInt32 s_bldSwitchSavedCull = (RwUInt32)rwCULLMODECULLBACK;
 // named instead of guessed.
 static int s_bldMeshLogged = 0;
 
+// BldZWriteParkGuard — RAII loop-exit guarantee for the decal ZWRITE park
+// (2026-11-09 BldZW audit). The decal policy parks ZWRITE (3 layers) on
+// blended meshes and restores it at loop end (or at the next non-decal mesh).
+// The loop-end close is a plain `if` after the mesh loop: a future early
+// `return`/`goto`/SEH unwind that skips it would leave ZWRITE parked across
+// the frame boundary (the prior-session draw-over-ped window). This guard's
+// destructor runs on EVERY function exit and re-applies the 3-layer
+// ZWRITE-TRUE restore if the park is still open, then clears the flag so the
+// normal loop-end close (and the Switch's own restore) stay no-ops. Park
+// semantics are unchanged — the guard only ever RESTORES, never parks.
+struct BldZWriteParkGuard {
+	bool *parked;
+	const char *lane;
+	BldZWriteParkGuard(bool *p, const char *l) : parked(p), lane(l) {}
+	~BldZWriteParkGuard(void)
+	{
+		if(!parked || !*parked)
+			return;
+		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
+		RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+		if(d3d9device)
+			d3d9device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+		*parked = false;
+		if(dbglog_throttle("bld_zw_guard"))
+			dbglog("[BldZW] %s: loop-exit guard restored ZWRITE (3L) — park was still open at function exit (early-return/SEH path); victims if leaked: CJ/peds, vehicles, markers (draw-over-CJ)",
+			       lane);
+	}
+};
+
 void
 CCustomBuildingDNPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *object, RwUInt8 type, RwUInt32 flags)
 {
@@ -2149,6 +2358,7 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *o
 	// gets the callback baseline (ZWRITE TRUE, forced by the Switch guard)
 	// back before it draws.
 	bool decalZWriteOff = false;
+	BldZWriteParkGuard zwGuard(&decalZWriteOff, "Xbox");
 
 	// Per-mesh write elision (POD locals, reset every callback): sentinels
 	// force the first write, texture stage 0 only re-binds a changed
@@ -2185,7 +2395,8 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *o
 		int tac = (config && config->texAlphaClassify) ? TexAlpha_Classify(material->texture) : TAC_UNKNOWN;
 		int blendOn;
 		// Same decision table as the PBR cb. tac=0 is TAC_UNKNOWN, NOT
-		// OPAQUE — a budget-skipped / not-yet-classified texture takes the
+		// OPAQUE — a TAC_UNKNOWN texture (classifier INI-off or cached
+		// extraction failure; budget-skip UNKNOWNs no longer exist) takes the
 		// SAFE DEFAULT (matTranslucent-only blend; see the PBR cb's
 		// TAC_UNKNOWN arm for the full rationale — vertex alpha alone must
 		// never blend solid geometry or the mesh blends AND ZWRITE-carves).
@@ -2234,16 +2445,29 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *o
 		}else
 			s_bpipeElideSkip[BPELIDE_XBOX] += 2;
 
-		// DECAL depth policy (PBR :2208-2236): a mesh that blends because of
-		// TRUE material translucency, OR a FADED soft decal mask
-		// (texture-alpha decals — material alpha 255), is an overlay and
-		// must not write depth. ZTEST stays TRUE. All three layers are
-		// written because a cache-only write is applied[]-gated and can leave
-		// the device writing depth; the Switch restores the pre-entry values
-		// on exit, and the else closes the policy before the next non-decal
-		// mesh's draw.
-		const bool decalBlend = (blendOn != 0) && (matTranslucent || tac == TAC_FADED);
-		if(decalBlend){
+		// DECAL depth policy (PBR :2208-2236): ANY mesh that blends is an
+		// overlay — TRUE material translucency, a FADED soft decal mask
+		// (texture-alpha decals — material alpha 255), or any future blend
+		// cause the decision table gains — and must not write depth. The
+		// old predicate parked ZWRITE only for (matTranslucent || FADED), so
+		// a blended mesh OUTSIDE that pair kept ZWRITE on and CARVED its
+		// depth plane (M2 carve family): every later draw behind it (CJ/peds,
+		// vehicles, markers) depth-rejected — the build-11 "buildings draw
+		// over CJ" victim chain. decalBlend == blendOn (structural coverage
+		// of ALL blended meshes at TAC_UNKNOWN / the fix-34 safe default).
+		// ZTEST stays TRUE (a nearer CJ still depth-rejects the decal). All
+		// three layers are written because a cache-only write is
+		// applied[]-gated and can leave the device writing depth; the Switch
+		// restores the pre-entry values on exit, and the else closes the
+		// policy before the next non-decal mesh's draw.
+		const bool decalBlend = (blendOn != 0);
+		// Narrowed (2026-11-09 BldZW audit): TAC_OPAQUE textures carry no
+		// usable alpha (unused/all-zero channel) — a matTranslucent flag on
+		// them is a phantom blend with nothing to blend, so parking ZWRITE
+		// would only carve a draw-over-ped window with no visual gain.
+		// OPAQUE blends keep ZWRITE ON (write depth like any solid mesh).
+		const bool decalPark = decalBlend && tac != TAC_OPAQUE;
+		if(decalPark){
 			// Consecutive decal meshes share the same three-layer FALSE
 			// burst — skip it when THIS callback already pushed it.
 			if(elideLastZWrite != 0){
@@ -2252,6 +2476,11 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *o
 				if(d3d9device)
 					d3d9device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
 				elideLastZWrite = 0;
+				// Throttled park receipt naming the carve victims (M2).
+				if(dbglog_throttle("bld_decal_park"))
+					dbglog("[BldZW] Xbox: blended mesh tex='%s' tac=%d matA=%u — ZWRITE parked (3L); carve victims if it wrote depth: CJ/peds, vehicles, markers",
+					       (material->texture && material->texture->name[0]) ? material->texture->name : "",
+					       tac, (unsigned)material->color.alpha);
 			}else
 				s_bpipeElideSkip[BPELIDE_XBOX] += 3;
 			decalZWriteOff = true;
@@ -2267,6 +2496,14 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *o
 			}else
 				s_bpipeElideSkip[BPELIDE_XBOX] += 3;
 			decalZWriteOff = false;
+		}else if(decalBlend){
+			// OPAQUE-texture blend (tac=1): park SKIPPED — throttled delta
+			// receipt names the producer class now keeping ZWRITE ON.
+			if(dbglog_throttle("bld_opaque_nopark"))
+				dbglog("[BldZW] Xbox: OPAQUE-texture blend (tac=%d) SKIPPED ZWRITE park — keeps ZWRITE ON; no draw-over-ped carve; tex='%s' matA=%u",
+				       tac,
+				       (material->texture && material->texture->name[0]) ? material->texture->name : "",
+				       (unsigned)material->color.alpha);
 		}
 
 		// Alpha test is left to the Switch (pipeForceAlphaBlock) and
@@ -2366,7 +2603,7 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *o
 			// the reflection layer); the alpharef move still covers it.
 			// Instrumentation only: same call, result kept for the report.
 			void *selPS = buildingPipe_selectPS(texinfo, true);
-			buildingPipe_bindNoiseFor(selPS);	// s9 live before the PS bind
+			buildingPipe_bindNoiseFor(selPS, material);	// s9 + per-material variation live before the PS bind
 			RwD3D9SetPixelShader(selPS);
 			bpipeBindPS(bTrace[BTR_XBOX], selPS);
 		}else{
@@ -2389,6 +2626,23 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *o
 		}
 
 		D3D9RenderDual(config->dualPassBuilding, resEntryHeader, instancedData, texinfo);
+	}
+	// decalZWriteOff close (M2 carve family / build-11 ordering hole): the
+	// mesh loop can END on a blended mesh with ZWRITE parked on all three
+	// layers — the old exit restored L1 only (buildingPipe_restoreRenderState)
+	// and left L2/L3 parked until the Switch's own ZWRITE restore ran, so
+	// anything drawn in between (probes, the next pipe group) inherited
+	// ZWRITE-off and never carved its depth (later building re-draws then
+	// painted over it). Hand the callback baseline (ZWRITE TRUE) back NOW,
+	// three-layer paired, exactly like the else-arm above.
+	if(decalZWriteOff){
+		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
+		RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+		if(d3d9device)
+			d3d9device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+		decalZWriteOff = false;
+		if(dbglog_throttle("bld_zw_close"))
+			dbglog("[BldZW] Xbox: mesh loop ended on a blended mesh — ZWRITE restored at loop end (3L); victims if leaked: CJ/peds, vehicles, markers (draw-over-CJ)");
 	}
 	// Close the cb-level leaks. The per-mesh VERTEXALPHAENABLE sets (:932) and
 	// the env branch's TEXTUREADDRESS=WRAP (:952) otherwise survive past this
@@ -2630,6 +2884,42 @@ static IDirect3DTexture9 *bldIndoorNeutralTex(IDirect3DDevice9 *dev)
 	return tex;
 }
 
+// -----------------------------------------------------------------------------
+// bldPrelightFactor — N5 baked-prelight strength (the c20.w ambient-split key
+// buildingPBRVS reads as surfPrelight). Class is a STATIC geometry property,
+// never a time-of-day value:
+//   1.0  real baked prelight: the prelight flag is set AND the static prelight
+//        colour stream carries light (pre0 rgb != 0) -> the VS keeps the
+//        trace-scale kAmbientScale (0.10) — pre-lit building appearance is
+//        BIT-IDENTICAL to a 0-boost upload (the boost term is exactly 0).
+//   0.0  N5 class: PRELIT flag missing OR pre0 rgb == 0 (missing/black static
+//        prelight buffer, e.g. vegetation). The VS's baked term is then empty
+//        (prelight * surfDiff, and the CPU fallback leaves the dynamic-light
+//        scale at the raw ~0 diffuse), so ambient*surfAmb*kAmbientScale was
+//        the whole lighting (0.05 floor * 0.10 = 0.005 -> near-black foliage).
+//        The VS gives these the full ambient instead.
+// Pattern = vehiclePipe.cpp:1031 (`->surfaceProps.w = flags &
+// rpGEOMETRYPRELIT`), extended with the pre0 colour probe — the vehicle VSs
+// guard their ambient behind isPrelit, the PBR building VS scales ambient on
+// it, so the flag alone would boost road/terrain/vegetation ONLY when the
+// stream is actually empty. Surfacing: packed into surfUpload[3]/surfW[3]
+// (PBR cb only). SAFE by construction: the other building VSs (xboxBuildingVS,
+// xboxBuildingWindVS, PS2/GTAIV FX VSs) never read c20.w, and the WIND-VS
+// branch shares surfUpload's constants but binds its own VS which ignores .w.
+static float
+bldPrelightFactor(RwUInt32 flags, RpAtomic *atomic)
+{
+	if(!(flags & rpGEOMETRYPRELIT))
+		return 0.0f;
+	RpGeometry *geo = atomic ? atomic->geometry : NULL;
+	const RwRGBA *pre = geo ? RpGeometryGetPreLightColors(geo) : NULL;
+	if(!pre)
+		return 0.0f;
+	if(pre[0].red == 0 && pre[0].green == 0 && pre[0].blue == 0)
+		return 0.0f;
+	return 1.0f;
+}
+
 void
 CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *object, RwUInt8 type, RwUInt32 flags)
 {
@@ -2686,10 +2976,18 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 		RwD3D9SetRenderState(D3DRS_ALPHAFUNC, d3dfn);
 		RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
 
-		// Switch forced zwrite TRUE both layers; the IBL pass can leave
-		// the raw device side off again.
+		// Switch forced zwrite TRUE at entry; the IBL pass can leave the
+		// raw DEVICE side off again — and this re-assert was a 2-layer
+		// write (L1 rw cache + L2 driver cache only), so the applied[]-gated
+		// L2 set could no-op against an unchanged cache while the device
+		// kept ZWRITE off for the whole mesh loop: the building meshes then
+		// drew without depth writes and every later draw (CJ/peds, vehicles,
+		// markers) depth-tested against an uncarved buffer. 3-layer paired
+		// burst only (M2 rule) — raw L3 completes the pair.
 		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
 		RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+		if(d3d9device)
+			d3d9device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
 	}
 	// Re-assert the pipe cull (Im2D fullscreen pass may leave CULLNONE):
 	// rw-only was not enough — when the rw cache already said BACK the
@@ -2946,6 +3244,7 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 	// forced ZWRITE off, so the next non-decal mesh gets the callback baseline
 	// (ZWRITE TRUE, forced by the Switch guard) back before it draws.
 	bool decalZWriteOff = false;
+	BldZWriteParkGuard zwGuard(&decalZWriteOff, "PBR");
 
 	// Per-mesh write elision (POD locals, reset every callback): sentinels
 	// force the first write, textures only re-bind when the RwTexture*
@@ -2972,6 +3271,31 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 	for(int numMeshes = resEntryHeader->numMeshes; numMeshes--; instancedData++){
 		RpMaterial *material = instancedData->material;
 		float colorScale = 1.0f;
+		// N5 baked-prelight strength -> c20.w (buildingPBRVS surfPrelight).
+		// Geometry-invariant (see bldPrelightFactor): recomputed per mesh is
+		// pointer fetch + branches only. The else-branch below packs the same
+		// value into its white surfW upload so BOTH c20.w writers agree.
+		float prelightFactor = bldPrelightFactor(flags, atomic);
+		// One-shot receipt naming the first N5-classified geometry the PBR cb
+		// actually draws (the [N5] treeWind receipt fires only when wind is
+		// active — this also surfaces non-trees/static prelit-but-black
+		// geometry without any extra hot-path cost after frame one).
+		if(prelightFactor == 0.0f && buildingPBRVS){
+			static bool s_n5bldReceiptDone = false;
+			if(!s_n5bldReceiptDone){
+				s_n5bldReceiptDone = true;
+				RpGeometry *g = atomic->geometry;
+				const RwRGBA *pre = g ? RpGeometryGetPreLightColors(g) : NULL;
+				dbglog("[N5bld] zero-prelight geometry at PBR cb: geo=%p "
+				       "prelit=%d pre0=(%u,%u,%u) tex='%s' matA=%u",
+				       (void*)g, (flags & rpGEOMETRYPRELIT) ? 1 : 0,
+				       pre ? pre[0].red : 0u, pre ? pre[0].green : 0u,
+				       pre ? pre[0].blue : 0u,
+				       (material->texture && material->texture->name[0])
+				           ? material->texture->name : "",
+				       (unsigned)material->color.alpha);
+			}
+		}
 		if(material->texture)
 			colorScale = config->ps2ModulateBuilding ? 255.0f/128.0f : 1.0f;
 		buildingPipe_bindTexStage(material->texture, 0, &elideLastTex0,
@@ -2983,9 +3307,10 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 		// the CPU blend enable AND c48.w (main_building's alpha override:
 		// 1 = force output alpha 1, 0 = use the texture alpha).
 		// config->texAlphaClassify=0 disables the classifier (TAC_UNKNOWN,
-		// legacy-hasAlpha decision below); TexAlpha_Classify self-budgets
-		// to 256 newly-seen textures per render frame (warm-up ~16 frames
-		// for a 4k-texture level).
+		// legacy-hasAlpha decision below); TexAlpha_Classify always scans
+		// first-sight textures (build-11 stability fix — the old 256/frame
+		// self-budget that skipped to TAC_UNKNOWN is gone; 256/tick is now
+		// scan-rate telemetry only, see texalpha.cpp).
 		//
 		// SA paint marker: material->color.alpha == 16 means "this mesh uses
 		// the paint colour" — it is NOT a translucency value (same rule as
@@ -3009,9 +3334,11 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 		float shaderAlpha;
 		// AUDITED mapping (texalpha.h): TAC_UNKNOWN=0, TAC_OPAQUE=1,
 		// TAC_CUTOUT=2, TAC_FADED=3. tac=0 in a log line is UNKNOWN, NOT
-		// OPAQUE — a budget-skipped / not-yet-classified texture takes
-		// the SAFE DEFAULT below (replaces the legacy hasAlpha fallback /
-		// parity item 2, same shape as vehiclePipe). TAC_OPAQUE MUST still
+		// OPAQUE — a TAC_UNKNOWN texture (classifier INI-off or cached
+		// extraction failure — budget-skip UNKNOWNs no longer exist, see
+		// texalpha.cpp) takes the SAFE DEFAULT below (replaces the legacy
+		// hasAlpha fallback / parity item 2, same shape as vehiclePipe).
+		// TAC_OPAQUE MUST still
 		// yield 1.0 or solid meshes with an unused alpha channel (all-zero
 		// DXT3 nibbles, DXT1 with unused transparency) are alpha-tested away.
 		switch(tac){
@@ -3024,7 +3351,8 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 		case TAC_UNKNOWN:	// tac=0 == UNKNOWN → SAFE DEFAULT (see below)
 		default:
 			// SAFE DEFAULT (unconditional — runs when the classifier is
-			// INI-off AND when it budget-skips a texture): opaque geometry
+			// INI-off or the texture resolved TAC_UNKNOWN (extraction
+			// failure): opaque geometry
 			// draws opaque, only real decal/vedecal materials blend.
 			//   blendOn = matTranslucent — vertex alpha alone must never
 			//   blend solid geometry. SA world meshes carry vertex alpha
@@ -3074,22 +3402,34 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 		if(!vertexAlphaIsAlpha)
 			blendOn = matTranslucent ? 1 : 0;
 
-		// DECAL depth policy (user m0452): a mesh that blends because of TRUE
-		// material translucency, OR a FADED soft decal mask (texture-alpha
-		// decals — material alpha 255), is an overlay — decals, road
-		// sublayers, shadows — and must not write depth or it carves
-		// itself into the depth buffer. ZTEST stays TRUE (never disable it):
-		// the uneven depth buffer already holds CJ and the world, so a nearer
-		// CJ depth-rejects the decal (decal over buildings, never over CJ)
-		// while the decal still passes where it really is in front. All three
-		// layers are written (rw cache / D3D9 driver cache / raw device)
-		// because a cache-only write is applied[]-gated and can leave the
-		// device writing depth. Exit restoration is covered twice:
-		// buildingPipe_restoreRenderState(&rs) restores the rw cache (L1) and
-		// the Switch ZWRITE guard restores driver/device (L2/L3) to their
-		// pre-callback values.
-		const bool decalBlend = (blendOn != 0) && (matTranslucent || tac == TAC_FADED);
-		if(decalBlend){
+		// DECAL depth policy (user m0452): ANY mesh that blends is an
+		// overlay — TRUE material translucency, a FADED soft decal mask
+		// (texture-alpha decals — material alpha 255), or any future blend
+		// cause the decision table gains: decals, road sublayers, shadows,
+		// glass — and must not write depth or it carves itself into the
+		// depth buffer (M2 carve family — build-11 "buildings draw over CJ":
+		// the carved plane depth-rejects every later draw behind it, victims
+		// CJ/peds, vehicles, markers). The old predicate parked ZWRITE only
+		// for (matTranslucent || tac == TAC_FADED); decalBlend == blendOn
+		// makes the park cover ALL blended meshes structurally — including
+		// every TAC_UNKNOWN / fix-34 safe-default blend. ZTEST stays TRUE
+		// (never disable it): the uneven depth buffer already holds CJ and
+		// the world, so a nearer CJ depth-rejects the decal (decal over
+		// buildings, never over CJ) while the decal still passes where it
+		// really is in front. All three layers are written (rw cache / D3D9
+		// driver cache / raw device) because a cache-only write is
+		// applied[]-gated and can leave the device writing depth. Exit
+		// restoration is covered three times: the loop-end decalZWriteOff
+		// close below (all layers), buildingPipe_restoreRenderState(&rs)
+		// (L1) and the Switch ZWRITE guard (L2/L3 pre-callback values).
+		const bool decalBlend = (blendOn != 0);
+		// Narrowed (2026-11-09 BldZW audit): TAC_OPAQUE textures carry no
+		// usable alpha (unused/all-zero channel) — a matTranslucent flag on
+		// them is a phantom blend with nothing to blend, so parking ZWRITE
+		// would only carve a draw-over-ped window with no visual gain.
+		// OPAQUE blends keep ZWRITE ON (write depth like any solid mesh).
+		const bool decalPark = decalBlend && tac != TAC_OPAQUE;
+		if(decalPark){
 			// Consecutive decal meshes share the same three-layer FALSE
 			// burst — skip it when THIS callback already pushed it.
 			if(elideLastZWrite != 0){
@@ -3098,6 +3438,11 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 				if(d3d9device)
 					d3d9device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
 				elideLastZWrite = 0;
+				// Throttled park receipt naming the carve victims (M2).
+				if(dbglog_throttle("bld_decal_park"))
+					dbglog("[BldZW] PBR: blended mesh tex='%s' tac=%d(%s) matA=%u — ZWRITE parked (3L); carve victims if it wrote depth: CJ/peds, vehicles, markers",
+					       (material->texture && material->texture->name[0]) ? material->texture->name : "",
+					       tac, TexAlphaClassTag(tac), (unsigned)material->color.alpha);
 			}else
 				s_bpipeElideSkip[BPELIDE_PBR] += 3;
 			decalZWriteOff = true;
@@ -3113,6 +3458,14 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 			}else
 				s_bpipeElideSkip[BPELIDE_PBR] += 3;
 			decalZWriteOff = false;
+		}else if(decalBlend){
+			// OPAQUE-texture blend (tac=1): park SKIPPED — throttled delta
+			// receipt names the producer class now keeping ZWRITE ON.
+			if(dbglog_throttle("bld_opaque_nopark"))
+				dbglog("[BldZW] PBR: OPAQUE-texture blend (tac=%d) SKIPPED ZWRITE park — keeps ZWRITE ON; no draw-over-ped carve; tex='%s' matA=%u",
+				       tac,
+				       (material->texture && material->texture->name[0]) ? material->texture->name : "",
+				       (unsigned)material->color.alpha);
 		}
 
 		// NM lane: bind <diffuse>_n on s8 (raw D3D9) + c48 = {bound, intensity,
@@ -3210,9 +3563,10 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 		if(flags & rpGEOMETRYLIGHT){
 			pipeUploadMatCol(flags, material, REG_matCol);
 			// c20 layout for buildingPBRVS: x=ambient scale, y=dynamic-light
-			// scale, z=prelight scale (float4 upload — the old
-			// RwSurfaceProperties{3 floats} upload read 4 bytes past the
-			// struct for the 4th component).
+			// scale, z=prelight scale, w=baked-prelight strength
+			// (bldPrelightFactor — the VS's N5 ambient-split key; float4
+			// upload — the old RwSurfaceProperties{3 floats} upload read 4
+			// bytes past the struct for the 4th component).
 			//
 			// SA assets commonly ship diffuse=0 (lighting baked into vertex
 			// colours; ps2BuildingVS never uses surfDiff) → surfDiff=0 zeroes
@@ -3227,13 +3581,20 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 			// (ps2BuildingVS = prelight + ambient*surfAmb, no light sum).
 			// Materials with a real diffuse value are a complete no-op.
 			RwSurfaceProperties surf = material->surfaceProps;
-			float surfUpload[4] = { surf.ambient, surf.diffuse, surf.diffuse, 0.0f };
+			float surfUpload[4] = { surf.ambient, surf.diffuse, surf.diffuse,
+				prelightFactor };
 			if(surf.diffuse < 1e-4f)
 				surfUpload[2] = 1.0f; // prelight passes at full strength
 			RwD3D9SetVertexShaderConstant(REG_surfProps, surfUpload, 1);
 		}else{
 			static float white[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-			static float surfW[4] = { 1.0f, 1.0f, 1.0f, 0.0f };
+			// Same N5 key as the lighting branch above — the white surfW
+			// upload ALSO carries the per-geometry prelight strength so
+			// non-rpGEOMETRYLIGHT / prelit-black geometry gets the same
+			// ambient-split treatment (and pre-lit ones stay bit-identical
+			// at 0 boost). Was a static with .w=0 — the static can no longer
+			// hold a per-geometry value; rebuilt per mesh (4 floats).
+			float surfW[4] = { 1.0f, 1.0f, 1.0f, prelightFactor };
 			RwD3D9SetVertexShaderConstant(REG_matCol, white, 1);
 			RwD3D9SetVertexShaderConstant(REG_surfProps, surfW, 1);
 		}
@@ -3355,6 +3716,23 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 			}
 		}
 	}
+	// decalZWriteOff close (M2 carve family / build-11 ordering hole): the
+	// mesh loop can END on a blended mesh with ZWRITE parked on all three
+	// layers — the old exit restored L1 only (buildingPipe_restoreRenderState)
+	// and left L2/L3 parked until the Switch's own ZWRITE restore ran, so
+	// anything drawn in between (probes, the next pipe group) inherited
+	// ZWRITE-off and never carved its depth (later building re-draws then
+	// painted over it). Hand the callback baseline (ZWRITE TRUE) back NOW,
+	// three-layer paired, exactly like the else-arm above.
+	if(decalZWriteOff){
+		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
+		RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+		if(d3d9device)
+			d3d9device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+		decalZWriteOff = false;
+		if(dbglog_throttle("bld_zw_close"))
+			dbglog("[BldZW] PBR: mesh loop ended on a blended mesh — ZWRITE restored at loop end (3L); victims if leaked: CJ/peds, vehicles, markers (draw-over-CJ)");
+	}
 
 	// W8-2: close the tree alpharef push before the cb-entry restore.
 	TreeAlpha_RestoreAlphaRef();
@@ -3464,6 +3842,37 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Switch(RwResEntry *repEntry, void 
 	RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
 	if(d3d9device)
 		d3d9device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+
+	// ZTEST/ZFUNC depth-test force (build-11 "buildings draw over CJ", root
+	// family "Z-test state leaked into the draw"): the guard above repairs
+	// ZWRITE but nothing ever repaired ZENABLE/ZFUNC — postfx/DepthHook raw
+	// writes drift the DEVICE behind unchanged caches (pipelinecommon :1400
+	// evidence "ZFUNC drv=4/dev=8" — device at D3DCMP_ALWAYS) and building
+	// meshes — including the transparent-pass re-draws that run AFTER CJ —
+	// then depth-test with ALWAYS and paint over the player. Force the
+	// canonical geometry signature through the layers that own it: ZTEST
+	// TRUE has an rw twin (L1+L2+L3 paired); ZFUNC has none (L2+L3 paired,
+	// pedOpaqueEnforce idiom). No save/restore: TRUE/LESSEQUAL ARE the
+	// world's own normal-state values, so leaving them behind is the repair,
+	// not a leak (DefPipe entry-contract doctrine, main.cpp:2019).
+	// Throttled drift probe FIRST (2s gate pays the two raw reads only when
+	// the line can fire), then the force, then the receipt naming victims.
+	bool bldZDepthDue = dbglog_throttle("bld_zdepth");
+	DWORD bldZen = TRUE, bldZfn = D3DCMP_LESSEQUAL;
+	if(bldZDepthDue && d3d9device){
+		d3d9device->GetRenderState(D3DRS_ZENABLE, &bldZen);
+		d3d9device->GetRenderState(D3DRS_ZFUNC, &bldZfn);
+	}
+	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
+	RwD3D9SetRenderState(D3DRS_ZENABLE, TRUE);
+	RwD3D9SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+	if(d3d9device){
+		d3d9device->SetRenderState(D3DRS_ZENABLE, TRUE);
+		d3d9device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+	}
+	if(bldZDepthDue && d3d9device && (bldZen != (DWORD)TRUE || bldZfn != (DWORD)D3DCMP_LESSEQUAL))
+		dbglog("[BldZW] Switch: Z-test drift at entry (zen=%u zfunc=%u) — forced ZTEST=1 ZFUNC=LESSEQUAL (3L-paired); victims if leaked: CJ/peds overdrawn by buildings/props (draw-over-CJ)",
+		       (unsigned)bldZen, (unsigned)bldZfn);
 
 	// Non-screen-raster probe — geometry half of the blank-world hunt
 	// (main.cpp:1570 m0170/m0171 documents the failure class: a mid-frame

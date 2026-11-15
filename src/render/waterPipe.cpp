@@ -1372,27 +1372,47 @@ static inline float FoamHash2(int x, int y, int salt)
 #define FOAM_TEX_N 256
 #define FOAM_CELLS 8
 
+// M5 caustics gate the .gb channels were last baked with (-1 = never).
+// Lets EnsureFoamTex re-bake when the key flips (INI edit or menu toggle).
+static int s_foamCausGate = -1;
+
+// ---- F3 wiring: M5 caustics master gate (INI key, default ON) ----
+// The ONE consumption of the caustics key in this file (unify directive: one
+// shared impl per constant): the c17.y/z upload AND the foam-texture .gb
+// caustic-channel bake both AND through here. Null-config -> ON (INI default
+// 1) so a pre-init draw uploads exactly the shipped values.
+static inline RwBool waterM5CausticsGate(void)
+{
+    return config ? config->waterCaustics : 1;
+}
+
 static void EnsureFoamTex(void)
 {
-    if(g_foamTex) return;
+    RwBool causOn = waterM5CausticsGate();
+    // Bake matches the live gate -> done. Gate flipped since the bake ->
+    // fall through and rewrite the channels (managed pool re-lock; the .r
+    // foam mask is regenerated identically, only .gb are gate-zeroed).
+    if(g_foamTex && s_foamCausGate == causOn) return;
     if(!g_d3dDevice) return;
 
-    // AUTOGENMIPMAP: the foam fetch rides scrolling UVs — mips keep it
-    // alias-free at distance (same req as the detail map).
-    HRESULT hr = g_d3dDevice->CreateTexture(FOAM_TEX_N, FOAM_TEX_N, 0,
-        D3DUSAGE_AUTOGENMIPMAP, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED,
-        &g_foamTex, nullptr);
-    g_foamTexHasMips = SUCCEEDED(hr) && g_foamTex != nullptr;
     if(!g_foamTex){
-        // Fallback: single-level texture (MIPFILTER off at bind time).
-        hr = g_d3dDevice->CreateTexture(FOAM_TEX_N, FOAM_TEX_N, 1,
-            0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &g_foamTex, nullptr);
-        g_foamTexHasMips = false;
-        if(FAILED(hr) || !g_foamTex){
-            g_foamTex = nullptr;
-            if(dbglog_throttle("water_nofoam"))
-                dbglog("[water] foam texture create failed hr=0x%08X", hr);
-            return;
+        // AUTOGENMIPMAP: the foam fetch rides scrolling UVs — mips keep it
+        // alias-free at distance (same req as the detail map).
+        HRESULT hr = g_d3dDevice->CreateTexture(FOAM_TEX_N, FOAM_TEX_N, 0,
+            D3DUSAGE_AUTOGENMIPMAP, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED,
+            &g_foamTex, nullptr);
+        g_foamTexHasMips = SUCCEEDED(hr) && g_foamTex != nullptr;
+        if(!g_foamTex){
+            // Fallback: single-level texture (MIPFILTER off at bind time).
+            hr = g_d3dDevice->CreateTexture(FOAM_TEX_N, FOAM_TEX_N, 1,
+                0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &g_foamTex, nullptr);
+            g_foamTexHasMips = false;
+            if(FAILED(hr) || !g_foamTex){
+                g_foamTex = nullptr;
+                if(dbglog_throttle("water_nofoam"))
+                    dbglog("[water] foam texture create failed hr=0x%08X", hr);
+                return;
+            }
         }
     }
 
@@ -1452,8 +1472,29 @@ static void EnsureFoamTex(void)
             float f = (blob * 0.8f + noise * 0.30f) * mask;
             if(f > 1.0f) f = 1.0f;
             if(f < 0.0f) f = 0.0f;
-            int c = (int)(f * 255.0f + 0.5f);
-            dst[x] = ((DWORD)255 << 24) | ((DWORD)c << 16) | ((DWORD)c << 8) | (DWORD)c;
+            // M5 caustic channels (DISTINCT from the foam mask .r): .g = a
+            // ridged value-noise "web" (folded Perlin -> thin bright ridges
+            // that read as caustic filaments after WaterCaustics' sharpen),
+            // .b = a second, higher-frequency scale for breakup. Both are
+            // periodic value noise (DetailValueNoise) so the tile stays
+            // seamless, same recipe family as the detail map. The old
+            // grayscale write (R=G=B) made .gb read back the foam mask, so
+            // WaterCaustics was sharpening FOAM instead of caustics — fixed.
+            float ridge = DetailValueNoise(u * 6.0f, v * 6.0f, 6);
+            float web   = 1.0f - fabsf(ridge * 2.0f - 1.0f);   // fold -> [0,1] ridges
+            web = web * web * (3.0f - 2.0f * web);             // sharpen the ridge
+            float web2  = DetailValueNoise(u * 14.0f, v * 14.0f, 14);
+            int cr = (int)(f * 255.0f + 0.5f);
+            // F3: the M5 key gates the caustic channels AT THE SOURCE —
+            // OFF bakes .g/.b to 0 (gate multiplies to zero; pre-feature
+            // texture), ON keeps the exact shipped rounding. The .r foam
+            // mask is untouched (M2/M3/M6 read it).
+            int cg = causOn ? (int)(web * 255.0f + 0.5f) : 0;
+            int cb = causOn ? (int)(web2 * 255.0f + 0.5f) : 0;
+            if(cr < 0) cr = 0; if(cr > 255) cr = 255;
+            if(cg < 0) cg = 0; if(cg > 255) cg = 255;
+            if(cb < 0) cb = 0; if(cb > 255) cb = 255;
+            dst[x] = ((DWORD)255 << 24) | ((DWORD)cr << 16) | ((DWORD)cg << 8) | (DWORD)cb;
         }
     }
     g_foamTex->UnlockRect(0);
@@ -1461,6 +1502,7 @@ static void EnsureFoamTex(void)
         g_foamTex->GenerateMipSubLevels();
     dbglog("[water] foam tex %dx%d mips=%d", FOAM_TEX_N, FOAM_TEX_N,
            g_foamTexHasMips ? 1 : 0);
+    s_foamCausGate = causOn;   // bake recorded: matches the live gate now
 }
 
 // Timecycle values are stored as floats but come from 0-255 DAT columns;
@@ -2388,6 +2430,56 @@ void waterPipe_setRenderState(void)
                         depthValid ? 0.55f : 0.0f,
                         waterClampF(reflMixUser, 0.0f, 1.0f, 0.7f)};
     RwD3D9SetPixelShaderConstant(16, waterFx, 1);
+
+    // ---- M4/M5/M6: water FX params 2, c17 ----
+    //   c17 = (refractValidGain, causticsScale, causticsSpeed, isecFoamGain)
+    // Water_Parallax.hlsl reads this as waterFxParams2. This upload was
+    // MISSING (the shader declared/used register(c17) but the pipe never
+    // wrote it) — the register carried stale garbage from a prior consumer,
+    // so the M4/M5/M6 gates could flip on unpredictably. Uploaded every draw
+    // like c14-c16 so a style/PS switch never inherits stale values.
+    //   refractValidGain (M4): 1 whenever the s2 depth copy is live (the
+    //     depth validation reads it; the off-screen clamp term runs
+    //     regardless and is harmless), 0 otherwise -> pre-M4 bit-identical.
+    //   causticsScale (M5): 1 when depth copy + foam texture both live (the
+    //     term keys off the real thickness + the s4 .g caustic channel),
+    //     0 otherwise -> exactly 0 (pre-M5).
+    //   causticsSpeed (M5): 1 (the Cry PB_time scroll, c17.z multiplier).
+    //   isecFoamGain (M6, per-texel isec foam mask): 1 when the foam texture
+    //     exists, else 0 -> the mask resolves to 1.0 (pre-M6 identity).
+    // F3 wiring (keys default ON -> upload bit-identical to shipped):
+    //   x ANDs the M4 depth-validated-refraction key, y AND z AND the M5
+    //   caustics key (shared waterM5CausticsGate, which also gates the
+    //   texture .gb channels at bake). w (M3/M6 isec-foam mask) is
+    //   deliberately NOT keyed. Key OFF -> gate multiplies to 0 ->
+    //   pre-feature bit-identical.
+    RwBool refractOn = config ? config->waterRefractionValid : 1;
+    RwBool causOn = waterM5CausticsGate();
+    float waterFx2[4] = { (depthValid && refractOn) ? 1.0f : 0.0f,
+                          (depthValid && g_foamTex && causOn) ? 1.0f : 0.0f,
+                          causOn ? 1.0f : 0.0f,
+                          g_foamTex ? 1.0f : 0.0f };
+    RwD3D9SetPixelShaderConstant(17, waterFx2, 1);
+
+    // ---- M7/M8: water FX params 3, c18 ----
+    //   c18 = (sssScale, reserved, volumeDensity, volumeFresnelBias)
+    // M7 SSS (Cry Water.cfx:1202-1210 crest scatter): sssScale = 2.0 (the
+    //   Cry SubSurfaceScatteringScale constant); the term is further gated
+    //   by tier >= 2 + depth copy + day + above-water in the shader.
+    // M8 volume/surface split (Cry WaterVolume.cfx, INTERIOR bodies code 2):
+    //   volumeDensity = 1.5 (exp2 fog, opaque within ~1 m), volumeFresnelBias
+    //   = 0.05 (bias-Schlick F0 for the calm interior reflection).
+    // c18 all-zero (stale pipe) -> the M7/M8 terms are exactly 0/neutral.
+    // F3 wiring: .x ANDs the M7 SSS key, .z AND .w AND the M8 volume key
+    //   (defaults ON -> upload identical to shipped). Key OFF -> .x = 0 makes
+    //   the SSS term exactly 0, and .z = 0 drives the shader's
+    //   step(1e-4, z) M8 weight to 0 (the interior lerps stay identity ->
+    //   pre-feature bit-identical; .w rides the same weight).
+    RwBool sssOn = config ? config->waterSss : 1;
+    RwBool volOn = config ? config->waterVolume : 1;
+    float waterFx3[4] = { sssOn ? 2.0f : 0.0f, 0.0f,
+                          volOn ? 1.5f : 0.0f, volOn ? 0.05f : 0.0f };
+    RwD3D9SetPixelShaderConstant(18, waterFx3, 1);
 
     // ---- Z state: pin the draw-order contract (all three layers) ----
     // Runs BEFORE the draw setup below so nothing in here can move Z after

@@ -5,6 +5,27 @@
 #include "texdefs.h"	// texdb.txt TexInfo + NM lane: <diffuse>_n pairing lookup (s8 bind)
 #include "texalpha.h"	// per-texture alpha classification (solid vs cutout/faded)
 
+// ============================================================
+// PROVENANCE (junior-rewrite wave, 2026-11-09; plan §1.3 vehiclePipe).
+//
+// vehiclePipe.cpp = aap/skygfx carpipe (E:\SDKs\skygfx_original\
+// src/vehiclePipe.cpp, 1481 lines) + OUR PBR env/glass/rubber/Xbox/
+// leeds/mobile layers (e39a6f8 Sept wave). JuniorDjjr's "SkyGfx
+// Extended" contribution to THIS TU is cosmetic-only and carries no
+// gap-prone state-handling code to rewrite:
+//   * 4x `instancedData->vertexAlpha ||` -> `(instancedData->
+//     vertexAlpha != 0)` — type-safety, no behaviour change;
+//   * 3 commented-out sunPos constant lines (never compiled).
+// The junior dual-pass machinery this pipe relies on — D3D9RenderDual
+// (J1) and the per-texture zwriteThreshold/TexInfo table (J5) — lives
+// in core/main.cpp + texdefs.cpp and is CALLED here (e.g. :1343,
+// :2084); those are single-writer files outside this TU's scope.
+// The raw d3d9device->SetRenderState calls below are OUR deliberate
+// three-layer (L1/L2/L3) save/restore mirrors (see the "audit —
+// unpaired raw write" receipts in the FX-leg restore block), NOT
+// junior verbatim.
+// ============================================================
+
 extern void *Glass_Vehicle;
 extern void *Rubber_Vehicle;
 extern void *Rubber_Vehicle_Modern;
@@ -820,6 +841,43 @@ static void vehiclePipe_fxAdditiveBlend(RxD3D9ResEntryHeader *header,
 }
 
 // ===========================================================================
+// N9 FAIL-CLOSED MISS POLICY — CONSUMER HONOR (world-geometry consumer).
+//
+// A texture pointer reaches this pipe in exactly three shapes:
+//   1. a REAL texture — bind it, unchanged.
+//   2. NULL — the material legitimately has NO diffuse map (SA paint meshes:
+//      UVs + rxGEOMETRY_TEXTURED, but the paint is material colour + env
+//      map). This is NOT a lookup failure: it resolves to gpWhiteTexture
+//      exactly as before the policy (MODULATE(white, DIFFUSE) renders the
+//      paint colour). UNCHANGED BY THIS FUNCTION.
+//   3. a POLICY SENTINEL (skygfx_missgrey / skygfx_missclear) — the texture
+//      LOOKUP failed. TexDefsFindCB binds the 1x1 sentinel instead of
+//      handing NULL to the game, so the material's texture pointer IS the
+//      sentinel — a NULL test cannot see it.
+//
+// The vehicle pipe draws WORLD geometry, so it honors the policy's world
+// action (action=sentinel) for BOTH sentinel classes: the dim-grey 1x1 keeps
+// the mesh DRAWING (a data-side gap must never hole the world) and the
+// transparent-magenta sprite sentinel is never bound here — on an opaque
+// vehicle body it renders as a magenta shell, or vanishes outright under
+// alpha blending, i.e. a louder defect than the one the policy removes.
+//
+// The discrimination is by POINTER IDENTITY (TexDefsMissTextureKind), never
+// by "is it NULL": case 2 keeps gpWhiteTexture byte-for-byte, only case 3 is
+// re-mapped. TexDefsMissTextureKind never allocates (the sentinel accessors
+// would create their raster on demand — never on the draw path).
+// ===========================================================================
+static RwTexture *
+vehPolicyTexture(RwTexture *tex)
+{
+	if(!tex)
+		return NULL;	// case 2 — legitimate "no diffuse map" (white)
+	if(TexDefsMissTextureKind(tex) == TEXDEFS_MISS_TEX_SPRITE)
+		return TexDefsMissSentinelWorld();	// case 3 — sprite class -> world action
+	return tex;		// real texture, or the world sentinel already
+}
+
+// ===========================================================================
 // vehBindDiffuse3L — THREE-LAYER diffuse/stage bind (the BINDING FIX).
 //
 // Black-silhouette defect (docs/plans/2026-10-30-test2-0438/log-forensics.md #3,
@@ -903,7 +961,13 @@ vehBindElideLog(void)
 static void
 vehBindDiffuse3L(RwTexture *tex, int stage)
 {
-	RwTexture *resolved = tex ? tex : gpWhiteTexture;
+	// N9 policy honor: a sentinel (a FAILED lookup) is re-mapped to the
+	// world action (dim grey 1x1); a NULL material texture still resolves to
+	// the game's opaque white — the legitimate "no diffuse map" case, which
+	// is NOT a miss and must stay byte-for-byte unchanged.
+	RwTexture *resolved = vehPolicyTexture(tex);
+	if(!resolved)
+		resolved = gpWhiteTexture;
 
 	// [bind-elision] resolve the L3 target FIRST so the elision check can run
 	// before ANY driver call. A NULL extraction leaves the device state
@@ -2059,7 +2123,15 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *ob
 			// leaked raster bound; SetupMaterial_Xbox above already uploaded
 			// matCol (LOC_matCol) from material->color, so MODULATE(white,
 			// DIFFUSE) renders the paint colour even when env/spec is absent.
-			diffuseBound = material->texture ? material->texture : gpWhiteTexture;
+			// N9: diffuseBound is the "intended bound texture" the
+			// want-vs-device readback compares against — it MUST be the
+			// pointer vehBindDiffuse3L actually binds, so the policy
+			// re-map is applied here too (otherwise a sprite-class
+			// sentinel would read back as DIVERGED against the world
+			// sentinel it was bound as).
+			diffuseBound = vehPolicyTexture(material->texture);
+			if(!diffuseBound)
+				diffuseBound = gpWhiteTexture;
 			texBranch = material->texture ? "xboxTex" : "xboxPaintNull";
 			vehBindDiffuse3L(material->texture, 0);
 			RwD3D9SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
@@ -2680,7 +2752,14 @@ vehEnvUploadPS(int reg, const float *v, int vecs)
 static void
 vehEnvBindTexture(RwTexture *tex, int stage)
 {
-	RwTexture *resolved = tex ? tex : gpWhiteTexture;
+	// N9 policy honor (same contract as vehBindDiffuse3L): the elision key
+	// MUST be the pointer that would actually be bound, so the policy
+	// re-map happens BEFORE the key is taken — a sprite-class sentinel is
+	// bound as the dim-grey world sentinel, and the key says exactly that.
+	// A NULL texture still resolves to gpWhiteTexture (legitimate, unchanged).
+	RwTexture *resolved = vehPolicyTexture(tex);
+	if(!resolved)
+		resolved = gpWhiteTexture;
 	if(stage >= 0 && stage < VEH_ENV_STAGE_MAX &&
 	   s_vehEnvElide.texKnown[stage] &&
 	   s_vehEnvElide.texVal[stage] == (const void*)resolved){
@@ -3117,7 +3196,12 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 		// transition invalidates the entry and forces the white bind instead of
 		// leaving the previous pass's raster (vegetation atlas / cloud raster)
 		// on s0 for MODULATE to multiply into the body colour.
-		RwTexture *diffuseTex = material->texture ? material->texture : gpWhiteTexture;
+		// N9: same policy re-map as above — the tracker stores the pointer
+		// that is actually bound (the world sentinel for a sprite-class
+		// miss), and a NULL material texture still resolves to white.
+		RwTexture *diffuseTex = vehPolicyTexture(material->texture);
+		if(!diffuseTex)
+			diffuseTex = gpWhiteTexture;
 		vehEnvBindTexture(diffuseTex, 0);
 		const char *texBranch = material->texture ? "envTex" : "envPaintNull";
 
@@ -3153,8 +3237,10 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 		// c48.w (main() alpha override: 1 = force output alpha 1, 0 = use the
 		// texture alpha). config->texAlphaClassify=0 disables the classifier
 		// (TAC_UNKNOWN, legacy-hasAlpha decision below);
-		// TexAlpha_Classify self-budgets to 256 new textures/frame (warm-up
-		// ~16 frames for a 4k-texture level). hasAlpha is diagnostic only and
+		// TexAlpha_Classify always scans first-sight textures (build-11
+		// stability fix — the old 256/frame self-budget that skipped to
+		// TAC_UNKNOWN is gone; 256/tick is scan-rate telemetry only, see
+		// texalpha.cpp). hasAlpha is diagnostic only and
 		// excludes the paint marker.
 		hasAlpha = instancedData->vertexAlpha != 0 || matTranslucent;
 		// SAFE DEFAULT note (was "parity item 2"): the legacy aap decided
@@ -3167,7 +3253,8 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 		int tac = (config && config->texAlphaClassify) ? TexAlpha_Classify(material->texture) : TAC_UNKNOWN;
 
 		// Glass MUST be classified BEFORE the TAC_UNKNOWN fallback below: the
-		// classifier can skip a window texture (tac=0), and the safe default
+		// classifier can still resolve a window texture TAC_UNKNOWN
+		// (extraction failure / INI-off), and the safe default
 		// would not reliably keep the glass pass blending
 		// (the isGlassMesh override below forces blendOn=1 regardless).
 		const char *texName = material->texture ? material->texture->name : "";
@@ -3191,7 +3278,8 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 		float shaderAlpha;
 		// AUDITED mapping (texalpha.h): TAC_UNKNOWN=0, TAC_OPAQUE=1,
 		// TAC_CUTOUT=2, TAC_FADED=3. tac=0 in a log line is UNKNOWN, NOT
-		// OPAQUE — it is the budget-skipped / not-yet-classified texture, and
+		// OPAQUE — it is the classifier-off / extraction-failure texture
+		// (budget-skip UNKNOWNs no longer exist, see texalpha.cpp), and
 		// it takes the SAFE DEFAULT below (replaces the legacy hasAlpha
 		// fallback / parity item 2). TAC_OPAQUE MUST still yield 1.0
 		// here or solid meshes whose alpha channel is unused (all-zero DXT3
@@ -3206,7 +3294,8 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 		case TAC_UNKNOWN:	// tac=0 == UNKNOWN → SAFE DEFAULT (see below)
 		default:
 			// SAFE DEFAULT (unconditional — runs when the classifier is
-			// INI-off AND when it budget-skips a texture): opaque geometry
+			// INI-off or the texture resolved TAC_UNKNOWN (extraction
+			// failure): opaque geometry
 			// draws opaque, only real decal/vedecal materials blend.
 			//   blendOn = matTranslucent — vertex alpha alone must never
 			//   blend solid geometry. SA vehicle meshes carry vertex alpha

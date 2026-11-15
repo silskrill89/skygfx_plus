@@ -67,6 +67,7 @@
 #include "../rw/gta.h"		// CTimer__ms_fTimeStep, Scene, CVector
 #include "../rw/rphanim.h"	// RpHAnimHierarchy, RpHAnimIDGetIndex, ...
 #include "../core/physicscfg.h"	// [SkyPhysics] softbodyBackend / softbodyBudget
+#include "../extras/water_swell.h"	// M9 single-source swell law (WaterSwell::Height/HeightVel) + Finite
 
 #include <cmath>
 
@@ -177,8 +178,16 @@ typedef unsigned char (*WaterLevelCore_t)(float x, float y, float z,
 // surface); the bob PERIOD/wavelength always match the shader exactly.
 static double s_waterClockAnchor = -1.0;
 
-static double
-WaterClockSeconds(void)
+// MISSION B (2026-11-09): this is now THE one water clock. Exported through
+// softbody.h as SoftbodyWaterClockSeconds() so ragdoll_death.cpp's
+// RagdollWaterClockSeconds() mirror collapses onto it (ragdoll_death.cpp is
+// outside this lane's write scope - see the house report handoff). Chosen
+// direction: expose SOFTBODY's clock (not a water_swell.h accessor) because
+// ragdoll_death.cpp already consumes softbody.h exports (SoftbodyWaterQuery),
+// so no new dependency edge is created and water_swell.h stays
+// clock-free/self-contained as its header contract demands.
+double
+SoftbodyWaterClockSeconds(void)
 {
 	LARGE_INTEGER freq, cnt;
 	QueryPerformanceFrequency(&freq);
@@ -189,58 +198,25 @@ WaterClockSeconds(void)
 	return now - s_waterClockAnchor;
 }
 
-// Water_VS.hlsl c11 swell law - verbatim port of the VS block:
-//   dirA = normalize(1, 0.35),  kA = 2pi/45, cA = sqrt(9.81/kA), amp 0.10
-//   dirB = normalize(-0.45, 1), kB = 2pi/23, cB = sqrt(9.81/kB), amp 0.06
-//   fW = kW * (dot(dirW, xy) - cW * t)
-//   swell = (cos(fA)*0.10 + cos(fB)*0.06) * swAmp
-// c11 is uploaded as (1, 1, 0, 0) (waterPipe.cpp:1312) so swAmp/timeScale
-// are both 1.0 here. The direction normalization and the sqrt(9.81/k) wave
-// speed are DERIVED at init with the same guarded math as the shader (no
-// hand-typed constants - they must match the HLSL literals exactly).
-struct WaterSwellWave { float dirX, dirY, k, c; };
-
-static WaterSwellWave
-WaterSwellMakeWave(float dx, float dy, float wavelength)
-{
-	WaterSwellWave w;
-	double len = std::sqrt((double)dx * dx + (double)dy * dy);
-	if(len < 1e-7) len = 1e-7;			// shader's max(length, 1e-7)
-	w.dirX = (float)(dx / len);
-	w.dirY = (float)(dy / len);
-	w.k = (float)(6.2831853 / (double)wavelength);	// 2pi / lambda
-	double kk = (double)w.k < 1e-7 ? 1e-7 : (double)w.k;
-	w.c = (float)std::sqrt(9.81 / kk);		// deep-water phase speed
-	return w;
-}
-
-static const WaterSwellWave s_waveA = WaterSwellMakeWave(1.0f, 0.35f, 45.0f);
-static const WaterSwellWave s_waveB = WaterSwellMakeWave(-0.45f, 1.0f, 23.0f);
-
-static inline bool
-WaterFinite(float v) { return (v == v) && v > -1e30f && v < 1e30f; }
+// MISSION B (2026-11-09): the duplicated law is GONE. The old file-scope
+// WaterSwellWave / WaterSwellMakeWave / s_waveA / s_waveB (verbatim VS port)
+// were deleted; WaterSwell::MakeWave/Waves in water_swell.h is the
+// bit-for-bit port of that exact math (same double len/kk derivations, same
+// constants 6.2831853 / 9.81 / 0.10 / 0.06, same float-vs-double ordering),
+// and WaterSwell::Height/HeightVel evaluate it identically. These two
+// exported wrappers keep the stable softbody.h API; numerically unchanged.
 
 float
 SoftbodyWaterSwell(float x, float y)
 {
-	if(!WaterFinite(x) || !WaterFinite(y)) return 0.0f;
-	float t = (float)WaterClockSeconds();
-	float fA = s_waveA.k * (s_waveA.dirX * x + s_waveA.dirY * y - s_waveA.c * t);
-	float fB = s_waveB.k * (s_waveB.dirX * x + s_waveB.dirY * y - s_waveB.c * t);
-	return (float)(std::cos((double)fA) * 0.10 + std::cos((double)fB) * 0.06);
+	return WaterSwell::Height(x, y, (float)SoftbodyWaterClockSeconds());
 }
 
 float
 SoftbodyWaterSwellVel(float x, float y)
 {
-	// d/dt cos(k*(d - c t)) = k*c*sin(f); same wave pair as above.
-	if(!WaterFinite(x) || !WaterFinite(y)) return 0.0f;
-	float t = (float)WaterClockSeconds();
-	float fA = s_waveA.k * (s_waveA.dirX * x + s_waveA.dirY * y - s_waveA.c * t);
-	float fB = s_waveB.k * (s_waveB.dirX * x + s_waveB.dirY * y - s_waveB.c * t);
-	float v = (float)(std::sin((double)fA) * (double)(s_waveA.k * s_waveA.c) * 0.10 +
-		std::sin((double)fB) * (double)(s_waveB.k * s_waveB.c) * 0.06);
-	return WaterFinite(v) ? v : 0.0f;
+	// d/dt of Height - the bob velocity the physics lanes follow.
+	return WaterSwell::HeightVel(x, y, (float)SoftbodyWaterClockSeconds());
 }
 
 bool
@@ -248,7 +224,7 @@ SoftbodyWaterQuery(float x, float y, float z, float *pLevel)
 {
 	if(!pLevel) return false;
 	*pLevel = 0.0f;
-	if(!WaterFinite(x) || !WaterFinite(y) || !WaterFinite(z)) return false;
+	if(!WaterSwell::Finite(x) || !WaterSwell::Finite(y) || !WaterSwell::Finite(z)) return false;
 	unsigned char found = SOFTBODY_WATERLEVEL(x, y, z, pLevel);
 	if(!found){
 		*pLevel = 0.0f;	// the 0.0/no-water fallback -> "no water"
@@ -256,7 +232,7 @@ SoftbodyWaterQuery(float x, float y, float z, float *pLevel)
 	}
 	// plausibility guard (streaming holes / corrupt hits): SA water lives
 	// well inside +/-1000 z
-	if(!WaterFinite(*pLevel) || *pLevel > 1000.0f || *pLevel < -1000.0f){
+	if(!WaterSwell::Finite(*pLevel) || *pLevel > 1000.0f || *pLevel < -1000.0f){
 		*pLevel = 0.0f;
 		return false;
 	}
@@ -270,6 +246,40 @@ SoftbodyWaterQuery(float x, float y, float z, float *pLevel)
 #define PED_OFF_CLUMP			0x18		// CEntity.m_pRwObject (RpClump* for skinned peds)
 #define PED_OFF_MOVESPEED		0x44		// CPed.m_vecMoveSpeed (CVector)
 #define CLUMP_OFF_FRAME			0x04		// RpClump.object.parent -> RwFrame* root frame
+
+// ---- W0.5 lane E (family-C residue): write-time identity predicate ----
+// The helper lives up here because PreRender and ReleaseFrames - the two
+// WRITE sites that reach into the captured clump's CAnimBlendClumpData -
+// are defined below and consume it at their definition point (the old
+// location of SoftbodyPedOwnsClump, below SoftbodyApplyForce, now only points
+// here). Ped-pool layout = gta.h CPedPool (0xB74490 ped pool).
+
+// One predicate = pool-slot liveness (same pedPool / PED_POOL_STRIDE /
+// PED_SLOT_FREE_BIT evidence as sftbdyphsx.cpp RagdollPedIsLive:461-481) PLUS
+// ownsClump identity (ragdoll_death.cpp:1401-1418 shape: ped+0x18 must still
+// be the exact captured clump). Called at WRITE time because the
+// SoftbodyUpdate pass-1 gate runs in RenderScene_after while the write runs
+// in the NEXT RenderScene_before - between gate and write the game streams
+// peds (slot freed + reissued) and RW pool memory can reap+recycle the
+// captured clump into a foreign bottle/plant/prop clump; writing then
+// poisons that memory (floating-props family). Pool slot arrays persist for
+// the game session, so these reads stay inside pooled memory even for
+// freed/reused slots - never a wild deref.
+static bool SoftbodyPedOwnsClump(void *ped, RpClump *clump) {
+	if (!ped || !clump) return false;
+	CPedPool *pool = pedPool;
+	if (!pool || !pool->m_pSlots || !pool->m_pSlotInfos) return false;
+	if (pool->m_nNumSlots <= 0) return false;
+	uintptr_t base = (uintptr_t)pool->m_pSlots;
+	uintptr_t p = (uintptr_t)ped;
+	if (p < base) return false;
+	uintptr_t offset = p - base;
+	if (offset % PED_POOL_STRIDE != 0) return false;		// not slot-aligned - not a CPed
+	int idx = (int)(offset / PED_POOL_STRIDE);
+	if (idx >= pool->m_nNumSlots) return false;	// pool shrank
+	if (pool->m_pSlotInfos[idx] & PED_SLOT_FREE_BIT) return false;	// slot freed (stream-out)
+	return *(RpClump**)(p + PED_OFF_CLUMP) == clump;
+}
 
 // ---- Shipped BoneNode_c port + prototype m_vel (doc 5.2 SoftBone_c) ----
 
@@ -563,8 +573,19 @@ void SoftRagdoll_c::CaptureFrames() {
 
 // R8 release: restore the exact pre-capture Flags byte (game-set bits
 // preserved), so a revived/scripted ped resumes anim-driven poses cleanly.
+// W0.5 lane E write gate: fd->Flags lives INSIDE the captured clump's anim
+// frame array. If the ped no longer owns that clump (slot freed+reissued,
+// clump reaped+recycled), that memory is no longer ours to restore - the
+// restoring write would edit a foreign object's memory (floating-props
+// family). The capture bits also died with the clump, so nothing is leaked.
 void SoftRagdoll_c::ReleaseFrames() {
 	if (!captured) return;
+	if (!SoftbodyPedOwnsClump(ped, clump)) {
+		if (dbglog_throttle("softbody_stale_write"))
+			dbglog("[Softbody] stale-write skip (ReleaseFrames) ped=%p clump=%p", ped, clump);
+		captured = false;	// nothing restorable - frame array is not ours anymore
+		return;
+	}
 	for (int i = 0; i < RAGDOLL_MAX_BONES; i++) {
 		AnimBlendFrameData *fd = bones[i].frameData;
 		if (!fd || bones[i].boneTag < 0) continue;
@@ -932,7 +953,7 @@ void SoftRagdoll_c::WaterResponse(float deltaTime) {
 			root->worldMat.pos.z, &rootLevel))
 		return;	// 0.0/no-water fallback -> no water under this corpse
 	float rootSurf = rootLevel + SoftbodyWaterSwell(root->worldMat.pos.x, root->worldMat.pos.y);
-	if (!WaterFinite(rootSurf)) return;
+	if (!WaterSwell::Finite(rootSurf)) return;
 
 	int total = 0, wet = 0;
 	float fracSum = 0.0f, fracMax = 0.0f;
@@ -948,7 +969,7 @@ void SoftRagdoll_c::WaterResponse(float deltaTime) {
 		float level;
 		if (!SoftbodyWaterQuery(wp->x, wp->y, wp->z, &level)) continue;
 		float surf = level + SoftbodyWaterSwell(wp->x, wp->y);
-		if (!WaterFinite(surf)) continue;
+		if (!WaterSwell::Finite(surf)) continue;
 
 		// submerged fraction of the bone sphere (SOFTBODY_BONE_RADIUS,
 		// the directive's per-bone sphere radius 0.08); 0 = fully clear of
@@ -991,7 +1012,7 @@ void SoftRagdoll_c::WaterResponse(float deltaTime) {
 
 		// NaN/inf audit (project rule: nothing NaN may persist in the
 		// integrator - the swing would poison the orientations next frame)
-		if (!WaterFinite(bone->vel.x) || !WaterFinite(bone->vel.y) || !WaterFinite(bone->vel.z)) {
+		if (!WaterSwell::Finite(bone->vel.x) || !WaterSwell::Finite(bone->vel.y) || !WaterSwell::Finite(bone->vel.z)) {
 			bone->vel.x = bone->vel.y = bone->vel.z = 0.0f;
 		}
 	}
@@ -1010,6 +1031,20 @@ void SoftRagdoll_c::WaterResponse(float deltaTime) {
 void SoftRagdoll_c::PreRender() {
 	if (!ped) return;
 	if (settled && blend >= 1.0f) return;
+	// W0.5 lane E (family-C residue) - write-time identity, not loop-time:
+	// SoftbodyUpdate pass 1 validated this instance's ped/clump down in
+	// RenderScene_after; the BlendKeyframe slerp below WRITES frameData ->
+	// KeyFrame->q (interp frame inside the captured clump's
+	// CAnimBlendClumpData) up in the NEXT RenderScene_before. Between gate
+	// and write the game streams peds: a slot can be freed + reissued and
+	// the captured clump reaped + recycled into foreign RW memory
+	// (bottle/speck-at-ceiling family). Re-derive
+	// liveness + ownership in the same breath as the write.
+	if (!SoftbodyPedOwnsClump(ped, clump)) {
+		if (dbglog_throttle("softbody_stale_write"))
+			dbglog("[Softbody] stale-write skip ped=%p clump=%p", ped, clump);
+		return;
+	}
 	for (int i = 0; i < RAGDOLL_MAX_BONES; i++) {
 		if (bones[i].boneTag < 0 || !bones[i].frameData) continue;
 		bones[i].BlendKeyframe(blend);
@@ -1058,14 +1093,11 @@ static SoftRagdoll_c *SoftbodyAddRagdoll(void *ped, int poolIdx) {
 }
 
 // ped pool walk - same layout proven in RagdollManager_c::ProcessAllPeds
-// (sftbdyphsx.cpp:479-559) and ragdoll_death.cpp:994: pool 0xB74490, slot
-// stride 0x7C4, free bit 0x80, clump at CPed+0x18, state at CPed+0x530.
-struct SoftbodyPedSlotInfo { unsigned char id : 7; bool free : 1; };
-struct SoftbodyPedPool {
-	void *m_pSlots;
-	SoftbodyPedSlotInfo *m_pSlotInfos;
-	int m_nNumSlots;
-};
+// (sftbdyphsx.cpp:479-559) and ragdoll_death.cpp:994: pool pedPool, slot
+// stride PED_POOL_STRIDE, free bit PED_SLOT_FREE_BIT, clump at CPed+0x18,
+// state at CPed+0x530. (Pool layout = gta.h CPedPool; SoftbodyPedOwnsClump
+// MOVED UP, file top - W0.5 lane E: the write sites PreRender/ReleaseFrames
+// consume it there.)
 
 // ---- Backend gate (m0971: sky_physics.ini via physicscfg.cpp) ----
 bool SoftbodyGetEnabled(void) {
@@ -1129,7 +1161,7 @@ bool SoftbodyWorldToBoneLocal(const RwMatrix *parentWorld, const RwMatrix *child
 // ---- Lifecycle (texdefs.h:11-20 contract) ----
 
 void SoftbodyInit(void) {
-	WaterClockSeconds();	// anchor the swell clock NOW (same init burst as
+	SoftbodyWaterClockSeconds();	// anchor THE one water clock NOW (same init burst as
 							// waterPipe_init main.cpp:8301 - its g_waterTime is
 							// the Water_VS c11 time base we phase-match)
 	PhysicsCfgLoad();	// idempotent; also lazy-called by GetBackend above
@@ -1166,7 +1198,7 @@ void SoftbodyUpdate(void) {
 	if (budget < 1) budget = 1;
 	if (budget > SOFTBODY_MAX_RAGDOLLS) budget = SOFTBODY_MAX_RAGDOLLS;
 
-	SoftbodyPedPool *pool = *(SoftbodyPedPool**)0xB74490;
+	CPedPool *pool = pedPool;
 	if (!pool || !pool->m_pSlots || !pool->m_pSlotInfos) return;
 
 	CVector camPos;
@@ -1186,7 +1218,7 @@ void SoftbodyUpdate(void) {
 		if (!r->IsActive()) continue;
 		bool release = false;
 		int idx = r->GetPoolIndex();
-		if (idx < 0 || idx >= pool->m_nNumSlots || pool->m_pSlotInfos[idx].free) {
+		if (idx < 0 || idx >= pool->m_nNumSlots || (pool->m_pSlotInfos[idx] & PED_SLOT_FREE_BIT)) {
 			release = true;	// slot freed (stream-out) or pool shrank
 		} else {
 			void *p = r->GetPed();
@@ -1218,8 +1250,8 @@ void SoftbodyUpdate(void) {
 	// softbody.h P1 scope note - root-frame exemption is the P2 fix).
 	if (activeCount < budget) {
 		for (int i = 0; i < pool->m_nNumSlots; i++) {
-			if (pool->m_pSlotInfos[i].free) continue;
-			void *ped = (void*)((uint8*)pool->m_pSlots + i * 0x7C4);
+			if (pool->m_pSlotInfos[i] & PED_SLOT_FREE_BIT) continue;
+			void *ped = (void*)((uint8*)pool->m_pSlots + i * PED_POOL_STRIDE);
 			if (*(int*)((uint32)ped + PED_OFF_STATE) != SOFTBODY_PEDSTATE_DEAD) continue;
 			if (SoftbodyFindForPed(ped)) continue;
 			RpClump *clump = *(RpClump**)((uint32)ped + PED_OFF_CLUMP);

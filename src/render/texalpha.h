@@ -51,26 +51,66 @@
 //                 hint can never touch a genuine gradient: cleargraf02_LA
 //                 (full=0) fails the full>0 requirement.
 //   TAC_UNKNOWN — unresolvable (texture != NULL but raster == NULL),
-//                 extraction failed, budget-skipped, or classifier disabled
-//                 → pipes fall back to the LEGACY hasAlpha decision
-//                 (vertexAlpha || material alpha != 255) with texture alpha
-//                 preserved (parity item 2); budget skips are retried on a
-//                 later frame. A NULL texture is TAC_OPAQUE, not UNKNOWN.
+//                 extraction failed, or classifier disabled → pipes fall
+//                 back to their TAC_UNKNOWN SAFE DEFAULT (blend only on true
+//                 material translucency — never vertex alpha alone — with
+//                 texture alpha preserved; see the decision tables in
+//                 buildingPipe.cpp / vehiclePipe.cpp). Budget-skip UNKNOWNs
+//                 are GONE (build-11 stability fix: first-sight scans always
+//                 run, so the same raster can never alternate between this
+//                 fallback and its real class across draws). A NULL texture
+//                 is TAC_OPAQUE, not UNKNOWN. Build-12: a TAC_UNKNOWN from a
+//                 TRANSIENT failure (D3D texture not realized yet, stream-out
+//                 mid-scan, lock/leveldesc hiccup) is re-scanned at most
+//                 TAC_UNKNOWN_RETRY_MAX (4) times instead of sticking for the
+//                 session, so a real texture whose D3D object appears a frame
+//                 or two late resolves to its real class; a permanently
+//                 unextractable texture probes only those 4 times and then
+//                 stays cached. When the classifier is INI-off the first call
+//                 logs one "texalpha: DISABLED" receipt naming the cause
+//                 (the 2026-11-08 retest read as "classification broken"
+//                 with zero receipts when the feature was simply off).
 //
 // CACHE
 //   4-way set-associative, 1024 sets x 4 ways = 4096 entries keyed by
-//   texture->raster. At most 256 new textures are inspected per render frame
-//   (RWSRCGLOBAL(renderFrame)); the budget keeps a cold cache from stalling a
-//   frame and is independent of database/INI config. Extraction-failure
-//   UNKNOWN results are cached together with the failure reason, so a texture
-//   that cannot be extracted is not re-probed every frame. Null-texture draws
-//   (!texture || !texture->raster) are neither cached nor budgeted: they have
-//   no cache key and would otherwise starve real textures out of the budget.
+//   texture->raster. STABILITY (build-11 fix): a raster's class is identical
+//   on EVERY draw — first-sight scans always run (bounded CPU read; see
+//   texalpha.cpp), so no draw of a texture can see the TAC_UNKNOWN fallback
+//   while another draw sees the real class (that split was the
+//   angle-dependent transparency: the pipes' safe default and the classified
+//   path disagree on empty-alpha solids and soft decals). Cache hits promote
+//   the touched way to the LAST eviction slot of its set (cyclic LRU), so
+//   every-frame textures survive streaming churn and never re-enter the scan
+//   path. TAC_CLASSIFY_BUDGET (256 scans/renderFrame tick) is now scan-rate
+//   TELEMETRY only (summary "budget=" slots) — it never gates classification.
+//   Extraction-failure UNKNOWN results are cached together with the failure
+//   reason, so a texture that cannot be extracted is not re-probed every
+//   frame (build-12: transient failures — TacReasonIsRetryable — are
+//   re-probed at most TAC_UNKNOWN_RETRY_MAX times, then cached for good).
+//   Null-texture draws (!texture || !texture->raster) are neither
+//   cached nor counted: they have no cache key and nothing to probe.
 //   No-alpha FORMATS (R5G6B5, X8R8G8B8, ...) are classified one-shot from the
 //   format alone with a synthesized all-opaque histogram (nFull = nTotal =
 //   w*h) — no LockRect — so their receipts show a real histogram instead of
 //   "hist=none" (F5 fix: the five player skin parts read as "classifier never
-//   ran" when the format simply has no alpha channel).
+//   ran" when the format simply has no alpha channel). Alpha-bearing scans
+//   cover DXT1-5, A8R8G8B8/A8B8G8R8, A4R4G4B4 and — build-12, N6 coverage
+//   for PS2-converted / modded TXDs — A1R5G5B5 (1-bit alpha), A8 and A8L8;
+//   those used to fall to UNSUPPORTED_FORMAT → TAC_UNKNOWN for every draw of
+//   a real texture.
+//   VERIFY (2026-11-09 hardening lane, no code change): the build-12 bounded
+//   UNKNOWN retry cannot loop hot on a permanently-missing/unextractable
+//   texture — `tries` is carried across the drop -> re-scan -> re-install
+//   cycle via s_tacRetryCarry (texalpha.cpp, one-call static), increments on
+//   every re-probe, and the drop gate
+//   (`e->cls == TAC_UNKNOWN && e->retryable && e->tries < TAC_UNKNOWN_RETRY_MAX`,
+//   texalpha.cpp ~:1466) stops serving re-scans once the bound fills; the
+//   entry then sticks cached for the session. TexAlpha_ResetCache runs only
+//   via TexAlpha_OnDeviceReset (D3D9 reset) and on tests — never per frame.
+//   Interaction with the texdefs N9 fail-closed miss policy (texdefs.h):
+//   each miss sentinel is exactly ONE new stable raster (1x1, system-managed
+//   pool, same pool class as streamed textures), classified once and cached
+//   like any stream texture — no per-frame rescan is introduced.
 //   TexAlpha_ResetCache() drops all 4096 entries.
 //
 // TexAlpha_OnDeviceReset() clears the cache (call on D3D9 device reset).

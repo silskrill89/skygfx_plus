@@ -54,11 +54,102 @@ static bool icontains_ascii(const char *hay, const char *needle)
 	return false;
 }
 
+// ---------------------------------------------------------------------------
+// Head-part classification (shared — the S5 keyword set lives HERE, one copy).
+// ---------------------------------------------------------------------------
+// chars_TextureIsHeadPart — texture-name predicate for the head/face/hair
+// accessory family. chars_IsHeadPartAtomic — the same test walked over an
+// atomic's whole material list (a head part carries several materials: face
+// skin + hair + bandana/glasses, and only ONE of them may be name-matched).
+// Both are pure reads: no state, no receipts, no render-state writes, so they
+// are safe to call per atomic per frame from either dual-path arm.
+//
+// The keyword set is deliberately the one the one-shot [CharsHead] receipt
+// already used — the receipt corpus must not change (grep-stable directive).
+// 2026-11-09 head-blob lane EXTENDED (diagnostic trigger only — nothing in
+// the draw path reads this predicate): two W0/W0.1 sessions logged nothing
+// but identical 'neckcross'-burned one-shots because neither the head
+// texture family nor the necklace are covered by the original five
+// keywords. The real CJ head component textures, per the extracted asset
+// maps (SKYGFXPLUS_DOCS player.img contents): 'head'/'head8bit' (head.txd,
+// also probed by the texalpha watch receipts), 'face'/'face_afro'/…
+// (player_face.txd and the hairstyle TXDs), and the neck accessories
+// 'neck'/'neckcross'. These additions make chars_IsHeadPartAtomic actually
+// name-match the head atomic, which wakes the [PedHead]/[PedHeadPath]/
+// [PedHeadBind] receipt set on it.
+// ---------------------------------------------------------------------------
+bool chars_TextureIsHeadPart(const char *tn)
+{
+	return icontains_ascii(tn, "bandana") ||
+		icontains_ascii(tn, "hair") ||
+		icontains_ascii(tn, "afro") ||
+		icontains_ascii(tn, "cap") ||
+		icontains_ascii(tn, "hat") ||
+		icontains_ascii(tn, "head") ||
+		icontains_ascii(tn, "face") ||
+		icontains_ascii(tn, "neck");
+}
+
+bool chars_IsHeadPartAtomic(const RpAtomic *atomic)
+{
+	if(!atomic || !atomic->geometry || !atomic->geometry->matList.materials)
+		return false;
+	RpGeometry *geom = atomic->geometry;
+	for(RwInt32 i = 0; i < geom->matList.numMaterials; i++){
+		RpMaterial *m = geom->matList.materials[i];
+		if(m && m->texture && chars_TextureIsHeadPart(m->texture->name))
+			return true;
+	}
+	return false;
+}
+
+// ---------------------------------------------------------------------------
+// Head-part receipt router — ONE-SHOT fires ONLY on a NAME-MATCHED head part.
+// ---------------------------------------------------------------------------
+// 2026-11-09 head-blob lane rework (trigger semantics only; all existing
+// receipt lines byte-identical). Log evidence that forced the change: both
+// W0 and W0.1 burned the single shot on the necklace accessory 'neckcross'
+// (frame ' Pelvis', matched by the old "any TAC_CUTOUT/FADED texture counts"
+// trigger) and the actual head component was NEVER characterized — two
+// sessions, two identical neckcross receipts, zero head-part data. Now:
+//   - trigger: a head-part NAME MATCH only (keyword set extended above),
+//   - a bounded 4096-call scan replaces the unconditional early-out, so the
+//     head atomic cannot be permanently starved by an earlier accessory,
+//   - [CharsHead] keeps its exact text (grep-stable corpus),
+//   - [PedHeadPath] moves to its own one-shot, fired on the SAME atomic,
+//   - NEW [PedHeadBind] (additive token, documented in the lane report):
+//     names the matched head texture's raster and the LIVE stage-0 raster
+//     (L1 rw cache — the slot SkinStage0Resync/pedStage0Resync repairs, and
+//     the level the skin pipe's per-material bind must agree with). A
+//     foreign/NULL stage-0 at the head draw is the wrong-bind signature;
+//     a clean bind with the foreign blob persists means the green/black
+//     mass is foreign geometry at the ped head, not a ped-pipe defect.
+// ---------------------------------------------------------------------------
+
+// stage-0 raster read with the skin.cpp:900-904 sentinel convention
+// (a failed RwRenderStateGet leaves 0xFFFFFFFF in the out-param).
+static RwRaster *chars_getStage0Raster(void)
+{
+	void *ras = NULL;
+	RwRenderStateGet(rwRENDERSTATETEXTURERASTER, &ras);
+	if(ras == (void*)0xFFFFFFFF)
+		return nil;
+	return (RwRaster*)ras;
+}
+
 void chars_logHeadPartReceipt(const RpAtomic *atomic)
 {
 	static bool logged = false;
+	static int  headScanBudget = 4096;
 	if(logged) return;
 	if(!atomic) return;
+	if(headScanBudget <= 0){
+		logged = true;	// never woke on a head part — stop paying the scan
+		dbglog("[PedHeadScan] exhausted (4096 calls, no name-matched head "
+		       "part) — head-part receipts stood down");
+		return;
+	}
+	headScanBudget--;
 	RpGeometry *geom = atomic->geometry;
 	if(!geom || !geom->matList.materials) return;
 
@@ -77,22 +168,24 @@ void chars_logHeadPartReceipt(const RpAtomic *atomic)
 	char texList[256];
 	size_t pos = 0;
 	texList[0] = 0;
-	bool found = false;
+	const char *headTexName = NULL;
+	RwTexture *headTex = NULL;
 	for(RwInt32 i = 0; i < geom->matList.numMaterials; i++){
 		RpMaterial *m = geom->matList.materials[i];
 		if(!m || !m->texture) continue;
 		const char *tn = m->texture->name;
-		bool isHeadPart = icontains_ascii(tn, "bandana") ||
-			icontains_ascii(tn, "hair") ||
-			icontains_ascii(tn, "afro") ||
-			icontains_ascii(tn, "cap") ||
-			icontains_ascii(tn, "hat");
+		bool isHeadPart = chars_TextureIsHeadPart(tn);
+		if(isHeadPart && !headTex){
+			// FIRST name-matched head-part texture: the trigger + the
+			// [PedHeadBind] subject.
+			headTex = m->texture;
+			headTexName = tn ? tn : "(null)";
+		}
 		int tac = TexAlpha_Classify(m->texture);
 		// Report head-part textures by name, plus any alpha-carrying mask
 		// (CUTOUT/FADED) — head-part planes are the chroma-green carriers
 		// even when the texture name does not match the keywords.
 		if(isHeadPart || tac == 2 || tac == 3){
-			found = true;
 			int cls = isHeadPart ? 1 : 0;	// 1=name-matched head part
 			int w = _snprintf_s(texList + pos, sizeof(texList) - pos,
 				_TRUNCATE, "%s[%s tac=%d]%s",
@@ -102,7 +195,10 @@ void chars_logHeadPartReceipt(const RpAtomic *atomic)
 			pos += (size_t)w;
 		}
 	}
-	if(!found) return;
+	// TRIGGER (2026-11-09): only a NAME-MATCHED head part wakes the receipt
+	// now — an accessory cutout (neckcross) is logged inside the list of the
+	// atomic that actually matches, never as the trigger itself.
+	if(!headTex) return;
 	logged = true;
 	dbglog("[CharsHead] receipt: atomic=%p frame='%s' root='%s' textures:%s "
 		"(*=name-matched head part; tac: 1=OPAQUE 2=CUTOUT 3=FADED 0=UNKNOWN)",
@@ -110,6 +206,50 @@ void chars_logHeadPartReceipt(const RpAtomic *atomic)
 		frameName ? frameName : "(null)",
 		rootName ? rootName : "(null)",
 		texList[0] ? texList : " (none)");
+
+	// NEW [PedHeadBind] — the wrong-bind discriminator (fires BEFORE
+	// [PedHeadPath]'s read of atomic->renderCallBack, on the same atomic,
+	// before any later shader-hygiene unbind can clear the device).
+	{
+		RwRaster *stage0 = chars_getStage0Raster();
+		dbglog("[PedHeadBind] atomic=%p tex='%s' raster=%p stage0raster=%p "
+		       "matlist=%d",
+			(const void*)atomic,
+			headTexName ? headTexName : "(null)",
+			(void*)(headTex ? headTex->raster : nil),
+			(void*)stage0,
+			(int)geom->matList.numMaterials);
+	}
+
+	// ---------------------------------------------------------------------------
+	// Additive discriminator — WHICH pipe actually draws the head part.
+	// ---------------------------------------------------------------------------
+	// This is the evidence line for the "head atomic not going through the ped
+	// entry contract" hypothesis. myDefaultCallback (hooked 0x7491C0) only
+	// runs SkinEntryContract / pedOpaqueEnforce / the dual pass / the cull
+	// re-assert / SkinAmbientOverride when `atomic->pipeline == skinPipe`
+	// (main.cpp isPedPipe). For a head part:
+	//   isPed=1  -> the ped contract DOES cover it; if it still renders wrong
+	//               the defect is inside the ped span (classifier / dual legs
+	//               / entry-exit contract), not a missing contract.
+	//   isPed=0  -> the head is drawn by another branch: pipe==NULL falls into
+	//               the default-pipe contract (NO ped opaque enforce, NO cull
+	//               force, NO dual pass, NO pAmbient override) which is
+	//               exactly the "dark head + solid chroma-green fringe"
+	//               signature; a foreign pipeline is worse still.
+	// renderCallBack is the +0x48 member (gta.h SA layout contract) — anything
+	// other than AtomicDefaultRenderCallBack means myDefaultCallback never
+	// sees this atomic at all, so no ped contract of either dual-path arm can
+	// ever reach it.
+	// One-shot, fires on the same atomic as [CharsHead]; additive tag so the
+	// existing receipt corpus stays byte-identical.
+	dbglog("[PedHeadPath] atomic=%p frame='%s' pipe=%p skinPipe=%p isPed=%d "
+		"renderCb=%p defaultCb=%p",
+		(const void*)atomic,
+		frameName ? frameName : "(null)",
+		(void*)atomic->pipeline, (void*)skinPipe,
+		(int)(atomic->pipeline == skinPipe),
+		(void*)atomic->renderCallBack, (void*)AtomicDefaultRenderCallBack);
 }
 
 // ============================================================

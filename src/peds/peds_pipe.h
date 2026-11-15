@@ -9,7 +9,7 @@
 // (TexDefsPluginAttach: guarded, one-shot, always-degrade-never-break).
 //
 // PHASE MAP (design doc §7):
-//   Phase 1 (THIS) — skeleton: clump plugin slot 0x50647031 ("Pdp1"),
+//   Phase 1 — skeleton: clump plugin slot 0x50647031 ("Pdp1"),
 //       per-ped state pool (fixed 64-entry free-list, POD, no heap churn),
 //       [Ped] config parse into a file-static mirror, probe receipts.
 //       Inert: every exported call early-outs on a single bool read while
@@ -19,13 +19,38 @@
 //       hook points P1-P15 (design doc §3.1 table) into skin.cpp;
 //       readIniFile calls PedsPipe_ReadConfig; InjectDelayedPatches calls
 //       Skin_Init.
-//   Phase 3 — hair thread (HairOnClumpAttach / HairPreRender / HairDraw;
-//       enlivens the dead chars_classifyClump path, design doc §4.1).
-//   Phase 4 — cloth sim (ClothUpdate / ClothPreRender, softbody A/B gate,
-//       design doc §5).
+//   Phase 3 (SKIN absorb — DONE) — skin.cpp owns the real skin logic:
+//       Skin_ClassifyAtomic (material walk -> class mask),
+//       SkinEntryContract (capture/enforce/cull/alpha/zwrite/depth),
+//       SkinAmbientOverrideEnter/Exit (pAmbient black-guard pair),
+//       SkinExitContract (restore / GE@1 reset / sticky-depth).
+//       All contract state lives in PedPipeState (below) so the main.cpp
+//       marked blocks route through the module with a pedsPipeEnable=0
+//       legacy fallback. Hair thread (HairOnClumpAttach / HairPreRender /
+//       HairDraw; enlivens the dead chars_classifyClump path, design doc
+//       §4.1) and cloth sim (ClothUpdate / ClothPreRender, softbody A/B
+//       gate, design doc §5) remain future sub-modules.
 //
 // ROLLBACK LEVER: [Ped] pedsPipeEnable=0 in any lane's INI restores the
 // legacy inline ped path byte-for-byte (design doc §7 Phase 1).
+
+// ---------------------------------------------------------------------------
+// Pre-entry render-state triplet capture — the PedOpaqueState idiom
+// (main.cpp:1074-1081), field-for-field. The module owns its own copy so
+// main.cpp's legacy struct (and the pedsPipeEnable=0 inline path that uses
+// it) stays byte-identical; when the pedContract.cpp extraction finally
+// lands (design doc §3.1 "FUTURE render/pedContract.cpp"), both copies merge
+// into that header verbatim. POD only — scalar members (C2712-safe).
+// ---------------------------------------------------------------------------
+struct SkinOpaqueState
+{
+	// L1 rw render-state cache
+	RwUInt32 rwVtxAlpha, rwZWrite, rwZTest, rwAlphaFunc, rwAlphaRef;
+	// L2 RW D3D9 driver cache
+	DWORD drvBlend, drvZWrite, drvZEnable, drvZFunc, drvAlphaTest, drvAlphaFunc, drvAlphaRef;
+	// L3 raw device
+	DWORD devBlend, devZWrite, devZEnable, devZFunc, devAlphaTest, devAlphaFunc, devAlphaRef;
+};
 
 // ---------------------------------------------------------------------------
 // Per-ped state (POD only — no ctors, no virtuals, no heap members).
@@ -39,17 +64,59 @@ struct PedPipeState
 	RpAtomic	*backAtomic;		// atomic that first acquired this state (diagnostic back-pointer; may be NULL)
 	RpClump		*ownerClump;		// clump that owns this pool entry (double-release / staleness guard)
 
-	// --- skin classification (Phase 2: Skin_ClassifyAtomic fills) ---
-	uint32		skinClassMask;		// per-atomic skin-classification bitmask (PartType encoding, chars.h:14-25)
-	uint32		dualPassMask;		// bit per atomic that needs the dual-pass second leg
+	// --- skin classification (Skin_ClassifyAtomic fills, one atomic per call) ---
+	uint32		skinClassMask;		// SKINCLASS_* bits (skin.h) of the MOST RECENTLY classified
+									// atomic — opaque/cutout/translucent/unknown parts. The
+									// PartType encoding (chars.h:14-25) stays with the
+									// chars_classifyClump lane (design doc §4.1).
+	uint32		dualPassMask;		// bit0 (SKINDUAL_SECOND_LEG, skin.h) = the most recently
+									// classified atomic needs the dual-pass second leg. The
+									// dual-pass gate in myDefaultCallback reads bit0 per
+									// atomic (veto when clear). Cleared ONLY for a fully
+									// untextured + fully opaque atomic — every textured
+									// atomic (head/hair/bandana/glasses included) keeps
+									// the leg, because the FFP ped pipe cannot force the
+									// shader alpha=1 that TAC_OPAQUE assumes. See the
+									// "HEAD-PART FIX" block in Skin_ClassifyAtomic.
 
-	// --- stage-0 recovery latch (Phase 2: SkinStage0Resync absorb, design doc §3.1) ---
+	// --- stage-0 recovery latch (SkinStage0Resync state lane, design doc §3.1) ---
 	uint32		stage0Latch;		// 0 = clean, 1 = resync armed, 2 = recovered this clump
 	uint32		stage0FailCount;	// consecutive recovery failures (ped_tex_recover_fail counter)
 
-	// --- dual-pass state (Phase 2: SkinDrawDual absorb, main.cpp:2260-2338) ---
+	// --- dual-pass state (SkinDrawDual state lane, main.cpp:2541) ---
 	uint32		dualPassActive;		// leg currently drawn: 0 = none, 1 = GREATEREQUAL@zt ZWRITE-on, 2 = LESS@zt ZWRITE-off + VERTEXALPHA blend-on (F6 fix)
 	float		dualZTest;			// cached zt clamp value (zwriteThresholdPed lever, skygfx.h:364)
+
+	// --- entry/exit contract (Phase 3: SkinEntryContract / SkinExitContract) ---
+	// Written once per ped span by SkinEntryContract (pre-entry), consumed at
+	// exit by SkinExitContract. A divergent capture is NEVER re-emitted at
+	// exit (sticky rule) — the canonical signature is left behind instead.
+	SkinOpaqueState	contractCap;		// pre-entry triplet capture (compare basis for the
+										// §8 compare-then-write enforce + exit restore source)
+	PipeAlphaState	contractAlpha;		// pipeEnterAlphaMode snapshot (exit: pipeExitAlphaMode)
+	RwUInt32		contractCull;		// pipeEnterCullMode saved value (exit: pipeExitCullMode)
+	RwUInt32		contractCullDraw;	// effective span cull forced at entry (main.cpp's
+										// draw-boundary re-assert at :2516-2517 reads it)
+	RwBool			zwriteRw;			// entry ZWRITE 3-layer guard captures (pre-seeded TRUE)
+	DWORD			zwriteDrv;			// L2 RW driver cache
+	DWORD			zwriteDev;			// L3 raw device
+	uint32			contractOn;			// pedOpaqueContract latch (exit: restore vs GE@1 reset)
+	uint32			alphaTestOn;		// pedAlphaTestEnable latch (1 = canonical, 0 = S5 lane)
+	uint32			zwriteWasDesync;	// sticky ZWRITE rule flag (entry guard tripped)
+	uint32			depthWasDesync;		// sticky-depth rule flag (ZTEST/ZENABLE/ZFUNC divergent)
+	uint32			contractEntered;	// SkinEntryContract ran for this span — SkinExitContract
+										// early-outs unless set (the ambOverridden idiom). The
+										// pool zero-fills contractAlpha/contractCull/zwrite*;
+										// an exit on that zeroed state would push colorWrite=0
+										// through pipeExitAlphaMode (blank channels) and restore
+										// ZWRITE=OFF — main.cpp pre-seeds savedAlpha/savedZWrite
+										// (2132-2142) against the same hazard, so the module
+										// needs its own pairing latch. Cleared at exit start, so
+										// a second exit in the same span is a no-op (re-entrant).
+
+	// --- pAmbient override (Phase 3: SkinAmbientOverride enter/exit pair) ---
+	RwRGBAReal		ambSaved;			// pre-override pAmbient->color (exit restore source)
+	uint32			ambOverridden;		// enter ran — exit must restore
 
 	// --- frame stamps ---
 	uint32		lastSeenFrame;		// last render frame this state was touched (staleness probe)

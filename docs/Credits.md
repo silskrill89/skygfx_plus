@@ -4,7 +4,7 @@
 - **aap** — Author of SkyGfx ([github.com/aap/skygfx](https://github.com/aap/skygfx)). SkyGfx is aap's project; it is not a DK22Pac project.
 
 ## Core Contributors
-- **Junior (JuniorDjjr)** — JuniorDjjr fork: stochastic texturing (later superseded by `noiseDetail`), wind animation, EDED plugin, texdb, extended colour filters
+- **Junior (JuniorDjjr)** — JuniorDjjr fork: noise-based variation texturing (later superseded by `noiseDetail`), wind animation, EDED plugin, texdb, extended colour filters
 - **GTASAS 1987 Team** — skygfx_plus extension work recorded in project docs (lead: babamohammed2022 — UNVERIFIED)
 - **DK22Pac** — Normal Map Plugin (rpNORMMAP pipeline reference)
 - **Silent** — SilentPatch / SilentPatchSA compatibility

@@ -1,6 +1,6 @@
 # docs/plans — Index & Crash-Resume Procedure
 
-Last updated: 2026-11-02 (recon-pass reconciliation: 2026-11-01/02 rows indexed).
+Last updated: 2026-11-02 late (build 11 / wave-12 + CJ bug-wave reconciliation: 2026-11-02 rows indexed).
 
 Status legend: **ACTIVE** = current guidance / still authoritative · **SUPERSEDED** = replaced by a
 newer doc, kept for history · **ARCHIVE** = executed, deferred, or reference-only.
@@ -29,7 +29,9 @@ newer doc, kept for history · **ARCHIVE** = executed, deferred, or reference-on
 | `2026-10-31-peds-pipe-design.md` | 2026-10-31 | ACTIVE (design only) | Peds pipe phases 1-4: `src/peds/` layout (peds_pipe/skin/hair/cloth), extraction plan for the default callback, INI keys, SkinSSS binding. | Next work = Phase 1 extraction (main.cpp:1881-2440). |
 | `2026-10-31-md-reconciliation.md` | 2026-10-31 | ACTIVE (process) | MD reconciliation record: fixes applied to FUTURE_FEATURES.md / PLAN.md / CODEBASE_DOCUMENTATION.md, coronaZtest + pedAmbientFloor conflict resolutions, sep3 file count correction. | Companion to `docs/FEATURE_LIST.md`. |
 | `2026-11-01-sa-font-path.md` | 2026-11-01 | ACTIVE (READ-ONLY constraint) | SA font/text path PE map (opinion doc); consult BEFORE touching font-flush pins; describes an UNCOMMITTED tree state. | Constraint listed in `.opencode/memory-bank/activeContext.md`. |
-| `2026-11-02-recon-pass.md` | 2026-11-02 | ACTIVE (recon) | Deployed-vs-committed reconciliation: build 9 (ASI 2,540,032 B, md5 4459b4b7) vs HEAD 898e894 + 413-entry uncommitted tree (waves 1-11); risk register (R1 = staged wave-history commits to a branch) + next actions. | Companion: `.opencode/memory-bank/activeContext.md` (2026-11-02 section). |
+| `2026-11-02-systematic-roadmap.md` | 2026-11-02 | ACTIVE | Consolidated systematic fix roadmap: whiteout/scene/cloud/sea/height-fog/rotor/ground families (A–G) + cross-cutting TC validation with per-item LANDED/IN FLIGHT status; CJ bug wave families A/B/C section; perf lane R2/R5/R6. | Global acceptance gate: `../baseline/2026-11-02-stable-config/README.md`. Wave record: `.serena/memories/wave-13-record.md`. |
+| `2026-11-02-wrapper-migration.md` | 2026-11-02 | ACTIVE | Wrapper migration plan: migrate TU-local address casts/typedefs onto `WRAPPER` definitions in `src/rw/gta.cpp`; bogus 0x748xxx block byte-verified and corrected (RpClumpStreamRead 0x74B420, RpClumpDestroy 0x74A310, …). | Additive pass only; call-site migration follow-up (sftbdyphsx.cpp owned by another lane). |
+| `2026-11-02-recon-pass.md` | 2026-11-02 | ACTIVE (recon) | Deployed-vs-committed reconciliation: build 9 (ASI 2,540,032 B, md5 4459b4b7) vs HEAD 898e894 + 413-entry uncommitted tree (waves 1-11); risk register (R1 = staged wave-history commits to a branch) + next actions. R1 discharged by 84ef232+5cc5d25 + skrillex attribution rewrite (build 11). | Companion: `.opencode/memory-bank/activeContext.md` (2026-11-02 section). |
 | `effects-menu-overhaul.md` | 2026-09-29 | ACTIVE (reference) | Effects + menu overhaul consolidated research; §0 is NEVER-REVERT. | No successor; §0 protected. |
 | `questionnaire.md` | 2026-10-01 | ARCHIVE (resolved) | Consolidated user Q&A root causes (A-H) for the Oct-1 fix swarm. | Resolved; no successor. |
 | `swarm-deploy-2026-10-01.md` | 2026-10-01 | SUPERSEDED | 8-fixer swarm deployment plan and write-scope pool. | `.serena/memories/swarm-round3-2026-10-01.md` (rounds 1-4 authoritative record). |

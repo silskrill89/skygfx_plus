@@ -1,6 +1,6 @@
 // weather.h — Multi-timecyc weather system
 // Sits on top of game's CTimeCycle, overrides m_CurrentColours
-// RW-style: uses game's CColourSet interpolation, adds hash-based set selection
+// RW-style: uses game's CColourSet interpolation; set 2 (weathers2.dat) is always selected
 
 #pragma once
 
@@ -15,10 +15,14 @@ enum WeatherSet {
 void Weather_Init(const char *gameDir);
 
 // Called each frame after CTimeCycle::Update()
-// Overrides m_CurrentColours with blended values from both sets
+// Overrides m_CurrentColours with blended values from both sets.
+// Also restores m_CurrentColours.directional* from the timecyc "Dir" column
+// in BOTH modes: SA's CTimeCycle never carries that column into
+// m_CurrentColours (the slot holds ambient-before-brightness instead), so
+// without the restore every directional consumer reads the ambient colour.
 void Weather_Update(void);
 
-// Select weather set for a given weather type + time slot (deterministic hash)
+// Select weather set for a given weather type + time slot (always WEATHER_SET_2)
 int Weather_SelectSet(int weatherType, int timeSlot);
 
 // Get the blend factor between sets (0.0 = set1, 1.0 = set2)

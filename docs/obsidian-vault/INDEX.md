@@ -1,11 +1,15 @@
 # SkyGFX Plus — Obsidian Vault Index
 
+> Last synchronized with the live tree: **2026-11-10** (wave 20). Status lives in
+> [[Status 2026-11-10]]; architecture in [[Current Architecture (Wave 20)]].
+
 ## Vault Structure
 
 ```
 docs/obsidian-vault/
 ├── 00-Index/
-│   └── Home.md
+│   ├── Home.md
+│   └── Status 2026-11-10.md
 ├── 03-Shaders/
 │   └── VehiclePBR Modern.md
 ├── 06-Technical-Decisions/
@@ -13,13 +17,15 @@ docs/obsidian-vault/
 │   └── Rubber Shader Merge.md
 ├── 08-Build-Deploy/
 │   ├── Build System.md
+│   ├── Gate Chain.md
 │   └── SDK Dependencies.md
 ├── AntiAliasing/
 │   ├── Conservative Morphological AA.md
 │   ├── Dynamic Temporal AA Call of Duty.md
 │   └── SMAA Enhanced Subpixel Morphological AA.md
 ├── Architecture/
-│   └── 32_to_64_Bit_Transition_Reference.md
+│   ├── 32_to_64_Bit_Transition_Reference.md
+│   └── Current Architecture (Wave 20).md
 ├── BRDF/
 │   └── Non-Parametric Sparse BRDF.md
 ├── EPK-Reference/
@@ -49,6 +55,9 @@ The vault contains deep-dive research and architecture documents. For project-le
 
 | Vault Topic | Main docs/ Counterpart |
 |-------------|----------------------|
+| [[Status 2026-11-10]] | `.serena/memories/wave-20-record.md` |
+| [[Gate Chain]] | `docs/plans/2026-11-07-build-gate-checklist.md` |
+| [[Current Architecture (Wave 20)]] | `CODEBASE_DOCUMENTATION.md` |
 | [[SkyGFX Pipeline Overview]] | `docs/Vehicle Pipeline.md`, `docs/Building Pipeline.md`, `docs/Unified Pipeline.md` |
 | [[VehiclePBR Modern]] | `docs/VehiclePBR Modern.md` |
 | [[Build System]] | `docs/Build System.md` |

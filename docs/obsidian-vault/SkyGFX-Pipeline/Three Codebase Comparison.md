@@ -38,7 +38,7 @@ aap (original v4.2b) → junior_dr (fork) → skygfx_plus (expIV rewrite)
 
 ### junior Fork
 - Added VCS/III/VC color filters
-- Added stochastic sampling, wind animation
+- Added noise-based variation, wind animation
 - Added radiosity, trails, grading
 - YCbCr correction
 - ~3x code growth

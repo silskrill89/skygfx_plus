@@ -19,7 +19,7 @@ float3		ambient		: register(c4);
 float3		directCol[7]: register(c5);
 float3		directDir[7]: register(c12);
 float4		matCol		: register(c19);
-float3		surfProps	: register(c20);
+float4		surfProps	: register(c20);
 float4		shaderParams	: register(c29);
 float4		dayparam	: register(c30);
 float4		nightparam	: register(c31);
@@ -34,13 +34,22 @@ float3x3	envmat		: register(c38);
 
 #define surfAmb  (surfProps.x)
 // c20 packed by buildingPipe.cpp (PBR cb): x = ambient scale, y = dynamic
-// light scale, z = prelight scale. SA road/terrain/vegetation materials ship
+// light scale, z = prelight scale, w = baked-prelight strength (N5 ambient
+// split key, 1.0 = real baked prelight / 0.0 = weak-or-zero prelight — see
+// surfPrelight below). SA road/terrain/vegetation materials ship
 // diffuse=0 with lighting baked into vertex prelight; the CPU fallback boosts
 // ONLY z (prelight passes at full) and leaves y at the raw diffuse (~0) so the
 // live 7-light sum cannot stack on top of already-baked lighting (2x energy =
 // white blown-out ground).
 #define surfLightScale (surfProps.y)
 #define surfDiff (surfProps.z)
+// N5 (near-black vegetation): per-geometry baked-prelight strength packed by
+// the PBR cb's surfUpload/surfW (bldPrelightFactor — flags + colour-stream
+// probe of the STATIC prelight buffers, never the day/night-blended value).
+// 1.0 = the baked term carries light -> ambient keeps kAmbientScale (pre-lit
+// appearance bit-identical); 0.0 = missing/black prelight -> ambient at FULL
+// strength, the only light that material has.
+#define surfPrelight (surfProps.w)
 
 // ---- Sept-3 (c270294) prelight-dominant balance --------------------------
 // c270294 shipped `OUT.Color = (prelight*surfDiff + ambient*surfAmb)*matCol`
@@ -55,7 +64,9 @@ float3x3	envmat		: register(c38);
 //   material's real surfDiff leaves the baked prelight too weak.
 // kAmbientScale: c270294 ambient was effectively 0 (dead static). 0.10 keeps a
 //   trace of timecycle tint in shadow instead of pure black while contributing
-//   only ~2-4% of a typical daylight prelight.
+//   only ~2-4% of a typical daylight prelight. Weak/zero-prelight materials
+//   (surfPrelight == 0) get this at FULL strength via the N5 ambient split
+//   below — for them the 0.10 trace WAS the whole lighting (near-black).
 // kDirectScale: 0.15 of the existing surfLightScale'd 7-light sum. At full
 //   daylight (directCol[0] ~= 1.0, NdotL ~= 0.7, diffuse ~= 0.8) that is ~0.08
 //   added against a ~0.4-0.6 prelight -> ~15-20% of the base: enough to keep
@@ -130,7 +141,17 @@ VS_OUTPUT main(in VS_INPUT IN)
 	// now that sun is added (sunlit faces can otherwise exceed 1.0).
 	float4 prelight = IN.DayColor * dayparam + IN.NightColor * nightparam;
 	float4 vcol = prelight * surfDiff * kPrelightDominance;
-	vcol.xyz += ambient * surfAmb * kAmbientScale;
+	// N5 ambient split: baked-prelight materials (surfPrelight == 1) keep the
+	// trace-scale ambient below, BIT-IDENTICAL to before — the boost term is
+	// exactly 0 there and `kAmbientScale + x*0 == kAmbientScale` in IEEE.
+	// Weak/zero-prelight materials (surfPrelight == 0, e.g. vegetation with a
+	// missing or black prelight buffer) get ambient at FULL strength: their
+	// baked term is empty and the dynamic light is off (surfLightScale ~= 0),
+	// so the 0.10 trace was their entire lighting (0.05 floor * 0.10 = 0.005
+	// -> near-black foliage).
+	float ambBoost = 1.0 - saturate(surfPrelight);
+	float ambScale = kAmbientScale + (1.0 - kAmbientScale) * ambBoost;
+	vcol.xyz += ambient * surfAmb * ambScale;
 	for (int i = 0; i < 7; i++){
 		float l = max(0.0, dot(worldNormal, -directDir[i]));
 		// Dynamic lights scale by surfLightScale (y), NOT surfDiff: for

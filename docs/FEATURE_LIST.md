@@ -3,7 +3,14 @@
 Consolidated from ALL project MDs (PLAN.md, TODO.md, WORKFLOW_PLAN.md, FUTURE_FEATURES.md,
 CODEBASE_DOCUMENTATION.md, docs/plans/*, docs/baseline/*, memory-bank, .serena memories).
 This is the single checklist future waves generate from.
-Last consolidated: 2026-11-01. Repo: `E:\dev(dave)\skygfx_plus_expIV`. ASI target: `E:\games\gtasa_skygfx_plus\skygfx.asi`.
+Last consolidated: 2026-11-03 (post-CJ-wave reconciliation). Repo: `E:\dev(dave)\skygfx_plus_expIV`. ASI target: `E:\games\gtasa_skygfx_plus\skygfx.asi`.
+Git attribution: 3 branches rewritten to author `skrillex` (291 commits; heads at rewrite: ve cd19e3f / master d0cface / experimental 25040bb); README front-page rewrite committed (`5cc5d25`).
+CJ-wave fixes (families A/B/C) are LANDED ON DISK but **not yet built/deployed** — see
+docs/plans/2026-11-02-systematic-roadmap.md "CJ bug wave" + docs/baseline/2026-11-03-test12/findings.md.
+W0.3 wave (landing 2026-11-09, build pending): "stochastic texturing" is renamed **noise based
+variation** (driven by `src/render/noise.cpp/.h`, `NoiseMaterialVariation`), and wind animation moves
+into the new motion-FX family (`src/render/motion_fx.cpp/.h` parent → `src/render/wind.cpp` child;
+`treeWind.cpp` keeps only `TreeAlpha`).
 
 ---
 
@@ -55,12 +62,14 @@ supersedes 2026-08-01-remaining-roadmap.md); .serena/memories/wave-12lane.md.
 | Feature | Status | Owner files | Source MD |
 |---|---|---|---|
 | PS2 / Xbox / PBR / GTA IV building render callbacks | ✅ | src/render/buildingPipe.cpp | CODEBASE_DOCUMENTATION.md; source-inventory §1 |
-| Stochastic detail maps + dual-pass (PS2/Xbox) | ✅ | buildingPipe.cpp, shaders/stochasticBuildingPS.hlsl | noise-system-audit §3 |
+| Noise based variation + dual-pass (PS2/Xbox) — renamed from "stochastic texturing" in the W0.3 wave; driven by the `NoiseMaterialVariation` API over the packed noise tile | 🟡 (rename landing W0.3, build pending; legacy `stochasticTexturing`/`stochastic` INI aliases still parse) | src/render/noise.cpp/.h, src/render/buildingPipe.cpp (`buildingPipe_bindNoiseFor`, s9 + c49-c52), shaders/noiseDetailBuildingPS.hlsl, shaders/include/Noise.hlsl | noise-system-audit §3; W0.3 wave |
 | Unified texture-def layer (normal-map extraction, TexDefsGetD3DTexture, plugin registry) | ✅ (merge landed) | src/texdefs.cpp/.h | 2026-10-29-merge-rinse §0 |
-| Texture alpha classifier (TAC_OPAQUE/CUTOUT/FADED) + cache 4096 | ✅ | src/render/texalpha.cpp/.h (consumers buildingPipe.cpp:2111) | activeContext Wave 5 |
+| Texture alpha classifier (TAC_OPAQUE/CUTOUT/FADED) + cache 4096 | ✅ (+ deterministic classification on disk 2026-11-03: first-sight scans always run, per-raster stable class, cyclic-LRU, `budget=` demoted to telemetry — kills angle-dependent class flip-flop) | src/render/texalpha.cpp/.h (consumers buildingPipe.cpp:2111) | activeContext Wave 5; roadmap CJ-A |
 | Building dual-pass road-decals / classify bracket | ✅ | buildingPipe.cpp:2253-2280, PipeChain.hlsl | alpha-reversal-findings (alpha echo fix landed) |
+| M2 carve contract (blended meshes ZWRITE-parked 3L + loop-end restore; `decalBlend == blendOn`) | ✅ (on disk 2026-11-03, unbuilt) | buildingPipe.cpp ([BldZW] receipts) | roadmap CJ-B; test12 findings §2-B |
 | Building env reflect (bldEnvReflect/bldSkyReflect) | ✅ | buildingPipe.cpp | source-inventory §4 |
 | World-state baseline at frame boundaries (pipeApplyWorldBaseline) | ✅ | pipelinecommon.cpp (call sites main.cpp:2144/2636/2658/5639, depthhook.cpp:378) | activeContext Wave 5 |
+| Scene-start repair (rs_mon `scene_start` detection promoted to repair: canonical entry block {blend OFF, ZWRITE ON, ZTEST ON, ZFUNC LESSEQUAL} 3L once per frame before CClouds) | ✅ (wave-12 lane, build 11; acceptance probe pending) | pipelinecommon.cpp (scene_repair), main.cpp RenderScene_before | roadmap §B; wave-13-record §1 lane 2 |
 | stateBaselineEnable A/B lever | 🟡 (no-op today — call sites unconditional) | main.cpp:3935/4497/4526 | activeContext 2026-10-24 "INI bisect levers" |
 
 ### 3.2 Vehicles
@@ -82,27 +91,28 @@ supersedes 2026-08-01-remaining-roadmap.md); .serena/memories/wave-12lane.md.
 |---|---|---|---|
 | Ped default-callback contract (entry/exit, cull A/B, alpha A/B, opaque contract, pAmbient override) | ✅ | src/core/main.cpp:1881-2440 → extraction target | source-inventory §6; 2026-10-31-peds-pipe-design §3.1 |
 | Ped dual-pass legs (ZWRITE two-layer, VERTEXALPHA blend F6 fix) | ✅ | main.cpp:2260-2388 | peds-pipe-design §3.1 |
-| Ped opaque contract default ON (pedOpaqueContract, wave 5) | ✅ | main.cpp + envmap.cpp restore | activeContext Wave 5 |
+| Ped opaque contract default ON (pedOpaqueContract, wave 5) | ✅ (2026-11-03: pedOpaqueEnforce UNCONDITIONAL — ALPHATEST GE@1 + CULLBACK forced 3L at every ped entry, not gated on the INI key) | main.cpp (pedOpaqueEnforce) + envmap.cpp restore | activeContext Wave 5; roadmap CJ-A |
+| Ped entry depth trio + sticky-depth exit (ZTEST=1/ZENABLE=1/ZFUNC=LESSEQUAL forced 3L-paired; exit leaves canonical state instead of replaying divergent capture) | ✅ (on disk 2026-11-03, unbuilt — `[PedZW]` receipts) | main.cpp ped entry/exit | roadmap CJ-B; test12 findings §2-B |
 | Ped ambient max(timecycle) + pedAmbientFloor (default 0.20) | ✅ ped ambient max() landed per wave 5; pedAmbientFloor is DEAD-BUT-PARSED (W3 revert removed consumers; field kept because debugmenu_ui.cpp:750/1506 references it) — RESOLVED in docs/plans/2026-10-31-md-reconciliation.md §3 | main.cpp:2185-2225, 7102-7104, 7284-7288; debugmenu_ui.cpp:750/1506 | md-reconciliation §3; source-inventory §2-D4 + sep3/git-chars-lighting.md |
 | Stage-0 texture resync (pedStage0Resync, NULL-cache recovery) | ✅ | main.cpp:1760-1872 | source-inventory §5/P6 |
 | Head-part receipt diagnostics (bandana/hair) | ✅ | src/entities/chars.cpp (chars_logHeadPartReceipt) | source-inventory §6 P9 |
 | SSS skin blur post-pass (chars_drawSSSBlur, live) | ✅ | chars.cpp:150-640 (called from postfx.cpp chain) | merge-rinse §3.3-D; TODO.md §D (CJ material depth) |
 | Ped shader-hygiene in default callback (defaultCbShaderHygiene) | ✅ | main.cpp:2142-2183 | activeContext Wave 5 |
-| Skin PBR shader (SkinSSS.cso reserved, PartSSSParams tuned) | 🟡 Phase 2 — reserved, not bound (pipelinecommon.cpp:810-811; IDR_SKINPBR embedded-not-loaded) | pipelinecommon.cpp, shaders/ps/SkinSSS.hlsl | peds-pipe-design §3.2 |
-| pedPBRVS.cso embedded, never loaded (IDR_PEDPBRVS) | 🟡 Phase 2 staging slot | resources/resource.rc:129 | source-inventory §2-D8 |
+| Skin PBR shader (SkinSSS.cso reserved, PartSSSParams tuned) | 🟡 rides Phase 3 — reserved, not bound (pipelinecommon.cpp:810-811; IDR_SKINPBR embedded-not-loaded) | pipelinecommon.cpp, shaders/ps/SkinSSS.hlsl | peds-pipe-design §3.2 |
+| pedPBRVS.cso embedded, never loaded (IDR_PEDPBRVS) | 🟡 staging slot (rides Phase 3) | resources/resource.rc:129 | source-inventory §2-D8 |
 | Full status → §5 (peds_pipe + hair + cloth) | | | |
 
 ### 3.4 Water
 | Feature | Status | Owner files | Source MD |
 |---|---|---|---|
 | Water pipe (3 styles: Xbox → Water_Parallax.cso, IV → Water_IV.cso, V → Water_V.cso) | ✅ | src/render/waterPipe.cpp, shaders/ps/Water_Parallax.hlsl, shaders/vs/Water_VS.hlsl | water-overhaul-spec §1a |
-| 2-wave vertical swell (c11 law) + body-class TEXCOORD5 (OCEAN/SHALLOW/INTERIOR/RIVER/POND/LAKE) | ✅ | Water_VS.hlsl, waterPipe.cpp W7-B classify | water-overhaul-spec §1a |
+| 2-wave vertical swell (c11 law) + wind sea + shore gate (W2: per-vertex shore-gate fade + SkyNoise gust via vs_3_0 texldl probe) + body-class TEXCOORD5 (OCEAN/SHALLOW/INTERIOR/RIVER/POND/LAKE) | ✅ (swell 0.54 m + shore gate + wind sea = fix-36, build 11) | Water_VS.hlsl, waterPipe.cpp W2/W7-B classify | water-overhaul-spec §1a; roadmap §C |
 | Fresnel sky reflection, depth shallow→deep ramp, shore alpha exp2, foam octaves, sun glitter | ✅ | Water_Parallax.hlsl | water-overhaul-spec §1a |
 | G1 screen-space reflection (flipped scene, tier≥2), sun pierce tier 3 | ✅ | waterPipe.cpp:670 (CopySceneFlippedToTexture) | water-overhaul-spec §1a |
 | Underwater volume fog + SSS (W7-D) | ✅ | src/render/postfx_underwater.cpp, shaders/ps/Water_Underwater.hlsl | source-inventory §1 |
 | Water clip-space fix + WbBufferCountsSane + park/pin/restore (water_state/water_badbuf) | ✅ | waterPipe.cpp, main.cpp:5739-5747 | activeContext Wave 5 / 2026-10-29 teal-quads diagnosis |
 | Water line: vanilla fallback NULL+cache-seed VS/PS (Patch A/B from exp-1) | 🟡 spec landed; patch status to confirm | waterPipe.cpp:513-517, main.cpp | .opencode (teal-quads fix spec) |
-| 9 missing features M1-M9 (far-water LOD/flood guard, foam texture, geom foam, refraction, caustics, ripple sim, SSS pierce polish, volume split, FFT swell) | 📋 phased (spec Phase 0-3) | Water_Parallax.hlsl, waterPipe.cpp, new waterSim.cpp | 2026-10-30-water-overhaul-spec §2-§5 — full status in §6 |
+| 9 missing features M1-M9 | 🟡 M1-M3 LANDED (M1 far-water LOD/flood guard; M2 foam-texture blend s4/c16; M3 softIsec soft-intersection foam); M4-M9 IN PROGRESS | Water_Parallax.hlsl, waterPipe.cpp, new waterSim.cpp | 2026-10-30-water-overhaul-spec §2-§5 — full status in §6 |
 
 ### 3.5 Sky / clouds
 | Feature | Status | Owner files | Source MD |
@@ -122,9 +132,10 @@ supersedes 2026-08-01-remaining-roadmap.md); .serena/memories/wave-12lane.md.
 | Plant island TU + depth contract (grasssys) | ✅ (support surface) | src/render/grasssys.cpp/.h | source-inventory §1 |
 | Grass instancing draw path | ⛔ DEAD unfed — SetEnabled wired, nothing calls DrawTriPlant; force-decision: delete 1,771 ln or wire CPlantMgr::Render thunk | grasssys.cpp/.h | 2026-10-29-merge-rinse §8 (Z1); source-inventory §2-D1 |
 | PC grass renderer legacy callback + plant surface props | ✅ | grasssys.cpp, grassRenderCallback in main.cpp | source-inventory §1 |
-| CPU tree wind tilt (TreeWind_ApplyToTransform) | ✅ | src/render/treeWind.cpp (hook 0x534E90 main.cpp:7805) | rw-physics-ragdoll-re §4.1 |
-| Tree angular spring (bend rewrite) | 🟡 Phase 2a spec, not landed | treeWind.cpp | rw-physics-ragdoll-re §5.4 |
-| Tree crack (sub-hierarchy gibs) | 📋 Phase 2b opt-in | treeWind.cpp, softbody | rw-physics-ragdoll-re §5.4 |
+| CPU tree wind tilt (TreeWind_ApplyToTransform) | ✅ (owner moves to motion_fx/wind in W0.3) | src/render/motion_fx.cpp/.h + src/render/wind.cpp (hook 0x534E90 main.cpp:7805) | rw-physics-ragdoll-re §4.1 |
+| Motion FX family (`motion_fx` parent → `wind` child): wind field/gust math + motion orchestration + randomness/physics-family integration (part of the randomness + physics systems, not a solo feature) | 🟡 landing W0.3 (new TUs; `treeWind.cpp` keeps only `TreeAlpha`) | src/render/motion_fx.cpp/.h, src/render/wind.cpp — one motion clock `MotionFxClockSeconds()`, randomness seam `NoiseMaterialVariation` (noise.h), read-only physics coupling (softbody/ragdoll/water_swell) | W0.3 wave; motion_fx.h |
+| Tree angular spring (bend rewrite) | 🟡 Phase 2a spec, not landed | motion_fx.cpp/wind.cpp | rw-physics-ragdoll-re §5.4 |
+| Tree crack (sub-hierarchy gibs) | 📋 Phase 2b opt-in | motion_fx.cpp/wind.cpp, softbody | rw-physics-ragdoll-re §5.4 |
 | Grass colour data + plant-surf-prop header absorb | 📋 rinse M-E (absorb ColData.h + PlantSurfPropMgr.h into grasssys.h) | src/rw/ColData.h, src/entities/PlantSurfPropMgr.h | merge-rinse §7-E |
 
 ### 3.7 Decals / coronas / sprite / shadows
@@ -137,6 +148,7 @@ supersedes 2026-08-01-remaining-roadmap.md); .serena/memories/wave-12lane.md.
 | Shadow state contract (byte-verified zero-arg sites 0x53E0BE/C3/C8, canonical L1+L2+L3) | ✅ | main.cpp (shadow_contract) | activeContext Wave 5 |
 | Cascaded shadow maps / CHSS / PCSS / night shadow atlas | 📋 | new shadow files | 2026-10-08-iv-v-graphics-physics-port §B |
 | Tag rendering (CTagManager hooks) + mirror fixes hooks | ✅ | main.cpp, src/render/mirrorPass.cpp | PLAN.md P3 hook map |
+| GPU particles module (GPU-resident sprite pool + WakeParticlePS; every entry point no-ops when `gpuParticlesEnable=0`) | ✅ module LANDED (build 11; default 0 = zero device-state traffic) | src/render/particles_gpu.cpp/.h, shaders/ps/WakeParticlePS.hlsl, main.cpp:6808-6990 | roadmap Remaining backlog (further emitter work rides on it) |
 
 ### 3.8 PostFX chain
 Chain order (verified): normal buffer → velocity buffer → SSAO → CopyDepthToPrev →
@@ -187,7 +199,7 @@ physics.ini (softbodyBackend off|native|bullet, budget). NEVER Euphoria (design 
 |---|---|---|---|
 | Native softbody ragdoll Phase 1 (SoftRagdoll_c, all-bone native integrator, capture bits) | ✅ (absorbed/merged) | src/entities/softbody.cpp/.h, src/entities/sftbdyphsx.cpp/.h | 2026-10-29-rw-physics-ragdoll-re §5; source-inventory §1 |
 | Bullet death ragdoll backend (11 capsules, cone/hinge, dismember bake) | ✅ | src/extras/ragdoll_death.cpp/.h, softbody | rw-physics-ragdoll-re §4.1 |
-| Dismemberment (RpSkin bake pipeline, zero-scale bone matrices) | ✅ | sftbdyphsx.cpp:563-1184 | rw-physics-ragdoll-re §4.1 |
+| Dismemberment (RpSkin bake pipeline, zero-scale bone matrices) + gibs render fix (renderCallBack at **+0x48** byte-verified; 0x804EF0 clump-frame splice REMOVED — it poisoned clump atomicList/dirty-list; frame read at atomic+0x04, modelling matrix EMBEDDED at frame+0x10) | ✅ (gibs fix on disk 2026-11-03, unbuilt — the fix that also closes family C inside-out) | sftbdyphsx.cpp:563-1184 (BuildGibClump/Dismember_Render), ragdoll_death.cpp | rw-physics-ragdoll-re §4.1; roadmap CJ-C |
 | Water buoyancy (RagdollWaterForces: buoyancy/drag/coupling/spring/drift, shared swell law) | ✅ (Bullet lane; clock unification still pending) | ragdoll_death.cpp:951, softbody.cpp (SoftbodyWaterQuery/Swell) | water-overhaul-spec §4 |
 | Shared water surface-height law (one clock, 3 consumers) | 🟡 clock divergence fix pending (physics contract #1) | softbody.cpp, ragdoll_death.cpp, waterPipe.cpp | water-overhaul-spec §4 |
 | Cloth simulation (verlet, ground/water/LOS collision, AnimBlend co-existence, flags/curtains reuse) | 📋 Phase 4 of peds pipe | src/peds/cloth.cpp (design) | 2026-10-31-peds-pipe-design §5 |
@@ -204,18 +216,22 @@ physics.ini (softbodyBackend off|native|bullet, budget). NEVER Euphoria (design 
 ## 5. Peds Pipe
 
 Design: docs/plans/2026-10-31-peds-pipe-design.md — DESIGN ONLY doc, phased 1-4.
-Layout: `src/peds/` — peds_pipe.{cpp,h}, skin.{cpp,h}, hair.{cpp,h}, cloth.{cpp,h}.
+Layout: `src/peds/` — peds_pipe.{cpp,h}, skin.{cpp,h} landed (hair/cloth not yet created).
+Current phase state (2026-11-03): **Phase 1–2 LANDED** (module skeleton + clump plugin
+slot + [Ped] config mirror + skin sub-module wired), **Phase 3 IN PROGRESS** (skin
+absorb — the four ped fixes move main.cpp → skin.cpp, design §3.1; the SkinSSS swap
+design §3.2 rides the same phase). Design-doc hair = §4, cloth = §5 (later phases).
 
 | Feature | Status | Owner files | Source MD |
 |---|---|---|---|
-| peds_pipe module (extract myDefaultCallback ped branch into PedsPipeRenderPedAtomic; wrap-first with pedsPipeEnablerollback) | 🟡 design landed; Phase 1 extraction is next work | design target src/peds/peds_pipe.cpp; today main.cpp:1881-2440 | 2026-10-31-peds-pipe-design §2/§7 |
-| skin sub-module (Stage0resync + dual pass + opaque + ambient absorbed) | 🟡 same Phase 1 | peds_pipe + skin | peds-pipe-design §3 |
-| Skin shader (FFP→SkinSSS.cso swap, register block reuse, pipeUploadPBR) | 📋 Phase 2 | skin.cpp, pipelinecommon.cpp | peds-pipe-design §3.2 |
-| Hair thread (card strips, per-bone HairAttachTable, Kajiya-Kay anisotropic, ≤96 strands/clump) | 📋 Phase 3 (revive dead chars_classifyClump path) | peds_pipe + hair.cpp, HairEnhance.hlsl | peds-pipe-design §4 |
-| Animal fur reuse (same hair thread, SPINE/TAIL attach tables) | 📋 Phase 3 extension | hair.cpp | peds-pipe-design §4.2 |
-| Cloth sim (verlet + physics link) | 📋 Phase 4 | cloth.cpp | peds-pipe-design §5 |
-| clump plugin slot "Pdp1" 0x50647031 (non-ped state attach) | 🟡 designed | peds_pipe | peds-pipe-design §2.2 |
-| [Ped] lane INI keys (pedsPipeEnable, skinShaderEnable, hairEnable, clothEnable, clothBackend…) | 📋 | main.cpp readIni [Ped] section | peds-pipe-design §6 |
+| peds_pipe module (extract myDefaultCallback ped branch into PedsPipeRenderPedAtomic; wrap-first with pedsPipeEnable rollback lever) | ✅ Phase 1–2 LANDED (module + wrap lever + config mirror in tree) | src/peds/peds_pipe.cpp/.h (legacy inline fallback: main.cpp:1881-2440) | 2026-10-31-peds-pipe-design §2/§7 |
+| skin sub-module (Stage0resync + dual pass + opaque + ambient absorbed) | 🟡 Phase 3 IN PROGRESS (skin absorb path — Phase 1-2 skeleton LANDED, absorb active work) | src/peds/skin.cpp/.h, peds_pipe | peds-pipe-design §3 |
+| Skin shader (FFP→SkinSSS.cso swap, register block reuse, pipeUploadPBR) | 🟡 rides Phase 3 (SkinSSS.cso reserved; IDR_SKINPBR embedded-not-loaded) | skin.cpp, pipelinecommon.cpp | peds-pipe-design §3.2 |
+| Hair thread (card strips, per-bone HairAttachTable, Kajiya-Kay anisotropic, ≤96 strands/clump) | 📋 later phase (design §4; revive dead chars_classifyClump path) | peds_pipe + hair.cpp, HairEnhance.hlsl | peds-pipe-design §4 |
+| Animal fur reuse (same hair thread, SPINE/TAIL attach tables) | 📋 (design §4.2) | hair.cpp | peds-pipe-design §4.2 |
+| Cloth sim (verlet + physics link) | 📋 (design §5) | cloth.cpp | peds-pipe-design §5 |
+| clump plugin slot "Pdp1" 0x50647031 (non-ped state attach) | ✅ LANDED (Phase 1-2; guarded one-shot registration, 64-entry POD pool) | peds_pipe | peds-pipe-design §2.2 |
+| [Ped] lane INI keys (pedsPipeEnable, skinShaderEnable, hairEnable, clothEnable, clothBackend…) | ✅ parser LANDED (PedsPipe_ReadConfig mirror; all-off default = vanilla behaviour) | peds_pipe.cpp, main.cpp readIni [Ped] section | peds-pipe-design §6 |
 | Bandana/head-part orientation | ✂ out of scope (requires game-side CClothes hook; flagged so no phase silently claims it) | — | peds-pipe-design §8 |
 | chars.cpp split: SSS blur → postfx side, receipt → peds_pipe (rinse M7) | 📋 | chars.cpp | source-inventory §3-M7 |
 | Skin PBR decision reserved (IDR_SKINPBR deliberately not loaded) | 🟡 | pipelinecommon.cpp:810-811 | peds-pipe-design §3.2 |
@@ -226,16 +242,17 @@ Layout: `src/peds/` — peds_pipe.{cpp,h}, skin.{cpp,h}, hair.{cpp,h}, cloth.{cp
 
 | # | Feature | Phase | Status | Owner |
 |---|---|---|---|---|
-| M1 | Far-water LOD + over-land flood guard (kills 59% F2 family) | Phase 0 | ✅/🟡 (teal-slab root cause found; Patch A nIdx≤verts*6 + Patch B NULL+cache-seed fallback) | Water_Parallax.hlsl, waterPipe.cpp W7-B |
-| M5 | Caustics upgrade (sharpen curve, mips, world-space UV) | Phase 0 | ✅/🟡 (fix-13 Water_Underwater.hlsl:127 saturate rebuilt) | Water_Parallax.hlsl |
+| M1 | Far-water LOD + over-land flood guard (kills 59% F2 family) | Phase 0 | ✅ LANDED (teal-slab root cause fixed: Patch A nIdx≤verts*6 + Patch B NULL+cache-seed fallback) | Water_Parallax.hlsl, waterPipe.cpp W7-B |
+| M5 | Caustics upgrade (sharpen curve, mips, world-space UV) | Phase 0 | 🟡 partial (fix-13 Water_Underwater.hlsl:127 saturate rebuilt) — rest in progress with M4-M9 | Water_Parallax.hlsl |
+| — | Wind sea + shore gate (W2 SkyNoise gust + per-vertex shore-gate fade, vs_3_0 texldl probe) | Phase 0 | ✅ LANDED (fix-36, build 11) | Water_VS.hlsl, waterPipe.cpp:1826+ |
 | — | FFP foam band tuning (F4 wake streaks) | Phase 0 | 📋 | Water_Parallax.hlsl fallback path |
-| M2 | Shoreline foam texture blending (RAGE FoamMask 1D gradient, +s4/s5) | Phase 1 | 📋 | Water_Parallax.hlsl |
-| M3 | Foam masks near geometry (soft intersection, softIsec) | Phase 1 | 📋 | Water_Parallax.hlsl |
-| M4 | Depth-validated wave refraction (4-tap depthMax, cannotRefract gate) | Phase 1 | 📋 | Water_Parallax.hlsl |
-| M7 | SSS + sun pierce polish (Cry EdotL² recipe) | Phase 2 | 📋 | main_v/main_iv composite |
-| M6 | Dynamic ripple sim (RT ping-pong, new waterSim.cpp, tier-3 gated) | Phase 3 | 📋 | waterSim.cpp (new) |
-| M8 | Volume vs surface split (INTERIOR pools path) | Phase 3 | 📋 | Water_Parallax.hlsl main_volume |
-| M9 | FFT-lite swell (VTF LUT ≤64², target-GPU verify first) | Phase 3 | 📋 | Water_VS.hlsl |
+| M2 | Shoreline foam texture blending (RAGE FoamMask 1D gradient, +s4/s5) | Phase 1 | ✅ LANDED (s4 foamTex + c16 foamTexValid/foamTexWeight) | Water_Parallax.hlsl:320+ |
+| M3 | Foam masks near geometry (soft intersection, softIsec) | Phase 1 | ✅ LANDED (c16 softIsecGain, Cry softIsec shaping on depth copy) | Water_Parallax.hlsl:345+ |
+| M4 | Depth-validated wave refraction (4-tap depthMax, cannotRefract gate) | Phase 1 | 🟡 in progress | Water_Parallax.hlsl |
+| M7 | SSS + sun pierce polish (Cry EdotL² recipe) | Phase 2 | 🟡 in progress | main_v/main_iv composite |
+| M6 | Dynamic ripple sim (RT ping-pong, new waterSim.cpp, tier-3 gated) | Phase 3 | 🟡 in progress | waterSim.cpp (new) |
+| M8 | Volume vs surface split (INTERIOR pools path) | Phase 3 | 🟡 in progress | Water_Parallax.hlsl main_volume |
+| M9 | FFT-lite swell (VTF LUT ≤64², target-GPU verify first) | Phase 3 | 🟡 in progress | Water_VS.hlsl |
 | — | Physics clock unification (single accumulator) | Phase 3 | 📋 | waterPipe + softbody |
 
 Do-not-regress list: near-camera caustics, HUD, interior pipeline, tier<2 SRCALPHA fallback,
@@ -248,9 +265,10 @@ vanilla FFP water (waterParallaxEnable=0). Register headroom: PS c16-c31 + s4+ f
 | Feature | Status | Owner files | Source MD |
 |---|---|---|---|
 | Dedicated CPU noise service (SkyNoise: tileable Perlin/Worley/white/Bayer + quality tiers + stats) — replaced utilitynoise.cpp (deleted 2026-10-29) | ✅ landed | src/render/noise.cpp/.h | 2026-10-25-noise-system-audit (§ recommended shape = what landed); merge-rinse §0 |
+| `NoiseMaterialVariation` API — noise based material variation, the project-wide replacement for stochastic texturing | 🟡 landing W0.3 (rename; build pending) | src/render/noise.cpp/.h, shaders/include/Noise.hlsl, shaders/noiseDetailBuildingPS.hlsl | W0.3 wave |
 | SkyNoise owns cloud noise tile (DynamicSky clouds) | ✅ | noise.cpp, DynamicSky.hlsl | merge-rinse §6.1 ("SkyNoise owns the tile", main.cpp:721-722) |
 | GPU noise include (Noise.hlsl, SM3.0-safe) to replace dead PerlinNoise.hlsl / CarPaintNoise.hlsl / StochasticSamplerPS.hlsl | 🟡 (C++ service shipped; dead shader sources deleted in L13/L14; GPU include consolidation pending) | shaders/include/Noise.hlsl | noise-system-audit §1 |
-| Stochastic → proper Perlin shader path (new CSO IDs 281-283, s9/s10, c49-c52 plan) | 📋 (old stochastic 227/231/278 remain as rollback; old stochastic CSOs cull started Wave 8) | buildingPipe.cpp selectPS, fast_build.py | noise-system-audit §3.2-§3.4 |
+| Noise based variation shader path (new CSO IDs 281-283, s9/s10, c49-c52 plan) | 📋 (legacy variation CSOs 227/231/278 remain as rollback; old variation CSO cull started Wave 8) | buildingPipe.cpp selectPS, fast_build.py | noise-system-audit §3.2-§3.4; W0.3 rename |
 | SetQuality repoint or delete ([General] NoiseQuality is now pure round-trip, 0 consumers; tooltip stale) | ⛔ decision needed (Option A repoint ~6 ln preferred) | main.cpp:5935/7455/7506-7511, noise.cpp SkyNoise::SetQuality | merge-rinse §6.1 I1 |
 | CloudNoise.hlsl merge (DynamicSky/IBL_SkyCloud hash+noise3d+fbm duplicates + alias PBR_chash family) | 📋 | shaders/ps/DynamicSky.hlsl, IBL_SkyCloud.hlsl, PBR_Common.hlsl | merge-rinse §5.1 S2 |
 | IBL_SkyCloud.hlsl not embedded (superseded by DynamicSky) — delete or wire | 📋 | shaders/ps/IBL_SkyCloud.hlsl | source-inventory §2-D2 |
@@ -321,6 +339,8 @@ Ranked audit outcomes (verified via WORKFLOW_PLAN + systematic-dig + activeConte
 | texAlpha classifier cache 4096 4-way (tac=0 starvation) | ✅ | activeContext Wave 5 |
 | Pipe chain gating (18-pass pf_gate) + per-mesh building elision (bpipe_elide) | ✅ | activeContext Wave 8 |
 | MEM-5 raw new/delete shutdown cleanup (normalmap_plugin/texdb 4 allocs) | 🟡 remaining low pr. | WORKFLOW_PLAN remaining #4 |
+| Fonts glyph-flush pin (0x7273D0 = CFont::RenderFontBuffer, NOT a cloud flush — pin fast path skips park-and-set + restore when entry is canonical) | ✅ LANDED | main.cpp:4271-4391 (CloudRegionFlush_7273D0_hook) | roadmap PERF R5; 2026-11-01-sa-font-path |
+| Forward+ rebuild-before-fallback reorder (cheap light-count check first) | ✅ (PERF R6, build 11) | src/render/forwardplus.cpp | roadmap Perf lane |
 | TODO-1/2 (wheels double-buffer/InterceptCall) | ✂ STALE (wheels module deleted) | WORKFLOW_PLAN Phase 4 |
 
 ---
@@ -333,16 +353,16 @@ Ranked audit outcomes (verified via WORKFLOW_PLAN + systematic-dig + activeConte
 | dbglog / dbglog_throttle (2 s global) / dbglog_once / diag scopes / heartbeat | ✅ | debug_handl; timestamps → skygfx_dbg.log | AGENTS.md rules |
 | diagLevel + watchdog (0x40010006 whitelist, VEH+minidump, crash capture) | ✅ | main.cpp (VEH handler), debug_handl | PLAN.md P0-P2; activeContext |
 | [BUILD] size fingerprint + binary string verify + `.cache/msbuild_last.log` persistence | ✅ | tools/fast_build.py | activeContext 2026-10-26 |
-| ImGui debug menu (All Settings tab, 235 rows, search, reset, copy-as-INI, live diagnostics; theme TU) | ✅ | src/core/debugmenu_ui.cpp, debugmenu_theme.cpp | activeContext Wave 5; README (2026-10-24-imgui-settings-coverage) |
+| ImGui debug menu — menu overhaul LANDED (30-section master-detail layout: category-grouped section list left, settings pane right; search, reset-to-default, copy-as-INI, live diagnostics; theme TU) | ✅ (overhaul landed build 11; `s_menuSections` = 30 sections) | src/core/debugmenu_ui.cpp:2894-3041, debugmenu_theme.cpp | docs/plans/effects-menu-overhaul.md; activeContext Wave 5 |
 | Mode chips + MODE pill rows + named configs (configs/) | ✅ | debugmenu_ui.cpp | activeContext Wave 8 |
 | Atmospheric collapsing header (13 sliders) | ✅ | debugmenu_ui.cpp:651+ | TODO.md §F |
 | Profiler (PfFrame, PF_SCOPE) | ✅ (scope-table overflow open §9) | src/render/profiler.cpp | source-inventory §1 |
-| Render-state monitor (3-layer rw/drv/dev) | ✅ | src/render/renderstate_monitor.cpp | source-inventory §1 |
+| Render-state monitor (3-layer rw/drv/dev) + classification fix (aggregate verdicts: agree/transient/diverge/bad via entry↔exit pairing — resolves the healthy-session "100% diverge, bad=0" metric defect) | ✅ (classification fix 2026-11-02) | src/render/renderstate_monitor.cpp | source-inventory §1; roadmap N2 evidence |
 | Unified pipeline block (JuniorDjjr fork) | ✂ deliberately disabled, documented dead | debugmenu_ui.cpp:141-208 | WORKFLOW_PLAN resolved; rinse Z3 |
 | III/VC in debug menu | ⛔ blocked by P1.3 preset framework | debugmenu_ui.cpp | WORKFLOW_PLAN Phase 5 |
 | Dead-code manifest checks (--check-shaders, --verify-embed) | ✅ | tools/fast_build.py | merge-rinse §5.2 |
 | INI reference generator (gen_ini_ref.py) | 🟡 --check STALE (drift only); regenerate docs-only | tools/gen_ini_ref.py | merge-rinse §6 I2 |
-| True ImGui menu in-plan: parser/save/clamp defect fixes (2026-10-24-imgui-settings-coverage) | 🟡 partially landed (tonemapMaxExposure clamp conflict main.cpp vs debugmenu_ui.cpp still open) | debugmenu_ui.cpp, main.cpp | README index row |
+| True ImGui menu in-plan: parser/save/clamp defect fixes (2026-10-24-imgui-settings-coverage) | 🟡 remaining defect fixes after the overhaul landed (tonemapMaxExposure clamp conflict main.cpp vs debugmenu_ui.cpp still open) | debugmenu_ui.cpp, main.cpp | README index row |
 
 ---
 
@@ -366,6 +386,7 @@ Ranked audit outcomes (verified via WORKFLOW_PLAN + systematic-dig + activeConte
 
 | Feature area | Authoritative MD |
 |---|---|
+| CJ-wave outcomes (families A/B/C) + open-item registry N1-N7 + A–G fix roadmap | docs/plans/2026-11-02-systematic-roadmap.md |
 | Plan index + resume procedure | docs/plans/README.md |
 | Master feature matrix (IV/V port, Mode Manager, Bullet) | docs/plans/2026-10-08-iv-v-graphics-physics-port.md (ACTIVE; supersedes 2026-08-01-remaining-roadmap.md) |
 | Architecture restructure / god-file split | docs/plans/2026-10-08-restructure-2026-10-08.md |
@@ -382,8 +403,9 @@ Ranked audit outcomes (verified via WORKFLOW_PLAN + systematic-dig + activeConte
 | Debug strategy + Rockstar/aap parity checklist | docs/plans/2026-10-25-debug-strategy-parity.md |
 | ImGui settings coverage | docs/plans/2026-10-24-imgui-settings-coverage.md |
 | Workflow/process | docs/plans/2026-10-17-systematic-dig.md |
-| Baseline target look (176 reference shots) | docs/baseline/2026-09-03-reference-caps/findings.md; newer baselines: docs/baseline/2026-10-24-screenshots/, docs/baseline/2026-10-29-finalgate-0042/findings.md |
+| Baseline target look (176 reference shots) | docs/baseline/2026-09-03-reference-caps/findings.md; newer baselines: docs/baseline/2026-10-24-screenshots/, docs/baseline/2026-10-29-finalgate-0042/findings.md; acceptance gate: docs/baseline/2026-11-02-stable-config/README.md; CJ pre-fix A-side: docs/baseline/2026-11-03-test12/findings.md |
 | Build/shader/embed rules | AGENTS.md |
 | Legacy status (STALE where conflicting) | PLAN.md, TODO.md, WORKFLOW_PLAN.md, FUTURE_FEATURES.md, CODEBASE_DOCUMENTATION.md (migrated to Obsidian vault [[00 - Index]]) |
-| Wave/session records | .opencode/memory-bank/activeContext.md + progress.md; .serena/memories/crash-recovery-checkpoint-2026-10-20.md (authoritative restore point), wave-12lane.md, round5-*/round6-directives-2026-10-08.md, session-rules.md |
+| Wave/session records | .opencode/memory-bank/activeContext.md + progress.md; .serena/memories/crash-recovery-checkpoint-2026-10-20.md (authoritative restore point), .serena/memories/wave-12lane.md, .serena/memories/round5-consolidated-2026-10-08.md + .serena/memories/round5-bugs-2026-10-08.md, .serena/memories/round6-directives-2026-10-08.md, .serena/memories/session-rules.md |
+| Junior-rewrite plan + provenance audit + W0.3 wave status | docs/plans/2026-11-09-junior-rewrite-plan.md |
 | Inventory baseline (older snapshot, stale LOC/keys) | .serena/memories/project-status.md (STALE 2026-10-01) |

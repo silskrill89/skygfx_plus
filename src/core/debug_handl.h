@@ -34,6 +34,7 @@
 #define diag_removeVEH()        ((void)0)
 #define diag_heartbeat()        ((void)0)
 #define diag_checkCrashMarker() ((void)0)
+#define diag_dumpStats()        ((void)0)
 
 #else
 
@@ -64,6 +65,13 @@ void diag_heartbeat(void);
 
 // Check for crash marker from previous session — show dialog if found.
 void diag_checkCrashMarker(void);
+
+// One-line end-of-session summary of crash-relevant counters (VEH catches,
+// access-violation classes, guarded-pass faults).  Cheap and idempotent;
+// call once from shutdown/exit so a log states its own crash families.
+// Hook point (main.cpp, out of this lane's scope): the final log line before
+// the module unloads, alongside wherever diag_removeVEH() is called.
+void diag_dumpStats(void);
 
 #endif // DIAGNOSTICS_DISABLED
 
@@ -129,11 +137,34 @@ unsigned DebugFrameCode(void);
 unsigned DebugOverlayCode(void);
 void DebugLogFrameMark(const char *tag);
 
+// ---- FRAME COUNTER SEMANTICS (log dissection) ----
+//
+// The [#<frameId>:<code>] prefix is NOT wall-clock time and NOT a per-line
+// counter.  Read it as a frame ordinal:
+//
+//   * <frameId> advances exactly once per RW-rendered frame (the widened
+//     16-bit RWSRCGLOBAL(renderFrame) tick described above).  Two lines with
+//     the same <frameId> belong to the same rendered frame.
+//   * It is session-relative and starts at 0 until the engine first reports a
+//     tick; it survives the 16-bit tick wrap (epoch-folded) and is never
+//     reset by a map load or a pipeline switch.
+//   * Gap analysis: a jump of N in <frameId> between adjacent log lines means
+//     N frames elapsed with no logging — a stall, a loading screen, or an
+//     interval where nothing in that family logged.  Per-line ordering inside
+//     one frame is the line order itself.
+//   * There is NO per-frame heartbeat line from debug_handl.  The only
+//     periodic liveness line is the 2s diagnostic heartbeat emitted by
+//     main.cpp; do not expect a tick per frame.  A frozen <frameId> with a
+//     still-moving home-heartbeat means the render loop stalled before the
+//     next frame began, not that logging broke.
+//   * <code> packs the pipeline mode in bits 31..28 and repeats the low
+//     frame bits; see the block above for the exact layout.
+
 // Forces the next log stamp to re-derive the pipeline nibble (the per-
-// frame latch in debugFrameStamp, debug_handl.cpp).  Optional exactness
-// hook for the pipeline re-derive receipt in main.cpp (reported hunk,
-// not wired); without it the latch self-heals on the next frame-id
-// advance.  Cheap, callable from any lane.
+// frame latch in debugFrameStamp, debug_handl.cpp).  Called from
+// derivePipelineFromPipes (main.cpp) whenever the pipeline is re-derived
+// mid-frame, so the [#frame:code] prefix never shows a stale mode after a
+// pipeline switch.  Cheap, callable from any lane.
 void DebugInvalidatePipelineCache(void);
 
 // ---- DIAGNOSTIC VERBOSITY LATCH ----
@@ -146,14 +177,9 @@ void DebugInvalidatePipelineCache(void);
 //     >=2  every throttle-gated receipt is silenced outright
 //
 // Lanes can also read it directly around their own per-frame dbglog()
-// calls (one global int load).  NOT yet wired to config parsing —
-// reported hunk for the orchestrator (do not apply from this lane):
-//   1. skygfx.h Config struct (not this lane's region): add
-//        int diagLevel;   // 0=full (default), 1=throttle x5, 2=quiet
-//   2. main.cpp readIniFile, alongside the other readint lines:
-//        c->diagLevel = readint(cfg.get("SkyGfx", "diagLevel", ""), 0);
-//        g_diagLevel = config->diagLevel;
-//   3. optional: debug menu / runtime setter writes g_diagLevel directly.
+// calls (one global int load).  Wired: readIniFile (main.cpp) parses
+// [SkyGfx] diagLevel into Config::diagLevel and syncs
+// g_diagLevel = c->diagLevel.
 extern int g_diagLevel;
 
 // ---- CRASH HANDLING (was crashhandler.cpp) ----

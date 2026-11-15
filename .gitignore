@@ -130,7 +130,8 @@ __pycache__/
 
 # Node
 node_modules/
-third_party/bullet/
+third_party/bullet/*
+!third_party/bullet/LICENSE.txt
 /-nologo
 archive/
 temp_bullet/

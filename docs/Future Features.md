@@ -7,7 +7,7 @@ See [[Roadmap to Ultimate Mod]] for the full development roadmap.
 ### Phase 1: Restore Full Compatibility
 - Verify all 9 aap car pipes work
 - Verify all 2 aap building pipes work
-- Verify all junior features (noise-detail texturing — formerly stochastic — wind, radiosity, trails, grading)
+- Verify all junior features (noise-based variation texturing, wind, radiosity, trails, grading)
 - Fix dead code stubs (UploadUnifiedConstants, wheel extender, env map normals)
 - Restore YCbCr correction from junior fork
 

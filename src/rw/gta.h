@@ -1,4 +1,5 @@
 #pragma once
+#include <stddef.h>	// offsetof — the layout contract below pins offsets with it
 
 class CGeneral
 {
@@ -338,6 +339,44 @@ extern short &skyBotRed, &skyBotGreen, &skyBotBlue;
 
 extern RwTexture *&gpWhiteTexture;
 
+// ---------------------------------------------------------------------------
+// Address-hygiene naming layer (hard rule, session m0269): raw game/SDK hex
+// lives ONLY here and in gta.cpp; every consumer uses these names.
+// ---------------------------------------------------------------------------
+
+// RwCameraBeginUpdate / RwCameraEndUpdate "camera in progress" slot (0xC9BCC0).
+// Set to the begun camera by RwCameraBeginUpdate, cleared to NULL by
+// RwCameraEndUpdate (see postfx_smaa.cpp crash-fix save/restore; game code at
+// 0x7F98DF dereferences [0xC9BCC0]+0x60 and faults on NULL). No stable public
+// symbol (disassembly-verified 2026-11-10); typed void* to match every
+// consumer's existing void* read/write.
+extern void *&pCameraBeingUpdated;
+
+// RwD3D9SetTexture raster-extension offset word (0xB4E9E0). The game derives a
+// raster's D3D9 extension block as: ext = raster + this word; ext+0 =
+// IDirect3DTexture9*, ext+8 = "valid" byte flag (may be stale). The game's
+// producer is 0x7FDCD0; texdefs.cpp TexDefsGetD3DTexture carries the full
+// guard chain.
+extern uint32 &RwD3D9RasterExtOffset;
+
+// ---- CPool<CPed> ped-pool contract (SA 1.0 US; plugin-sdk CPool.h / CPed.h:468) ----
+// The game's ped pool object lives at 0xB74490. Layout:
+//   +0x00 m_pSlots     — CPed* base of the array (m_aStorage)
+//   +0x04 m_pSlotInfos — uint8* per-slot flags (m_aFlags; PED_SLOT_FREE_BIT = free)
+//   +0x08 m_nNumSlots  — int32 capacity (m_nSize)
+// Consumers walk it as: ped_i = m_pSlots + i * PED_POOL_STRIDE; skip when
+// m_pSlotInfos[i] & PED_SLOT_FREE_BIT. (Same evidence as ragdoll_death.cpp.)
+struct CPedPool
+{
+	void  *m_pSlots;       // +0x00
+	uint8 *m_pSlotInfos;   // +0x04
+	int    m_nNumSlots;    // +0x08
+};
+extern CPedPool *&pedPool;    // *(CPool<CPed>**)0xB74490
+
+#define PED_POOL_STRIDE    0x7C4    // CPed array element stride (m_aStorage stride)
+#define PED_SLOT_FREE_BIT  0x80     // m_aFlags free-slot bit
+
 
 #define rpPDS_MAKEPIPEID(vendorID, pipeID)              \
     (((vendorID & 0xFFFF) << 16) | (pipeID & 0xFFFF))
@@ -386,3 +425,149 @@ enum RockstarPipelineIDs
 
 uint32 GetPipelineID(RpAtomic *atomic);
 void SetPipelineID(RpAtomic *atomic, uint32 id);
+
+// ============================================================================
+// SA 1.0 US RenderWare layout contract — RpAtomic / RwFrame / RpClump
+// (family-C fix pin; byte-verified 2026-11-02 against gta_sa.exe 1.0 US)
+// ============================================================================
+// WHY: the family-C fix (BuildGibClump / Dismember_Render in
+// src/entities/sftbdyphsx.cpp) drives game memory through RAW BYTE OFFSETS.
+// Those offsets are the fix's ABI with the game binary — this contract makes
+// them explicit and pins them at compile time. Any later migration onto
+// named accessors must keep these numbers (standing directive "unify": the
+// named offsets below are the single source of truth for the raw writers).
+//
+// Byte evidence (gta_sa.exe 1.0 US, PE .text VA 0x401000 / raw 0x400,
+// file offset = VA - 0x400C00):
+//   RpAtomicCreate 0x749C50             stores AtomicDefaultRenderCallBack
+//                                       (0x7491C0) at atomic+0x48; the
+//                                       frame-sync store 0x749D20 writes
+//                                       atomic+0x10 (RwObjectHasFrame.sync)
+//   clump render walk 0x749B20          reads the frame at [atomic+0x04],
+//                                       calls [atomic+0x48](atomic)
+//   re-instancing path 0x74BF7A         calls [atomic+0x48](atomic)
+//   _rwObjectHasFrameSetFrame 0x804EF0  writes the frame at atomic+0x04
+//   RwFrame LTM flush 0x8097D0          rep movsd frame+0x10 -> frame+0x50
+//   RwFrameGetLTM 0x7F0990              returns frame+0x50
+//   RwFrameUpdateObjects 0x7F0910       marks the frame root dirty (recompute)
+//   RpClumpForAllAtomics 0x749B70       walks the clump atomicList at +0x08
+//
+// TRAPS (the family-C root causes):
+//   * atomic+0x10 is RwObjectHasFrame.sync (the frame-sync callback) — the
+//     old +0x10 renderCallBack write clobbered the sync path and rerouted
+//     frame sync through the hooked 0x7491C0. The render callback lives at
+//     +0x48 ONLY.
+//   * frame+0x14 is matrix right.y/right.z (FLOATS) — there is NO matrix
+//     pointer at +0x14. The modelling matrix is EMBEDDED at frame+0x10
+//     (RwMatrix, 0x40 bytes) and the LTM is EMBEDDED at frame+0x50.
+//   * 0x804EF0 (_rwObjectHasFrameSetFrame) sets an ATOMIC's frame. Calling
+//     it on the CLUMP spliced the clump atomicList head (+0x08) into
+//     frame->objectList (+0x90) — garbage atomics + dirty-list poison. The
+//     clump-splice call stays REMOVED; wire atomics via RpClumpAddAtomic.
+//
+// Consumers today (raw-offset idiom, entities lane): sftbdyphsx.cpp
+// BuildGibClump :1006 (renderCallBack +0x48), Dismember_Render :1181 (frame
+// +0x04) / :1193 (modelling matrix +0x10). They duplicate these numbers
+// inline; point those writes at the names below when that lane picks this up.
+
+// Named offsets — the single source of truth for raw-offset consumers.
+struct RpAtomicOffsets
+{
+	enum {
+		objectHdr             = 0x00,	// type/subType/flags/privateFlags (4B)
+		frame                 = 0x04,	// object.parent — RwFrame* (THE frame pointer)
+		lFrame                = 0x08,	// rwLLLink next/prev — NOT the frame
+		sync                  = 0x10,	// RwObjectHasFrame.sync — NOT a render cb!
+		repEntry              = 0x14,
+		geometry              = 0x18,	// RpGeometry*
+		boundingSphere        = 0x1C,	// 0x10 bytes
+		worldBoundingSphere   = 0x2C,	// 0x10 bytes
+		clump                 = 0x3C,	// RpClump*
+		inClumpLink           = 0x40,	// rwLLLink next/prev
+		renderCallBack        = 0x48,	// THE render callback (called as +0x48(atomic))
+		interpolator          = 0x4C,	// 0x18 bytes
+		llWorldSectorsInAtomic = 0x64,	// rwLLLink next/prev
+		pipeline              = 0x6C,
+		size                  = 0x70,
+	};
+};
+
+// Documented layout struct — byte-map overlay of the game's RpAtomic
+// (POD, never instantiated; exists to pin the map at compile time).
+// 32-bit target: every pointer below is 4 bytes (the SA exe is x86).
+struct SAAtomicLayout
+{
+	uint8	objectHdr[4];		// +0x00 type/subType/flags/privateFlags
+	void	*frame;				// +0x04 object.parent (RwFrame*)
+	void	*lFrameNext;		// +0x08
+	void	*lFramePrev;		// +0x0C
+	void	*sync;				// +0x10 RwObjectHasFrame.sync (frame-sync cb)
+	void	*repEntry;			// +0x14
+	void	*geometry;			// +0x18 (RpGeometry*)
+	uint8	boundingSphere[0x10];		// +0x1C
+	uint8	worldBoundingSphere[0x10];	// +0x2C
+	void	*clump;				// +0x3C (RpClump*)
+	void	*inClumpLinkNext;	// +0x40
+	void	*inClumpLinkPrev;	// +0x44
+	void	*renderCallBack;	// +0x48 THE render callback
+	uint8	interpolator[0x18];	// +0x4C
+	void	*llWorldSectorsNext;// +0x64
+	void	*llWorldSectorsPrev;// +0x68
+	void	*pipeline;			// +0x6C
+};
+
+// RwFrame — partial map (only what the family-C fix touches is pinned).
+struct SAFrameLayout
+{
+	uint8	 objectHdr[0x10];	// +0x00..0x0F
+	RwMatrix modelling;			// +0x10 EMBEDDED RwMatrix (0x40) — no ptr at +0x14
+	RwMatrix ltm;				// +0x50 EMBEDDED RwMatrix (0x40)
+	void	*objectListNext;	// +0x90
+	void	*objectListPrev;	// +0x94
+};
+
+// RpClump — partial map. The 0x804EF0 clump-splice bug wrote THIS head into
+// frame->objectList (+0x90); never share frames between a clump and its
+// atomics through _rwObjectHasFrameSetFrame (see TRAPS above).
+struct SAClumpLayout
+{
+	uint8	objectHdr[0x08];	// +0x00..0x07
+	void	*atomicListNext;	// +0x08
+	void	*atomicListPrev;	// +0x0C
+};
+
+static_assert(sizeof(void *) == 4,
+	"SA 1.0 US layout contract is x86-only (pointers must be 4 bytes)");
+static_assert(sizeof(RwMatrix) == 0x40, "Wrong size: RwMatrix (layout contract)");
+
+static_assert(sizeof(SAAtomicLayout) == 0x70, "Wrong size: SAAtomicLayout");
+static_assert(offsetof(SAAtomicLayout, frame) == 0x04,
+	"RpAtomic frame is at +0x04 (object.parent)");
+static_assert(offsetof(SAAtomicLayout, lFrameNext) == 0x08,
+	"RpAtomic lFrame is at +0x08 — NOT the frame");
+static_assert(offsetof(SAAtomicLayout, sync) == 0x10,
+	"RpAtomic +0x10 is RwObjectHasFrame.sync — never a render callback");
+static_assert(offsetof(SAAtomicLayout, geometry) == 0x18,
+	"RpAtomic geometry is at +0x18");
+static_assert(offsetof(SAAtomicLayout, clump) == 0x3C,
+	"RpAtomic clump is at +0x3C");
+static_assert(offsetof(SAAtomicLayout, renderCallBack) == 0x48,
+	"RpAtomic renderCallBack is at +0x48 (RpAtomicCreate 0x749C50 / walk 0x749B20)");
+static_assert(offsetof(SAAtomicLayout, pipeline) == 0x6C,
+	"RpAtomic pipeline is at +0x6C");
+
+static_assert(offsetof(SAFrameLayout, modelling) == 0x10,
+	"RwFrame modelling matrix is EMBEDDED at +0x10");
+static_assert(offsetof(SAFrameLayout, ltm) == 0x50,
+	"RwFrame LTM is EMBEDDED at +0x50 (flush 0x8097D0, RwFrameGetLTM 0x7F0990)");
+static_assert(offsetof(SAFrameLayout, objectListNext) == 0x90,
+	"RwFrame objectList is at +0x90");
+
+static_assert(offsetof(SAClumpLayout, atomicListNext) == 0x08,
+	"RpClump atomicList is at +0x08 (walk 0x749B70)");
+
+// The named offsets must agree with the pinned overlay.
+static_assert(RpAtomicOffsets::frame == offsetof(SAAtomicLayout, frame), "offset drift");
+static_assert(RpAtomicOffsets::sync == offsetof(SAAtomicLayout, sync), "offset drift");
+static_assert(RpAtomicOffsets::renderCallBack == offsetof(SAAtomicLayout, renderCallBack), "offset drift");
+static_assert(RpAtomicOffsets::size == sizeof(SAAtomicLayout), "size drift");

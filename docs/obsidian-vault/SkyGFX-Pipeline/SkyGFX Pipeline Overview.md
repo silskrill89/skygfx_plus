@@ -1,7 +1,7 @@
 ---
 tags: [pipeline, rendering, architecture]
 created: 2025-01-02
-updated: 2026-07-15
+updated: 2026-11-10
 ---
 
 # SkyGFX Plus - Rendering Pipeline Overview
@@ -80,3 +80,23 @@ Entry: building pipe callback in `buildingPipe.cpp`
 - [[SMAA Enhanced Subpixel Morphological AA]] — AA system
 - [[VehiclePBR Modern]] — Vehicle shader details
 - [[IBL Env Map Decision]] — IBL approach
+
+---
+
+## Addendum — 2026-11-10 (wave 20)
+
+The pipeline shape above is unchanged; the **code layout** has moved on:
+
+- **PostFX split:** the former single `postfx.cpp` is now nine units. `postfx.cpp` keeps the
+  `DrawFinalEffects` chain, radiosity and front-buffer update; colour filter, luminance/auto
+  exposure, motion blur, new FX (shafts/DOF/bloom/CA/grain/vignette/FXAA3), SMAA, SSAO,
+  underwater and shared utils are separate TUs. Faults in this family are tracked in
+  [[Status 2026-11-10]].
+- **Motion-FX family:** `motion_fx.cpp` is the parent (motion orchestration, wind animation,
+  `MotionFxClockSeconds()`, `NoiseMaterialVariation` seam); `wind.cpp` is the pure-math child;
+  `treeWind.cpp` keeps only `TreeAlpha`.
+- **Extractions:** `shadows.cpp`, `rw_fixes.cpp`, `config.cpp` and `render_callbacks.cpp` left
+  `main.cpp`. See [[Current Architecture (Wave 20)]].
+- **HARD RULE:** addresses are named in `src/rw/gta.h`; call sites never use raw hex except for a
+  documented, disassembly-proven one-off.
+- Last verified binary: W0.5 (`2,616,832 B`, `bb5d1230…`); W0.6 pending ([[Gate Chain]]).

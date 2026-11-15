@@ -29,11 +29,24 @@
 // second axis is swizzled and offset by 0.37 so X and Y are decorrelated.
 static const float kNoiseDetailJitterScale = 100.0;
 
+// Per-material noise-based variation: a deterministic [0,1] scalar keyed by the
+// material id, uploaded by the CPU from SkyNoise::NoiseMaterialVariation
+// (src/render/noise.h). c3 is free across the whole simple/detail/xbox/
+// noise-detail PS family (detailtile owns c1; the noise block owns c49-c52).
+// When c3 is never uploaded it reads 0, which is exactly the pre-variation
+// behaviour (phase 0), so the fallback is byte-identical to the old jitter.
+uniform float4 matVariation : register(c3);   // .x = per-material variation
+
 // Per-pixel blue-noise UV offset. Zero-mean, amplitude = c52.x.
 float2 NoiseDetailJitter(float2 uv)
 {
-    float2 n = float2(NoiseBlue(uv * kNoiseDetailJitterScale),
-                      NoiseBlue(uv.yx * kNoiseDetailJitterScale + 0.37));
+    // Per-material phase: each material samples a different window of the
+    // blue-noise tile (37.0 is prime, so the X and Y windows decorrelate).
+    // This is what makes the variation *per material*: two materials with the
+    // same surface UV no longer share a jitter pattern.
+    float phase = matVariation.x * 37.0;
+    float2 n = float2(NoiseBlue(uv * kNoiseDetailJitterScale + phase),
+                      NoiseBlue(uv.yx * kNoiseDetailJitterScale + 0.37 + phase));
     return (n - 0.5) * uniNoiseParams3.x;   // c52.x = jitterAmount
 }
 

@@ -161,8 +161,16 @@
   <ItemGroup>
     <!-- All source paths point to new subdirectory layout after merge restructure -->
     <ClCompile Include="..\src\render\buildingPipe.cpp" />
-    <!-- W8-2: tree wind sway + console tree lighting/alpha (TreeWind_*/TreeAlpha_* called live from buildingPipe.cpp) -->
+    <!-- W8-2: tree wind sway + console tree lighting/alpha (TreeWind_*/TreeAlpha_* called live from buildingPipe.cpp). treeWind.cpp keeps TreeAlpha only; the wind family lives in motion_fx.cpp (parent) + wind.cpp (child). -->
     <ClCompile Include="..\src\render\treeWind.cpp" />
+    <!-- motion_fx: motion FX family PARENT — wind animation application +
+         randomness/physics family integration (motion_fx.h). Unique basename
+         — no ObjectFileName override, no LNK4042 duplicate-basename risk. -->
+    <ClCompile Include="..\src\render\motion_fx.cpp" />
+    <!-- wind: motion FX family CHILD — pure wind field/gust/variation math
+         (ModifyMatrixForTreeInWind port). Unique basename — no ObjectFileName
+         override, no LNK4042 duplicate-basename risk. -->
+    <ClCompile Include="..\src\render\wind.cpp" />
     <ClCompile Include="..\src\entities\chars.cpp" />
     <!-- sftbdyphsx: merged ragdoll + dismemberment. Unique basename - no
          ObjectFileName override, no LNK4042 duplicate-basename risk. -->
@@ -174,7 +182,6 @@
     <ClCompile Include="..\src\peds\peds_pipe.cpp" />
     <ClCompile Include="..\src\peds\skin.cpp" />
     <ClCompile Include="..\src\core\debug_handl.cpp" />
-    <!-- <ClCompile Include="..\src\core\config.cpp" /> -->
     <ClCompile Include="..\src\render\depthhook.cpp" />
     <ClCompile Include="..\src\render\envmap.cpp" />
     <!-- W7-C: CMirrors composite distortion fix (mirrorPass_init hook at 0x53EABA) -->
@@ -182,6 +189,26 @@
     <ClCompile Include="..\src\render\forwardplus.cpp" />
     <ClCompile Include="..\src\rw\gta.cpp" />
     <ClCompile Include="..\src\core\main.cpp" />
+    <!-- shadows: CShadows/shadow-contract system extracted verbatim from
+         main.cpp (E1, 2026-11-09). Unique basename — no ObjectFileName
+         override, no LNK4042 duplicate-basename risk. -->
+    <ClCompile Include="..\src\core\shadows.cpp" />
+    <!-- rw_fixes: RW-level fix machinery (corona/flush/font/pointlight shields)
+         extracted verbatim from main.cpp (E2, 2026-11-09). Unique basename — no
+         ObjectFileName override, no LNK4042 duplicate-basename risk. -->
+    <ClCompile Include="..\src\core\rw_fixes.cpp" />
+    <!-- config: INI parse/save/EMIT machinery (readIniFile / saveConfigTo /
+         IniPathForSlot / readIni / readInis / setConfig / reloadAllInis /
+         saveConfig / loadConfigFile) extracted verbatim from main.cpp
+         (E3, 2026-11-09). Unique basename — no ObjectFileName override, no
+         LNK4042 duplicate-basename risk. -->
+    <ClCompile Include="..\src\core\config.cpp" />
+    <!-- render_callbacks: default atomic render-callback machinery
+         (myDefaultCallback + atomicHasAlpha / PedOpaque contract /
+         pedStage0Resync / vs_probe) extracted verbatim from main.cpp
+         (E3, 2026-11-09). Unique basename — no ObjectFileName override, no
+         LNK4042 duplicate-basename risk. -->
+    <ClCompile Include="..\src\core\render_callbacks.cpp" />
     <ClCompile Include="..\src\core\modeManager.cpp" />
     <!-- physicscfg: sky_physics.ini load/save + backend/budget/crashFx store
          (m0971). Unique basename - no ObjectFileName override, no LNK4042

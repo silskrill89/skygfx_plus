@@ -8,22 +8,27 @@
 //     and the max-offset clamp that prevents extreme distortion. The green
 //     sample is reused for alpha (saves a fetch), exactly as in the source.
 //
-// Register map:
-//   s0     : color input (scene / current pass).
-//   c0     : (intensity, radialFalloff, maxOffset, aspect)
-//              intensity     -- overall strength (0..1 typical)
-//              radialFalloff -- pow exponent: 1 = linear, 2 = quadratic toward edge
-//              maxOffset     -- maximum radial offset in UV units (e.g. 0.01)
-//              aspect        -- width/height (>=1), corrects the radial distance
-//   c1     : reserved (unused).
-//   c2     : reserved (unused).
+// --- CA constant contract (kept identical in CA.hlsl and postfx_newfx.cpp) ---
+// c0 = (intensity, radialFalloff, maxOffsetUV, aspect)
+//   intensity     : 0..1 overall strength (caIntensity)
+//   radialFalloff : pow exponent of the radial falloff (1 = linear)
+//   maxOffsetUV   : per-channel offset cap in UV units. The shader applies a
+//                   raw-UV radial offset, so the worst-case screen-space
+//                   magnitude is maxOffsetUV * max(w,h) pixels. Derived from
+//                   the intended 2.5 px cap: 2.5 / max(w,h).
+//   aspect        : width/height, corrects the radial falloff shape.
+// Only c0 is part of this contract; c1/c2 are left unbound.
+// Per-channel offsets therefore peak at caIntensity * 2.5 px and the pass is
+// a bit-exact passthrough whenever intensity == 0 or maxOffsetUV == 0.
+//
+// s0 = color input (scene / current pass).
 //
 // Center is fixed at (0.5, 0.5). Per-channel offset scales + soft knee are the
 // tuning constants below (kept out of the register budget).
 
 sampler2D colorTex : register(s0);
 
-uniform float4 caParam : register(c0); // (intensity, radialFalloff, maxOffset, aspect)
+uniform float4 caParam : register(c0); // (intensity, radialFalloff, maxOffsetUV, aspect)
 
 // --- Lateral CA tuning knobs ---
 #define CA_RED_SCALE   1.0   // red pushed outward (+)

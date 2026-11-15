@@ -204,11 +204,11 @@
 | 102 | `ps2ModulateBuilding` | 0/1 | Building PS2 modulate | |
 | 103 | `ps2ModulateGrass` | 0/1 | Grass PS2 modulate | |
 
-### 5.3 Detail & Stochastic
+### 5.3 Detail & Noise-based Variation
 | # | Setting | Range | Test | Status |
 |---|---------|-------|------|--------|
 | 104 | `detailMaps` | 0/1 | Detail maps on buildings | |
-| 105 | `stochastic` | 0/1 | Stochastic texturing | |
+| 105 | `stochastic` | 0/1 | Noise-based variation | |
 
 ---
 

@@ -234,11 +234,12 @@ void SMAATryInitRasters(void)
 		}
 	}
 
-	// Crash fix: save the exe's global camera pointer (0xC9BCC0) before we
-	// call RwCameraBeginUpdate on our scratch camera. Each EndUpdate clears it
-	// to NULL, and game code at 0x7F98DF dereferences [0xC9BCC0]+0x60 → crash.
-	// Restore it after all BeginUpdate/EndUpdate pairs are done.
-	void* savedCam = *(void**)0xC9BCC0;
+	// Crash fix: save the exe's global camera pointer pCameraBeingUpdated
+	// (0xC9BCC0) before we call RwCameraBeginUpdate on our scratch camera. Each
+	// EndUpdate clears it to NULL, and game code at 0x7F98DF dereferences
+	// [0xC9BCC0]+0x60 → crash. Restore it after all BeginUpdate/EndUpdate pairs
+	// are done.
+	void* savedCam = pCameraBeingUpdated;
 
 	// ---- SMAA rasters ----
 	if(s_smaaPendingInit && g_smaaEdgeRaster && g_smaaBlendRaster && g_smaaPrevFrameRaster && g_smaaSceneRaster){
@@ -276,7 +277,7 @@ void SMAATryInitRasters(void)
 	}
 
 	// Restore the game's camera pointer so 0x7F98DF doesn't read NULL+0x60.
-	*(void**)0xC9BCC0 = savedCam;
+	pCameraBeingUpdated = savedCam;
 
 	// Crash fix (2026-09-14 #3): the scratch camera leaves the last init
 	// raster bound as the D3D9 render target, corrupting all downstream
@@ -410,7 +411,7 @@ static void smaaRestoreStage0(IDirect3DDevice9 *dev)
 	// a cache no-op cannot leave the device on SMAA's raster.
 	IDirect3DTexture9 *tex = NULL;
 	if(saved){
-		DWORD extOff = *(DWORD*)0xB4E9E0;
+		DWORD extOff = RwD3D9RasterExtOffset;
 		if(extOff > 0 && extOff < 0x100000){
 			IDirect3DTexture9 *cand = *(IDirect3DTexture9**)((uint8*)saved + extOff);
 			if(cand && (uintptr_t)cand >= 0x10000u && (((uintptr_t)cand & 3u) == 0))
