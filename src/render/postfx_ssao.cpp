@@ -3,6 +3,26 @@
 #include "debug_handl.h"
 #include "postfx.h"
 #include "depthhook.h"
+
+// ============================================================
+// P2 (2026-11-10, face bug): postfx composite exit.
+// RestoreRawGeomStates() restores the CAPTURED cull, and that capture can
+// itself be a drifted NONE (device + rw cache + driver cache all NONE):
+// every later RwRenderStateSet(BACK) is then a double no-op, the device
+// keeps NONE, and the game's OWN skinned pipeline (CJ/peds) - which does
+// not enter the ped cull contract - draws double-sided: backfaces land
+// over the face in submission order. Restore the snapshot, then hand the
+// scene back its world baseline (BACK) on all THREE layers.
+// Applied uniformly at every raw-geom exit in this file: the two cull-writing
+// passes (DrawSSAO, DrawSSAO_Overhaul) need it, and for the others the
+// force-back is a no-op whenever the baseline already holds.
+// ============================================================
+static void RestoreRawGeomThenWorldCull(const DWORD *rawGeom)
+{
+	RestoreRawGeomStates(rawGeom);
+	pipeForceCullMode(rwCULLMODECULLBACK);
+}
+
 IDirect3DTexture9 *g_ssaoDepthTex = NULL;
 IDirect3DSurface9 *g_ssaoDepthSurf = NULL;
 static IDirect3DTexture9 *g_ssaoNoiseTex = NULL;
@@ -301,7 +321,7 @@ void CopyDepthToPrev(void)
 	dev->SetSamplerState(0, D3DSAMP_MINFILTER, sampSaved[0][3]);
 	dev->SetSamplerState(0, D3DSAMP_MAGFILTER, sampSaved[0][4]);
 	if(rawGeomSaved){
-		RestoreRawGeomStates(rawGeom);
+		RestoreRawGeomThenWorldCull(rawGeom);
 		rawGeomSaved = false;
 	}
 
@@ -447,7 +467,7 @@ bool PostFX_CopyDepthToTexture(IDirect3DTexture9 *dstTex, int dstW, int dstH)
 	dev->SetSamplerState(0, D3DSAMP_MINFILTER, sampSaved[0][3]);
 	dev->SetSamplerState(0, D3DSAMP_MAGFILTER, sampSaved[0][4]);
 	if(rawGeomSaved){
-		RestoreRawGeomStates(rawGeom);
+		RestoreRawGeomThenWorldCull(rawGeom);
 		rawGeomSaved = false;
 	}
 
@@ -865,7 +885,7 @@ CPostEffects::DrawSSAO(void)
 
 		ImmediateModeRenderStatesReStore();
 		if(rawGeomSaved){
-			RestoreRawGeomStates(rawGeom);
+			RestoreRawGeomThenWorldCull(rawGeom);
 			rawGeomSaved = false;
 		}
 		dbglog("[PostFX] DrawSSAO completed successfully");
@@ -927,7 +947,7 @@ CPostEffects::DrawSSAO(void)
 			if(imStored)
 				ImmediateModeRenderStatesReStore();
 			if(rawGeomSaved)
-				RestoreRawGeomStates(rawGeom);
+				RestoreRawGeomThenWorldCull(rawGeom);
 			if(stage0Saved)
 				RestoreSSAOStage0Raster(savedStage0Raster);
 		} __except(EXCEPTION_EXECUTE_HANDLER){
@@ -1366,7 +1386,7 @@ void DrawSSAO_Overhaul(void)
 
 		CPostEffects::ImmediateModeRenderStatesReStore();
 		if(rawGeomSaved){
-			RestoreRawGeomStates(rawGeom);
+			RestoreRawGeomThenWorldCull(rawGeom);
 			rawGeomSaved = false;
 		}
 
@@ -1439,7 +1459,7 @@ void DrawSSAO_Overhaul(void)
 			if(imStored)
 				CPostEffects::ImmediateModeRenderStatesReStore();
 			if(rawGeomSaved)
-				RestoreRawGeomStates(rawGeom);
+				RestoreRawGeomThenWorldCull(rawGeom);
 			if(stage0Saved)
 				RestoreSSAOStage0Raster(savedStage0Raster);
 		} __except(EXCEPTION_EXECUTE_HANDLER){

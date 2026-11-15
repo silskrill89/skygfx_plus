@@ -2,6 +2,7 @@
 #include "neopipe.h"
 #include "brdfLibrary.h"
 #include "profiler.h"	// PF_SCOPE / PfBindVS / PfBindPS — instrumentation only
+#include "debug_handl.h"	// g_diagLevel (P4 receipt gate)
 #include "texdefs.h"	// texdb.txt TexInfo + NM lane: <diffuse>_n pairing lookup (s8 bind)
 #include "texalpha.h"	// per-texture alpha classification (solid vs cutout/faded)
 
@@ -951,7 +952,8 @@ vehBindElideLog(void)
 		return;
 	if(!dbglog_throttle("veh_bindelide"))
 		return;
-	dbglog("[bind-elision] veh hits=%d writes=%d dev_mismatch=%d",
+	if(g_diagLevel >= 1)
+		dbglog("[bind-elision] veh hits=%d writes=%d dev_mismatch=%d",
 	       s_vehBindElideSkips, s_vehBindElideWrites, s_vehElideMismatch);
 	s_vehBindElideSkips = 0;
 	s_vehBindElideWrites = 0;
@@ -980,7 +982,8 @@ vehBindDiffuse3L(RwTexture *tex, int stage)
 		vehBindElideLog();
 		if(!s_vehBindElideActive){
 			s_vehBindElideActive = true;
-			dbglog("[bind-elision] veh active");
+			if(g_diagLevel >= 1)
+				dbglog("[bind-elision] veh active");
 		}
 		// Hit: the device provably holds this exact texture (L3 was the last
 		// stage-0 writer on the previous miss) — skip all three layers,

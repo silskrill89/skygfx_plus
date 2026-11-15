@@ -468,34 +468,6 @@ MirrorPass_Composite(void)
 }
 
 // ============================================================
-// Cull re-sync after the mirror span. pipeForceCullMode is the only
-// writer that repairs all three layers (rw cache / RW driver cache /
-// raw device).
-//
-// ROUGH FIX (2026-11-10): this used to read the rw cache and push THAT
-// value to all three layers. The mirror span's own L1-only restore
-// regularly leaves the cache on NONE, so the "safety net" LAUNDERED NONE
-// into L2/L3 right before the authoritative pipeCullScopeEnd(BACK) -
-// measured as [CullResync] mirror exit rw=1 followed by
-// [cullfix] ... rw=1 drv=1 dev=2 (42x/session): the caches claimed NONE
-// while the device held BACK. It now re-asserts the mode the span
-// recorded (BACK - the value handed to pipeCullScopeBegin in the hook),
-// which is the value that must hold after the span. The scope End stays
-// authoritative; this is the pre-End net and can no longer fight it.
-// ============================================================
-static void
-MirrorPass_ResyncCull(void)
-{
-	if(!d3d9device)
-		return;
-
-	pipeForceCullMode((RwUInt32)rwCULLMODECULLBACK);
-
-	if(dbglog_throttle("cull_resync"))
-		dbglog("[CullResync] mirror exit re-assert BACK (scope-recorded)");
-}
-
-// ============================================================
 // Depth scope for the mirror span (2026-11-10).
 //
 // Measured defect (session 06:25): [zfix] fired 37x with the RAW DEVICE
@@ -709,14 +681,10 @@ MirrorPass_RenderMirrorBuffer(void)
 		if(dbglog_throttle("mirror_gate_fixoff"))
 			dbglog("[MirrorPass] gate: mirrorDistortionFix off (config=%p) — no composite overdraw",
 				(void*)config);
-		// The original already ran its state baseline — re-sync cull
-		// from the rw cache before handing control back to the game.
 		// Leave-FFP exit (band fix): re-assert the force + release the
 		// entry captures; the captured pair is never re-bound.
 		MirrorPass_LeaveFFP(staleVS, stalePS, staleS0);
-		if(originalRan)
-			MirrorPass_ResyncCull();
-		// Span exit: End is authoritative (Resync above is a safety net).
+		// Span exit: End is authoritative.
 		MirrorPass_DepthScopeEnd();
 		pipeCullScopeEnd();
 		return;
@@ -725,12 +693,8 @@ MirrorPass_RenderMirrorBuffer(void)
 		// Instrumentation (additive, throttled).
 		if(dbglog_throttle("mirror_gate_none"))
 			dbglog("[MirrorPass] gate: TypeOfMirror=MIRROR_TYPE_NONE — no mirror active, no composite overdraw");
-		// Non-mirror branch: still re-sync if (and only if) the game's
-		// function ran — it may have left the device off the cache.
 		MirrorPass_LeaveFFP(staleVS, stalePS, staleS0);
-		if(originalRan)
-			MirrorPass_ResyncCull();
-		// Span exit: End is authoritative (Resync above is a safety net).
+		// Span exit: End is authoritative.
 		MirrorPass_DepthScopeEnd();
 		pipeCullScopeEnd();
 		return;
@@ -744,9 +708,7 @@ MirrorPass_RenderMirrorBuffer(void)
 				(int)(CMirrors__MirrorFlags & MIRROR_FLAG_STAIRS), (int)bFudgeNow,
 				(unsigned)CMirrors__MirrorFlags);
 		MirrorPass_LeaveFFP(staleVS, stalePS, staleS0);
-		if(originalRan)
-			MirrorPass_ResyncCull();
-		// Span exit: End is authoritative (Resync above is a safety net).
+		// Span exit: End is authoritative.
 		MirrorPass_DepthScopeEnd();
 		pipeCullScopeEnd();
 		return;
@@ -764,9 +726,7 @@ MirrorPass_RenderMirrorBuffer(void)
 				dbglog("[MirrorPass] gate: stadium quad region (cam=%.1f,%.1f,%.1f distSq=%.1f < %.1f) — no composite overdraw",
 					cam.x, cam.y, cam.z, dx*dx + dy*dy + dz*dz, kMirrorStadiumQuadRadiusSq);
 			MirrorPass_LeaveFFP(staleVS, stalePS, staleS0);
-			if(originalRan)
-				MirrorPass_ResyncCull();
-			// Span exit: End is authoritative (Resync above is a safety net).
+			// Span exit: End is authoritative.
 			MirrorPass_DepthScopeEnd();
 			pipeCullScopeEnd();
 			return;
@@ -794,17 +754,14 @@ MirrorPass_RenderMirrorBuffer(void)
 			CMirrors__pBuffer ? CMirrors__pBuffer->width : 0,
 			CMirrors__pBuffer ? CMirrors__pBuffer->height : 0);
 
-	// Re-sync the three cull layers from the rw-cache truth after the
-	// original render AND the composite/restore work above. The scope End
-	// below is the AUTHORITATIVE re-assert; Resync is a redundant net.
+	// Span exit (fallthrough): the scope End below is the authoritative
+	// cull re-assert, paired with every other exit path.
 	// Leave-FFP exit (band fix): re-assert the force + release the entry
 	// captures AFTER the composite's own restore — the composite PS is
 	// already NULLed through the rw cache by MirrorPass_CompositeRestore,
 	// so the raw re-assert here is a pinned-layer no-op that guarantees
 	// the leave-FFP contract on the fallthrough path too.
 	MirrorPass_LeaveFFP(staleVS, stalePS, staleS0);
-	if(originalRan)
-		MirrorPass_ResyncCull();
 	// Span exit (fallthrough): must pair with every other exit path.
 	MirrorPass_DepthScopeEnd();
 	pipeCullScopeEnd();

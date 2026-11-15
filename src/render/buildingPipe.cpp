@@ -1284,7 +1284,8 @@ bldBindElideLog(void)
 		return;
 	if(!dbglog_throttle("bld_bindelide"))
 		return;
-	dbglog("[bind-elision] bld hits=%d writes=%d dev_mismatch=%d",
+	if(g_diagLevel >= 1)
+		dbglog("[bind-elision] bld hits=%d writes=%d dev_mismatch=%d",
 	       s_bldBindElideSkips, s_bldBindElideWrites, s_bldElideMismatch);
 	s_bldBindElideSkips = 0;
 	s_bldBindElideWrites = 0;
@@ -1403,7 +1404,8 @@ bldBindDiffuse3L(RwTexture *tex, int stage)
 		bldBindElideLog();
 		if(!s_bldBindElideActive){
 			s_bldBindElideActive = true;
-			dbglog("[bind-elision] bld active");
+			if(g_diagLevel >= 1)
+				dbglog("[bind-elision] bld active");
 		}
 		// Hit: the cache claims the device already holds this exact texture
 		// (L3 was the last stage-0 writer on the previous miss) — a skip is
@@ -2204,7 +2206,8 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *o
 	bTraceCur = &bTrace[BTR_XBOX];	// instrumentation only
 	bpipeElideSummary();	// throttled elision report (previous window)
 	s_noiseDetailBoundCB = false;	// one pipeBindNoise(9) per callback at most
-	if(++xboxFrameCount % 300 == 1)
+	// P4: verbose-gated (per-frame noise; 9,185 lines/session measured).
+	if(g_diagLevel >= 1 && ++xboxFrameCount % 300 == 1)
 		dbglog("XboxBuilding: frame %d object=%p type=%d flags=0x%X", xboxFrameCount, object, type, flags);
 
 	RpAtomic *atomic;

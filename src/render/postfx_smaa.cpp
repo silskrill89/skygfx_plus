@@ -60,6 +60,13 @@ static void smaaRestoreRawGeom(void)
 		RestoreRawGeomStates(s_smaaRawGeom);
 		s_smaaRawGeomSaved = false;
 	}
+	// P2 (2026-11-10, face bug): SMAA is the LAST pass of the frame, so a
+	// drifted cull exit here poisons the entire next scene. RestoreRawGeomStates
+	// gives back the CAPTURED cull, which can itself be a drifted NONE (all
+	// three layers NONE -> later RwRenderStateSet(BACK) is a double no-op and
+	// the game's own skinned pipeline draws CJ double-sided, backfaces over the
+	// face). Hand the scene back its world baseline on all three layers.
+	pipeForceCullMode(rwCULLMODECULLBACK);
 }
 
 // SMAA temporal history: set to true after the first frame's history is written.
