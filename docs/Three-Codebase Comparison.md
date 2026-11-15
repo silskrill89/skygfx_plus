@@ -562,3 +562,5 @@ aap (original v4.2b) → junior_dr (fork, backup_original/) → skygfx_plus (exp
 - [[Building Pipeline]] — Building rendering details
 - [[Shader Architecture]] — How shaders compile and load
 - [[Implemented Features]] — Current feature status
+
+> **NOTE (2026-11-10)** — the `hairEnhance*` / `vegetationEnhance*` rows below describe the *other* codebases' keys. expIV dropped its own dead copies of all seven hair/vegetation keys plus `pedAmbientFloor` (zero render consumers); see `wave-20-record.md` §5.

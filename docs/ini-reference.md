@@ -187,7 +187,6 @@ A `default` of `c-><field> (field default)` means the source uses the current Co
 | `forceWindShader` | bool | `0` | - | main.cpp:6636; global flag; only ==1 enables; global, not a Config field |
 | `ragdollEnable` | bool (RwBool) | `1` | - | main.cpp:6639 |
 | `pbrAmbientFloor` | float | `0.0f` | [0.0, 1.0] | main.cpp:6643 |
-| `pedAmbientFloor` | float | `0.20f` | [0.0, 1.0] | main.cpp:6652 |
 | `ambientMult` | float | `1.0f` | [0.0, 2.0] | main.cpp:6657 |
 | `pbrIblAmbientWeight` | float | `0.5f` | - | main.cpp:6660; mode-owned: Modern |
 | `tonemapBlackLift` | float | `0.0f` | - | main.cpp:6661 |
@@ -224,15 +223,8 @@ A `default` of `c-><field> (field default)` means the source uses the current Co
 | `skinSpecularPower` | float | `c->skinSpecularPower (field default)` | - | main.cpp:6721; mode-owned: Modern |
 | `skinSpecularStrength` | float | `c->skinSpecularStrength (field default)` | - | main.cpp:6722; mode-owned: Modern |
 | `skinSSSStrength` | float | `c->skinSSSStrength (field default)` | - | main.cpp:6723; mode-owned: Modern |
-| `hairAnisotropicPower` | float | `c->hairAnisotropicPower (field default)` | - | main.cpp:6726; mode-owned: Modern |
-| `hairAnisotropicStrength` | float | `c->hairAnisotropicStrength (field default)` | - | main.cpp:6727; mode-owned: Modern |
-| `hairSSSStrength` | float | `c->hairSSSStrength (field default)` | - | main.cpp:6728; mode-owned: Modern |
-| `vegetationSSSStrength` | float | `c->vegetationSSSStrength (field default)` | - | main.cpp:6731; mode-owned: Modern |
-| `vegetationAmbientBoost` | float | `c->vegetationAmbientBoost (field default)` | - | main.cpp:6732; mode-owned: Modern |
 | `sssPostProcessEnable` | bool (RwBool) | `c->sssPostProcessEnable (field default)` | - | main.cpp:6736; mode-owned (5 profiles) |
 | `skinEnhanceEnable` | bool (RwBool) | `c->skinEnhanceEnable (field default)` | - | main.cpp:6737; mode-owned (5 profiles) |
-| `hairEnhanceEnable` | bool (RwBool) | `c->hairEnhanceEnable (field default)` | - | main.cpp:6738; mode-owned (5 profiles) |
-| `vegetationEnhanceEnable` | bool (RwBool) | `c->vegetationEnhanceEnable (field default)` | - | main.cpp:6739; mode-owned (5 profiles) |
 | `sssEnable` | bool (RwBool) | `1` | - | main.cpp:6745 |
 | `sssIntensity` | float | `c->sssIntensity (field default)` | - | main.cpp:6746 |
 | `sssVegIntensity` | float | `c->sssVegIntensity (field default)` | - | main.cpp:6747 |
@@ -316,3 +308,6 @@ These sites were found in `readIniFile()` but were deliberately **not** turned i
 - Preset-tier values (`qualityPreset=0/1/2/3`) are not expanded into the default column; only the literal default expression at the read site is shown.
 - Clamps are the ones lexically visible in `readIniFile()` and the `clamp*()` helpers. Consumers may clamp again (menu ranges, save path, shader).
 - A key listed here is *read*, not necessarily *consumed*. Dead-key claims live in `docs/feature-matrix.md` and must be checked against consumers, not this table.
+
+
+> **REMOVED 2026-11-10** — `hairEnhanceEnable`, `hairAnisotropicPower`, `hairAnisotropicStrength`, `hairSSSStrength`, `vegetationEnhanceEnable`, `vegetationSSSStrength`, `vegetationAmbientBoost` and `pedAmbientFloor` were deleted as dead levers: parsed, saved and menu-exposed with zero render consumers (whole-tree grep). See `.serena/memories/wave-20-record.md` §5.

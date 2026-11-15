@@ -129,13 +129,6 @@ Every `vehiclePipe=` and `buildingPipe=` INI value from the original skygfx and 
 | `skinSpecularPower` | New | config.cpp | Skin specular power |
 | `skinSpecularStrength` | New | config.cpp | Skin specular strength |
 | `skinSSSStrength` | New | config.cpp | Skin SSS strength |
-| `hairEnhanceEnable` | New | config.cpp | Hair enhancement enable |
-| `hairAnisotropicPower` | New | config.cpp | Hair anisotropic power |
-| `hairAnisotropicStrength` | New | config.cpp | Hair anisotropic strength |
-| `hairSSSStrength` | New | config.cpp | Hair SSS strength |
-| `vegetationEnhanceEnable` | New | config.cpp | Vegetation enhancement enable |
-| `vegetationSSSStrength` | New | config.cpp | Vegetation SSS strength |
-| `vegetationAmbientBoost` | New | config.cpp | Vegetation ambient boost |
 | `enableNormalMaps` | New | config.cpp | Normal mapping enable |
 | `normalMapIntensity` | New | config.cpp | Normal map intensity |
 | `normalMapPlayerOnly` | New | config.cpp | Normal map player-only |
@@ -197,3 +190,6 @@ All `makePS()`/`makeVS()` calls in `CreateShaders()` verified:
 - [[Vehicle Pipeline]] — Full mode details
 - [[INI Configuration]] — All config fields
 - [[Three-Codebase Comparison]] — Full INI comparison across all codebases
+
+
+> **REMOVED 2026-11-10** — `hairEnhanceEnable`, `hairAnisotropicPower`, `hairAnisotropicStrength`, `hairSSSStrength`, `vegetationEnhanceEnable`, `vegetationSSSStrength`, `vegetationAmbientBoost` and `pedAmbientFloor` were deleted as dead levers: parsed, saved and menu-exposed with zero render consumers (whole-tree grep). See `.serena/memories/wave-20-record.md` §5.

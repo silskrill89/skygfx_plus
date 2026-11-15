@@ -889,9 +889,6 @@ BuildSettingRows(void)
 		"Forces CULLMODE through all three layers for the ped span. Default -1 = "
 		"leave the game's raw cull; 0 is accepted by the menu but behaves as -1 "
 		"at parse and at the gate. Bisect lever.");
-	rFn("pedAmbientFloor", "Ped ambient floor", &config->pedAmbientFloor, 0.0f, 1.0f,
-		"Minimum ambient luminance for the ped path (myDefaultCallback), default "
-		"0.20 clamped [0..1]; 0 disables the lift. Bisect lever.");
 	rWn("pedTexResync", "Ped stage-0 texture resync", &config->pedTexResync,
 		"Gates the park/set stage-0 texture-raster resync in myDefaultCallback "
 		"(cache<->device split repair). Default 1 = on. Bisect lever.");
@@ -1187,13 +1184,9 @@ BuildSettingRows(void)
 	rF("skinSpecularPower", "Skin specular power", &config->skinSpecularPower, 0.0f, 100.0f);
 	rF("skinSpecularStrength", "Skin specular strength", &config->skinSpecularStrength, 0.0f, 2.0f);
 	rF("skinSSSStrength", "Skin SSS strength", &config->skinSSSStrength, 0.0f, 1.0f);
-	rW("hairEnhanceEnable", "Hair enhance", &config->hairEnhanceEnable);
-	rF("hairAnisotropicPower", "Hair aniso power", &config->hairAnisotropicPower, 0.0f, 128.0f);
-	rF("hairAnisotropicStrength", "Hair aniso strength", &config->hairAnisotropicStrength, 0.0f, 2.0f);
-	rF("hairSSSStrength", "Hair SSS strength", &config->hairSSSStrength, 0.0f, 1.0f);
-	rW("vegetationEnhanceEnable", "Vegetation enhance", &config->vegetationEnhanceEnable);
-	rF("vegetationSSSStrength", "Vegetation SSS strength", &config->vegetationSSSStrength, 0.0f, 1.0f);
-	rF("vegetationAmbientBoost", "Vegetation ambient boost", &config->vegetationAmbientBoost, 0.0f, 3.0f);
+	// ROUGH CLEANUP (2026-11-10): the Hair and Vegetation enhancement rows were
+	// removed together with their Config fields - dead levers for features with
+	// zero render consumers.
 
 	// ================= TAB: VCS trails =================
 	G("VCS trails", "VCS trails");
@@ -1480,10 +1473,9 @@ BuildSettingRows(void)
 	rW("ps2ModulateGrass", "PS2 modulate grass", &config->ps2ModulateGrass);
 	rI("zwriteThresholdGrass", "Alpha threshold (grass)", &config->zwriteThresholdGrass, 0, 255);
 
-	G("Vegetation", "Vegetation enhancement (SSS / wrap)");
-	rW("vegetationEnhanceEnable", "Enhance", &config->vegetationEnhanceEnable);
-	rF("vegetationSSSStrength", "SSS strength", &config->vegetationSSSStrength, 0.0f, 1.0f);
-	rF("vegetationAmbientBoost", "Ambient boost", &config->vegetationAmbientBoost, 0.0f, 3.0f);
+	// ROUGH CLEANUP (2026-11-10): the Vegetation enhancement group (SSS / wrap)
+	// was removed with its dead Config fields - no render consumer ever read
+	// them, so the group only round-tripped values.
 
 	// ================= TAB: Buildings =================
 	// The building-pipe selector, one click from Vehicle in the WORLD
@@ -1780,10 +1772,6 @@ static const KeyDefault kKeyDefaults[] = {
 	{ "sssPostProcessRadius", 3.0f }, { "sssPostProcessThreshold", 0.0f }, { "sssAmbientBoost", 1.0f },
 	{ "skinEnhanceEnable", 1 }, { "skinWrapFactor", 0.4f }, { "skinSpecularPower", 24.0f },
 	{ "skinSpecularStrength", 0.2f }, { "skinSSSStrength", 0.3f },
-	{ "hairEnhanceEnable", 1 }, { "hairAnisotropicPower", 48.0f },
-	{ "hairAnisotropicStrength", 0.4f }, { "hairSSSStrength", 0.15f },
-	{ "vegetationEnhanceEnable", 1 }, { "vegetationSSSStrength", 0.2f },
-	{ "vegetationAmbientBoost", 1.3f },
 	{ "envMapSize", 512 }, { "envMapUseLODs", 0 }, { "envMapFarClipMult", 2.0f },
 	{ "reflectionMsaaLevel", 0 }, { "mirrorDistortionFix", 0 },
 	{ "envPower", 20.0f }, { "envFresnel", 0.4f }, { "envShininessMult", 1.0f },
@@ -1839,7 +1827,7 @@ static const KeyDefault kKeyDefaults[] = {
 	{ "coronaBlendShield", 1 }, { "spriteFlushShield", 1 }, { "effectsAlphaBlock", 1 },
 	{ "camRasterRepair", 1 }, { "moonMaskAlpha", 1 }, { "skidmarkAlphaFix", 1 },
 	{ "pedTexResync", 1 }, { "pedOpaqueContract", 1 }, { "pedAlphaTestEnable", 1 },
-	{ "pedCullMode", -1 }, { "pedAmbientFloor", 0.20f },
+	{ "pedCullMode", -1 },
 	// Coverage-gap / diagnostics rows added with the master-detail restructure.
 	{ "waterReflectionMix", 0.7f }, { "diagLevel", 0 }, { "debugOverlay", 0 },
 	// Wave-12 GPU particle module (main.cpp readint default 0).
@@ -1993,12 +1981,6 @@ RowInactiveReason(const SettingRow &r)
 	    strcmp(k, "skinSpecularStrength") == 0 || strcmp(k, "skinSSSStrength") == 0) &&
 	   !config->skinEnhanceEnable)
 		return "Skin enhancement is off (skinEnhanceEnable=0).";
-	if((strcmp(k, "hairAnisotropicPower") == 0 || strcmp(k, "hairAnisotropicStrength") == 0 ||
-	    strcmp(k, "hairSSSStrength") == 0) && !config->hairEnhanceEnable)
-		return "Hair enhancement is off (hairEnhanceEnable=0).";
-	if((strcmp(k, "vegetationSSSStrength") == 0 || strcmp(k, "vegetationAmbientBoost") == 0) &&
-	   !config->vegetationEnhanceEnable)
-		return "Vegetation enhancement is off (vegetationEnhanceEnable=0).";
 	if((strcmp(k, "trailsLimit") == 0 || strcmp(k, "trailsIntensity") == 0 ||
 	    strcmp(k, "trailsResolution") == 0) && !config->vcsTrails)
 		return "VCS trails are off (vcsTrails=0).";

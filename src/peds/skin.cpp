@@ -615,7 +615,8 @@ SkinEntryContract(PedPipeState *st)
 // main.cpp:2419-2465 enter / 2612-2615 restore). Sep-3 semantics (W3 revert
 // — docs/plans/2026-10-30-sep3-correlation/git-chars-lighting.md §4.2):
 // plain GetTimecycleAmbient() — no max() with the game's own ambient, no
-// pedAmbientFloor hue-preserving lift, no cutscene 0.15 special.
+// ambient-floor hue-preserving lift (that lever was removed 2026-11-10),
+// no cutscene 0.15 special.
 // ===========================================================================
 
 void

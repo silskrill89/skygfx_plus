@@ -218,18 +218,11 @@ Preset defaults are applied first, then individual INI values override them.
 
 | Key | Type | Default | Parsed In | Notes |
 |-----|------|---------|-----------|-------|
-| `hairEnhanceEnable` | int | `0` | config.cpp | Enable hair enhancement |
-| `hairAnisotropicPower` | float | `32.0` | config.cpp | Highlight sharpness |
-| `hairAnisotropicStrength` | float | `0.5` | config.cpp | Highlight intensity |
-| `hairSSSStrength` | float | `0.2` | config.cpp | Hair SSS strength |
 
 ## Vegetation Enhancement
 
 | Key | Type | Default | Parsed In | Notes |
 |-----|------|---------|-----------|-------|
-| `vegetationEnhanceEnable` | int | `0` | config.cpp | Enable vegetation enhancement |
-| `vegetationSSSStrength` | float | `0.3` | config.cpp | Translucency strength |
-| `vegetationAmbientBoost` | float | `1.2` | config.cpp | Ambient multiplier |
 
 ## Normal Mapping
 
@@ -297,3 +290,6 @@ Preset defaults are applied first, then individual INI values override them.
 - [[Vehicle Pipeline]] — Vehicle pipe options
 - [[Backwards Compatibility]] — All settings verified
 - [[Three-Codebase Comparison]] — Full INI comparison across codebases
+
+
+> **REMOVED 2026-11-10** — `hairEnhanceEnable`, `hairAnisotropicPower`, `hairAnisotropicStrength`, `hairSSSStrength`, `vegetationEnhanceEnable`, `vegetationSSSStrength`, `vegetationAmbientBoost` and `pedAmbientFloor` were deleted as dead levers: parsed, saved and menu-exposed with zero render consumers (whole-tree grep). See `.serena/memories/wave-20-record.md` §5.

@@ -70,8 +70,6 @@ Screen-space post-processing effects applied after the main scene render. Implem
 ### SSS (Subsurface Scattering)
 - **Post-process blur**: Screen-space edge-preserving blur (`sssPostProcessEnable`)
 - **Skin Enhancement**: Wrap lighting for SSS approximation (`skinEnhanceEnable`)
-- **Hair Enhancement**: Anisotropic Kajiya-Kay highlights (`hairEnhanceEnable`)
-- **Vegetation Enhancement**: SSS-like translucency for grass (`vegetationEnhanceEnable`)
 
 ### Other Effects
 - **Grain Filter**: Film grain overlay (PS2-style VU RNG or standard)

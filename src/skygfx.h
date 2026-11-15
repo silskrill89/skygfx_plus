@@ -507,20 +507,11 @@ struct Config {
 	float skinSpecularStrength;	// specular highlight intensity
 	float skinSSSStrength;		// 0.0-1.0, SSS effect strength
 
-	// Hair Enhancement - anisotropic highlights
-	// NOTE: Works ON TOP of existing hair rendering. Uses depth derivatives
-	// to estimate tangent direction for Kajiya-Kay anisotropic highlights.
-	RwBool hairEnhanceEnable;
-	float hairAnisotropicPower;		// highlight sharpness
-	float hairAnisotropicStrength;	// highlight intensity
-	float hairSSSStrength;			// 0.0-1.0, hair SSS strength
-
-	// Vegetation Enhancement - improved grass/plant rendering
-	// NOTE: Works ON TOP of existing grass rendering. Adds SSS-like translucency
-	// and improved ambient lighting to vegetation.
-	RwBool vegetationEnhanceEnable;
-	float vegetationSSSStrength;	// 0.0-1.0, translucency strength
-	float vegetationAmbientBoost;	// ambient light multiplier
+	// ROUGH CLEANUP (2026-11-10): the Hair Enhancement and Vegetation
+	// Enhancement blocks were removed. Both were parsed, saved and exposed as
+	// menu rows, but had ZERO render consumers anywhere in the tree (whole-tree
+	// grep) - dead levers for features that no longer exist. Their INI keys,
+	// mode-table entries and ImGui rows went with them.
 
 	// GTA IV Mode
 	RwBool ivMode;
@@ -786,17 +777,11 @@ struct Config {
 	// (= off); clamped [0..1]. readIniFile default, ADD_IF_MISSING and
 	// skygfx.default.ini all use 0.0, so any non-zero value is opt-in.
 	float pbrAmbientFloor;
-	// Ped (skin-pipe) ambient floor — myDefaultCallback overrides pAmbient with
-	// the timecycle ambient; at hour 12 the raw value can be ~(0.033,0,0) and
-	// vanilla skin peds (no Forward+/IBL) render flat black up close. This is
-	// the minimum PEAK channel of the final pAmbient colour, applied as a
-	// hue-preserving scale (all channels multiplied by floorV/maxChannel) so a
-	// warm dusk ambient stays warm instead of washing to gray. 0.0 = off.
-	// INI: SkyGfx.pedAmbientFloor, default 0.20, clamped [0..1].
-	// DEAD-BUT-PARSED (source-inventory D4): zero render consumers after the
-	// W3 revert — the debug menu still references this field
-	// (debugmenu_ui.cpp rFn row + reset table), so it stays; cleanup deferred.
-	float pedAmbientFloor;
+	// ROUGH CLEANUP (2026-11-10): pedAmbientFloor removed. It was DEAD-BUT-PARSED
+	// (source-inventory D4) since the W3 revert - the ped skin path uses the
+	// timecycle ambient directly (skin.cpp / render_callbacks.cpp carry only
+	// comments noting the lift is absent) and the field existed solely so the
+	// debug menu row and reset table had something to point at.
 	// Global ambient multiplier applied to timecycle ambient at upload
 	// (GetTimecycleAmbient, pipelinecommon.cpp). Vanilla SA applies NO such
 	// factor; 1.0 = vanilla-equivalent. Values < 1 darken every pipe that

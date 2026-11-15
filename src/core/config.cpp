@@ -837,17 +837,11 @@ readIniFile(const char *modulePath, Config *c)
 	// Menu bounds are [0..1]; clamp the INI read to the same band.
 	if(c->pbrAmbientFloor < 0.0f) c->pbrAmbientFloor = 0.0f;
 	if(c->pbrAmbientFloor > 1.0f) c->pbrAmbientFloor = 1.0f;
-	// Ped (skin-pipe) ambient floor — hue-preserving peak-channel floor applied
-	// to the pAmbient override in myDefaultCallback (near-camera black peds).
-	// Ambient-like keys in this file are floats; the default is 0.20 (peak-
-	// channel floor; set 0.0 to disable and restore reference-fork parity).
-	// Clamp [0..1] at parse, at refreshIni (via this shared parser) and at save.
-	// DEAD-BUT-PARSED (source-inventory D4): zero render consumers after the
-	// W3 revert — the debug menu still references config->pedAmbientFloor, so
-	// the field and this parse stay; cleanup deferred.
-	c->pedAmbientFloor = readfloat(cfg.get("SkyGfx", "pedAmbientFloor", ""), 0.20f);
-	if(c->pedAmbientFloor < 0.0f) c->pedAmbientFloor = 0.0f;
-	if(c->pedAmbientFloor > 1.0f) c->pedAmbientFloor = 1.0f;
+ 	// ROUGH CLEANUP (2026-11-10): pedAmbientFloor removed. It has been
+ 	// DEAD-BUT-PARSED since the W3 revert (zero render consumers; the ped path
+ 	// uses the timecycle ambient directly) and only survived because the debug
+ 	// menu row + reset table pointed at it. Key, field, row and mode entries
+ 	// are all gone.
 	// Global ambient multiplier (1.0 = vanilla; the old hardcoded 0.85 was
 	// a daylight-darkness bug on the ambient-only Xbox building pipe).
 	c->ambientMult = readfloat2(cfg, "Ped", "ambientMult", 1.0f);
@@ -925,21 +919,15 @@ readIniFile(const char *modulePath, Config *c)
 	c->skinSpecularStrength = readfloat(cfg.get("SkyGfx", "skinSpecularStrength", ""), c->skinSpecularStrength);
 	c->skinSSSStrength = readfloat(cfg.get("SkyGfx", "skinSSSStrength", ""), c->skinSSSStrength);
 	
-	// Hair enhancement
-	c->hairAnisotropicPower = readfloat(cfg.get("SkyGfx", "hairAnisotropicPower", ""), c->hairAnisotropicPower);
-	c->hairAnisotropicStrength = readfloat(cfg.get("SkyGfx", "hairAnisotropicStrength", ""), c->hairAnisotropicStrength);
-	c->hairSSSStrength = readfloat(cfg.get("SkyGfx", "hairSSSStrength", ""), c->hairSSSStrength);
-	
-	// Vegetation enhancement
-	c->vegetationSSSStrength = readfloat(cfg.get("SkyGfx", "vegetationSSSStrength", ""), c->vegetationSSSStrength);
-	c->vegetationAmbientBoost = readfloat(cfg.get("SkyGfx", "vegetationAmbientBoost", ""), c->vegetationAmbientBoost);
+ 	// ROUGH CLEANUP (2026-11-10): the Hair enhancement and Vegetation
+ 	// enhancement parse blocks were removed. Both were dead levers - declared,
+ 	// parsed, saved and menu-exposed with zero render consumers anywhere in the
+ 	// tree (whole-tree grep), so the values only ever round-tripped.
 
 	// CLASS 3: round-trip fixes — keys saveConfig writes / the menu mutates
 	// but readIni never read back (the preset block used to force them)
 	c->sssPostProcessEnable = readint(cfg.get("SkyGfx", "sssPostProcessEnable", ""), c->sssPostProcessEnable);
 	c->skinEnhanceEnable = readint(cfg.get("SkyGfx", "skinEnhanceEnable", ""), c->skinEnhanceEnable);
-	c->hairEnhanceEnable = readint(cfg.get("SkyGfx", "hairEnhanceEnable", ""), c->hairEnhanceEnable);
-	c->vegetationEnhanceEnable = readint(cfg.get("SkyGfx", "vegetationEnhanceEnable", ""), c->vegetationEnhanceEnable);
 
 	// Screen-space SSS (menu-exposed; previously neither saved nor read)
 	// sssEnable is now the master switch consulted by chars_drawSSSBlur —
@@ -1178,8 +1166,6 @@ readIniFile(const char *modulePath, Config *c)
 		EMIT("SkyGfx", "sssEnable", "1"); \
 		EMIT("SkyGfx", "sssAmbientBoost", "1"); \
 		EMIT("SkyGfx", "skinEnhanceEnable", "1"); \
-		EMIT("SkyGfx", "hairEnhanceEnable", "1"); \
-		EMIT("SkyGfx", "vegetationEnhanceEnable", "1"); \
 		EMIT("SkyGfx", "normalMapEnable", "0"); \
 		EMIT("SkyGfx", "ivMode", (c->pipeline == PIPELINE_GTAIV) ? "1" : "0"); \
 		EMIT("SkyGfx", "ivDesaturation", "0.15"); \
@@ -1223,7 +1209,6 @@ readIniFile(const char *modulePath, Config *c)
 		EMIT("SkyGfx", "postfxDumpDebug", "0"); \
 		EMIT("SkyGfx", "debugOverlay", "0"); \
 		EMIT("SkyGfx", "pbrAmbientFloor", "0.0"); \
-		EMIT("SkyGfx", "pedAmbientFloor", "0.20"); \
 		EMIT("SkyGfx", "ambientMult", "1.0"); \
 		EMIT("SkyGfx", "pbrIblAmbientWeight", "0.5"); \
 		EMIT("SkyGfx", "tonemapBlackLift", "0.0"); \
@@ -1348,8 +1333,6 @@ readIniFile(const char *modulePath, Config *c)
 		cfg.set("SkyGfx", "sssEnable", "1");
 		cfg.set("SkyGfx", "sssAmbientBoost", "1");
 		cfg.set("SkyGfx", "skinEnhanceEnable", "1");
-		cfg.set("SkyGfx", "hairEnhanceEnable", "1");
-		cfg.set("SkyGfx", "vegetationEnhanceEnable", "1");
 		cfg.set("SkyGfx", "normalMapEnable", "0");
 		cfg.set("SkyGfx", "normalMapIntensity", "1.0");
 		cfg.set("SkyGfx", "normalMapPlayerOnly", "1");
@@ -1713,15 +1696,8 @@ saveConfigTo(const char *path)
 	cfg.set("SkyGfx", "skinSSSStrength", std::to_string(c->skinSSSStrength));
 
 	// Hair enhancement
-	cfg.set("SkyGfx", "hairEnhanceEnable", std::to_string(c->hairEnhanceEnable));
-	cfg.set("SkyGfx", "hairAnisotropicPower", std::to_string(c->hairAnisotropicPower));
-	cfg.set("SkyGfx", "hairAnisotropicStrength", std::to_string(c->hairAnisotropicStrength));
-	cfg.set("SkyGfx", "hairSSSStrength", std::to_string(c->hairSSSStrength));
 
 	// Vegetation enhancement
-	cfg.set("SkyGfx", "vegetationEnhanceEnable", std::to_string(c->vegetationEnhanceEnable));
-	cfg.set("SkyGfx", "vegetationSSSStrength", std::to_string(c->vegetationSSSStrength));
-	cfg.set("SkyGfx", "vegetationAmbientBoost", std::to_string(c->vegetationAmbientBoost));
 
 	// GTA IV
 	cfg.set("SkyGfx", "ivMode", std::to_string(c->ivMode));
@@ -1874,7 +1850,6 @@ saveConfigTo(const char *path)
 	// Death ragdoll
 	cfg.set("SkyGfx", "ragdollEnable", std::to_string(c->ragdollEnable));
 	cfg.set("SkyGfx", "pbrAmbientFloor", std::to_string(c->pbrAmbientFloor));
-	cfg.set("SkyGfx", "pedAmbientFloor", std::to_string(c->pedAmbientFloor));
 	cfg.set("SkyGfx", "ambientMult", std::to_string(c->ambientMult));
 	cfg.set("SkyGfx", "pbrIblAmbientWeight", std::to_string(c->pbrIblAmbientWeight));
 	cfg.set("SkyGfx", "tonemapBlackLift", std::to_string(c->tonemapBlackLift));

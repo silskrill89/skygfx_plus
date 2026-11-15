@@ -1029,7 +1029,8 @@ myDefaultCallback(RpAtomic *atomic)
 	// All pipelines (buildings, vehicles, peds) now use the same ambient source.
 	// Sep-3 semantics (W3 revert — docs/plans/2026-10-30-sep3-correlation/
 	// git-chars-lighting.md §4.2): plain GetTimecycleAmbient() — no max()
-	// with the game's own ambient, no pedAmbientFloor hue-preserving lift,
+	// with the game's own ambient, no ambient-floor hue-preserving lift (the
+	// pedAmbientFloor lever was removed 2026-11-10 - see wave-20-record §5),
 	// no cutscene 0.15 special. The 0.20 floor saturated the FFP skin pipe
 	// (final ≈ pAmbient + pDirect·NdotL) to flat white at noon.
 	RwRGBAReal savedAmb = {};
