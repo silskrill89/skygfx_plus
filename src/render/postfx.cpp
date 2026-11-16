@@ -1968,8 +1968,9 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 		return;
 	}
 
-	// WHITE-INIT (call site 1 of 2 — DISABLED for bisect). The verts
-	// are reset by the game or by other code; this fix may be interfering.
+	// WHITE-INIT (call site 1 of 2 — RE-ENABLED). colorfilterVerts must be
+	// white (0xFFFFFFFF) for multiply-style composites; black verts blacken
+	// every post pass that uses them (FXAA3, IV grade, GodRays, FxFramePass).
 	EnsureColorfilterVertsVisible();
 
 	// Trusted screen-size capture point (postfx entry — main camera is on the
