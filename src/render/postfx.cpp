@@ -1970,7 +1970,7 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 
 	// WHITE-INIT (call site 1 of 2 — DISABLED for bisect). The verts
 	// are reset by the game or by other code; this fix may be interfering.
-	// EnsureColorfilterVertsVisible();
+	EnsureColorfilterVertsVisible();
 
 	// Trusted screen-size capture point (postfx entry — main camera is on the
 	// screen here, see GetScreenSize above). Geometry-phase readers
@@ -2342,7 +2342,7 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 		// case where the vanilla writer does not run and the verts would stay
 		// black. Deliberately placed before the first UpdateFrontBuffer() so
 		// the re-seed is in place before any consumer reads the verts.
-		// EnsureColorfilterVertsVisible();
+		EnsureColorfilterVertsVisible();
 		UpdateFrontBuffer();
 		if(!PfFrontBufferReady("bypass identity tonemap")){
 			pfSkip |= PFG_CA | PFG_GRAIN | PFG_VIGNETTE | PFG_IVGRADE;
