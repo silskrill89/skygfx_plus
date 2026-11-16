@@ -1375,6 +1375,16 @@ bldStage0DevContract(RwTexture *resolved)
 static RwTexture *
 bldPolicyTexture(RwTexture *tex)
 {
+	// ONE-SHOT (2026-11-16): what does the FIRST world diffuse bind carry —
+	// real texture / grey sentinel / NULL? Settles which class the drawn
+	// geometry actually holds.
+	static bool s_bldTexFirst = false;
+	if(!s_bldTexFirst){
+		s_bldTexFirst = true;
+		dbglog("[BldTex] bldPolicyTexture first: tex=%p kind=%d name='%s'",
+		       (void*)tex, tex ? TexDefsMissTextureKind(tex) : -1,
+		       (tex && tex->name[0]) ? tex->name : "");
+	}
 	if(!tex)
 		return NULL;	// legitimate "no diffuse map" (resolved -> white)
 	// Draw-time resolution (2026-11-16): if this is a policy sentinel whose
@@ -3811,6 +3821,15 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Switch(RwResEntry *repEntry, void 
 {
 //	if(GetAsyncKeyState(VK_F4) & 0x8000)
 //		return;
+
+	// ONE-SHOT (2026-11-16): proves whether the building cb ever runs —
+	// unthrottled static, immune to the throttle key/bucket budget.
+	static bool s_switchEntered = false;
+	if(!s_switchEntered){
+		s_switchEntered = true;
+		dbglog("[BPIPE] Switch cb ENTER (first ever) pipe=%d object=%p type=%d",
+		       config ? config->buildingPipe : -1, object, (int)type);
+	}
 
 	RwUInt32 savedCull = pipeEnterCullMode();
 	// Hand the raw pre-entry cull to the Xbox cb's draw-boundary re-assert

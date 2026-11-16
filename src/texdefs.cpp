@@ -786,6 +786,15 @@ TexDefsResolveAtDraw(RwTexture *tex)
 {
 	if(!tex)
 		return tex;
+	// ONE-SHOT (2026-11-16): proves this function is reached at all and with
+	// what class — static local, no throttle key involved.
+	static bool s_resolveFirst = false;
+	if(!s_resolveFirst){
+		s_resolveFirst = true;
+		dbglog("[texdefs] resolve first-call tex=%p kind=%d name='%s'",
+		       (void*)tex, TexDefsMissTextureKind(tex),
+		       tex->name[0] ? tex->name : "");
+	}
 	if(TexDefsMissTextureKind(tex) == TEXDEFS_MISS_TEX_NONE)
 		return tex;	// real texture (or NULL) — hot path, no map traffic
 	if(!tex->name[0])
