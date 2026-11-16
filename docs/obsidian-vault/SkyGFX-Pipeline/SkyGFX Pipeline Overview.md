@@ -1,7 +1,7 @@
 ---
 tags: [pipeline, rendering, architecture]
 created: 2025-01-02
-updated: 2026-11-10
+updated: 2026-11-16
 ---
 
 # SkyGFX Plus - Rendering Pipeline Overview
@@ -100,3 +100,35 @@ The pipeline shape above is unchanged; the **code layout** has moved on:
 - **HARD RULE:** addresses are named in `src/rw/gta.h`; call sites never use raw hex except for a
   documented, disassembly-proven one-off.
 - Last verified binary: W0.5 (`2,616,832 B`, `bb5d1230…`); W0.6 pending ([[Gate Chain]]).
+
+---
+
+## Addendum — 2026-11-16 (full pipe trace + root cause)
+
+- **Frame-by-frame order chart committed:** `docs/plans/2026-11-15-rendering-pipeline-order.md`
+  — Layer 0 frame entry → Layer 1 scene geometry (sky, buildings, vehicles, peds, default pipe,
+  water, mirrors, skidmarks, tags, effects, tree wind) → Layer 2 postfx → Layer 3 frame exit,
+  plus the key-hook table and the `skygfx.ini` config reference.
+- ⚠ **Correction:** that document's §1b "Known issues" and its "WHY BUILDINGS DON'T RENDER"
+  section claim `0x53C15E` is NOT a CALL and that `InterceptCall` corrupts the building render
+  path. **Disproven** by correct PE-section mapping: `0x53C15E` = `E8` (CALL), `0x5D5B10` = `E9`
+  (JMP). All hook addresses are byte-identical to AAP, and pipe creation
+  (`CreateCustomObjPipe_PS2`, `buildingPipe.cpp:4206/4237` = AAP `buildingPipe.cpp:723/754`) is
+  identical — CreateShaders ran (ps=55 vs=17, 0 failed).
+- **The pipe is not the defect.** Traced end-to-end against AAP (`E:\SDKs\skygfx_original`):
+  hook set, Switch/Xbox cb draw mechanics, CreateShaders, Update ambient all match. Full trace:
+  `docs/plans/2026-11-16-pipe-trace-and-root-cause.md`.
+- **The defect is texture resolution, not drawing:** `TexDefsFindCB` misses (broken
+  `dict->parent` walk in this ModLoader/ROSA install + LOD-DFF-first streaming) bound the shared
+  `skygfx_missgrey` 1×1 grey sentinel into `material->texture` forever → grey × ambient world
+  (pale-blue slabs by day, near-black at dawn). Fix in commit **e7bc752 (pushed)**: per-name
+  sentinel clones + `TexDefsResolveAtDraw` draw-time retry routed through `pipeSetTexture`
+  (`src/skygfx.h:1351`) + `TexDefsRemapToWorld` at sprite→world remap sites. See
+  [[Status 2026-11-16]].
+- Instrumentation one-shots deployed, awaiting one game-run to decide which cb draws the world:
+  `[BPIPE] Switch cb ENTER` (`buildingPipe.cpp:3830`), `[BldTex] bldPolicyTexture first`
+  (`buildingPipe.cpp:1384`), `[texdefs] resolve first-call` (`texdefs.cpp:794`).
+- Xbox engage finding: `[Mode] engage Xbox owned=80 pipes=2/1/2 cf=2 iv=0 smaa=0` — pipes were
+  ALREADY Xbox from the ini (`mode=none` at start); engage only flips colorFilter
+  Modern(8)→PC(2) + smaa=0 + mode-owned toggles, and the "xbox void" screenshot preceded the
+  engage in wall-time.

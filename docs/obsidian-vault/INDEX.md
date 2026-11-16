@@ -1,7 +1,8 @@
 # SkyGFX Plus — Obsidian Vault Index
 
-> Last synchronized with the live tree: **2026-11-10** (wave 20). Status lives in
-> [[Status 2026-11-10]]; architecture in [[Current Architecture (Wave 20)]].
+> Last synchronized with the live tree: **2026-11-16** (root cause + fix). Status lives in
+> [[Status 2026-11-16]]; architecture in [[Current Architecture (Wave 20)]]; prior status in
+> [[Status 2026-11-10]].
 
 ## Vault Structure
 
@@ -9,7 +10,8 @@
 docs/obsidian-vault/
 ├── 00-Index/
 │   ├── Home.md
-│   └── Status 2026-11-10.md
+│   ├── Status 2026-11-10.md
+│   └── Status 2026-11-16.md
 ├── 03-Shaders/
 │   └── VehiclePBR Modern.md
 ├── 06-Technical-Decisions/
@@ -55,6 +57,7 @@ The vault contains deep-dive research and architecture documents. For project-le
 
 | Vault Topic | Main docs/ Counterpart |
 |-------------|----------------------|
+| [[Status 2026-11-16]] | `docs/plans/2026-11-16-pipe-trace-and-root-cause.md` |
 | [[Status 2026-11-10]] | `.serena/memories/wave-20-record.md` |
 | [[Gate Chain]] | `docs/plans/2026-11-07-build-gate-checklist.md` |
 | [[Current Architecture (Wave 20)]] | `CODEBASE_DOCUMENTATION.md` |

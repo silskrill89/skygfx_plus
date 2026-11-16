@@ -1,7 +1,7 @@
 ---
 tags: [index, moc, overview]
 created: 2025-01-02
-updated: 2026-11-10
+updated: 2026-11-16
 ---
 
 # SkyGFX Plus — Technical Vault
@@ -34,7 +34,8 @@ updated: 2026-11-10
 - [[Rubber Shader Merge]] — Merged rubber shader into VehiclePBR_Modern
 
 ### Build & Deployment
-- [[Status 2026-11-10]] — latest wave status, fix-wave ledger, hard rule, watch-list
+- [[Status 2026-11-16]] — root-cause verdict (untextured world), fix ledger (e7bc752), instrumentation pending
+- [[Status 2026-11-10]] — wave 20 status, fix-wave ledger, hard rule, watch-list
 - [[Gate Chain]] — W0 → W0.5 binary identities and gate protocol
 - [[Build System]] — fast_build.py / fix_build.py, MSVC/SDK setup
 - [[SDK Dependencies]] — All external SDKs and paths
@@ -91,6 +92,24 @@ The main `docs/` directory contains project-level documentation. Use these links
 ---
 
 ## Current Status
+
+### As of 2026-11-16 (root cause found, fix landed)
+
+- **Root cause of the ~3-month untextured-world regression:** the `TexDefsFindCB` miss path
+  bound the shared `skygfx_missgrey` 1×1 grey sentinel permanently into `material->texture`
+  (broken `dict->parent` walk in this ModLoader/ROSA install + LOD-DFF-first streaming) → every
+  building/road/prop rendered grey × ambient (pale-blue slabs by day, near-black at dawn).
+  Full verdict: [[Status 2026-11-16]].
+- **Fix landed — commit e7bc752 (pushed):** per-name sentinel clones, `TexDefsResolveAtDraw`
+  (1 s rate-limited draw-time retry with pinned CTxdStore slot validation),
+  `TexDefsRemapToWorld`, consumers wired (`bldPolicyTexture`, `vehPolicyTexture`, ped sites).
+- **Awaiting one user game-run** for three one-shot receipts: `[BPIPE] Switch cb ENTER`,
+  `[BldTex] bldPolicyTexture first`, `[texdefs] resolve first-call` — to decide which cb draws
+  the world and why zero resolve receipts fired.
+- **Pipe verified AAP-identical:** hooks byte-identical (2026-11-15 RVA/PE-mapping theory
+  disproven), pipe creation identical. Frame-order chart:
+  `docs/plans/2026-11-15-rendering-pipeline-order.md` (committed; its "0x53C15E is NOT a CALL"
+  claim is disproven — see [[SkyGFX Pipeline Overview]]).
 
 ### As of 2026-11-10 (wave 20, on disk — unbuilt)
 

@@ -1,7 +1,7 @@
 ---
 tags: [roadmap, planning, milestones]
 created: 2025-01-02
-updated: 2026-11-10
+updated: 2026-11-16
 ---
 
 # SkyGFX Plus Roadmap
@@ -99,3 +99,30 @@ Features that fit in ps_3_0/vs_3_0:
 - Current status, watch-list and open backlog: [[Status 2026-11-10]].
 - Goal line: match `C:\Users\aaaaaaaaa\Documents\ShareX\Screenshots\2026-09` (Sep-23 ~07:09)
   with zero on-screen glitches.
+
+---
+
+## Status Addendum — 2026-11-16 (root cause + fix)
+
+- **The ~3-month untextured-world regression is root-caused.** World geometry was drawing
+  UNTEXTURED: the `TexDefsFindCB` miss path bound the shared `skygfx_missgrey` 1×1 grey
+  sentinel permanently into `material->texture` — mechanism = broken `dict->parent` walk in this
+  ModLoader/ROSA install + LOD-DFF-first streaming so full-detail lookups miss at load
+  (session log `miss total=158 distinct=32`, ~3 `dictfallback` recoveries). Grey × ambient
+  explains every screenshot (pale-blue slabs by day, near-black at dawn, flat tan ground).
+  Full verdict: [[Status 2026-11-16]].
+- **Fix landed (commit e7bc752, pushed):** per-name sentinel clones (`TexDefsNamedSentinel`),
+  `TexDefsMissTextureKind` raster identity, `TexDefsResolveAtDraw` 1 s rate-limited per-name
+  retry with pinned CTxdStore slot validation, `TexDefsRemapToWorld`; consumers wired
+  (`bldPolicyTexture`, `vehPolicyTexture`, ped sites) and all pipe binds routed through
+  `pipeSetTexture`.
+- **Phase 1 remains gated on the visual retest:** pipes are verified AAP-identical (hooks
+  byte-identical; the 11-15 RVA theory disproven; pipe creation identical), but no pipe A/B is
+  meaningful until the world renders textured at day AND dawn. One user game-run is awaited for
+  the three instrumentation receipts (`[BPIPE] Switch cb ENTER`, `[BldTex] bldPolicyTexture
+  first`, `[texdefs] resolve first-call`).
+- Frame-order chart committed: `docs/plans/2026-11-15-rendering-pipeline-order.md` (Layer 0–3,
+  hook table, config reference) — its "0x53C15E is NOT a CALL" claim is disproven; see the
+  [[SkyGFX Pipeline Overview]] 2026-11-16 addendum.
+- Standing rules unchanged (lanes never build; address-hygiene hard rule; never-commit and
+  NEVER-REVERT lists): restated in [[Status 2026-11-16]].
