@@ -647,15 +647,29 @@ myDefaultCallback(RpAtomic *atomic)
 			// Phase 3 FLIPPED — SkinDrawDual (skin.cpp) owns the two-leg
 			// draw + the leg-progression state lane when the module owns
 			// this span (pedsPipeState non-NULL, acquired at entry).
-			// pedsPipeState == NULL keeps the legacy inline block below
-			// byte-for-byte (the pedsPipeEnable=0 rollback lever,
-			// skin.h:8 / peds_pipe.h:34). The [PedDual] receipts stay on
-			// both paths.
+			// The legacy inline ped block was deleted by the P5 shrink
+			// (2026-11-15, commit 1f3352e) — module path is canonical.
 			pipe = SkinDrawDual(pipe, atomic, pedsPipeState,
 					    alphatest, alpharef, zt);
+		}else{
+			// Non-pipe-group (default/vehicle/building) dual pass —
+			// RESTORED 2026-11-16: P5's brace surgery deleted this
+			// two-leg block AND the !dodual single-execute else below,
+			// so dodual==0 executed NOTHING (the :581 hasAlpha gate
+			// clears dodual for opaque world geometry -> buildings/
+			// roads vanished; peds stayed visible through SkinDrawDual).
+			// Leg 1: GREATEREQUAL@zt seeds depth for cutout texels,
+			// leg 2: LESS@zt draws the fringe (pre-P5 sequence).
+			setAlphaTestTwoLayer(rwALPHATESTFUNCTIONGREATEREQUAL, zt);
+			RxPipelineExecute(pipe, atomic, 1);
+			setZWriteTwoLayer(FALSE);
+			setAlphaTestTwoLayer(rwALPHATESTFUNCTIONLESS, zt);
+			pipe = RxPipelineExecute(pipe, atomic, 1);
+			setZWriteTwoLayer(TRUE);
+			setAlphaTestTwoLayer((RwUInt32)alphatest, alpharef);
+		}
 	}else
 		pipe = RxPipelineExecute(pipe, atomic, 1);
-}
 
 	// Restore original ambient after ped rendering — SkinAmbientOverrideExit
 	// on the module path (re-entrant: no-op unless Enter ran this span),
