@@ -193,12 +193,12 @@ pedStage0Resync(RpAtomic *atomic, PedPipeState *pdsState)
 		// which never allocates — the TexDefsMissSentinel* accessors would
 		// create on demand and must not be called with a real texture in
 		// hand. WORLD-kind (grey already) binds AS-IS.
-		RwTexture *resolved = recovered;
+		RwTexture *resolved = TexDefsResolveAtDraw(recovered);	// 2026-11-16: sentinel -> real if TXD loaded since
 		if(resolved && TexDefsMissTextureKind(resolved) == TEXDEFS_MISS_TEX_SPRITE){
 			if(dbglog_throttle("n9_pedcb_remap"))
 				dbglog("[PedTex] N9: sprite-class miss sentinel re-mapped to grey world sentinel (was '%s')",
 				       recovered->name[0] ? recovered->name : "?");
-			resolved = TexDefsMissSentinelWorld();	// ONLY reached when kind==SPRITE: natural create
+			resolved = TexDefsRemapToWorld(resolved);	// name-preserving world remap
 		}
 		if(!resolved)
 			resolved = gpWhiteTexture;

@@ -145,6 +145,17 @@ enum TexDefsMissTexKind {
 	TEXDEFS_MISS_TEX_SPRITE		// the transparent-magenta one   (action=skip)
 };
 int TexDefsMissTextureKind(const RwTexture *tex);   // TEXDEFS_MISS_TEX_* — never creates
+// DRAW-TIME RESOLUTION (2026-11-16, root-cause fix for the untextured world):
+// when `tex` is a policy sentinel carrying its original requested name, retry
+// the lookup (game find -> case/variant -> CTxdStore sweep) — the LOD DFF that
+// first asked streams in BEFORE its parent full-detail TXD loads, so the
+// load-time miss is usually recoverable by draw time. Returns the real
+// texture when it now resolves, otherwise `tex` unchanged (rate-limited to
+// one full retry per name per second; real textures early-out untouched).
+RwTexture *TexDefsResolveAtDraw(RwTexture *tex);
+// Sprite-class sentinel -> world-class sentinel, PRESERVING the requested
+// name (so the remap stays resolvable). Real/world textures pass through.
+RwTexture *TexDefsRemapToWorld(RwTexture *tex);
 //
 // CONSUMER HONORS — status (2026-11-09):
 //   HONORED  particles_gpu.cpp (sprite-class consumer: a miss-classified

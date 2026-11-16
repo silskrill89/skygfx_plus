@@ -1377,8 +1377,13 @@ bldPolicyTexture(RwTexture *tex)
 {
 	if(!tex)
 		return NULL;	// legitimate "no diffuse map" (resolved -> white)
+	// Draw-time resolution (2026-11-16): if this is a policy sentinel whose
+	// parent TXD has since loaded, swap in the REAL texture — this is the
+	// one chokepoint all four building cbs (PS2/Xbox/PBR/Sphere) bind stage
+	// 0 through, so the untextured-world class dies here.
+	tex = TexDefsResolveAtDraw(tex);
 	if(TexDefsMissTextureKind(tex) == TEXDEFS_MISS_TEX_SPRITE)
-		return TexDefsMissSentinelWorld();	// sprite class -> world action
+		return TexDefsRemapToWorld(tex);	// sprite class -> world action (name kept)
 	return tex;			// real texture, or the world sentinel already
 }
 

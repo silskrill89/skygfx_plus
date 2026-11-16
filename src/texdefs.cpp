@@ -42,6 +42,7 @@
 
 #include <string>
 #include <map>
+#include <chrono>
 #include <string.h>
 #include <ctype.h>
 #include <rpnormmap.h>
@@ -601,6 +602,37 @@ TexDefsMissSentinelSprite(void)
 }
 
 // ---------------------------------------------------------------------------
+// PER-NAME SENTINEL CLONES (2026-11-16, root-cause fix for the untextured
+// world). The shared class sentinel overwrites its inline name with
+// "skygfx_missgrey"/"skygfx_missclear", destroying the ORIGINAL requested
+// name — once a material holds it, no later retry has anything to look up,
+// and the material is poisoned forever (the game never re-requests). On a
+// policy miss the FindCB therefore hands back a per-name CLONE that SHARES
+// the class singleton's 1x1 raster (so TexDefsMissTextureKind's raster
+// identity recognizes it) but carries the requested name. Clones live in no
+// dictionary, so nothing destroys them: process-lifetime, <= one per
+// distinct missed name.
+// ---------------------------------------------------------------------------
+static std::map<std::string, RwTexture*> s_namedSentinels;
+
+static RwTexture *
+TexDefsNamedSentinel(RwTexture *proto, const char *name)
+{
+	if(!proto || !name || !name[0])
+		return proto;	// unnamed lookup — nothing a later retry could use
+	std::map<std::string, RwTexture*>::iterator it = s_namedSentinels.find(name);
+	if(it != s_namedSentinels.end())
+		return it->second;
+	RwTexture *clone = RwTextureCreate(proto->raster);	// shares the 1x1 raster
+	if(!clone)
+		return proto;	// allocation failure degrades to the shared sentinel
+	strncpy(clone->name, name, sizeof(clone->name) - 1);
+	clone->name[sizeof(clone->name) - 1] = '\0';
+	s_namedSentinels[name] = clone;
+	return clone;
+}
+
+// ---------------------------------------------------------------------------
 // N9 CONSUMER-HANDOFF QUERY (2026-11-09): identity test against the two
 // sentinels — the ONLY safe way for a consumer to tell "this pointer is
 // POLICY OUTPUT (the texture lookup failed)" from "this material
@@ -620,11 +652,16 @@ TexDefsMissSentinelSprite(void)
 int
 TexDefsMissTextureKind(const RwTexture *tex)
 {
-	if(!tex)
+	if(!tex || !tex->raster)
 		return TEXDEFS_MISS_TEX_NONE;
-	if(tex == s_missSentinelGrey)
+	// RASTER identity (2026-11-16): the per-name clones share the class
+	// singleton's 1x1 raster, so pointer-identity on the texture struct no
+	// longer covers them. Comparing the raster recognizes the singleton AND
+	// every clone; real textures can never share our privately-created 1x1
+	// rasters. Still compare-only — never creates.
+	if(s_missSentinelGrey && tex->raster == s_missSentinelGrey->raster)
 		return TEXDEFS_MISS_TEX_WORLD;
-	if(tex == s_missSentinelClear)
+	if(s_missSentinelClear && tex->raster == s_missSentinelClear->raster)
 		return TEXDEFS_MISS_TEX_SPRITE;
 	return TEXDEFS_MISS_TEX_NONE;
 }
@@ -692,6 +729,122 @@ TexDefsTryNameVariant(const char *name)
 			return tex;
 	}
 	return NULL;
+}
+
+// ---------------------------------------------------------------------------
+// SPRITE -> WORLD REMAP, NAME-PRESERVING (2026-11-16). World consumers
+// (building/vehicle/skin/default cb) must never bind the transparent-magenta
+// sprite sentinel; they used to rebind the SHARED grey singleton, which drops
+// the requested name and makes the remap unresolvable. Remap through a
+// per-name world clone instead; real/world textures pass through as-is.
+// ---------------------------------------------------------------------------
+RwTexture*
+TexDefsRemapToWorld(RwTexture *tex)
+{
+	if(!tex)
+		return tex;
+	if(TexDefsMissTextureKind(tex) != TEXDEFS_MISS_TEX_SPRITE)
+		return tex;	// real texture or already the world class
+	return TexDefsNamedSentinel(TexDefsMissSentinelWorld(), tex->name);
+}
+
+// ---------------------------------------------------------------------------
+// DRAW-TIME RESOLUTION (2026-11-16, THE root-cause fix).
+//
+// Why this exists: the game's find (0x731720) parent-walks dict->parent and
+// that link is broken in this ModLoader/ROSA install, so full-detail textures
+// looked up while a LOD dictionary is current MISS. TexDefsDictSweep recovers
+// them only if the target TXD is ALREADY loaded — but streaming order loads
+// LOD DFFs first, so the miss happens before the parent TXD arrives, the
+// material binds the grey sentinel ONCE, and the game never re-asks: every
+// later frame draws the building as grey x ambient (pale-blue slabs by day,
+// black pyramids at dawn). Screenshots 2026-11-16 prove the class.
+//
+// This retries the lookup on the DRAW path (long after load, when the parent
+// TXDs are in memory) for textures that are policy sentinels carrying their
+// original name. Per-name state: a validated owning-dict pin (slot byteMap
+// re-check = dict alive => texture alive, O(1) hot path) and a 1 s retry
+// throttle for names still missing. Real textures take the early-out and
+// never touch the map after their first sight. Receipts throttled.
+// ---------------------------------------------------------------------------
+struct TexDefsResolveState {
+	RwTexture *tex;		// last real hit (NULL = never resolved)
+	int dictSlot;		// owning CTxdStore slot when pinnable, else -1
+	unsigned long lastTry;	// GetTickCount-style ms of the last full retry
+};
+static std::map<std::string, TexDefsResolveState> s_resolveState;
+
+static unsigned long
+TexDefsNowMs(void)
+{
+	return (unsigned long)std::chrono::duration_cast<std::chrono::milliseconds>(
+		std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
+RwTexture*
+TexDefsResolveAtDraw(RwTexture *tex)
+{
+	if(!tex)
+		return tex;
+	if(TexDefsMissTextureKind(tex) == TEXDEFS_MISS_TEX_NONE)
+		return tex;	// real texture (or NULL) — hot path, no map traffic
+	if(!tex->name[0])
+		return tex;	// unnamed shared sentinel — nothing to retry by
+	const char *name = tex->name;
+
+	TexDefsResolveState &st = s_resolveState[name];	// inserts once per name
+
+	// Hot path: a pinned owning dict still allocated => cached texture alive
+	// (RW destroys a dictionary's textures with the dictionary).
+	if(st.tex && st.dictSlot >= 0){
+		uint32 objects; uint8 *byteMap; int size;
+		if(TexDefsPoolInfo(&objects, &byteMap, &size) &&
+		   st.dictSlot < size && (byteMap[st.dictSlot] & 0x80) == 0)
+			return st.tex;
+		st.tex = NULL;		// owning dict unloaded — fall through to retry
+		st.dictSlot = -1;
+	}else if(st.tex){
+		return st.tex;		// unpinned hit — vanilla-equivalent trust
+	}
+
+	// Rate-limited full retry: 1 s per name (first sight runs immediately).
+	unsigned long now = TexDefsNowMs();
+	if(st.lastTry && now - st.lastTry < 1000)
+		return tex;		// keep the sentinel for this frame
+	st.lastTry = now;
+
+	char nameBuf[32];	// gameGetTexture takes char* (non-const signature)
+	strncpy(nameBuf, name, sizeof(nameBuf) - 1);
+	nameBuf[sizeof(nameBuf) - 1] = '\0';
+	RwTexture *real = gameGetTexture(nameBuf);	// vanilla find — may now succeed
+	if(!real)
+		real = TexDefsTryNameVariant(name);	// case/extension mismatch
+	if(real && TexDefsMissTextureKind(real) == TEXDEFS_MISS_TEX_NONE){
+		// Pin the owning slot so the hot path can validate cheaply (the
+		// sweep is authoritative for slots; a vanilla hit is in a loaded
+		// dict, so the sweep finds it too).
+		char hitDict[32] = {0};
+		uint32 objects; uint8 *byteMap; int size;
+		if(TexDefsPoolInfo(&objects, &byteMap, &size)){
+			int hitSlot = -1;
+			RwTexture *swept = TexDefsDictSweep(name, &hitSlot, hitDict,
+			                                   objects, byteMap, size);
+			if(swept && TexDefsMissTextureKind(swept) == TEXDEFS_MISS_TEX_NONE){
+				real = swept;
+				st.dictSlot = hitSlot;
+			}else
+				st.dictSlot = -1;
+		}else
+			st.dictSlot = -1;
+		st.tex = real;
+		if(dbglog_throttle("texdefs_resolve"))
+			dbglog("[texdefs] resolve '%s' -> HIT (dict='%s' slot=%d) — world texture restored",
+			       name, hitDict[0] ? hitDict : "?", st.dictSlot);
+		return real;
+	}
+	if(dbglog_throttle("texdefs_resolve"))
+		dbglog("[texdefs] resolve '%s' -> still-miss (keeping policy sentinel)", name);
+	return tex;
 }
 
 static RwTexture*
@@ -769,7 +922,9 @@ TexDefsFindCB(char *name)
 		                  : TexDefsMissSentinelSprite();
 		TexDefsNoteMissPolicy(name ? name : "", cls, sent);
 		if(sent)
-			return sent;
+			// Per-name clone (2026-11-16): keep the REQUESTED name on the
+			// returned sentinel so TexDefsResolveAtDraw can retry later.
+			return TexDefsNamedSentinel(sent, name);
 	}
 	if(tex){
 		TexInfo *info = findTexInfo(name);

@@ -873,8 +873,11 @@ vehPolicyTexture(RwTexture *tex)
 {
 	if(!tex)
 		return NULL;	// case 2 — legitimate "no diffuse map" (white)
+	// Draw-time resolution (2026-11-16): policy sentinel -> real texture if
+	// its TXD has loaded since the load-time miss (twin bldPolicyTexture).
+	tex = TexDefsResolveAtDraw(tex);
 	if(TexDefsMissTextureKind(tex) == TEXDEFS_MISS_TEX_SPRITE)
-		return TexDefsMissSentinelWorld();	// case 3 — sprite class -> world action
+		return TexDefsRemapToWorld(tex);	// case 3 — sprite class -> world action (name kept)
 	return tex;		// real texture, or the world sentinel already
 }
 
