@@ -828,23 +828,37 @@ TexDefsResolveAtDraw(RwTexture *tex)
 	RwTexture *real = gameGetTexture(nameBuf);	// vanilla find — may now succeed
 	if(!real)
 		real = TexDefsTryNameVariant(name);	// case/extension mismatch
+	// 2026-11-17 — THE gap behind the `resolve ... -> still-miss` 0/17 log
+	// (E:\games\gtasa_skygfx_plus\skygfx_dbg.log 02:17-02:20). The CTxdStore
+	// sweep below used to be reachable ONLY after a vanilla/variant HIT (to
+	// PIN a texture we had already found) — the one case where a sweep is
+	// useless. A still-missing name therefore never swept the pool here: the
+	// vanilla find's dict->parent walk is broken in this install (0x731720
+	// walks *(uint32*)0xC88018 + dict, written only once at child-TXD load)
+	// and TexDefsTryNameVariant is provably inert for this class
+	// (case/extension only), so every 1 s retry ended in `still-miss` no
+	// matter which TXDs had loaded since. Sweep the pool as a RECOVERY
+	// source first; the pin-only sweep further down then only has to handle
+	// the (rare) vanilla/variant hit. Same receipts, same throttle.
+	char hitDict[32] = {0};
+	int hitSlot = -1;
+	uint32 objects; uint8 *byteMap; int size;
+	bool poolOk = TexDefsPoolInfo(&objects, &byteMap, &size);
+	if(!real && poolOk)
+		real = TexDefsDictSweep(name, &hitSlot, hitDict, objects, byteMap, size);
 	if(real && TexDefsMissTextureKind(real) == TEXDEFS_MISS_TEX_NONE){
 		// Pin the owning slot so the hot path can validate cheaply (the
 		// sweep is authoritative for slots; a vanilla hit is in a loaded
 		// dict, so the sweep finds it too).
-		char hitDict[32] = {0};
-		uint32 objects; uint8 *byteMap; int size;
-		if(TexDefsPoolInfo(&objects, &byteMap, &size)){
-			int hitSlot = -1;
+		if(hitSlot < 0 && poolOk){
 			RwTexture *swept = TexDefsDictSweep(name, &hitSlot, hitDict,
 			                                   objects, byteMap, size);
-			if(swept && TexDefsMissTextureKind(swept) == TEXDEFS_MISS_TEX_NONE){
+			if(swept && TexDefsMissTextureKind(swept) == TEXDEFS_MISS_TEX_NONE)
 				real = swept;
-				st.dictSlot = hitSlot;
-			}else
-				st.dictSlot = -1;
-		}else
-			st.dictSlot = -1;
+			else
+				hitSlot = -1;
+		}
+		st.dictSlot = (hitSlot >= 0) ? hitSlot : -1;
 		st.tex = real;
 		if(dbglog_throttle("texdefs_resolve"))
 			dbglog("[texdefs] resolve '%s' -> HIT (dict='%s' slot=%d) — world texture restored",
@@ -854,6 +868,161 @@ TexDefsResolveAtDraw(RwTexture *tex)
 	if(dbglog_throttle("texdefs_resolve"))
 		dbglog("[texdefs] resolve '%s' -> still-miss (keeping policy sentinel)", name);
 	return tex;
+}
+
+// ---------------------------------------------------------------------------
+// DEFERRED RETRY AT TXD LIFECYCLE (2026-11-17, addTxdSlot + setCurrentTxd).
+//
+// DIAGNOSIS this block is built on (grounded in the exe + this TU):
+//   1. TexDefsResolveAtDraw could not recover a still-missing name because
+//      its pool sweep sat INSIDE the hit branch (see the note above) — the
+//      only path where a sweep cannot help. Hence 0 HIT / 17 still-miss.
+//   2. The game's find (0x731720) = RwTexDictionaryGetCurrent ->
+//      loop { RwTexDictionaryFindNamedTexture(dict,name);
+//            dict = *(parentPluginOffset + dict) } with the parent plugin
+//      OFFSET held at *(uint32*)0xC88018. That link is written by exactly
+//      ONE game function (0x731D50 — 2 callers, both inside the child
+//      TXD's own LoadTxd) as childDict[parentOffset] =
+//      parentTxdDef->m_pTxd AT THAT INSTANT: an unloaded parent stores
+//      NULL and is never re-linked, and the LoadTxd variant at 0x731930
+//      (taken when byte 0x8E4A58 is set) never links at all. So the vanilla
+//      find cannot see cross-dict names, ever.
+//   3. TXD SLOT REGISTRATION IS NOT A LOAD EVENT. RE of addTxdSlot
+//      (0x731C80): `mov dword ptr [esi], 0` (0x731C93) ZEROS
+//      TxdDef.m_pTxd before our 0x731CCB hook runs, and none of the three
+//      LoadTxd entry points (0x731930 / 0x731DD0 / 0x731E40) calls
+//      AddTxdSlot — slots are registered up front (init/level/IMG paths),
+//      so probing the just-added slot finds nothing BY CONSTRUCTION. The
+//      live-dict event is setCurrentTxd (0x7319C0), which the game runs
+//      right before reading a DFF with that dictionary current, and the
+//      draw-time sweep in TexDefsResolveAtDraw is the reliable catch for
+//      dicts that become current for no other reason.
+// The retry below probes, from BOTH hooks: (a) the slot's own dictionary
+// when it is alive (real work at setCurrentTxd, no-op at addTxdSlot), and
+// (b) throttled, the WHOLE CTxdStore pool for every name still awaiting
+// recovery — find-time distinct misses (s_missNames) plus draw-time
+// sentinels that never resolved (s_resolveState with tex == NULL). A hit
+// pins the slot in the miss cache (the next find-time ask resolves through
+// the pin and never hands out another sentinel clone) and fills the
+// resolve state (the next draw binds the REAL texture).
+// ADDITIVE receipt only, throttled key "texdefs_deferretry":
+//   [texdefs] defer-retry '<name>' -> HIT via dict '<dict>'
+// Residual (documented): a TXD the game NEVER requests cannot be found from
+// here — this layer has no name->TXD map and no safe load-forcing API, so
+// such names stay on the policy sentinel until a parent-link repair or an
+// explicit load-force phase.
+// ---------------------------------------------------------------------------
+static unsigned long s_deferLastSweep = 0;
+#define TEXDEFS_DEFER_SWEEP_MS 1000
+
+// Accept one deferred recovery: pin it in the miss cache, fill the resolve
+// state, emit the throttled receipt. Never accepts policy output as a hit.
+static void
+TexDefsDeferAccept(const char *name, RwTexture *tex, int dictSlot, const char *dictName)
+{
+	if(!name || !name[0] || !tex)
+		return;
+	if(TexDefsMissTextureKind(tex) != TEXDEFS_MISS_TEX_NONE)
+		return;		// a sentinel is not a recovery
+	auto it = s_resolveState.find(name);
+	if(it != s_resolveState.end()){
+		it->second.tex = tex;		// next draw binds the real texture
+		it->second.dictSlot = dictSlot;
+	}
+	TexDefsCacheUpsert(name, dictSlot);	// next find-time ask hits the pin
+	if(dbglog_throttle("texdefs_deferretry"))
+		dbglog("[texdefs] defer-retry '%s' -> HIT via dict '%s'",
+		       name, (dictName && dictName[0]) ? dictName : "?");
+}
+
+// Deferred retry for TXD lifecycle events (called from storeTxdName /
+// setCurrentTxdName). Read-only against the game: pool reads +
+// RwTexDictionaryFindNamedTexture + dbglog — no game call that could
+// re-enter this hook.
+static void
+TexDefsDeferRetry(int slot)
+{
+	if(s_missLogged <= 0 && s_resolveState.empty())
+		return;			// nothing pending (boot / fully recovered)
+	uint32 objects; uint8 *byteMap; int size;
+	if(!TexDefsPoolInfo(&objects, &byteMap, &size))
+		return;			// CTxdStore pool not initialised yet
+
+	// Full-pool leg — throttled (TXD events arrive in bursts; scan the pool
+	// at most once per TEXDEFS_DEFER_SWEEP_MS).
+	bool fullSweep = true;
+	unsigned long now = TexDefsNowMs();
+	if(s_deferLastSweep && now - s_deferLastSweep < TEXDEFS_DEFER_SWEEP_MS)
+		fullSweep = false;
+	else
+		s_deferLastSweep = now;
+
+	// The slot's own dictionary: assigned at LoadTxd (m_pTxd written at
+	// 0x731E13 / 0x731E72), NULLed at Remove (0x731F0F) and — per the RE
+	// note above — already NULL at addTxdSlot, so this leg is a no-op there
+	// by construction and the live one at setCurrentTxd.
+	RwTexDictionary *slotDict = NULL;
+	const char *slotDictName = "";
+	if(slot >= 0 && slot < size && (byteMap[slot] & 0x80) == 0){
+		RwTexDictionary *d = *(RwTexDictionary **)(objects + slot * 12);
+		if(d && (uintptr_t)d >= 0x10000 && ((uintptr_t)d & 3) == 0){
+			slotDict = d;
+			if(slot < 65500 && txdnames[slot])
+				slotDictName = txdnames[slot];
+		}
+	}
+	if(!slotDict && !fullSweep)
+		return;			// throttled out — nothing to probe this event
+
+	// Pending name set: find-time distinct misses + unresolved draw-time
+	// sentinels, deduped, bounded by the array (no allocation beyond it).
+	const char *pending[TEXDEFS_MISS_LOG_MAX + TEXDEFS_MISS_CACHE_MAX];
+	int nPending = 0;
+	int pendingCap = (int)(sizeof(pending) / sizeof(pending[0]));
+	for(int i = 0; i < s_missLogged && nPending < pendingCap; i++)
+		pending[nPending++] = s_missNames[i];
+	for(auto const &e : s_resolveState){
+		if(e.second.tex)
+			continue;		// already recovered
+		if(nPending >= pendingCap)
+			break;
+		bool dup = false;
+		for(int j = 0; j < nPending; j++)
+			if(_stricmp(pending[j], e.first.c_str()) == 0){
+				dup = true;
+				break;
+			}
+		if(!dup)
+			pending[nPending++] = e.first.c_str();
+	}
+
+	for(int i = 0; i < nPending; i++){
+		const char *nm = pending[i];
+		// Already recovered AND still pinned -> nothing to do (the pin is
+		// re-validated by TexDefsDictResolveSlot above).
+		int ci = TexDefsCacheFind(nm);
+		if(ci >= 0 && s_missCache[ci].dictSlot >= 0 &&
+		   TexDefsDictResolveSlot(s_missCache[ci].dictSlot, nm,
+		                          objects, byteMap, size))
+			continue;
+		int hitSlot = -1;
+		char hitDict[32] = {0};
+		RwTexture *tex = NULL;
+		if(slotDict){
+			tex = RwTxdFindNamed(slotDict, nm);
+			if(tex){
+				hitSlot = slot;
+				strncpy(hitDict, slotDictName, sizeof(hitDict) - 1);
+				hitDict[sizeof(hitDict) - 1] = '\0';
+			}
+		}
+		if(!tex && fullSweep)
+			tex = TexDefsDictSweep(nm, &hitSlot, hitDict,
+			                       objects, byteMap, size);
+		if(tex)
+			TexDefsDeferAccept(nm, tex, hitSlot,
+			                   hitDict[0] ? hitDict : slotDictName);
+	}
 }
 
 static RwTexture*
@@ -1035,6 +1204,13 @@ storeTxdName(int ret/*return address on stack*/, char *txdname)
 	}
 	if(txdname)
 		txdnames[txdslot] = strdup(txdname);
+	// DEFERRED RETRY (2026-11-17): a slot was registered — re-check every
+	// name still awaiting recovery against the loaded dictionaries. The new
+	// slot's own dict is NULL by construction here (see the RE note on
+	// TexDefsDeferRetry), so this leg is the throttled pool sweep; the live
+	// slot probe runs from setCurrentTxd. Runs AFTER the cache reset above
+	// so recovered names are re-pinned under the fresh cache.
+	TexDefsDeferRetry(txdslot);
 	return txdslot;
 }
 
@@ -1045,10 +1221,15 @@ setCurrentTxdName(void)
 	// and txdslot out of range on a foreign caller; strncpy(dst, NULL) is UB.
 	if(txdslot < 0 || txdslot >= 65500 || !txdnames[txdslot]){
 		currentTxdName[0] = '\0';
-		return;
+	}else{
+		strncpy(currentTxdName, txdnames[txdslot], sizeof(currentTxdName) - 1);
+		currentTxdName[sizeof(currentTxdName) - 1] = '\0';
 	}
-	strncpy(currentTxdName, txdnames[txdslot], sizeof(currentTxdName) - 1);
-	currentTxdName[sizeof(currentTxdName) - 1] = '\0';
+	// DEFERRED RETRY (2026-11-17): the dictionary being made current is
+	// loaded and populated (the game reads DFFs against it right after), so
+	// probe it — and throttled, the whole pool — for every pending miss name
+	// before the next material read can bind another sentinel clone.
+	TexDefsDeferRetry(txdslot);
 }
 
 static void __declspec(naked)

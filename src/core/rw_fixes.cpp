@@ -448,6 +448,20 @@ spriteRestoreZWrite(DWORD devZw, DWORD drvZw, RwUInt32 rwZw)
 {
 	if(!d3d9device)
 		return;
+	// Cross-layer disagreement guard (same rule as spriteFlushShieldClose's
+	// ZWRITE replay): when BOTH caches agree the device leg is the drifted
+	// one — the [zfix] pipe-entry signature rw zwrite=1 drv zwrite=1 dev
+	// zwrite=0, left behind by the glyph draw's device-side ZWRITE park
+	// (a raw L3 write no cache sees). Replaying device-0 verbatim publishes
+	// it under pending[]==applied[]==1, the one split RW's applied[]-gated
+	// pre-draw flush can NEVER repair — the shield re-cemented the drift the
+	// pipe entry had just healed (65x/session in the 02:17 and 06:25 logs).
+	// Caches agree ON + device says OFF -> heal the device leg to the cache
+	// consensus; every other combination (incl. a coherent capture whose
+	// layers agree) replays verbatim, so the font contract documented above
+	// ("OFF while the glyphs rasterise, the entry value after") is unchanged.
+	if(rwZw && drvZw && !devZw)
+		devZw = TRUE;
 	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)rwZw);
 	RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, drvZw ? TRUE : FALSE);
 	d3d9device->SetRenderState(D3DRS_ZWRITEENABLE, devZw ? TRUE : FALSE);
@@ -513,6 +527,22 @@ spriteFlushShieldClose(const char *path)
 	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)s.rwDstBlend);
 	RwD3D9SetRenderState(D3DRS_DESTBLEND, s.drvDstBlend);
 	d3d9device->SetRenderState(D3DRS_DESTBLEND, s.dstBlend);
+	// Cross-layer disagreement guard for the ZWRITE replay (same rule as
+	// spriteRestoreZWrite): the three captured legs can disagree when the
+	// device was already drifted at capture time (rw zwrite=1 drv zwrite=1
+	// dev zwrite=0 — the [zfix] pipe-entry signature). Replaying that
+	// verbatim re-publishes device-0 while L1/L2 claim 1, and because the
+	// raw leg moves the device WITHOUT touching pending[]/applied[], the
+	// applied[]-gated pre-draw flush value-compares into a no-op and can
+	// never repair it — the close re-cements the split every cycle (the
+	// doctrine main.cpp's CClouds window close documents: when the captures
+	// disagree, the caches are the single source; never re-publish the
+	// split). Caches agree ON + device says OFF -> device leg heals to the
+	// cache consensus; a capture whose three legs already agree (the normal
+	// case, and the legitimate font contract OFF-during-glyphs) replays
+	// verbatim, byte-identical to the old behaviour.
+	if(s.rwZwrite && s.drvZwrite && !s.zwrite)
+		s.zwrite = TRUE;
 	// ZWRITEENABLE: park the boolean inverse -> captured target.
 	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE,
 		(void*)(s.rwZwrite ? (RwUInt32)FALSE : (RwUInt32)TRUE));
@@ -554,10 +584,20 @@ spriteFlushShieldClose(const char *path)
 	RwD3D9SetRenderState(D3DRS_BLENDOP, parkOp);
 	RwD3D9SetRenderState(D3DRS_BLENDOP, s.drvBlendOp);
 	d3d9device->SetRenderState(D3DRS_BLENDOP, s.blendOp);
-	// ZENABLE: rw twin ZTESTENABLE — park the boolean inverse -> captured
-	// target, then L1+L2+raw L3 (same idiom as ZWRITEENABLE above).
-	Transparency_SetZEnabled(!(s.rwZtest ? true : false));
-	Transparency_SetZEnabled(s.rwZtest ? true : false);
+	// ZENABLE: park the boolean inverse -> the FORCED-CANONICAL capture
+	// (s.zenable, forced TRUE by spriteFlushShieldCapture's "never capture
+	// corrupted values" rule — the same source the ZFUNC restore below
+	// already uses via s.drvZfunc/s.zfunc). This restore used to drive all
+	// three layers from s.rwZtest, the RAW L1 read: a leaked font/Im2D
+	// ZTEST-off park leaves it 0, so every close replayed device
+	// ZENABLE=0 and the trailing enforce below had to repair it — the
+	// [SpriteDepthFix] "dev zen=0" churn (postfx-white x22 + the
+	// SpriteFlush_70CF20/clouds hits in the 02:17 log). End state is
+	// unchanged: enforce would force exactly this canonical value anyway;
+	// this only removes the transient device-0 and the receipt churn it
+	// caused. s.rwZtest stays captured (diagnostic record of the raw read).
+	Transparency_SetZEnabled(!(s.zenable ? true : false));
+	Transparency_SetZEnabled(s.zenable ? true : false);
 	// ZFUNC: no rw twin — L2+L3 only; park LESSEQUAL<->ALWAYS.
 	DWORD parkZFunc = (s.drvZfunc == (DWORD)D3DCMP_LESSEQUAL)
 		? (DWORD)D3DCMP_ALWAYS : (DWORD)D3DCMP_LESSEQUAL;
@@ -1244,6 +1284,21 @@ PostFxFlush_701FE9_hook(int primType, void *verts, int nverts, void *indices, in
 	bool stage0WhiteBound = false;
 	RwRaster *savedStage0Ras = NULL;
 	IDirect3DBaseTexture9 *savedStage0DevTex = NULL;
+	// SEH latch guard (same as SpriteFlushIndexedDraw_hook), armed BEFORE
+	// the first state mutation: this fence used to start only around the
+	// orig draw at the bottom, but the gate/white-bind block below mutates
+	// render state (white stage-0 bind, spriteFlushShieldCapture,
+	// coronaDrawRawShield force) and runs receipts / the identity Release
+	// BEFORE that old fence — a fault there propagated out of this hook
+	// with the force parked (ZWRITE=0 + ONE/ONE on all three layers) and
+	// s_spriteForceValid latched true forever (the effectsForceAlphaBlock
+	// producer gate then never runs again), and the white stage-0 bind
+	// stayed bound: neither restore in the __finally below would ever run.
+	// One fence now covers the mutation span AND the orig draw; the
+	// __finally closes the force and hands stage-0 back on BOTH the normal
+	// and the faulted path, exactly as before. All locals in scope here are
+	// POD (no unwinding) — C2712-safe.
+	__try{
 	if(batch > 0 && d3d9device && (!config || config->spriteFlushShield)){
 		// Producer discrimination (fail-open gate): the shared TempBuffer is
 		// ALSO the game's 2D text/HUD/font lane. Only a corona/pointlight/
@@ -1297,6 +1352,22 @@ PostFxFlush_701FE9_hook(int primType, void *verts, int nverts, void *indices, in
 					dbglog("[texflush] skip-screenblit family=0 ras=%p nverts=%d",
 					       (void*)id.ras, nverts);
 			}else if(devBlend == 0){
+				// Arm the post-draw stage-0 restore BEFORE the first bind
+				// write: the 3L white bind below is NOT covered by
+				// spriteFlushShieldClose (states only), so a fault mid-bind
+				// must still hand the pre-bind raster/texture back — the arm
+				// used to run AFTER the bind, leaving that window unguarded.
+				// id.ras is the pre-bind L1 raster (flushBatchIdentity read it
+				// before any shield write). savedStage0DevTex takes its OWN
+				// AddRef so the identity ref stays on id.devTex's normal
+				// Release line below ([postfx_flush_id] keeps printing the
+				// real s0DevTex); the __finally restore Releases this ref.
+				savedStage0Ras = id.ras;
+				if(id.devTex){
+					id.devTex->AddRef();
+					savedStage0DevTex = id.devTex;
+				}
+				stage0WhiteBound = true;
 				// (a) bind neutral white through all three layers (park-and-
 				// set L1, L2 driver, raw L3) so the batch samples a defined
 				// white instead of the leaked black raster, then run the SAME
@@ -1332,19 +1403,6 @@ PostFxFlush_701FE9_hook(int primType, void *verts, int nverts, void *indices, in
 				forcePath = "PostFxFlush_701FE9/postfx-white";
 				forced = true;
 				texAction = "white";
-				// Arm the post-draw stage-0 restore: the 3L white bind above
-				// is NOT covered by spriteFlushShieldClose (states only).
-				// id.ras is the pre-bind L1 raster (flushBatchIdentity read it
-				// before any shield write). savedStage0DevTex takes its OWN
-				// AddRef so the identity ref stays on id.devTex's normal
-				// Release line below ([postfx_flush_id] keeps printing the
-				// real s0DevTex); the __finally restore Releases this ref.
-				savedStage0Ras = id.ras;
-				if(id.devTex){
-					id.devTex->AddRef();
-					savedStage0DevTex = id.devTex;
-				}
-				stage0WhiteBound = true;
 			}
 		}
 		// Per-site receipt: the batch's stage-0 identity + whether the force
@@ -1374,10 +1432,9 @@ PostFxFlush_701FE9_hook(int primType, void *verts, int nverts, void *indices, in
 		       "(skipped = 0xC4B950<=0 at entry, spriteFlushShield=0, "
 		       "or unknown stage-0 producer)",
 		       s_shielded, s_skipped);
-	// SEH latch guard (same as SpriteFlushIndexedDraw_hook): the orig draw
-	// sits between spriteFlushShieldCapture and spriteFlushShieldClose; a
-	// swallowed fault latches s_spriteForceValid true forever.
-	__try{
+		// Orig draw — inside the mutation-span fence armed above (the
+		// capture/close pair brackets it; a swallowed fault still runs the
+		// __finally restores below).
 		if(PostFxFlush_701FE9_orig)
 			PostFxFlush_701FE9_orig(primType, verts, nverts, indices, nindices);
 	}__finally{

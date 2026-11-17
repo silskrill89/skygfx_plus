@@ -22,6 +22,14 @@
 //     game's find callback could not reach via its (broken) dict->parent
 //     chain — the LOD-slab fix. Semantics are STABLE; the format may gain
 //     fields (do not parse positionally past the known columns).
+//   [texdefs] defer-retry '<name>' -> HIT via dict '<dict>'   (2026-11-17,
+//     ADDITIVE, throttled key "texdefs_deferretry"): a name that was still
+//     missing got recovered at a TXD lifecycle event (addTxdSlot /
+//     setCurrentTxd) — proof that the containing TXD loaded LATE, i.e. the
+//     load-time miss class. Absence of this line for a pending name while
+//     resolve keeps logging still-miss means the containing TXD never loads
+//     (see the residual noted on TexDefsResolveAtDraw / the deferred-retry
+//     block in texdefs.cpp).
 //
 // --- cross-dict recovery policy (N8) ---
 // On a find miss the game's CTxdStore pool is searched via the game's own
@@ -153,6 +161,20 @@ int TexDefsMissTextureKind(const RwTexture *tex);   // TEXDEFS_MISS_TEX_* — ne
 // texture when it now resolves, otherwise `tex` unchanged (rate-limited to
 // one full retry per name per second; real textures early-out untouched).
 RwTexture *TexDefsResolveAtDraw(RwTexture *tex);
+// 2026-11-17 FIX on that path: the CTxdStore sweep now runs as a RECOVERY
+// source for a still-missing name (it used to be reachable only after a
+// game-find/variant HIT, to pin that hit — so a name whose parent TXD
+// loaded late could never recover: 0 HIT / 17 still-miss in the
+// 02:17-02:20 log). Complemented by the deferred retry at TXD lifecycle
+// (texdefs.cpp: TexDefsDeferRetry from storeTxdName + setCurrentTxdName),
+// which probes the newly-current dictionary (and, throttled, the whole
+// pool) for every pending name — receipt `[texdefs] defer-retry ...`. Both
+// are read-only against the game (pool reads + RwTexDictionaryFindNamed)
+// and never allocate on the draw path beyond the existing per-name state.
+// Residual: a TXD the game itself never requests still cannot be found
+// from this layer (no name->TXD map, no safe load-forcing API) — those
+// names keep the policy sentinel until a parent-link repair / load-force
+// phase.
 // Sprite-class sentinel -> world-class sentinel, PRESERVING the requested
 // name (so the remap stays resolvable). Real/world textures pass through.
 RwTexture *TexDefsRemapToWorld(RwTexture *tex);
