@@ -154,6 +154,10 @@ static const ModeValue kValuesPS2[] = {
 	// under a PS2 look.
 	MV_I(waterQuality, 1),		// 1 = Medium
 	MV_I(waterParallaxEnable, 1),
+	// m2200: every mode owns the colour source — a base waterUseTimecycle=0
+	// (INI overrides) would otherwise make the water colour mode-independent
+	// only by luck of the base value.
+	MV_I(waterUseTimecycle, 1),
 	// Legacy extras the preset writer pinned off (sun glare, water drops)
 	MV_IK(doglare, "sunGlare", 0),
 	MV_I(neoWaterDrops, 0),
@@ -161,6 +165,10 @@ static const ModeValue kValuesPS2[] = {
 	// PostFX
 	MV_I(radiosity, 0),
 	MV_I(doRadiosity, 1),
+	// Master radiosity gate — PS2's look runs the classic radiosity composite
+	// (doRadiosity=1 above), so pin the master ON against a user INI=0 (m2200:
+	// every mode that wants an effect on owns its master gate).
+	MV_I(radiosityEnable, 1),
 	MV_I(grainFilter, 0),
 	MV_I(infraredVision, 0),
 	MV_I(nightVision, 0),
@@ -174,8 +182,15 @@ static const ModeValue kValuesPS2[] = {
 	MV_I(dofEnable, 0),
 	MV_I(sunShaftsEnable, 0),
 	MV_I(fxaaEnable, 0),
+	// Enhancement gates the vintage PostFX block above did not reach — owned
+	// so a base with them ON (user INI) can never leak god rays / height fog
+	// into the PS2 look; non-owned keys always fall back to the base on
+	// engage, so the mode's look was base-dependent here (m2200).
+	MV_I(godRaysEnable, 0),
+	MV_I(heightFogEnable, 0),
 	MV_F(grainIntensity, 0.0f),
 	MV_F(caIntensity, 0.0f),
+	MV_F(vignetteIntensity, 0.0f),	// lens finishing off (intensity IS the gate)
 	MV_I(vcsTrails, 0),
 	MV_I(colorFilterEnable, 1),
 	MV_F(rgb1Mult, 1.0f),
@@ -224,6 +239,10 @@ static const ModeValue kValuesPS2[] = {
 	MV_I(forwardPlusEnable, 0),
 	MV_I(pipeChainEnable, 0),
 	MV_I(normalBufferEnable, 0),
+	// Velocity reconstruct has no consumer with motionBlur/SSAO-temporal off
+	// (postfx.cpp:2005) — pin it OFF so the per-frame copy never runs under
+	// the PS2 look even when the base had it enabled (m2200 + 1070 budget).
+	MV_I(velocityBufferEnable, 0),
 	MV_I(depthHookEnable, 1),
 	MV_I(profilerEnable, 0),
 };
@@ -262,6 +281,8 @@ static const ModeValue kValuesXBOX[] = {
 	// Xbox keeps High, not the inherited Ultra tier-3 depth copies.
 	MV_I(waterQuality, 2),		// 2 = High
 	MV_I(waterParallaxEnable, 1),
+	// m2200: colour source owned by every mode (see kValuesPS2).
+	MV_I(waterUseTimecycle, 1),
 	// Legacy extras the preset writer pinned off (sun glare, water drops)
 	MV_IK(doglare, "sunGlare", 0),
 	MV_I(neoWaterDrops, 0),
@@ -269,6 +290,9 @@ static const ModeValue kValuesXBOX[] = {
 	// PostFX
 	MV_I(radiosity, 1),
 	MV_I(doRadiosity, 1),
+	// Master radiosity gate — Xbox's look runs the Shader radiosity composite
+	// (doRadiosity=1 above), so pin the master ON against a user INI=0 (m2200).
+	MV_I(radiosityEnable, 1),
 	MV_I(grainFilter, 0),
 	MV_I(infraredVision, 0),
 	MV_I(nightVision, 0),
@@ -282,8 +306,15 @@ static const ModeValue kValuesXBOX[] = {
 	MV_I(dofEnable, 0),
 	MV_I(sunShaftsEnable, 0),
 	MV_I(fxaaEnable, 0),
+	// Enhancement gates the vintage PostFX block above did not reach (m2200):
+	// owned so a base with them ON can never leak god rays / height fog into
+	// the Xbox look (the same black-screen-era "no enhancements" contract the
+	// ssao/smaa rows above already enforce).
+	MV_I(godRaysEnable, 0),
+	MV_I(heightFogEnable, 0),
 	MV_F(grainIntensity, 0.0f),
 	MV_F(caIntensity, 0.0f),
+	MV_F(vignetteIntensity, 0.0f),	// lens finishing off (intensity IS the gate)
 	MV_I(vcsTrails, 0),
 	MV_I(colorFilterEnable, 1),
 	MV_F(rgb1Mult, 1.0f),
@@ -334,6 +365,9 @@ static const ModeValue kValuesXBOX[] = {
 	MV_I(forwardPlusEnable, 0),
 	MV_I(pipeChainEnable, 0),
 	MV_I(normalBufferEnable, 0),
+	// Velocity reconstruct has no consumer with motionBlur/SSAO-temporal off
+	// (postfx.cpp:2005) — pin OFF (m2200 + 1070 budget; same as kValuesPS2).
+	MV_I(velocityBufferEnable, 0),
 	MV_I(depthHookEnable, 1),
 	MV_I(profilerEnable, 0),
 };
@@ -366,14 +400,22 @@ static const ModeValue kValuesPCVintage[] = {
 	MV_I(envMapSize, 256),
 	MV_F(envMapFarClipMult, 1.0f),
 
-	// Water — legacy PC keeps its inherited style, but must not inherit the
-	// Ultra tier-3 depth copies from a Modern/IV snapshot.
+	// Water — m2200: legacy PC's style is OWNED, not inherited. The old
+	// "keeps its inherited style" wording made the water style base-dependent
+	// (PS2/Xbox/Mobile pin 0, IV 1, Modern/GTAV 2 — PC was the only gap).
+	// SA-PC water is the base Xbox-style surface; the Ultra tier-3 depth
+	// copies stay excluded via the quality row below.
+	MV_I(waterStyle, 0),
 	MV_I(waterQuality, 2),		// 2 = High
 	MV_I(waterParallaxEnable, 1),
+	MV_I(waterUseTimecycle, 1),	// m2200: colour source owned by every mode
 
 	// PostFX
 	MV_I(radiosity, 1),
 	MV_I(doRadiosity, 1),
+	// Master radiosity gate — legacy PC runs the classic composite
+	// (doRadiosity=1), pin the master ON against a user INI=0 (m2200).
+	MV_I(radiosityEnable, 1),
 	MV_I(grainFilter, 1),
 	MV_I(infraredVision, 0),
 	MV_I(nightVision, 0),
@@ -382,6 +424,23 @@ static const ModeValue kValuesPCVintage[] = {
 	MV_I(motionBlurEnable, 0),
 	MV_I(sssPostProcessEnable, 0),
 	MV_I(skinEnhanceEnable, 0),
+	// m2200: the rest of the "no enhancements" gate set — the table already
+	// pinned ssao/smaa/motionBlur/sss/skin off but left bloom/DoF/sunShafts/
+	// FXAA/god rays/height fog to the base, so a user INI with them ON showed
+	// them under Legacy PC (a non-owned key always falls back to the base on
+	// engage). All OFF here so the mode's look is base-independent.
+	MV_I(bloomEnable, 0),
+	MV_I(dofEnable, 0),
+	MV_I(sunShaftsEnable, 0),
+	MV_I(fxaaEnable, 0),
+	MV_I(godRaysEnable, 0),
+	MV_I(heightFogEnable, 0),
+	// Lens finishing off (intensity IS the gate) — matches the PS2/Xbox/
+	// Mobile lens rows; legacy grain follows the user's grainEnable master
+	// with the grainFilter=1 variant above (new W6 film grain stays off).
+	MV_F(vignetteIntensity, 0.0f),
+	MV_F(grainIntensity, 0.0f),
+	MV_F(caIntensity, 0.0f),
 	MV_I(vcsTrails, 0),
 	// Legacy extras the preset writer pinned off (sun glare, water drops)
 	MV_IK(doglare, "sunGlare", 0),
@@ -416,6 +475,14 @@ static const ModeValue kValuesPCVintage[] = {
 
 	// FPS / perf
 	MV_I(forwardPlusEnable, 0),
+	// Buffers with no consumer under this look (normalMap/pipeChain/SSAO all
+	// off above): pin OFF so the per-frame prepass never runs on a base that
+	// enabled them (m2200 completeness + 1070 budget; matches PS2/Xbox/Mobile).
+	MV_I(normalBufferEnable, 0),
+	MV_I(velocityBufferEnable, 0),
+	// Profiler pinned OFF like every other vintage profile (m2200: PerfTimer
+	// flood); INI/menu still re-enable it outside the mode contract.
+	MV_I(profilerEnable, 0),
 };
 
 // ------------------------------------------------------------
@@ -539,6 +606,7 @@ static const ModeValue kValuesGTAIV[] = {
 	MV_I(waterStyle, 1),		// 1 = GTA IV
 	MV_I(waterParallaxEnable, 1),
 	MV_I(waterQuality, 3),		// 3 = Ultra
+	MV_I(waterUseTimecycle, 1),	// m2200: colour source owned by every mode
 
 	// Alpha / state + screen extras
 	MV_IK(ps2ModulateGlobal, "ps2Modulate", 0),
@@ -593,6 +661,8 @@ static const ModeValue kValuesGTAV[] = {
 	MV_I(waterQuality, 3),	// 3 = Ultra
 	MV_I(waterParallaxEnable, 1),	// water pipe master gate — owned so V water
 					// cannot go inert on a snapshot with it disabled
+	MV_I(waterUseTimecycle, 1),	// m2200: colour source owned by every mode
+					// (water row — inside GTAV's water-only scope)
 };
 
 // ------------------------------------------------------------
@@ -634,6 +704,10 @@ static const ModeValue kValuesModern[] = {
 	// PostFX
 	MV_I(radiosity, 1),
 	MV_I(doRadiosity, 1),
+	// Master postfx radiosity gate (postfx.cpp:1486). doRadiosity=1 above
+	// only lets the draw through; without this row a user INI radiosityEnable=0
+	// would leave Modern's Shader radiosity dead (m2200 full-look rule).
+	MV_I(radiosityEnable, 1),
 	MV_I(grainFilter, 1),
 	MV_I(infraredVision, 0),
 	MV_I(nightVision, 0),
@@ -642,6 +716,16 @@ static const ModeValue kValuesModern[] = {
 	MV_F(ssaoPower, 2.0f),
 	MV_F(ssaoKernelSize, 16.0f),
 	MV_I(ssaoSampleCount, 16),
+	// SSAO quality tier (m2200): own the overhaul-path knobs too — a user INI
+	// with temporal/blur off (the m1846 debug-isolation state) would otherwise
+	// drop Modern onto the full-res no-blur fallback (the hard AO silhouette).
+	// 16 samples + quarter-res temporal + 2 bilateral blur passes = the
+	// recommended tier a GTX 1070 holds at 1080p (no supersampling rows).
+	MV_I(ssaoTemporalEnable, 1),
+	MV_F(ssaoTemporalBlend, 0.1f),
+	MV_I(ssaoBlurPasses, 2),
+	MV_F(ssaoBlurRadius, 3.0f),
+	MV_F(ssaoDepthThreshold, 0.01f),
 	MV_I(smaaEnable, 1),
 	MV_I(motionBlurEnable, 1),
 	MV_F(motionBlurStrength, 0.4f),
@@ -660,11 +744,48 @@ static const ModeValue kValuesModern[] = {
 	// PostFX gates the ULTRA base relies on. Without owned rows a snapshot
 	// taken from a vintage profile would leave these OFF and silently strip
 	// the Modern lens/atmosphere stack.
+	//
+	// m2200 full-look rule: every gate is owned AND its render params are
+	// owned, because the gate alone is inert against a user INI that zeroed
+	// the params (m1846 debug isolation shipped exactly that state). Each
+	// param value is the documented default for its effect (skygfx.h /
+	// config.cpp read-site) — the tier a GTX 1070 holds ~60fps at 1080p:
+	// no resolution-scale or multisample rows are touched (envMapSize stays
+	// at the profile's 512, reflectionMsaaLevel is not owned here).
 	MV_I(bloomEnable, 1),
+	MV_I(bloomQuality, 2),		// 4 mips (0-3 = 2-6 mips): the recommended
+					// cost/quality tier; 6 mips buys marginal
+					// glow reach for ~33% more bloom pixels
+	MV_F(bloomThreshold, 1.0f),	// documented default (IV's 0.90 is the
+					// LDR IV-probe, not the Modern look)
+	MV_F(bloomIntensity, 0.8f),	// documented default
 	MV_I(dofEnable, 1),
+	MV_F(dofFocusDistance, 20.0f),	// documented defaults (skygfx.h:933-936)
+	MV_F(dofFocusRange, 15.0f),
+	MV_F(dofBokehRadius, 4.0f),
+	MV_F(dofMaxBlur, 0.5f),
 	MV_I(sunShaftsEnable, 1),
+	MV_F(sunShaftsDensity, 0.84f),	// documented defaults (config.cpp:1130-1135)
+	MV_F(sunShaftsDecay, 1.0f),
+	// Legacy DrawGodRays pass — separate from SunShafts (postfx.cpp:5245),
+	// both on per m2200. Params owned or exposure/decay/weight/samples parse
+	// to 0 on a key-less INI and the pass draws nothing.
+	MV_I(godRaysEnable, 1),
+	MV_F(godRaysExposure, 0.0034f),	// documented defaults (skygfx.h:760-764)
+	MV_F(godRaysDecay, 1.0f),
+	MV_F(godRaysDensity, 0.84f),
+	MV_F(godRaysWeight, 1.0f),
+	MV_I(godRaysNumSamples, 20),
 	MV_I(grainEnable, 1),
+	// DrawFilmGrain self-gates on grainIntensity>0 (postfx_newfx.cpp:841) —
+	// enable alone is invisible against an INI that shipped intensity=0.
+	MV_F(grainIntensity, 0.03f),	// subtle film grain (IV probe value)
 	MV_I(heightFogEnable, 1),
+	// density=0 is OFF (postfx.cpp:4992 Family E fix) and timecycleScale=0
+	// drops the skyBot haze term — own both or the gate above does nothing.
+	MV_F(heightFogDensity, 0.002f),		// documented defaults (skygfx.h:752-756)
+	MV_F(heightFogHeightFalloff, 0.8f),
+	MV_F(heightFogTimecycleScale, 1.0f),
 	MV_F(caIntensity, 0.10f),	// subtle chromatic aberration
 	MV_F(vignetteIntensity, 0.15f),	// subtle finishing vignette
 	MV_I(fxaaEnable, 0),		// SMAA owns the AA slot
@@ -673,7 +794,11 @@ static const ModeValue kValuesModern[] = {
 	// leave the base water draw (or a lower depth-copy tier) in place.
 	MV_I(waterStyle, 2),		// 2 = GTA V (Water_V)
 	MV_I(waterQuality, 3),		// 3 = Ultra
-	MV_I(waterParallaxEnable, 1),	// water pipe master gate
+	MV_I(waterParallaxEnable, 1),	// water pipe master gate — waterPipe.cpp:3071
+					// (0 = every water draw goes FFP)
+	MV_I(waterUseTimecycle, 1),	// water colour/alpha from timecyc (m2200:
+					// every mode owns this row so the water
+					// colour source is never base-dependent)
 
 	// IV grade path used by the Modern colour filter. NOTE: ivMode=0 above
 	// makes DrawIVGrade return early, so every iv* row below is INERT in
@@ -742,7 +867,12 @@ static const ModeValue kValuesModern[] = {
 	MV_I(grassInstancing, 0),
 	MV_I(treeWind, 0),
 	MV_I(treeFx, 0),
-	MV_I(profilerEnable, 1),
+	// m2200: profiler was forced ON here (was 1) — the PerfTimer flood was
+	// 88% of a session log (~810 file syscalls/s) and a direct fps cost.
+	// Mode contract keeps the row (deterministic off while Modern is engaged);
+	// the INI value still comes back on disengage, and the menu Profiler tab
+	// toggles it live (profilerEnableRowEdit -> g_pfEnable).
+	MV_I(profilerEnable, 0),
 };
 
 // ------------------------------------------------------------
@@ -783,6 +913,7 @@ static const ModeValue kValuesMobile[] = {
 	// not inherited from the pre-mode snapshot.
 	MV_I(waterQuality, 1),		// 1 = Medium
 	MV_I(waterParallaxEnable, 1),
+	MV_I(waterUseTimecycle, 1),	// m2200: colour source owned by every mode
 	// Legacy extras the preset writer pinned off (sun glare, water drops)
 	MV_IK(doglare, "sunGlare", 0),
 	MV_I(neoWaterDrops, 0),
@@ -803,6 +934,15 @@ static const ModeValue kValuesMobile[] = {
 	MV_I(dofEnable, 0),
 	MV_I(sunShaftsEnable, 0),
 	MV_I(fxaaEnable, 0),
+	// m2200: the remaining enhancement gates + lens intensities (intensity IS
+	// the gate) — owned so a base with them ON (user INI) can never leak god
+	// rays / height fog / vignette / CA / film grain into the Mobile look
+	// (a non-owned key always falls back to the base on engage).
+	MV_I(godRaysEnable, 0),
+	MV_I(heightFogEnable, 0),
+	MV_F(vignetteIntensity, 0.0f),
+	MV_F(grainIntensity, 0.0f),
+	MV_F(caIntensity, 0.0f),
 	MV_I(vcsTrails, 0),
 	// IV-grade neutrals: Mobile does not use the IV grade path
 	MV_F(ivDesaturation, 0.0f),
@@ -848,6 +988,9 @@ static const ModeValue kValuesMobile[] = {
 	MV_I(forwardPlusEnable, 0),
 	MV_I(pipeChainEnable, 0),
 	MV_I(normalBufferEnable, 0),
+	// Velocity reconstruct has no consumer with motionBlur/SSAO-temporal off
+	// (postfx.cpp:2005) — pin OFF (m2200 + 1070 budget; same as PS2/Xbox).
+	MV_I(velocityBufferEnable, 0),
 	MV_I(depthHookEnable, 1),
 	MV_I(profilerEnable, 0),
 };

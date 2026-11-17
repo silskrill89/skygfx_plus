@@ -2923,9 +2923,9 @@ DrawModesSection(void)
 		{ MODE_XBOX,   "Xbox",   "Xbox profile: Xbox pipes + PC filter,\ndetail maps on, PC timecyc (kValuesXBOX)." },
 		{ MODE_PC_VINTAGE, "Legacy PC", "Legacy PC profile: Xbox building pipe + original PC car pipe\n+ PC filter (kValuesPCVintage)." },
 		{ MODE_MOBILE, "Mobile", "Mobile profile: Xbox building pipe + Mobile car pipe\n+ Mobile filter (kValuesMobile)." },
-		{ MODE_GTAIV,  "GTAIV",  "GTA IV profile (mirrors IVMode_ApplyDefaults):\nIV pipes + filter, radiosity/SSAO/SMAA/grain off, ivMode on.\nINI-tuned IV grade sliders are kept." },
-		{ MODE_GTAV,   "GTAV",   "GTA V profile: V water (style=V, Ultra, pipe on).\nNo V building/vehicle pipe exists yet - water only (kValuesGTAV)." },
-		{ MODE_MODERN, "Modern", "Modern profile: PBR pipes + Modern filter + full\npostfx set (SSAO/SMAA/bloom/DOF/motion blur on, kValuesModern)." },
+		{ MODE_GTAIV,  "GTAIV",  "GTA IV profile (mirrors IVMode_ApplyDefaults):\nIV pipes + filter, radiosity off (doRadiosity=0), SSAO/SMAA/\nbloom/DoF/sun-shafts/grain ON with IV probe params, ivMode on.\nINI-tuned IV grade sliders are kept." },
+		{ MODE_GTAV,   "GTAV",   "GTA V profile: V water (style=V, Ultra, pipe on, timecycle colour).\nNo V building/vehicle pipe exists yet - water only (kValuesGTAV)." },
+		{ MODE_MODERN, "Modern", "Modern profile: PBR pipes + Modern filter + full postfx set at\nthe 1070 tier (SSAO/SMAA/bloom/DoF/god rays/height fog/radiosity/\ngrain/CA/vignette on, fxaa off, water parallax+V water on,\nprofiler off while latched - kValuesModern)." },
 		{ MODE_CUSTOM, "Custom", "Custom: no profile fields - latches the mode over your\ncurrent settings so Restore INI has a baseline (kValuesCustom = none)." },
 	};
 

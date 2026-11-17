@@ -690,6 +690,32 @@ SpriteFlushIndexedDraw_hook(int primType, void *verts, int nverts, void *indices
 				blend, src, dst);
 		}
 	}
+	// ---- Stage-0 identity receipt (H3, 2026-11-16 particle-alpha cleanup) --
+	// MEASUREMENT ONLY — reads, never writes: rw-cache texture raster (L1)
+	// via RwRenderStateGet + raw device stage-0 texture (L3) via GetTexture
+	// (AddRef/Release). No render state is touched. Tests H3: water/wake
+	// flushes deliberately leave their world raster bound at stage 0
+	// (main.cpp water/wake sites — the bind is NOT restored), so the next
+	// cache-gated sprite bind can no-op and the batch samples the LAST
+	// WORLD TEXTURE (teal over sea / brown over land) instead of the glow
+	// raster. Gated on spriteBatch > 0: an empty batch early-outs at
+	// 0x70CF27 before any sprite samples stage 0, so its identity is
+	// irrelevant there. Throttled 2s (tag "sprite_stage0"); first call of
+	// any 2s window is unstarvable, so a short run still yields evidence.
+	if(spriteBatch > 0 && dbglog_throttle("sprite_stage0")){
+		void *rawRas = NULL;
+		IDirect3DBaseTexture9 *devTex = NULL;
+		RwRenderStateGet(rwRENDERSTATETEXTURERASTER, &rawRas);
+		if((void*)rawRas == (void*)0xFFFFFFFF)
+			rawRas = NULL;	// failed-Get sentinel (flushBatchIdentity convention)
+		if(d3d9device)
+			d3d9device->GetTexture(0, &devTex);	// AddRef, released below
+		dbglog("[sprite_stage0] batch=%d nverts=%d nidx=%d s0Raster=%p s0DevTex=%p "
+		       "(H3: non-glow s0 here = sprite samples the last world texture)",
+		       spriteBatch, nverts, nindices, rawRas, (void*)devTex);
+		if(devTex)
+			devTex->Release();
+	}
 	// ---- Force the additive block on the corona-family carrier flushes --
 	// PRODUCER GATING (perf fix 2026-11-01): the force below used to run on
 	// EVERY hook invocation that reached the draw sites (~100 D3D9 ops each,

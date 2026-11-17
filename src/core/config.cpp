@@ -689,7 +689,9 @@ readIniFile(const char *modulePath, Config *c)
 	//   spriteStateShield     — per-draw ALPHAFUNC/ALPHAREF/SEPARATEALPHA/
 	//                           COLORWRITEENABLE normalisation in
 	//                           coronaDrawRawShield (blend/ZWRITE force is
-	//                           not gated).
+	//                           not gated). Default 1 (2026-11-16 particle-
+	//                           alpha cleanup) but NOT floored — toggleable
+	//                           lever, unlike the floored members above.
 	c->texAlphaClassify = readint2(cfg, "Effects", "texAlphaClassify", 1);
 	// SAFETY DEFAULT: floor to 1 (same H1 semantics as stateBaselineEnable).
 	if(c->texAlphaClassify < 1) c->texAlphaClassify = 1;
@@ -710,8 +712,12 @@ readIniFile(const char *modulePath, Config *c)
 	// writer, and it resets to 1 on the next INI reload.)
 	if(c->stateBaselineEnable < 1) c->stateBaselineEnable = 1;
 	if(c->stateBaselineEnable > 1) c->stateBaselineEnable = 1;
-	c->spriteStateShield = readint(cfg.get("SkyGfx", "spriteStateShield", ""), 0);
-	// 0 = disabled (AAP parity: no sprite state shield).
+	// 2026-11-16 particle-alpha cleanup: default restored to 1 (a8aecb7
+	// flipped it to 0 under "run vanilla settings"; with the shields OFF the
+	// black-RGB/opaque-alpha glow textures rasterise as opaque boxes).
+	// Toggleable lever, deliberately NOT floored (every fix keeps its own
+	// toggle): 0 = skip the four-state normalisation (AAP parity).
+	c->spriteStateShield = readint(cfg.get("SkyGfx", "spriteStateShield", ""), 1);
 	if(c->spriteStateShield < 0) c->spriteStateShield = 0;
 	if(c->spriteStateShield > 1) c->spriteStateShield = 1;
 
@@ -1194,7 +1200,7 @@ readIniFile(const char *modulePath, Config *c)
 		EMIT("SkyGfx", "pipeChainReflEnable", "0"); \
 		EMIT("SkyGfx", "texAlphaClassify", "1"); \
 		EMIT("SkyGfx", "stateBaselineEnable", "1"); \
-		EMIT("SkyGfx", "spriteStateShield", "0"); \
+		EMIT("SkyGfx", "spriteStateShield", "1"); \
 		EMIT("SkyGfx", "coronaBlendShield", "1"); \
 		EMIT("SkyGfx", "spriteFlushShield", "1"); \
 		EMIT("SkyGfx", "rwFixesEnable", "1"); \

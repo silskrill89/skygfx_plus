@@ -241,6 +241,7 @@
     <ClCompile Include="..\src\render\postfx_utils.cpp" />
     <!-- W7-D staged Diff 3a (applied by W8-3 as sole build-file owner — do NOT re-apply) -->
     <ClCompile Include="..\src\render\postfx_underwater.cpp" />
+    <ClCompile Include="..\src\render\underwater.cpp" />
     <ClCompile Include="..\src\core\presets.cpp" />
     <ClCompile Include="..\src\extras\ragdoll_death.cpp" />
     <ClCompile Include="..\src\render\noise.cpp" />
@@ -254,6 +255,7 @@
     <ClCompile Include="..\src\extras\vehicles.cpp" />
     <ClCompile Include="..\src\extras\veh_shaders.cpp" />
     <ClCompile Include="..\src\render\waterPipe.cpp" />
+    <ClCompile Include="..\src\render\water.cpp" />
     <ClCompile Include="..\src\core\weather.cpp" />
     <ClCompile Include="..\src\extras\wheels.cpp" />
     <ClCompile Include="..\src\core\debugmenu_ui.cpp" />
