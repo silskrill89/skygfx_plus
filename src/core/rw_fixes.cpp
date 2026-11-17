@@ -697,6 +697,55 @@ CSprite__RenderBufferedOneXLUSprite_Rotate_Aspect(float x, float y, float z, flo
 typedef void (__cdecl *SpriteFlushIndexedDraw_t)(int primType, void *verts, int nverts, void *indices, int nindices);
 static SpriteFlushIndexedDraw_t SpriteFlushIndexedDraw_orig;
 
+// ---- Root-cause blend-contract reconcile gate (spriteFlushShield=0 path) --
+// DEFECT (screenshots gta_sa_qUIPC6eVMq.jpg / gta_sa_JZOcnBTZrU.jpg, log
+// 07:46-07:48): giant organic black blotches over roads/ground, 42x
+// `[PtLightGlow] flush batch=N drew UNSHIELDED dev blend=0|1 src=5 dst=6`.
+// ROOT CAUSE — verified against the field log, NOT a cache desync: every
+// layer agrees on the same wrong pair. The glow batch is QUEUED, not
+// rasterised, inside its producer (SilentPatchSA rewrites CCoronas::Render's
+// tail-jmp at 0x6FB621 into a RET), so the game's own additive contract
+// (rwBLENDONE / rwBLENDONE + VERTEXALPHA — gta-reversed Coronas.cpp:195-196;
+// our `[CoronaBlend]` probe right after the body reads dev blend=1 src=2
+// dst=2) is consumed BEFORE the quads reach a rasteriser:
+//   * CCoronas__Render_blendprobe_hook's EXIT RESTORE pushes the canonical
+//     normal-alpha block at Render exit (trail immediately upstream of the
+//     first flush: `[CoronaExit]` then `[FxAlpha] PostFx.repaired: rw(vtx=0
+//     src=5 dst=6 zw=1) dev(vtx=0 src=5 dst=6 zw=1)`);
+//   * the world's own passes ([Pipeline] pipeApplyWorldBaseline, veg /
+//     building draws) then re-write blend=1 src=5 dst=6.
+// Either way the device reaches 0x70CF20 on SRCALPHA/INVSRCALPHA or blend
+// OFF while the glow texture is authored black-RGB + opaque alpha for
+// ONE/ONE: the surround REPLACES the background instead of adding nothing
+// -> the black blotch. spriteFlushShield=1 hides this by forcing the pair
+// at the flush boundary; =0 (the user's INI, "vanilla settings should
+// work") leaves the raw state, so the flush must reconcile the blend
+// contract ITSELF for glow-family batches.
+//
+// GATE — positive identification only, everything else FAILS OPEN: a batch
+// is glow-family when its L1 stage-0 raster is one of the corona/pointlight/
+// cloud glow rasters (flushBatchIdentity — the same verdict
+// PostFxFlush_701FE9_hook already uses) OR a producer window is open
+// (g_inCoronasRender / g_inCloudsRender — the exact triple
+// effectsForceAlphaBlock's producer gate trusts). Glyph/font/HUD/screen-blit
+// batches therefore keep their authored normal-alpha (the 2026-11-01
+// washed-out-font class), and the blend!=0 fail-open elsewhere is untouched.
+// The writes run INSIDE the SEH fence around the orig draw so the pre-flush
+// block is always put back; the spriteFlushShield=1 branch keeps its own
+// eleven-state capture/force/close byte-for-byte unchanged (this block is
+// unreachable there — it lives in the lever-OFF else-branch).
+struct SpriteBlendContract
+{
+	bool pass;	// glow-family -> reconcile the contract for this draw
+	bool family;	// flushBatchIdentity(): L1 stage-0 = glow raster
+	bool window;	// g_inCoronasRender || g_inCloudsRender
+	RwRaster *ras;	// L1 stage-0 raster (receipt only)
+};
+// Defined beside flushBatchIdentity()/isFrontOrCameraRaster() further down
+// (those helpers are declared AFTER this hook in the file), so the call
+// site below needs this forward declaration.
+static SpriteBlendContract spriteBlendContract(void);
+
 static void __cdecl
 SpriteFlushIndexedDraw_hook(int primType, void *verts, int nverts, void *indices, int nindices)
 {
@@ -784,6 +833,17 @@ SpriteFlushIndexedDraw_hook(int primType, void *verts, int nverts, void *indices
 	// Count = buffered-sprite count at 0xC6A158, read as a dword.
 	const char *spriteForcePath = NULL;	// close-receipt label, force-only
 	bool spriteForced = false;
+	// ---- Root-cause blend-contract reconcile PODs (lever-OFF path only) --
+	// Armed by the spriteFlushShield=0 else-branch below; the capture/force
+	// writes run inside the SEH fence around the orig draw and the __finally
+	// puts the pre-flush block back on every path. Constant-init PODs only —
+	// no dynamic initialisation, C2712-safe inside __try/__finally.
+	bool glowContractPending = false;	// lever OFF + non-empty batch -> evaluate the gate
+	bool glowContractForced = false;	// snapshot taken + producer contract written
+	DWORD glowPreBlendEn = (DWORD)TRUE;		// pre-flush device block (verbatim undo)
+	DWORD glowPreSrcBlend = (DWORD)D3DBLEND_SRCALPHA;
+	DWORD glowPreDstBlend = (DWORD)D3DBLEND_INVSRCALPHA;
+	DWORD glowPreBlendOp = (DWORD)D3DBLENDOP_ADD;
 	{
 		// One-shot gate receipt + throttled skipped-vs-shielded counter
 		// (perf fix 2026-11-01). POD statics only — constant init, no
@@ -860,6 +920,12 @@ SpriteFlushIndexedDraw_hook(int primType, void *verts, int nverts, void *indices
 				       spriteBatch, (int)ub, (int)us, (int)ud,
 				       config ? config->spriteFlushShield : -1);
 			}
+			// Root-cause reconcile gate input (read-only; the writes run
+			// inside the SEH fence below, immediately before the orig draw).
+			// The receipt above keeps naming the RAW entry state — that is
+			// the root-cause evidence — and [PtLightGlow] root-cause ... (see
+			// the fence) then names the reconcile decision taken for it.
+			glowContractPending = true;
 		}
 		// Throttled skipped-vs-shielded receipt for the producer gate:
 		// "skipped" = this draw site reached the hook with an already-drained
@@ -891,11 +957,80 @@ SpriteFlushIndexedDraw_hook(int primType, void *verts, int nverts, void *indices
 	// skipped forever. __finally runs the unbind + close on BOTH the normal
 	// and fault paths, so the latch can never survive a swallowed fault.
 	__try{
+		// ---- ROOT-CAUSE BLEND RECONCILE (spriteFlushShield=0 only) -------
+		// See SpriteBlendContract above: by the time this deferred batch
+		// rasterises the producer's ONE/ONE has already been overwritten by
+		// the world's normal-alpha, so push the producer's own contract back
+		// through the shared 3-layer chokepoint (pipeDeviceStateSet: L1 rw
+		// cache + L2 driver cache + raw L3 — never a single-layer write) for
+		// THIS draw only. Order is snapshot -> ARM -> write, so a fault
+		// between the arm and the draws still reaches the __finally undo
+		// below with a valid pre-flush snapshot. All PODs (C2712-safe).
+		if(glowContractPending && d3d9device){
+			SpriteBlendContract gate = spriteBlendContract();
+			DWORD devBlend = (DWORD)TRUE;
+			DWORD devSrc = (DWORD)D3DBLEND_SRCALPHA;
+			DWORD devDst = (DWORD)D3DBLEND_INVSRCALPHA;
+			DWORD devOp = (DWORD)D3DBLENDOP_ADD;
+			DWORD v = 0;
+			if(SUCCEEDED(d3d9device->GetRenderState(D3DRS_ALPHABLENDENABLE, &v))) devBlend = v;
+			if(SUCCEEDED(d3d9device->GetRenderState(D3DRS_SRCBLEND, &v)))         devSrc   = v;
+			if(SUCCEEDED(d3d9device->GetRenderState(D3DRS_DESTBLEND, &v)))        devDst   = v;
+			if(SUCCEEDED(d3d9device->GetRenderState(D3DRS_BLENDOP, &v)))          devOp    = v;
+			// Already on the producer pair -> nothing to write and nothing to
+			// restore; the receipt still names the entry state.
+			bool alreadyAdditive = (devBlend != 0 &&
+				devSrc == (DWORD)D3DBLEND_ONE &&
+				devDst == (DWORD)D3DBLEND_ONE &&
+				devOp  == (DWORD)D3DBLENDOP_ADD);
+			bool reconcile = (gate.pass && !alreadyAdditive);
+			if(reconcile){
+				glowPreBlendEn = devBlend;
+				glowPreSrcBlend = devSrc;
+				glowPreDstBlend = devDst;
+				glowPreBlendOp = devOp;
+				glowContractForced = true;	// ARM before the first write
+				pipeDeviceStateSet(D3DRS_ALPHABLENDENABLE, TRUE);
+				pipeDeviceStateSet(D3DRS_SRCBLEND, (DWORD)D3DBLEND_ONE);
+				pipeDeviceStateSet(D3DRS_DESTBLEND, (DWORD)D3DBLEND_ONE);
+				pipeDeviceStateSet(D3DRS_BLENDOP, (DWORD)D3DBLENDOP_ADD);
+			}
+			// ONE new receipt for this fix: names the root cause (the entry
+			// state the deferred batch inherited) and which gate leg matched.
+			// First hit unstarvable (dbglog_once), then the 2s bucket.
+			if(dbglog_once("ptlightglow_rc1") || dbglog_throttle("ptlightglow_rc"))
+				dbglog("[PtLightGlow] root-cause %s: flush entry blend=%d src=%d dst=%d op=%d "
+				       "family=%d window=%d ras=%p — deferred glow batch rasterises after "
+				       "the producer's ONE/ONE was overwritten by the world normal-alpha "
+				       "(spriteFlushShield=0 path); %s",
+				       reconcile ? "reconciled"
+				         : (gate.pass ? "already-additive" : "skip-non-glow"),
+				       (int)devBlend, (int)devSrc, (int)devDst, (int)devOp,
+				       gate.family ? 1 : 0, gate.window ? 1 : 0, (void*)gate.ras,
+				       reconcile ? "producer ONE/ONE pushed L1+L2+L3, pre-flush block restored after the draw"
+				         : (gate.pass ? "already on the producer pair — no write"
+				                      : "not a glow-family batch — authored blend kept (fail open)"));
+		}
 		SpriteFlushIndexedDraw_orig(primType, verts, nverts, indices, nindices);
 	}__finally{
 		if(g_inCloudsRender && cloudsPS && d3d9device){
 			RwD3D9SetPixelShader(NULL);
 			d3d9device->SetPixelShader(NULL);
+		}
+		// Root-cause reconcile undo (spriteFlushShield=0 path): replay the
+		// EXACT pre-flush blend block on all three layers so the forced
+		// ONE/ONE can never leak past its own draw. Deliberately verbatim —
+		// the entry state belonged to whoever wrote it last, and this hook
+		// must change nothing outside its own rasterisation (that is what
+		// keeps the lever a real bisect switch instead of a hidden shield).
+		// Runs on the faulted path too (same __finally contract as the close).
+		if(glowContractForced){
+			glowContractForced = false;
+			pipeDeviceStateSet(D3DRS_ALPHABLENDENABLE,
+			                   glowPreBlendEn ? TRUE : FALSE);
+			pipeDeviceStateSet(D3DRS_SRCBLEND, glowPreSrcBlend);
+			pipeDeviceStateSet(D3DRS_DESTBLEND, glowPreDstBlend);
+			pipeDeviceStateSet(D3DRS_BLENDOP, glowPreBlendOp);
 		}
 		// Close the force on EVERY path that ran it — NOT gated on
 		// g_coronaBodyDone. This is what keeps cloud/sun/water/HUD/deferred
@@ -1184,6 +1319,36 @@ isFrontOrCameraRaster(RwRaster *ras)
 	if(camRas && sameRasterFamily(ras, camRas))
 		return true;
 	return false;
+}
+
+// ---- Glow-family verdict for the flush-entry blend reconcile -------------
+// Definition sits here (beside flushBatchIdentity / isFrontOrCameraRaster)
+// because those helpers are declared AFTER SpriteFlushIndexedDraw_hook in
+// this file; the hook reaches them through the forward declaration at the
+// top of the flush block. Verdict rule is the producer-ownership triple the
+// rest of the tree already trusts — a POSITIVE stage-0 glow-raster match
+// (strictly L1: the device-layer OR is the documented 2026-11-01 font false
+// positive), or a live producer window (CCoronas/CPointLights =
+// g_inCoronasRender, CClouds = g_inCloudsRender; the same triple
+// effectsForceAlphaBlock uses to keep its canonical normal-alpha sweep off
+// glow batches). Anything else returns pass=false and the caller leaves the
+// batch's authored blend untouched — glyph/font/HUD/screen-blit lanes stay
+// on SRCALPHA/INVSRCALPHA, and the blend!=0 fail-open in
+// PostFxFlush_701FE9_hook is untouched. id.devTex is diagnostics-only
+// (GetTexture AddRef) and is released here, exactly as the other caller
+// releases it after logging.
+static SpriteBlendContract
+spriteBlendContract(void)
+{
+	SpriteBlendContract gate;
+	FlushBatchId id = flushBatchIdentity();
+	gate.family = id.family;
+	gate.window = (g_inCoronasRender || g_inCloudsRender);
+	gate.ras = id.ras;
+	gate.pass = (id.family || gate.window);
+	if(id.devTex)
+		id.devTex->Release();
+	return gate;
 }
 
 // ---- Post-draw stage-0 restore for the white-shield bind ----------------

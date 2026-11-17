@@ -98,10 +98,10 @@ ClampAmbientToSky(RwRGBAReal &c)
 	// is in an interior area. Outdoor frames run the exact same code as
 	// before (see the skyL/no-data/k/nightWeight trail below — untouched).
 	extern int* CGame__currArea;
-	// NOTE: this early return makes the ambientFloor tail at the bottom of
-	// this function UNREACHABLE for all interiors (CGame__currArea != 0) —
-	// deliberate, behaviour unchanged. Interior ambient is handled by
-	// pbrAmbientFloor in GetTimecycleAmbientPBR(), not by ClampAmbientToSky.
+	// NOTE (2026-11-17 audit): since 351ce52 the absolute ambientFloor tail
+	// is NO LONGER in this function — it is the tail of GetTimecycleAmbient()
+	// (which runs AFTER this call), so interiors DO receive the floor; the
+	// old "tail UNREACHABLE for interiors" note described the earlier layout.
 	if(*CGame__currArea != 0)
 		return;
 
