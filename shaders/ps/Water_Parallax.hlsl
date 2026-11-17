@@ -126,6 +126,13 @@
 //              0 = off -> interior bodies keep the ocean sheet)
 //       volumeFresnelBias: M8 interior reflection Schlick F0 (0.05)
 //       c18 all-zero (stale pipe) -> M7/M8 terms exactly 0/neutral.
+// c19 = (swellNormalStrength, 0, 0, 0)   <- W2b deform<->normal coupling
+//       swellNormalStrength: scale applied to the VS's analytic swell slope
+//              (TEXCOORD6, Water_VS.hlsl) before it is summed into the
+//              shading normal. 0 = exactly the pre-W2b normal (stale-pipe /
+//              opt-out escape hatch, same doctrine as c16/c17/c18); bounded
+//              in-shader to [0,4] so a foreign c19 can never run away.
+//       ALL-ZERO c19 -> the swell normal contribution is exactly 0.
 //
 // s0 = scene colour (refraction capture)            [tier >= 2]
 // s1 = water detail normal map (RGB=normal, A=height; mip-mapped)
@@ -172,6 +179,7 @@ uniform float4 bodyParams1   : register(c15);   // W7-B contract: (normScale, op
 uniform float4 waterFxParams : register(c16);   // M2/M3/refl-mix: (foamTexValid, foamTexWeight, softIsecGain, reflMix)
 uniform float4 waterFxParams2 : register(c17);  // M4/M5/M6: (refractValidGain, causticsScale, causticsSpeed, isecFoamGain)
 uniform float4 waterFxParams3 : register(c18);  // M7/M8: (sssScale, reserved, volumeDensity, volumeFresnelBias)
+uniform float4 swellParams : register(c19);    // W2b: (swellNormalStrength, 0, 0, 0)
 
 struct VS_OUTPUT {
     float4 position  : POSITION;
@@ -186,6 +194,11 @@ struct VS_OUTPUT {
     // WaterBodyContract() pins every body scale to exactly 1.0 and the G3
     // river scroll offset is exactly zero (zero visual change).
     float4 bodyData  : TEXCOORD5;
+    // W2b: analytic swell normal XY from Water_VS (TEXCOORD6) — the surface
+    // normal of the two waves that displace position, already amp/shore
+    // gated so flat-locked shore vertices deliver 0. Scaled by c19.x and
+    // summed with the detail normal in every core (see WaterSwellNormal).
+    float2 swellSlope : TEXCOORD6;
     float4 vtxColor  : COLOR0;
 };
 
@@ -239,6 +252,39 @@ SurfBase WaterSetup(VS_OUTPUT IN)
     // a flat Z-up plane, so its Z sign is exact for every water quad height.
     S.below = S.V.z < 0.0 ? 1.0 : 0.0;
     return S;
+}
+
+// ============================================================================
+// W2b — deform <-> normal coupling (the vertex swell must SHADE, not move)
+// ============================================================================
+// Water_VS displaces the sheet with two analytic waves and hands their exact
+// surface normal here on TEXCOORD6. Two rules:
+//  * SUM, never replace: the swell slope is added to the per-pixel detail
+//    gradient BEFORE the single normalize, so the low-frequency swell shading
+//    and the high-frequency capillary detail both stay live.
+//  * The gate rides the data: the VS already multiplied the slope by the same
+//    swAmp * ampMod (wind / gust / shore) gate as the position displacement,
+//    so a flat-locked shore vertex delivers exactly 0 and keeps a flat
+//    normal — no second gate is needed here beyond c19.x itself.
+// c19.x = 0 -> exactly the pre-W2b normal (stale-pipe escape hatch, the
+// c16/c17/c18 doctrine); bounded to [0,4] so a foreign c19 written by another
+// pipe before this draw can never run the normal away.
+float2 WaterSwellNormal(float2 slope)
+{
+    return slope * min(max(swellParams.x, 0.0), 4.0);
+}
+
+// Depth-free crest-foam weight. Every shore-keyed foam term in the cores
+// below needs the s2 depth copy (WaterSoftIsec / shoreFade / the V core's
+// foamMask): when that copy cannot run (clipPlanes.z == 0 — depth hook off,
+// no INTZ, see waterPipe_setRenderState) those terms are forced to 0 and the
+// whole foam stack renders nothing. This keeps the depth-independent HEIGHT
+// mask alive in that configuration ONLY, so foam still rides the wave crests
+// instead of vanishing. Exactly 0 when the depth copy is live -> pre-change
+// output bit-identical.
+float WaterDepthlessCrest(void)
+{
+    return 1.0 - saturate(clipPlanes.z);
 }
 
 // ============================================================================
@@ -1040,7 +1086,12 @@ float4 WaterXbox(VS_OUTPUT IN)
     // M2: keep the pre-normalize gradient — RAGE's foam block modulates the
     // foam texture by len(flatNormal.xy) (this XY, before normalize).
     float2 flatXY = (n1.xy + n2.xy * 0.7) * strength;
-    float3 N = normalize(float3(flatXY, 1.0));
+    // W2b: the VS's analytic swell normal SUMS with the detail gradient
+    // before the one normalize — the two layer, neither replaces the other,
+    // so wave crests/troughs light from the direction their geometry faces.
+    // flatXY stays detail-only, so the M2 foam's len(flatNormal.xy) term is
+    // unchanged.
+    float3 N = normalize(float3(flatXY + WaterSwellNormal(IN.swellSlope), 1.0));
 
     // ---- View from below: the shading normal points up, away from an
     // underwater camera — flip it to face the viewer or NdotV/fresnel collapse
@@ -1101,8 +1152,13 @@ float4 WaterXbox(VS_OUTPUT IN)
         // water_terrainfoam.psFoamDeferred port). c16.x/c17.w both 0 -> the
         // mask resolves to exactly 1.0 -> the pre-M6 line bit-identical.
         float isecMask = WaterIsecFoamMask(tuv1 * 0.22 + float2(-0.003, 0.004) * time);
+        // Depth-free crest fallback (WaterDepthlessCrest): with no s2 depth
+        // copy `band` lands on view distance and `isec` is exactly 0, so the
+        // stack above paints nothing — keep the height mask alive so foam
+        // still rides the wave crests. Exactly 0 when the copy is live.
         foam = (band * pattern
-              + isec * saturate(waterFxParams.z) * pattern * isecMask * (1.0 - band) * 0.5)
+              + isec * saturate(waterFxParams.z) * pattern * isecMask * (1.0 - band) * 0.5
+              + procFoam * 0.6 * WaterDepthlessCrest())
               * 0.25 * B.foam * WaterFoamGate();
     }
 
@@ -1263,7 +1319,10 @@ float4 WaterIV(VS_OUTPUT IN)
     // ("the effect is lost" well inside the view).
     float nFade = 0.25 + 0.75 * saturate(1.0 - S.dist * S.dist * max(qualityParams.y, 0.0));
     float2 dN = (n1.xy * 0.0512 + n2.xy * 0.256) * waterParams.x * B.norm;
-    float3 N = normalize(float3(dN * nFade, 1.00001));
+    // W2b: swell slope summed AFTER the IV distance fade (the displaced
+    // geometry is not distance-faded, so its shading must not be either) —
+    // dN itself stays detail-only for the texFoam len(dN * nFade) term.
+    float3 N = normalize(float3(dN * nFade + WaterSwellNormal(IN.swellSlope), 1.00001));
 
     // View from below: face the camera (see WaterXbox for the full note).
     if(below > 0.5)
@@ -1316,8 +1375,10 @@ float4 WaterIV(VS_OUTPUT IN)
         // water_terrainfoam.psFoamDeferred port). c16.x/c17.w both 0 -> the
         // mask resolves to exactly 1.0 -> the pre-M6 line bit-identical.
         float isecMask = WaterIsecFoamMask(uv1 * 0.22 + float2(-0.003, 0.004) * time);
+        // Depth-free crest fallback — see WaterDepthlessCrest / WaterXbox.
         foam = (band * pattern
-              + isec * saturate(waterFxParams.z) * pattern * isecMask * (1.0 - band) * 0.5)
+              + isec * saturate(waterFxParams.z) * pattern * isecMask * (1.0 - band) * 0.5
+              + procFoam * 0.6 * WaterDepthlessCrest())
               * 0.25 * B.foam * WaterFoamGate();
     }
 
@@ -1486,7 +1547,10 @@ float4 WaterV(VS_OUTPUT IN)
     // range and the wave field died into a flat sheet (flat-cyan defect).
     float strength = waterParams.x * B.norm * (1.0 - 0.55 * S.distFactor);
     float2 dN = (n1.xy + n2.xy * 0.7) * strength * (0.75 + 0.5 * cellMask);
-    float3 N = normalize(float3(dN, 1.0));
+    // W2b: swell slope summed with the detail gradient before the one
+    // normalize (see WaterSwellNormal). dN stays detail-only so the V core's
+    // FoamMask*(len(dN)*0.27+0.44) shore term is unchanged.
+    float3 N = normalize(float3(dN + WaterSwellNormal(IN.swellSlope), 1.0));
 
     // View from below: face the camera (see WaterXbox for the full note).
     if(below > 0.5)
@@ -1573,9 +1637,16 @@ float4 WaterV(VS_OUTPUT IN)
         // water_terrainfoam.psFoamDeferred port). c16.x/c17.w both 0 -> the
         // mask resolves to exactly 1.0 -> the pre-M6 line bit-identical.
         float isecMask = WaterIsecFoamMask(uv1 * 0.22 + float2(-0.003, 0.004) * time);
+        // Depth-free crest fallback: V's shore gate is the thickness-driven
+        // foamMask/shoreFade pair, both 0-without-depth in effect (they key
+        // off the distance estimate) — the RAGE height mask keeps crests
+        // foaming. Exactly 0 when the s2 depth copy is live.
+        float crestFoam = foamTex * (length(dN) * 0.27 + 0.44) * 0.45
+                        * WaterDepthlessCrest();
         foam = foamBand * foamTex * shoreFade
              + texFoam * saturate(waterFxParams.y) * foamBand * shoreFade * 0.75
-             + isec * saturate(waterFxParams.z) * foamTex * isecMask * (1.0 - shoreFade) * 0.35;
+             + isec * saturate(waterFxParams.z) * foamTex * isecMask * (1.0 - shoreFade) * 0.35
+             + crestFoam;
         foam *= B.foam * WaterFoamGate();
     }
 

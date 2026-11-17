@@ -32,6 +32,16 @@
 // wavelets) remains per-pixel in Water_Parallax.hlsl — the two shaders pair
 // exactly as before: this VS animates the surface, that PS shades it.
 //
+// W2b (deform <-> normal coupling): the surface NORMAL of the very waves that
+// displace position is computed here analytically and handed to the PS on
+// TEXCOORD6 (see the VS_OUTPUT note). The PS sums it into the shading normal
+// BEFORE the single normalize, so lighting follows the displaced geometry —
+// crests/troughs light from the direction their geometry actually faces and
+// the sun glint rides the swell instead of sliding over a flat sheet. The
+// slope carries the SAME swAmp * ampMod gate as the displacement (identical
+// wavelengths, phases, wind directions), so a vertex whose swell is gated to
+// 0 (flat-locked shore band) delivers a slope of exactly 0 and stays flat.
+//
 // Constants:
 //   c0-c3 = WorldViewProjection
 //   c4-c7 = World
@@ -121,6 +131,14 @@ struct VS_OUTPUT {
     // the vanilla 1.0 via WaterBodyContract's mag gate (mid-plane code 0
     // alone would otherwise read as OCEAN).
     float4 bodyType  : TEXCOORD5;
+    // W2b: analytic surface-normal XY of the two swell waves above
+    // (N.xy = -grad(swell) of the SAME sin terms that move position). Already
+    // multiplied by the identical swAmp * ampMod gate, so flat-locked shore
+    // vertices deliver exactly 0. Consumed by Water_Parallax as
+    // `swellSlope` and summed with the per-pixel detail normal (PS c19.x
+    // scales it; 0 = pre-W2b normal bit for bit). TEXCOORD6 was free — the
+    // PS declared TEXCOORD0-5 + COLOR0 only.
+    float2 swellSlope : TEXCOORD6;
 };
 
 VS_OUTPUT main(VS_INPUT IN)
@@ -205,6 +223,22 @@ VS_OUTPUT main(VS_INPUT IN)
     // a4e81f8 Gerstner's ~2.4 m pop threshold.
     float ampMod = (0.55 + 0.45 * wStr) * gustMod * shoreGate;
     float swell = (cos(fA) * 0.34 + cos(fB) * 0.20) * swAmp * ampMod;
+
+    // ---- W2b: analytic normal of the SAME waves (deform <-> normal) ----
+    // Surface is z = swell(x,y), so its normal is N ~ (-dz/dx, -dz/dy, 1).
+    //   dz/dx = -sin(fA)*0.34*kA*dirA.x - sin(fB)*0.20*kB*dirB.x
+    // => N.xy = +sin(fA)*0.34*kA*dirA + sin(fB)*0.20*kB*dirB.
+    // Every term (wavelengths kA/kB, phases fA/fB, directions dirA/dirB and
+    // the swAmp * ampMod gate) is byte-identical to the displacement line
+    // above, so the shading normal and the moved geometry can never drift
+    // apart. gustMod and shoreGate are slow spatial fields; their own
+    // gradients are negligible beside the wave slope and are folded in as
+    // the same constant multiplier the displacement uses. c11.x = 0 (or a
+    // missing upload) zeroes this exactly as it zeroes `swell`.
+    float2 swellSlope = (sin(fA) * 0.34 * kA * dirA
+                       + sin(fB) * 0.20 * kB * dirB) * swAmp * ampMod;
+    OUT.swellSlope = swellSlope;
+
     float3 surfPos = float3(posXY, IN.position.z + swell);
 
     // Flat plane base: position passes through (displaced only by the gated

@@ -1899,6 +1899,22 @@ void waterPipe_setRenderState(void)
             _rwD3D9RenderStateFlushCache();
         }
     }
+    // W2b receipt (ADDITIVE — every existing [water]/[water_rt] string is
+    // byte-identical): depthValid is the master gate for PS c8.z, c16.z,
+    // c17.x/c17.y and for the VS shore gate c12.z/c12.w. When it reads 0 at
+    // tier >= 2 every depth-keyed shore term is silently off — the
+    // soft-intersection foam band, the shore fade / junction ramp,
+    // refraction validity, caustics, SSS — and SampleWaterColumn falls back
+    // to its distance-driven estimate with frontFade pinned to 0, so the
+    // sheet renders opaque against a razor waterline with no foam band. The
+    // usual cause is upstream of this file: depthHookEnable==0 at
+    // DepthHook_Install leaves g_intzTex NULL (depthhook.cpp), so
+    // PostFX_CopyDepthToTexture bails before it copies anything
+    // (postfx_ssao.cpp). Throttled; log-only, no render path reads it.
+    if(needRT && !depthValid && dbglog_throttle("water_nodepth"))
+        dbglog("[water] depth copy unavailable at tier>=2 -> shore fade / "
+               "softIsec foam / refraction-validity / caustics / SSS off "
+               "(check depthHookEnable -> INTZ)");
 
     // ---- W2 wind-driven swell: one-time vertex-texture-fetch probe ----
     // The Water_VS swell samples TWO vertex textures (vs_3_0 texldl, device
@@ -2515,6 +2531,23 @@ void waterPipe_setRenderState(void)
     float waterFx3[4] = { sssOn ? 2.0f : 0.0f, 0.0f,
                           volOn ? 1.5f : 0.0f, volOn ? 0.05f : 0.0f };
     RwD3D9SetPixelShaderConstant(18, waterFx3, 1);
+
+    // ---- W2b: swell normal strength, PS c19 = (strength, 0, 0, 0) ----
+    // Water_VS hands the PS the analytic surface normal of the two swell
+    // waves on TEXCOORD6; Water_Parallax's WaterSwellNormal scales it by
+    // c19.x and SUMS it with the per-pixel detail normal, so the displaced
+    // geometry shades from the direction it actually faces (sun glint rides
+    // the swell). 2.0 = the raw analytic slope (<= ~0.10 gradient) doubled so
+    // the tight V-core specular lobe tracks the swell at SA viewing
+    // distances; the in-shader bound is [0,4]. Register discipline: c0-c18
+    // are taken (see the header), c19+ is the documented free band — no
+    // c14/c15 slot was borrowed, so the all-zero WaterBodyContract mag gate
+    // is untouched. c19 all-zero (stale pipe / older binary) -> the swell
+    // normal term is exactly 0 -> pre-W2b output bit-identical. Uploaded
+    // every draw like c14-c18 so a style/PS switch never inherits stale
+    // values.
+    float swellNrm[4] = { 2.0f, 0.0f, 0.0f, 0.0f };
+    RwD3D9SetPixelShaderConstant(19, swellNrm, 1);
 
     // ---- Z state: pin the draw-order contract (all three layers) ----
     // Runs BEFORE the draw setup below so nothing in here can move Z after
