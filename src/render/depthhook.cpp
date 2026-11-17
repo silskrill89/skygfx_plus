@@ -169,6 +169,45 @@ static void DpUnbindIntzFromSamplers(IDirect3DDevice9 *dev)
 }
 
 // ============================================================
+// SSAO depth-alias invalidation (the freeer's half of the contract)
+// ============================================================
+// postfx_ssao.cpp owns the raw alias pair g_ssaoDepthTex / g_ssaoDepthSurf
+// (postfx.h:139-140) and points it at OUR g_intzTex / g_intzSurf in
+// InitSSAOResources. That alias holds NO reference — postfx.cpp:2996-3000
+// treats it as an alias precisely so the texture is released once, by us.
+// The price is that the alias can only be healed by an explicit NULL, and
+// its re-alias guard is one-shot on NULL (postfx_ssao.cpp:79
+// `if(!g_ssaoDepthTex && g_intzTex)`): postfx.cpp:3080-3083 documents the
+// failure mode verbatim — free g_intzTex without dropping the alias and
+// `g_ssaoDepthTex dangles ... use-after-free on the next frame`, because the
+// guard never fires again for a non-NULL pointer.
+//
+// ReleaseDefaultPoolResources() clears the alias after our Reset-time
+// release (postfx.cpp:3084), but the release sites INSIDE THIS FILE — the
+// lazy recreate and the stale-size recreate in hook_SetDS, plus a
+// ReleaseResources call that does not come from that postfx path — have no
+// such partner. There the alias outlives the texture it names and every
+// downstream depth bind (SSAO, normal-buffer reconstruction, velocity, SMAA
+// edge, height fog, motion blur) samples freed memory for the rest of the
+// session. Nulling instead of re-pointing is the safe direction: every
+// consumer NULL-gates and the main ones re-alias through InitSSAOResources
+// (postfx_ssao.cpp:697/1002, postfx.cpp:3568/4116).
+//
+// Compare-then-NULL only — never Release here: g_intzTex's own reference is
+// owned by the release block that calls this, and postfx.cpp:2999 already
+// handles the case where the alias is a texture postfx owns outright
+// (g_ssaoDepthTex != g_intzTex), which this helper deliberately leaves alone.
+static void DpInvalidateSsaoDepthAlias(void)
+{
+	// Function-local externs: same idiom as the hook_Reset externs below —
+	// no postfx.h / skygfx.h edit.
+	extern IDirect3DTexture9 *g_ssaoDepthTex;	// postfx.h:139
+	extern IDirect3DSurface9 *g_ssaoDepthSurf;	// postfx.h:140
+	if(g_ssaoDepthTex == g_intzTex) g_ssaoDepthTex = NULL;
+	if(g_ssaoDepthSurf == g_intzSurf) g_ssaoDepthSurf = NULL;
+}
+
+// ============================================================
 // Vtable hook: SetDepthStencilSurface (index 39)
 // ============================================================
 static HRESULT STDMETHODCALLTYPE hook_SetDS(IDirect3DDevice9 *dev, IDirect3DSurface9 *pDS) {
@@ -248,6 +287,9 @@ static HRESULT STDMETHODCALLTYPE hook_SetDS(IDirect3DDevice9 *dev, IDirect3DSurf
 			// Release a stale texture first: if a previous create made the
 			// texture but GetSurfaceLevel failed, g_intzTex is non-NULL while
 			// g_intzSurf is NULL and CreateTexture into it would fail/leak.
+			// Drop postfx's raw alias first (it compares against the pointer
+			// we are about to free) — see DpInvalidateSsaoDepthAlias.
+			DpInvalidateSsaoDepthAlias();
 			if(g_intzTex) { g_intzTex->Release(); g_intzTex = NULL; }
 			HRESULT hr = dev->CreateTexture(lw, lh, 1, D3DUSAGE_DEPTHSTENCIL,
 				(D3DFORMAT)MAKEFOURCC('I','N','T','Z'),
@@ -295,6 +337,12 @@ static HRESULT STDMETHODCALLTYPE hook_SetDS(IDirect3DDevice9 *dev, IDirect3DSurf
 			   ((int)izd.Width != (int)desc.Width || (int)izd.Height != (int)desc.Height)) {
 				dbglog("DepthHook: INTZ %dx%d stale vs DS %dx%d — recreating",
 				       (int)izd.Width, (int)izd.Height, (int)desc.Width, (int)desc.Height);
+				// Freeing g_intzTex here orphans postfx's raw alias with NO
+				// heal: InitSSAOResources' re-alias guard is one-shot on NULL
+				// (postfx_ssao.cpp:79), so a live g_ssaoDepthTex would keep
+				// naming the released texture for the rest of the session
+				// (postfx.cpp:3080-3083 use-after-free class). Drop it first.
+				DpInvalidateSsaoDepthAlias();
 				g_intzSurf->Release(); g_intzSurf = NULL;
 				if(g_intzTex) { g_intzTex->Release(); g_intzTex = NULL; }
 				HRESULT hr = dev->CreateTexture(desc.Width, desc.Height, 1,
@@ -687,6 +735,11 @@ void DepthHook_ReleaseResources(void) {
 			Transparency_SetZEnabled(g_savedZenable ? true : false);
 		}
 	}
+	// Drop postfx's raw depth alias BEFORE the pointers go NULL (the helper
+	// matches against them) so every release path in this file honours the
+	// contract postfx.cpp:3080 documents — not just the Reset chain, where
+	// ReleaseDefaultPoolResources re-nulls the alias for us at :3084.
+	DpInvalidateSsaoDepthAlias();
 	if(g_intzSurf) { dbglog("DepthHook: Release surf=%p", g_intzSurf); g_intzSurf->Release(); g_intzSurf = NULL; }
 	if(g_intzTex) { dbglog("DepthHook: Release tex=%p", g_intzTex); g_intzTex->Release(); g_intzTex = NULL; }
 }

@@ -4,6 +4,15 @@
 #include "postfx.h"
 #include "depthhook.h"
 
+// Naked thunk in main.cpp (EAXJMP 0x7FC200) — plain-C++ declaration, the same
+// idiom as envmap.cpp:11 / buildingPipe.cpp:60 / mirrorPass.cpp:105.
+// rwcore.h only exposes it under `#ifdef _D3D9_H_`, and skygfx.h includes
+// rwcore.h BEFORE d3d9.h, so the header's own declaration never reaches this
+// TU. Needed by the depth-filter pins below: the rw TEXTUREFILTER write is
+// still pending in RwD3D9, and its applied[]-gated pre-draw flush would push
+// LINEAR back over a raw D3DTEXF_POINT pin set before it is committed.
+void _rwD3D9RenderStateFlushCache(void);
+
 // ============================================================
 // P2 (2026-11-10, face bug): postfx composite exit.
 // RestoreRawGeomStates() restores the CAPTURED cull, and that capture can
@@ -27,6 +36,33 @@ IDirect3DTexture9 *g_ssaoDepthTex = NULL;
 IDirect3DSurface9 *g_ssaoDepthSurf = NULL;
 static IDirect3DTexture9 *g_ssaoNoiseTex = NULL;
 RwRaster *g_ssaoOutputRaster = NULL;
+
+// ============================================================
+// Black-floor target — the multiply composite's only legal source.
+//
+// The composite is dest x aoTexture (SRCBLEND=ZERO / DESTBLEND=SRCCOLOR):
+// an aoTexture texel of 0 REPLACES the scene pixel with black. "Never let a
+// bad depth reach pure black" therefore CANNOT be a blend-state rule:
+//   * one blend equation has exactly one dest term, so dest*max(ao, F) is
+//     not expressible as src*SrcBlend + dest*DstBlend, and
+//   * D3D's MIN/MAX blend ops ignore the blend factors entirely (D3D11
+//     functional spec 17.1: "the min and max blend ops ignore
+//     SrcBlend/DestBlend ... they just operate on the source and dest
+//     colors"), so D3DBLENDOP_MAX cannot carry the floor term either.
+// The floor must live in the SOURCE: SSAOFloorDraw blits
+// max(aoTexture, SSAO_BLACK_FLOOR) into this raster through the
+// already-loaded ClampShader (c0={min,max,tonemap,0}) and the composite
+// multiplies by THAT. Same dims as g_ssaoOutputRaster; destroyed with it
+// in ReleaseSSAOOverhaulResources (the Reset release path).
+// ============================================================
+static RwRaster *g_ssaoFloorRaster = NULL;
+
+// AO floor for the multiply composite: the composited pixel is never below
+// SSAO_BLACK_FLOOR x the original scene pixel (0.25 x = at most 4x
+// darkening). ValidateSSAOOutput counts the pre-floor texels it had to lift
+// with the 8-bit equivalent (0.25 * 255 = 63.75 -> 64).
+static const float SSAO_BLACK_FLOOR = 0.25f;
+static const BYTE SSAO_BLACK_FLOOR_BYTE = 64;
 
 // Wave-2 temporal history: previous-frame depth (own R32F render target, never aliased)
 IDirect3DTexture9 *g_prevDepthTex = NULL;
@@ -489,6 +525,10 @@ void ReleaseSSAOOverhaulResources(void){
 	}
 	if(g_ssaoBlurTempTexRW){ RwTextureDestroy(g_ssaoBlurTempTexRW); g_ssaoBlurTempTexRW = NULL; }
 	if(g_ssaoBlurTempRaster){ RwRasterDestroy(g_ssaoBlurTempRaster); g_ssaoBlurTempRaster = NULL; }
+	// Black-floor target (rwRASTERTYPECAMERATEXTURE = D3DPOOL_DEFAULT): a live
+	// one across device Reset is exactly the leaked-DEFAULT-resource class
+	// that makes Reset fail D3DERR_INVALIDCALL (see ReleaseDefaultPoolResources).
+	if(g_ssaoFloorRaster){ RwRasterDestroy(g_ssaoFloorRaster); g_ssaoFloorRaster = NULL; }
 	g_ssaoHistoryValid = false;
 	g_ssaoQuarterW = g_ssaoQuarterH = 0;
 }
@@ -551,8 +591,11 @@ static void InitSSAOOverhaulResources(void){
 // but runs regardless of postfxDumpDebug because it is a safety gate, not a
 // debug dump. First 3 frames always validate (catch immediate failures),
 // then once every 60 frames (~2s) to bound the GetRenderTargetData stall.
+// blackFloorActive = the black-floor blit actually ran this frame (the caller
+// computed it before this readback): px below SSAO_BLACK_FLOOR is only ever
+// "clamped" when there is a floor to clamp to, so the receipt is gated on it.
 // Returns true = composite may proceed.
-static bool ValidateSSAOOutput(IDirect3DSurface9 *aoRT)
+static bool ValidateSSAOOutput(IDirect3DSurface9 *aoRT, bool blackFloorActive)
 {
 	// Self-gate: this readback only exists to guard the SSAO multiply
 	// composite; with SSAO off no composite runs, so no surface is created.
@@ -571,13 +614,33 @@ static bool ValidateSSAOOutput(IDirect3DSurface9 *aoRT)
 	D3DSURFACE_DESC desc;
 	if(FAILED(aoRT->GetDesc(&desc)) || desc.Width < 1 || desc.Height < 1)
 		return true;
+	// The staging surface MUST match the AO RT's own format exactly:
+	// GetRenderTargetData rejects a mismatch with D3DERR_INVALIDCALL and this
+	// gate then fails OPEN with no receipt at all. That is not theoretical —
+	// this function hardcoded D3DFMT_A8R8G8B8 and produced ZERO
+	// "[PostFX] SSAO ao validate" lines across a 6066-line session while the
+	// composite ran every frame, i.e. the near-black fail-open gate was dead
+	// the whole time. DumpRasterToBMP (postfx.cpp:263-270) documents the same
+	// failure and uses desc.Format; the camera rasters are not guaranteed
+	// A8R8G8B8 (X8R8G8B8 is in play).
 	IDirect3DSurface9 *sysSurf = NULL;
 	if(FAILED(dev->CreateOffscreenPlainSurface(desc.Width, desc.Height,
-			D3DFMT_A8R8G8B8, D3DPOOL_SYSTEMMEM, &sysSurf, NULL)) || !sysSurf)
+			desc.Format, D3DPOOL_SYSTEMMEM, &sysSurf, NULL)) || !sysSurf)
 		return true;
 	if(FAILED(dev->GetRenderTargetData(aoRT, sysSurf))){
 		sysSurf->Release();
 		return true; // readback failed — don't skip the composite on a glitch
+	}
+	// Both BGRA8 layouts store the red channel at byte offset +2; anything
+	// else (R5G6B5-class) is not decodable by the byte walk below, so the gate
+	// stays fail-open instead of reading garbage — reported once so a silent
+	// fail-open cannot hide behind this branch either.
+	if(desc.Format != D3DFMT_A8R8G8B8 && desc.Format != D3DFMT_X8R8G8B8){
+		sysSurf->Release();
+		if(dbglog_once("ssao_aofmt_once"))
+			dbglog("[SSAO] ao validate: unsupported RT format=%d, gate fail-open",
+				(int)desc.Format);
+		return true;
 	}
 	D3DLOCKED_RECT lr;
 	if(FAILED(sysSurf->LockRect(&lr, NULL, D3DLOCK_READONLY))){
@@ -599,8 +662,31 @@ static bool ValidateSSAOOutput(IDirect3DSurface9 *aoRT)
 			count++;
 		}
 	}
+	// Black-floor accounting over the WHOLE pre-floor buffer: every texel the
+	// composite would have driven to (near) black is one SSAOFloorDraw has to
+	// lift. Readback frames only (count gate above), so the full scan is
+	// bounded to the first 3 frames + 1 in 60. 8-bit floor: a texel that ends
+	// up below 0.25 occupies bytes 0..63 (0.25 * 255 = 63.75).
+	int floorClampedPx = 0;
+	for(int y = 0; y < (int)desc.Height; y++){
+		const BYTE *row = (const BYTE*)lr.pBits + (size_t)y * lr.Pitch;
+		for(int x = 0; x < (int)desc.Width; x++){
+			if(row[x * 4 + 2] < SSAO_BLACK_FLOOR_BYTE)
+				floorClampedPx++;
+		}
+	}
 	sysSurf->UnlockRect();
 	sysSurf->Release();
+
+	// The one place the black-guard proves it had work to do: px is the number
+	// of pre-floor AO texels below SSAO_BLACK_FLOOR that the clamp pass lifted
+	// this readback frame (0 = the guard was a no-op, nothing to report). Gated
+	// on the floor having run at all: without a floor nothing was clamped, and
+	// that absence already has its own receipt (ssao_floor_skip / the
+	// creation-failure line), so this one must not claim work that did not
+	// happen.
+	if(blackFloorActive && floorClampedPx > 0 && dbglog_throttle("ssao_blackguard"))
+		dbglog("[SSAO] black-guard clamped px=%d", floorClampedPx);
 
 	// Healthy AO: mostly white (avg ~0.7+). avg < 0.02 = effectively all
 	// black -> the multiply would black out the frame -> fail open.
@@ -651,6 +737,177 @@ static void RestoreSSAOStage0Raster(RwRaster *saved)
 		d3d9device->SetTexture(0, tex);
 }
 
+// ============================================================
+// Black-floor raster (lazy, res-aware) — see g_ssaoFloorRaster.
+// Returns NULL when it cannot be allocated; callers then fail open (skip the
+// composite, i.e. leave the scene untouched) instead of multiplying by an
+// unfloored AO buffer, so "never pure black" still holds on that path too.
+// ============================================================
+static RwRaster *EnsureSSAOFloorRaster(int w, int h, int depth)
+{
+	if(g_ssaoFloorRaster &&
+	   g_ssaoFloorRaster->width == w && g_ssaoFloorRaster->height == h)
+		return g_ssaoFloorRaster;
+	if(g_ssaoFloorRaster){
+		RwRasterDestroy(g_ssaoFloorRaster);
+		g_ssaoFloorRaster = NULL;
+	}
+	g_ssaoFloorRaster = RwRasterCreate(w, h, depth, rwRASTERTYPECAMERATEXTURE);
+	if(!g_ssaoFloorRaster){
+		// Throttled: this is re-evaluated every frame (the dims guard can only
+		// re-arm after a resolution change), and an unthrottled retry log would
+		// write once per frame for as long as the allocation keeps failing.
+		if(dbglog_throttle("ssao_floor_fail"))
+			dbglog("[SSAO] black-floor raster creation failed %dx%d", w, h);
+		return NULL;
+	}
+	SSAOAllocReceipt("ssaoFloorRT", w, h);
+	return g_ssaoFloorRaster;
+}
+
+// ============================================================
+// Black-floor draw: g_ssaoFloorRaster = max(g_ssaoOutputRaster,
+// SSAO_BLACK_FLOOR), through the loaded ClampShader (c0={min,max,0}).
+//
+// The caller swaps Scene.camera onto g_ssaoFloorRaster first (the only way to
+// render into an RwRaster here without a raw surface lookup) and owns the
+// camSwapped/camInUpdate flags, so its fault handler restores the camera for
+// us. What THIS function owns is the stage-0 TEXTURERASTER park: it records
+// the pre-pass binding in the caller's savedStage0Raster/stage0Saved slots
+// (that is what the caller's fault handler restores from), re-binds the AO
+// buffer for the draw, then restores the pre-pass binding before returning so
+// the composite's own park still captures the true pre-pass value. Leaving
+// g_ssaoOutputRaster registered as the live stage-0 raster would make the
+// final RestoreSSAOStage0Raster park the AO buffer instead of unbinding it.
+//
+// No __try here on purpose: this runs inside DrawSSAO/DrawSSAO_Overhaul's SEH
+// frame, and MSVC forbids object unwinding in that frame (C2712) — the
+// composite's blend guard lives in DrawSSAOMultiplyComposite for the same
+// reason. A fault here unwinds to the caller's handler, which restores
+// camera + stage-0 raster + depth hook.
+// ============================================================
+static bool SSAOFloorDraw(RwRaster **savedStage0Raster, bool *stage0Saved)
+{
+	IDirect3DDevice9 *dev = d3d9device;
+	if(!dev || !Scene.camera || !g_ssaoOutputRaster || !g_ssaoFloorRaster)
+		return false;
+	if(!ClampShader){
+		if(dbglog_throttle("ssao_floor_skip"))
+			dbglog("[SSAO] black-floor unavailable (ClampShader=NULL) - composite skipped");
+		return false;
+	}
+
+	// Park stage-0 BEFORE the binding write, and publish the park to the
+	// caller first: a fault between the park and the draw must still be
+	// undone by the caller's handler (stage0Saved is its switch).
+	RwRaster *parkedRaster = NULL;
+	RwRenderStateGet(rwRENDERSTATETEXTURERASTER, (void*)&parkedRaster);
+	if(parkedRaster == (RwRaster*)0xFFFFFFFF)
+		parkedRaster = NULL;
+	*savedStage0Raster = parkedRaster;
+	*stage0Saved = true;
+
+	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
+	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, g_ssaoOutputRaster);
+	dev->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+	dev->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+	dev->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+	dev->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+
+	// c0 = {clampMin, clampMax, tonemapStrength, 0} (Clamp.hlsl) — tonemap off.
+	float floorParams[4] = { SSAO_BLACK_FLOOR, 1.0f, 0.0f, 0.0f };
+	RwD3D9SetPixelShaderConstant(0, floorParams, 1);
+
+	overrideIm2dPixelShader = ClampShader;
+	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, s_ffQuad, 4, s_ffQuadIdx, 6);
+	overrideIm2dPixelShader = nil;
+
+	// Undo the park now (not at the caller's tail): stage0Saved stays true so
+	// a later fault still restores this same pre-pass binding, and the
+	// composite's own park below then captures the pre-pass value again.
+	RestoreSSAOStage0Raster(parkedRaster);
+	return true;
+}
+
+// ============================================================
+// Multiply-composite blend window — set / draw / restore as ONE guarded unit.
+//
+// The window (VERTEXALPHAENABLE + rw SRCBLEND=ZERO/DESTBLEND=SRCCOLOR,
+// mirrored raw as ALPHABLENDENABLE/SRCBLEND/DESTBLEND) is the single most
+// dangerous state transition in this file: leaking it multiplies the NEXT
+// world pass into black. It used to be a bare set at the call site with the
+// restore several statements later, so any exit introduced between the two
+// would silently leak. The guard makes the restore structural: it runs
+// explicitly on the normal path and from the destructor on every other exit.
+//
+// Deliberately no __try in this function: the guard is a C++ object with a
+// destructor, which is illegal in an SEH frame (C2712), so the guard only
+// exists where SEH does not — a fault inside the draw still unwinds to
+// DrawSSAO/DrawSSAO_Overhaul's handler, which restores layer (1) through
+// ImmediateModeRenderStatesReStore and layers (2)/(3) through the
+// SaveRawGeomStates snapshot (rawGeom covers ALPHABLENDENABLE / SRCBLEND /
+// DESTBLEND / BLENDOP / BLENDFACTOR). No other draw runs between this
+// helper's restore and that snapshot restore, so leaving the raw SRCBLEND /
+// DESTBLEND pin to the snapshot (as before) cannot be observed.
+// ============================================================
+struct SsaoMultiplyBlendGuard
+{
+	bool armed;
+
+	SsaoMultiplyBlendGuard() : armed(false) {}
+
+	void Arm(void)
+	{
+		if(armed)
+			return;
+		// Blend factors through the RW cache FIRST: RwIm2D re-emits cached
+		// states at draw time and would clobber raw-only D3D9 factors set
+		// before the draw — the old raw-only sequence is how the multiply
+		// silently degraded to a plain replace (showing the AO texture alone /
+		// black). Mirror the factors with raw calls immediately before the
+		// draw as a second layer.
+		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
+		RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDZERO);        // src factor dropped
+		RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDSRCCOLOR);   // dest x src = multiply
+		RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+		RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+		RwD3D9SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ZERO);
+		RwD3D9SetRenderState(D3DRS_DESTBLEND, D3DBLEND_SRCCOLOR);
+		armed = true;
+	}
+
+	void Disarm(void)
+	{
+		if(!armed)
+			return;
+		armed = false;
+		// Restore blend defaults through the RW cache too, so layers (1)/(2)
+		// stay coherent with the device before ImmediateModeRenderStatesReStore.
+		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
+		RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
+		RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
+		RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+	}
+
+	~SsaoMultiplyBlendGuard() { Disarm(); }
+
+private:
+	SsaoMultiplyBlendGuard(const SsaoMultiplyBlendGuard&);
+	SsaoMultiplyBlendGuard &operator=(const SsaoMultiplyBlendGuard&);
+};
+
+// Photoshop-multiply composite of the floor-clamped AO buffer onto the scene:
+// final = scene x aoTexture, white = no occlusion. The white RT-sized quad
+// (s_ffQuad) is mandatory — colorfilterVerts carry emissiveColor=0 and would
+// modulate the SSAO texture to black.
+static void DrawSSAOMultiplyComposite(void)
+{
+	SsaoMultiplyBlendGuard blendGuard;
+	blendGuard.Arm();
+	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, s_ffQuad, 4, s_ffQuadIdx, 6);
+	blendGuard.Disarm();
+}
+
 void
 CPostEffects::DrawSSAO(void)
 {
@@ -671,8 +928,9 @@ CPostEffects::DrawSSAO(void)
 	// MINFILTER and MAGFILTER are snapshotted and restored on normal + fault exits.
 	DWORD sampSaved[3][5];
 	bool sampSavedOk = false;
-	// Stage-0 raster captured before the multiply binds g_ssaoOutputRaster;
-	// ReStore does not cover TEXTURERASTER, so the pass must restore it itself.
+	// Stage-0 raster captured before the black-floor blit / the multiply bind
+	// (they both park this slot); ReStore does not cover TEXTURERASTER, so the
+	// pass must restore it itself.
 	RwRaster *savedStage0Raster = NULL;
 	bool stage0Saved = false;
 	// Hoisted for the __except path: the AO output surface (AddRef'd by
@@ -684,6 +942,10 @@ CPostEffects::DrawSSAO(void)
 	RwRaster *origRaster = NULL;
 	bool camSwapped = false;	// camera currently points at an SSAO RT
 	bool camInUpdate = false;	// ...and is mid-BeginUpdate on it
+	// Black-floor pass outcome (set inside __try, read by the composite gate):
+	// false = no floor-clamped AO buffer exists this frame, so the multiply
+	// must not run at all (fail open to 1.0x the scene, never to black).
+	bool floorOk = false;
 
 	__try {
 		IDirect3DDevice9 *dev = d3d9device;
@@ -756,6 +1018,15 @@ CPostEffects::DrawSSAO(void)
 		RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
 		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
 
+		// Commit every pending rw/RwD3D9 state above BEFORE the sampler work:
+		// the rw TEXTUREFILTER=LINEAR written on the previous line is still in
+		// RwD3D9's pending[] and its applied[]-gated flush runs pre-draw, so it
+		// would be re-emitted over the raw depth filter pin below. Flushing
+		// first also makes the snapshot below capture the state the draw would
+		// actually have started from, which is what the end-of-pass raw
+		// restore has to put back to stay coherent with layer (2).
+		_rwD3D9RenderStateFlushCache();
+
 		// Snapshot the sampler fields BEFORE raw-overriding them (stages 0-2).
 		for(int st = 0; st < 3; st++){
 			dev->GetSamplerState(st, D3DSAMP_ADDRESSU, &sampSaved[st][0]);
@@ -771,6 +1042,14 @@ CPostEffects::DrawSSAO(void)
 		dev->SetTexture(2, g_normalBufferTex);
 		dev->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
 		dev->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+		// INTZ on s0 is DEPTH, not a colour texture: sample it POINT only.
+		// Filtering a depth-stencil texel invents depths the buffer never held
+		// (silhouette-averaged values GetViewPos then linearizes into garbage
+		// occlusion) — the rule CopyDepthToPrev / PostFX_CopyDepthToTexture /
+		// the s5-s6 history taps in DrawSSAO_Overhaul already follow. The raw
+		// pin is safe because the pending rw TEXTUREFILTER was committed above.
+		dev->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_POINT);
+		dev->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
 		dev->SetSamplerState(1, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP);
 		dev->SetSamplerState(1, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
 		dev->SetSamplerState(2, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
@@ -811,6 +1090,36 @@ CPostEffects::DrawSSAO(void)
 		RwCameraBeginUpdate(Scene.camera);
 		camSwapped = false;
 
+		// ---- black-floor pass -------------------------------------------------
+		// g_ssaoFloorRaster = max(g_ssaoOutputRaster, SSAO_BLACK_FLOOR); see
+		// g_ssaoFloorRaster for why no blend equation can express that floor.
+		// Sits before the sampler restore / DepthHook_Restore so it borrows this
+		// pass's sampler snapshot and stays inside the suspend window; it samples
+		// only the AO buffer (never INTZ), so the ordering is about state
+		// lifetimes, not depth feedback.
+		RwRaster *floorRas = EnsureSSAOFloorRaster(w, h, camRas->depth);
+		if(floorRas){
+			RwCameraEndUpdate(Scene.camera);
+			RwCameraSetRaster(Scene.camera, floorRas);
+			// Arm the fault-path flag BEFORE BeginUpdate: a fault inside
+			// BeginUpdate would otherwise leave Scene.camera repointed at the
+			// floor raster with camSwapped=false, and the handler (gated on
+			// camSwapped) would never hand the scene raster back — the exact
+			// "camera stuck on an SSAO RT = black screen" failure the hoisted
+			// flags exist for.
+			camSwapped = true;
+			RwCameraBeginUpdate(Scene.camera);
+			camInUpdate = true;
+
+			floorOk = SSAOFloorDraw(&savedStage0Raster, &stage0Saved);
+
+			RwCameraEndUpdate(Scene.camera);
+			camInUpdate = false;
+			RwCameraSetRaster(Scene.camera, origRaster);
+			RwCameraBeginUpdate(Scene.camera);
+			camSwapped = false;
+		}
+
 		// Unbind SSAO samplers (s0-s2) so g_ssaoDepthTex doesn't leak past
 		// DepthHook_Restore and stay bound while INTZ is re-bound as DS
 		// (feedback lock risk), mirroring DrawSSAO_Overhaul/DrawHeightFog.
@@ -833,53 +1142,41 @@ CPostEffects::DrawSSAO(void)
 		DepthHook_Restore();
 
 		// Photoshop-multiply contract: final = scene x aoTexture, white =
-		// no occlusion. Fail-open: skip the composite entirely if the readback
+		// no occlusion. Fail-open on two independent conditions: the readback
 		// says the AO buffer is near-black (a black texture under
-		// ZERO/SRCCOLOR *replaces* the scene with black).
-		bool aoOk = ValidateSSAOOutput(aoRT);
+		// ZERO/SRCCOLOR *replaces* the scene with black), or the black-floor
+		// buffer does not exist (an unfloored AO buffer must never be
+		// multiplied in — SSAOFloorDraw already reported that reason once, so
+		// no second, less precise receipt is emitted for it here).
+		bool aoOk = ValidateSSAOOutput(aoRT, floorOk);
 		if(dbglog_throttle("ssao_comp"))
 			dbglog("[PostFX] DrawSSAO composite: raster=%p aoOk=%d",
 				g_ssaoOutputRaster, (int)aoOk);
 		if(aoRT){ aoRT->Release(); aoRT = NULL; }
 
-		if(aoOk){
-			// Set blend through the RW cache FIRST (VERTEXALPHAENABLE /
-			// SRCBLEND / DESTBLEND): RwIm2D re-emits cached states at draw
-			// time and would clobber raw-only D3D9 factors set before the
-			// draw — the old raw-only sequence is how the multiply could
-			// silently degrade to a plain replace (showing the AO texture
-			// alone / black). Mirror the factors with raw calls immediately
-			// before the draw as a second layer.
+		if(floorOk && aoOk){
 			RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
 			savedStage0Raster = NULL;
 			RwRenderStateGet(rwRENDERSTATETEXTURERASTER, (void*)&savedStage0Raster);
 			if(savedStage0Raster == (RwRaster*)0xFFFFFFFF)
 				savedStage0Raster = NULL;
 			stage0Saved = true;
-			RwRenderStateSet(rwRENDERSTATETEXTURERASTER, g_ssaoOutputRaster);
-			RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
-			RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDZERO);        // src factor dropped
-			RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDSRCCOLOR);   // dest x src = multiply
-			RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
-			RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-			RwD3D9SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ZERO);
-			RwD3D9SetRenderState(D3DRS_DESTBLEND, D3DBLEND_SRCCOLOR);
+			// Multiply by the FLOORED AO buffer (>= SSAO_BLACK_FLOOR on every
+			// texel) — never by g_ssaoOutputRaster raw; see g_ssaoFloorRaster.
+			RwRenderStateSet(rwRENDERSTATETEXTURERASTER, g_ssaoFloorRaster);
 
 			// White RT-sized quad — NOT colorfilterVerts (emissiveColor=0 would
 			// modulate the SSAO texture to black and zero the whole scene).
-			RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, s_ffQuad, 4, s_ffQuadIdx, 6);
-
-			// Restore blend defaults through the RW cache too (keep it coherent
-			// with the D3D9 state before ImmediateModeRenderStatesReStore)
-			RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
-			RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
-			RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
-			RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
-		}else if(dbglog_throttle("ssao_skipped"))
+			// The blend set -> draw -> restore sequence is a single guarded
+			// unit (DrawSSAOMultiplyComposite), so no exit from this block can
+			// leak the multiply factors.
+			DrawSSAOMultiplyComposite();
+		}else if(floorOk && dbglog_throttle("ssao_skipped"))
 			dbglog("[PostFX] DrawSSAO: multiply composite SKIPPED (AO buffer near-black — fail-open)");
 
-		// Undo the composite's stage-0 TEXTURERASTER bind (ReStore does not
-		// cover it): park-and-set back to the pre-composite raster + raw texture.
+		// Undo the stage-0 TEXTURERASTER parks of this pass's floor blit AND
+		// of the composite (ReStore covers neither): park-and-set back to the
+		// pre-pass raster + raw texture.
 		if(stage0Saved)
 			RestoreSSAOStage0Raster(savedStage0Raster);
 
@@ -977,8 +1274,9 @@ void DrawSSAO_Overhaul(void)
 	// MINFILTER and MAGFILTER are snapshotted and restored on normal + fault exits.
 	DWORD sampSaved[7][5];
 	bool sampSavedOk = false;
-	// Stage-0 raster captured before the multiply binds g_ssaoOutputRaster;
-	// ReStore does not cover TEXTURERASTER, so the pass must restore it itself.
+	// Stage-0 raster captured before the black-floor blit / the multiply bind
+	// (they both park this slot); ReStore does not cover TEXTURERASTER, so the
+	// pass must restore it itself.
 	RwRaster *savedStage0Raster = NULL;
 	bool stage0Saved = false;
 	// Hoisted for the __except path: the AO output surface (AddRef'd by
@@ -989,6 +1287,10 @@ void DrawSSAO_Overhaul(void)
 	RwRaster *origRaster = NULL;
 	bool camSwapped = false;	// camera currently points at an SSAO RT
 	bool camInUpdate = false;	// ...and is mid-BeginUpdate on it
+	// Black-floor pass outcome (set inside __try, read by the composite gate):
+	// false = no floor-clamped AO buffer exists this frame, so the multiply
+	// must not run at all (fail open to 1.0x the scene, never to black).
+	bool floorOk = false;
 
 	__try {
 		IDirect3DDevice9 *dev = d3d9device;
@@ -1082,6 +1384,15 @@ void DrawSSAO_Overhaul(void)
 		RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
 		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
 
+		// Commit every pending rw/RwD3D9 state above BEFORE the sampler work:
+		// the rw TEXTUREFILTER=LINEAR written on the previous line is still in
+		// RwD3D9's pending[] and its applied[]-gated flush runs pre-draw, so it
+		// would be re-emitted over the raw depth filter pins below. Flushing
+		// first also makes this snapshot capture the state the draw would
+		// actually have started from, which is what the end-of-pass raw restore
+		// has to put back to stay coherent with layer (2).
+		_rwD3D9RenderStateFlushCache();
+
 		// Snapshot the sampler fields BEFORE raw-overriding them (stages 0-6;
 		// the blur passes reuse stages 0/1, so one entry snapshot covers all).
 		for(int st = 0; st < 7; st++){
@@ -1105,6 +1416,16 @@ void DrawSSAO_Overhaul(void)
 
 		dev->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
 		dev->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+		// s0 carries INTZ DEPTH for this whole pass: POINT only, same rule the
+		// s5/s6 history taps below spell out (and the same one CopyDepthToPrev
+		// / PostFX_CopyDepthToTexture enforce for depth). A filtered INTZ tap
+		// invents depths the buffer never held across silhouettes, and
+		// GetViewPos linearizes those straight into garbage occlusion. The raw
+		// pin survives the draw because the pending rw TEXTUREFILTER was
+		// committed above — an un-flushed rw filter is re-emitted pre-draw and
+		// would silently put LINEAR back.
+		dev->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_POINT);
+		dev->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
 		dev->SetSamplerState(1, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP);
 		dev->SetSamplerState(1, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
 		dev->SetSamplerState(2, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
@@ -1181,13 +1502,26 @@ void DrawSSAO_Overhaul(void)
 			RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
 			RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
 
+			// Commit the pending rw TEXTUREFILTER above before the raw sampler
+			// pins (its applied[]-gated flush runs pre-draw and would otherwise
+			// re-emit LINEAR over the depth POINT pin below).
+			_rwD3D9RenderStateFlushCache();
+
 			// s0: source, s1: depth
 			RwD3D9SetTexture(g_ssaoQuarterTexRW[g_ssaoFrameIndex], 0);
 			dev->SetTexture(1, g_ssaoDepthTex);
 			dev->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
 			dev->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+			// s0 = quarter AO (colour) stays LINEAR; s1 = INTZ depth must be
+			// POINT (filtered depth invents depths the buffer never held —
+			// see pass 1). Both pinned explicitly so neither depends on which
+			// stages the rw TEXTUREFILTER happens to cover.
+			dev->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+			dev->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
 			dev->SetSamplerState(1, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
 			dev->SetSamplerState(1, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+			dev->SetSamplerState(1, D3DSAMP_MINFILTER, D3DTEXF_POINT);
+			dev->SetSamplerState(1, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
 
 			// c0: {blurRadius, depthThreshold, 0, 0}  (0 = horizontal pass)
 			float c0BlurH[4] = { config->ssaoBlurRadius, config->ssaoDepthThreshold, 0.0f, 0.0f };
@@ -1223,13 +1557,24 @@ void DrawSSAO_Overhaul(void)
 			RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
 			RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
 
+			// Commit the pending rw TEXTUREFILTER above before the raw sampler
+			// pins (its applied[]-gated flush runs pre-draw and would otherwise
+			// re-emit LINEAR over the depth POINT pin below).
+			_rwD3D9RenderStateFlushCache();
+
 			// s0: source (blur temp), s1: depth
 			RwD3D9SetTexture(g_ssaoBlurTempTexRW, 0);
 			dev->SetTexture(1, g_ssaoDepthTex);
 			dev->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
 			dev->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+			// s0 = quarter AO (colour) stays LINEAR; s1 = INTZ depth must be
+			// POINT (see pass 1) — both pinned explicitly.
+			dev->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+			dev->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
 			dev->SetSamplerState(1, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
 			dev->SetSamplerState(1, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+			dev->SetSamplerState(1, D3DSAMP_MINFILTER, D3DTEXF_POINT);
+			dev->SetSamplerState(1, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
 
 			// c0: {blurRadius, depthThreshold, 1, 0}  (1 = vertical pass flag)
 			float c0BlurV[4] = { config->ssaoBlurRadius, config->ssaoDepthThreshold, 1.0f, 0.0f };
@@ -1277,13 +1622,24 @@ void DrawSSAO_Overhaul(void)
 		RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
 		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
 
+		// Commit the pending rw TEXTUREFILTER above before the raw sampler
+		// pins (its applied[]-gated flush runs pre-draw and would otherwise
+		// re-emit LINEAR over the depth POINT pin below).
+		_rwD3D9RenderStateFlushCache();
+
 		// s0: final V-pass result (quarter frame), s1: depth
 		RwD3D9SetTexture(g_ssaoQuarterTexRW[g_ssaoFrameIndex], 0);
 		dev->SetTexture(1, g_ssaoDepthTex);
 		dev->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
 		dev->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+		// s0 = quarter AO (colour) stays LINEAR; s1 = INTZ depth must be POINT
+		// (see pass 1) — both pinned explicitly.
+		dev->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+		dev->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
 		dev->SetSamplerState(1, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
 		dev->SetSamplerState(1, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+		dev->SetSamplerState(1, D3DSAMP_MINFILTER, D3DTEXF_POINT);
+		dev->SetSamplerState(1, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
 
 		// c0: {depthThreshold, 0, 0, 0}
 		float c0Up[4] = { config->ssaoDepthThreshold, 0.0f, 0.0f, 0.0f };
@@ -1308,6 +1664,39 @@ void DrawSSAO_Overhaul(void)
 		RwCameraSetRaster(Scene.camera, origRaster);
 		RwCameraBeginUpdate(Scene.camera);
 		camSwapped = false;
+
+		// ---- black-floor pass -------------------------------------------------
+		// g_ssaoFloorRaster = max(g_ssaoOutputRaster, SSAO_BLACK_FLOOR); see
+		// g_ssaoFloorRaster for why no blend equation can express that floor.
+		// Sits before the sampler restore / DepthHook_Restore so it borrows this
+		// pass's sampler snapshot and stays inside the suspend window; it samples
+		// only the AO buffer (never INTZ), so the ordering is about state
+		// lifetimes, not depth feedback. Runs BEFORE ValidateSSAOOutput's
+		// readback target is touched — it writes the floor raster, and aoRT is
+		// the pre-floor AO surface, which is what px in the black-guard receipt
+		// has to count.
+		RwRaster *floorRas = EnsureSSAOFloorRaster(w, h, camRas->depth);
+		if(floorRas){
+			RwCameraEndUpdate(Scene.camera);
+			RwCameraSetRaster(Scene.camera, floorRas);
+			// Arm the fault-path flag BEFORE BeginUpdate: a fault inside
+			// BeginUpdate would otherwise leave Scene.camera repointed at the
+			// floor raster with camSwapped=false, and the handler (gated on
+			// camSwapped) would never hand the scene raster back — the exact
+			// "camera stuck on an SSAO RT = black screen" failure the hoisted
+			// flags exist for.
+			camSwapped = true;
+			RwCameraBeginUpdate(Scene.camera);
+			camInUpdate = true;
+
+			floorOk = SSAOFloorDraw(&savedStage0Raster, &stage0Saved);
+
+			RwCameraEndUpdate(Scene.camera);
+			camInUpdate = false;
+			RwCameraSetRaster(Scene.camera, origRaster);
+			RwCameraBeginUpdate(Scene.camera);
+			camSwapped = false;
+		}
 
 		// Wave-2: unbind all Pass 1 samplers (s0-s6) so the depth texture and
 		// history textures don't leak past DepthHook_Restore (feedback lock risk).
@@ -1338,49 +1727,40 @@ void DrawSSAO_Overhaul(void)
 		// =====================================================================
 		// Composite: multiply blend SSAO onto scene (Photoshop multiply:
 		// final = scene x ao, white = no occlusion). Fail-open on a
-		// near-black AO readback — see ValidateSSAOOutput.
+		// near-black AO readback — see ValidateSSAOOutput — and on a missing
+		// black-floor buffer (an unfloored AO buffer must never be multiplied
+		// in; SSAOFloorDraw already reported that reason once, so no second,
+		// less precise receipt is emitted for it here).
 		// =====================================================================
-		bool aoOk = ValidateSSAOOutput(aoRT);
+		bool aoOk = ValidateSSAOOutput(aoRT, floorOk);
 		if(dbglog_throttle("ssao_ov_comp"))
 			dbglog("[PostFX] DrawSSAO_Overhaul composite: raster=%p aoOk=%d",
 				g_ssaoOutputRaster, (int)aoOk);
 		if(aoRT){ aoRT->Release(); aoRT = NULL; }
 
-		if(aoOk){
-			// Blend factors through the RW cache FIRST (RwIm2D re-emits cached
-			// states at draw time and would clobber raw-only D3D9 factors),
-			// then mirror them raw immediately before the draw — same contract
-			// as DrawSSAO's composite.
+		if(floorOk && aoOk){
 			RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
 			savedStage0Raster = NULL;
 			RwRenderStateGet(rwRENDERSTATETEXTURERASTER, (void*)&savedStage0Raster);
 			if(savedStage0Raster == (RwRaster*)0xFFFFFFFF)
 				savedStage0Raster = NULL;
 			stage0Saved = true;
-			RwRenderStateSet(rwRENDERSTATETEXTURERASTER, g_ssaoOutputRaster);
-			RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
-			RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDZERO);        // src factor dropped
-			RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDSRCCOLOR);   // dest x src = multiply
-			RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
-			RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-			RwD3D9SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ZERO);
-			RwD3D9SetRenderState(D3DRS_DESTBLEND, D3DBLEND_SRCCOLOR);
+			// Multiply by the FLOORED AO buffer (>= SSAO_BLACK_FLOOR on every
+			// texel) — never by g_ssaoOutputRaster raw; see g_ssaoFloorRaster.
+			RwRenderStateSet(rwRENDERSTATETEXTURERASTER, g_ssaoFloorRaster);
 
 			// White RT-sized quad — NOT colorfilterVerts (their emissiveColor is 0
 			// under COLORFILTER_MODERN, which modulates SSAO to black).
-			RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, s_ffQuad, 4, s_ffQuadIdx, 6);
-
-			// Restore blend defaults through the RW cache (keep it coherent
-			// with the D3D9 state before ImmediateModeRenderStatesReStore)
-			RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
-			RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
-			RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
-			RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
-		}else if(dbglog_throttle("ssao_ov_skip"))
+			// The blend set -> draw -> restore sequence is a single guarded
+			// unit (DrawSSAOMultiplyComposite), so no exit from this block can
+			// leak the multiply factors.
+			DrawSSAOMultiplyComposite();
+		}else if(floorOk && dbglog_throttle("ssao_ov_skip"))
 			dbglog("[PostFX] DrawSSAO_Overhaul: multiply composite SKIPPED (AO buffer near-black — fail-open)");
 
-		// Undo the composite's stage-0 TEXTURERASTER bind (ReStore does not
-		// cover it): park-and-set back to the pre-composite raster + raw texture.
+		// Undo the stage-0 TEXTURERASTER parks of this pass's floor blit AND
+		// of the composite (ReStore covers neither): park-and-set back to the
+		// pre-pass raster + raw texture.
 		if(stage0Saved)
 			RestoreSSAOStage0Raster(savedStage0Raster);
 

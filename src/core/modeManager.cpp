@@ -711,22 +711,19 @@ static const ModeValue kValuesModern[] = {
 	MV_I(grainFilter, 1),
 	MV_I(infraredVision, 0),
 	MV_I(nightVision, 0),
-	MV_I(ssaoEnable, 1),
-	MV_F(ssaoRadius, 1.0f),
-	MV_F(ssaoPower, 2.0f),
-	MV_F(ssaoKernelSize, 16.0f),
-	MV_I(ssaoSampleCount, 16),
-	// SSAO quality tier (m2200): own the overhaul-path knobs too — a user INI
-	// with temporal/blur off (the m1846 debug-isolation state) would otherwise
-	// drop Modern onto the full-res no-blur fallback (the hard AO silhouette).
-	// 16 samples + quarter-res temporal + 2 bilateral blur passes = the
-	// recommended tier a GTX 1070 holds at 1080p (no supersampling rows).
-	MV_I(ssaoTemporalEnable, 1),
-	MV_F(ssaoTemporalBlend, 0.1f),
-	MV_I(ssaoBlurPasses, 2),
-	MV_F(ssaoBlurRadius, 3.0f),
-	MV_F(ssaoDepthThreshold, 0.01f),
-	MV_I(smaaEnable, 1),
+	// SSAO + SMAA + the SSAO tier rows are deliberately NOT owned (2026-11-17
+	// engage regression): those two passes are the ones the MODE_XBOX hard
+	// force below blacklists because they cause black-screen redraws over
+	// the frame, and depthHookEnable=1 (owned below) had just put SSAO on
+	// the overhaul/INTZ depth path for the first time. Owning ssaoEnable=1 +
+	// smaaEnable=1 + the full temporal/blur tier here forced exactly those
+	// passes onto an INI whose ssaoEnable=smaaEnable=0 — post-engage log:
+	// [Mode] engage Modern ... followed by SSAO=1 smaa=1 normalBuf=1 and
+	// [SSAO] running ... path=overhaul.
+	// Doctrine: a mode may set a feature's look, not enable passes documented
+	// to break rendering on this build. Modern therefore INHERITS the user's
+	// ssaoEnable / smaaEnable / ssao* tier / normalBufferEnable rows (the
+	// per-slot base is the post-INI state, so disengage is unaffected).
 	MV_I(motionBlurEnable, 1),
 	MV_F(motionBlurStrength, 0.4f),
 	MV_F(motionBlurRadial, 0.2f),
@@ -788,7 +785,10 @@ static const ModeValue kValuesModern[] = {
 	MV_F(heightFogTimecycleScale, 1.0f),
 	MV_F(caIntensity, 0.10f),	// subtle chromatic aberration
 	MV_F(vignetteIntensity, 0.15f),	// subtle finishing vignette
-	MV_I(fxaaEnable, 0),		// SMAA owns the AA slot
+	// AA slot: Modern owns no AA pass any more (smaaEnable is inherited —
+	// see the SSAO/SMAA note above), so FXAA is pinned off and the user's
+	// INI decides both halves of the slot.
+	MV_I(fxaaEnable, 0),
 
 	// Water — V style surface at Ultra, owned so a vintage/PS2 snapshot cannot
 	// leave the base water draw (or a lower depth-copy tier) in place.
@@ -861,7 +861,15 @@ static const ModeValue kValuesModern[] = {
 	// FPS / perf
 	MV_I(forwardPlusEnable, 1),
 	MV_I(pipeChainEnable, 0),
-	MV_I(normalBufferEnable, 1),
+	// normalBufferEnable NOT owned (2026-11-17): its only producer
+	// (DrawNormalBufferToTexture, postfx.cpp:1987) exists to feed the SSAO
+	// overhaul path Modern no longer turns on, and its other consumer — the
+	// optional PBR screen-space normal blend — is the documented GGX
+	// white-patch failure when the buffer is stale/garbage
+	// (buildingPipe.cpp:3186-3190). Inherit the INI value (=0 here).
+	// velocityBufferEnable stays owned: motionBlurEnable=1 above is its live
+	// consumer (postfx.cpp:2059 prevDepthWanted pairs velocity with it; the
+	// Mobile profile pins it OFF only because motionBlur is off there).
 	MV_I(velocityBufferEnable, 1),
 	MV_I(depthHookEnable, 1),
 	MV_I(grassInstancing, 0),
@@ -1671,6 +1679,13 @@ ApplyMode(ModeId id)
 		config->smaaEnable = 0;
 		config->ssaoEnable = 0;
 	}
+	// Re-check (2026-11-17): should this blacklist widen beyond Xbox? No —
+	// the fix for the Modern engage regression was to STOP OWNING those rows
+	// (kValuesModern now inherits ssaoEnable/smaaEnable from the user INI),
+	// not to widen a hard force. A profile that does not own a field can
+	// never enable the pass, so a mode-wide post-apply clamp would only
+	// fight the profiles that do own them (GTAIV). This force stays the
+	// Xbox-specific belt-and-braces for its own unknown re-enabler.
 	logModeReceipt("engage", ModeManager_GetAlias(id),
 		(incoming && incoming->values) ? incoming->numValues : 0);
 	dbglog("[Mode] apply %s pipes=%d/%d/%d cf=%d iv=%d smaa=%d",

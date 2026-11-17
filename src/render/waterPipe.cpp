@@ -2537,16 +2537,27 @@ void waterPipe_setRenderState(void)
     // waves on TEXCOORD6; Water_Parallax's WaterSwellNormal scales it by
     // c19.x and SUMS it with the per-pixel detail normal, so the displaced
     // geometry shades from the direction it actually faces (sun glint rides
-    // the swell). 2.0 = the raw analytic slope (<= ~0.10 gradient) doubled so
-    // the tight V-core specular lobe tracks the swell at SA viewing
-    // distances; the in-shader bound is [0,4]. Register discipline: c0-c18
-    // are taken (see the header), c19+ is the documented free band — no
-    // c14/c15 slot was borrowed, so the all-zero WaterBodyContract mag gate
-    // is untouched. c19 all-zero (stale pipe / older binary) -> the swell
-    // normal term is exactly 0 -> pre-W2b output bit-identical. Uploaded
-    // every draw like c14-c18 so a style/PS switch never inherits stale
-    // values.
-    float swellNrm[4] = { 2.0f, 0.0f, 0.0f, 0.0f };
+    // the swell). 1.0 = the raw analytic slope EXACTLY: Water_VS's
+    // swellSlope already IS the full derivative of the displacement that
+    // moves the geometry (sin(f)*A*k*dir with the SAME kA/kB phases,
+    // directions and swAmp*ampMod gate — Water_VS.hlsl:227-239), so the
+    // scale factor is the identity and the shading normal matches the moved
+    // surface term for term. The shipped 2.0 DOUBLED that derivative — a
+    // 2x-steeper normal than the geometry — and water.dat's quads are
+    // independent (4 verts / 6 indices each; the live flush logs 228v/342i
+    // = 57 of them, 80-600 m across), so the 45 m / 23 m waves alias to
+    // unrelated corner values: the doubled per-vertex slope stepped the
+    // normal triangle-to-triangle and the grazing-angle mirror plus the
+    // tight specPow lobe read those steps as diamond/pyramid facets with
+    // white specular triangles. 1.0 halves that contrast while keeping the
+    // glint on the swell; the in-shader bound is still [0,4]. Register
+    // discipline: c0-c18 are taken (see the header), c19+ is the documented
+    // free band — no c14/c15 slot was borrowed, so the all-zero
+    // WaterBodyContract mag gate is untouched. c19 all-zero (stale pipe /
+    // older binary) -> the swell normal term is exactly 0 -> pre-W2b output
+    // bit-identical. Uploaded every draw like c14-c18 so a style/PS switch
+    // never inherits stale values.
+    float swellNrm[4] = { 1.0f, 0.0f, 0.0f, 0.0f };
     RwD3D9SetPixelShaderConstant(19, swellNrm, 1);
 
     // ---- Z state: pin the draw-order contract (all three layers) ----

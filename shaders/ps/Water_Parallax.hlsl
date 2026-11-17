@@ -287,6 +287,34 @@ float WaterDepthlessCrest(void)
     return 1.0 - saturate(clipPlanes.z);
 }
 
+// Vanilla vertex-alpha FLOOD FADE (the "over-land slab" contract).
+// SA's water buffers carry a per-vertex alpha that the game's fixed-function
+// path applies to the WHOLE water output through SRCALPHA/INVSRCALPHA. The
+// important case is the 13/255 out-of-poly fade water.dat's quads that reach
+// across the shoreline onto dry land carry: vanilla turns those slabs almost
+// invisible with it (water.cpp WaterDirectFlush_Draw documents the same
+// 13/255 fade). The tier >= 2 opaque pin in waterPipe_setRenderState turns
+// ALPHA blending OFF and composites in-shader, and only the TRANSMISSION lobe
+// kept the fade (WaterBodyOpacity multiplies by vtxA, and every legacyOp
+// path multiplies by S.vtxA) — the REFLECTION lobe (F) and the additive
+// HIGHLIGHTS (foam / sun spec / glitter / pierce / caustics) painted at full
+// strength over a slab that should be 5% opaque. That is the land-missing /
+// white-triangles / diamond-tessellation-over-the-tarmac family: the unfaded
+// reflection replaces the terrain, the unfaded foam/spec reads white, and the
+// per-vertex swell on water.dat's coarse independent quads (4 verts/quad,
+// 80-600 m) modulates both triangle-to-triangle. Fading F and highlights by
+// the SAME value the hardware blend used restores the vanilla contract for
+// both composites (WaterSplitOpaque AND WaterSplitBlend, so the tier-parity
+// pairing those two document stays intact).
+// Escape hatch: WaterSetup already remaps an exact 0 alpha to 1.0
+// ("no fade"), so a buffer without vertex alpha reads 1.0 here, and fully
+// opaque water (vtxA = 1) is a strict no-op — every term is multiplied by
+// exactly 1.0, which is bit-identical. No new constant, register or sampler.
+float WaterFloodFade(float vtxA)
+{
+    return saturate(vtxA);
+}
+
 // ============================================================================
 // Timecycle lighting gates (defect 1: night water glowed white)
 // ============================================================================
@@ -1206,6 +1234,10 @@ float4 WaterXbox(VS_OUTPUT IN)
     // pools -> identity); c18.z = 0 -> interiorW = 0 -> pre-M8 bit-identical.
     waterCol = WaterApplyInterior(waterCol, thickness, NdotV, bodyT, F,
                                   WaterInteriorWeight(IN));
+    // Vanilla vertex-alpha flood fade for the lobes the tier>=2 opaque pin
+    // stopped blending through hardware alpha — see WaterFloodFade. 1.0 for
+    // fully-opaque / alpha-less water -> strict no-op (bit-identical).
+    float floodFade = WaterFloodFade(S.vtxA);
 
     // Legacy composite (INI waterFresnelSplit = 0): the pre-split
     // lerp(scene, surf, bodyOpacity) form, kept as a per-user rollback.
@@ -1233,14 +1265,16 @@ float4 WaterXbox(VS_OUTPUT IN)
         // Reflection AND refraction in the same pixel: F of the env, the rest
         // split between the water body and the refracted scene behind it.
         return float4(saturate(WaterSplitOpaque(behind, skyReflect, waterCol,
-                                                 F, bodyT, highlights)), 1.0);
+                                                 F * floodFade, bodyT,
+                                                 highlights * floodFade)), 1.0);
     }
     // Tier 0/1: no scene/depth copies — hardware SRCALPHA blend approximates
     // the same split against the framebuffer (reflection still live, the
     // scene behind shows through the alpha instead of being fetched).
     if(split < 0.5)
         return float4(saturate(legacySurf), legacyOp);
-    return WaterSplitBlend(skyReflect, waterCol, F, bodyT, highlights);
+    return WaterSplitBlend(skyReflect, waterCol, F * floodFade, bodyT,
+                           highlights * floodFade);
 }
 
 // ============================================================================
@@ -1420,6 +1454,10 @@ float4 WaterIV(VS_OUTPUT IN)
     // pools -> identity); c18.z = 0 -> interiorW = 0 -> pre-M8 bit-identical.
     waterCol = WaterApplyInterior(waterCol, thickness, NdotV, bodyT, F,
                                   WaterInteriorWeight(IN));
+    // Vanilla vertex-alpha flood fade for the lobes the tier>=2 opaque pin
+    // stopped blending through hardware alpha — see WaterFloodFade. 1.0 for
+    // fully-opaque / alpha-less water -> strict no-op (bit-identical).
+    float floodFade = WaterFloodFade(S.vtxA);
 
     // ---- G1 screen-space reflection (IV core): blend the flipped scene
     //      capture over the analytic sky tint by F before any composite
@@ -1455,11 +1493,13 @@ float4 WaterIV(VS_OUTPUT IN)
         if(split < 0.5)
             return float4(saturate(lerp(behind, legacySurf, legacyOp)), 1.0);
         return float4(saturate(WaterSplitOpaque(behind, skyReflect, waterCol,
-                                                 F, bodyT, highlights)), 1.0);
+                                                 F * floodFade, bodyT,
+                                                 highlights * floodFade)), 1.0);
     }
     if(split < 0.5)
         return float4(saturate(legacySurf), legacyOp);
-    return WaterSplitBlend(skyReflect, waterCol, F, bodyT, highlights);
+    return WaterSplitBlend(skyReflect, waterCol, F * floodFade, bodyT,
+                           highlights * floodFade);
 }
 
 // ============================================================================
@@ -1699,6 +1739,10 @@ float4 WaterV(VS_OUTPUT IN)
     // pools -> identity); c18.z = 0 -> interiorW = 0 -> pre-M8 bit-identical.
     waterCol = WaterApplyInterior(waterCol, thickness, NdotV, bodyT, F,
                                   WaterInteriorWeight(IN));
+    // Vanilla vertex-alpha flood fade for the lobes the tier>=2 opaque pin
+    // stopped blending through hardware alpha — see WaterFloodFade. 1.0 for
+    // fully-opaque / alpha-less water -> strict no-op (bit-identical).
+    float floodFade = WaterFloodFade(S.vtxA);
 
     // ---- G1 screen-space reflection (V core): the flipped scene capture is
     //      sampled along V's OWN damped anti-chrome normal (Nrefl — the
@@ -1754,12 +1798,14 @@ float4 WaterV(VS_OUTPUT IN)
             return float4(saturate(lerp(refr, surfV, junction)), 1.0);
         }
         return float4(saturate(WaterSplitOpaque(refr, skyReflect, baseCol,
-                                                 F, bodyT, highlights)), 1.0);
+                                                 F * floodFade, bodyT,
+                                                 highlights * floodFade)), 1.0);
     }
 
     if(split < 0.5)
         return float4(saturate(legacySurf), legacyOp);
-    return WaterSplitBlend(skyReflect, waterCol, F, bodyT, highlights);
+    return WaterSplitBlend(skyReflect, waterCol, F * floodFade, bodyT,
+                           highlights * floodFade);
 }
 
 // ---- Entry points (one CSO per style, multi_entry compilation) ----

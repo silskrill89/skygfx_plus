@@ -1110,6 +1110,73 @@ flushBatchIdentity(void)
 	return id;
 }
 
+// ---- Screen-copy discrimination (white-quad fix, 2026-11-17) -------------
+// The unknown-producer white branch of PostFxFlush_701FE9_hook used to fire
+// on ANY blend-0 batch whose stage-0 raster was not corona-family -- including
+// the postfx writer's own SCREEN BLIT: family=0 with the FRONT BUFFER bound at
+// stage 0 (field log: `[texflush] white family=0 ras=075D0A38 nverts=720
+// nidx=1080`, 46x per run after a mode engage; ras=075D0A38 = pRasterFrontBuffer,
+// the 2048x2048 pRasFB of the [PostFX-REPORT] receipt). That batch samples the
+// FRAMEBUFFER ITSELF, so its blend-0 output is an opaque screen copy -- never
+// the black slab of the black-quad class (a screen raster cannot shade to
+// black) -- and the white bind + ONE/ONE shield painted it WHITE: giant white
+// quads, plus a per-draw [SpriteDepthFix] as the close healed the blit's
+// depth-off entry state. Such batches now take the blend1 skip (left alone,
+// zero state touched; receipt below).
+// The genuine black-quad case is UNAFFECTED: a glow raster is never the front/
+// camera raster, so family!=0 keeps its shield and family=0 + glow/unknown
+// raster keeps the white+shield path exactly as-is.
+// TRUE when ras IS the front buffer or the camera raster, through the named
+// layer only (CPostEffects::pRasterFrontBuffer = pRasFB; Scene.camera's raster
+// = camRas -- same read postfx.cpp:414 uses). No raw address sites.
+// Verdict is L1-only, the single-source discipline flushBatchIdentity uses:
+// ORing the device layer in is the documented font false-positive of
+// 2026-11-01. sameRasterFamily also matches a parent/sub-raster bind.
+static bool
+isFrontOrCameraRaster(RwRaster *ras)
+{
+	if(!ras)
+		return false;
+	RwRaster *fb = CPostEffects::pRasterFrontBuffer;
+	if(fb && sameRasterFamily(ras, fb))
+		return true;
+	RwRaster *camRas = Scene.camera ? RwCameraGetRaster(Scene.camera) : NULL;
+	if(camRas && sameRasterFamily(ras, camRas))
+		return true;
+	return false;
+}
+
+// ---- Post-draw stage-0 restore for the white-shield bind ----------------
+// The unknown-producer white path in PostFxFlush_701FE9_hook rebinds stage 0
+// through all three layers (L1 park/set, L2 RwD3D9SetTexture, L3 raw device
+// pin) for its own rasterisation. spriteFlushShieldClose only replays RENDER
+// STATES -- it has no texture field -- so without this the white bind leaked
+// into every later draw (the next consumer that cache-gates its bind inherits
+// gpWhiteTexture = white silhouettes). Same park-and-set L1 + raw L3 sequence
+// as main.cpp restoreStage0Tex (CloudShield R5, 2026-11-09), whose comment
+// documents why the RwTexture layer cannot be replayed here: only the raster
+// (L1) and the captured device texture (L3, the identity GetTexture AddRef
+// held alive by the caller) are available. Park on a guaranteed-different
+// raster first so the set is always a transition, never a cache-hit no-op.
+// Silent by design: the ONE new receipt for this fix is the [texflush]
+// skip-screenblit line in the hook.
+static void
+postfxRestoreStage0Tex(RwRaster *savedTexRaster, IDirect3DBaseTexture9 *savedDevTex0)
+{
+	if(!d3d9device)
+		return;
+	RwRaster *whiteRas = (gpWhiteTexture && gpWhiteTexture->raster)
+		? gpWhiteTexture->raster : NULL;
+	RwRaster *texPark = (savedTexRaster == whiteRas) ? (RwRaster*)NULL : whiteRas;
+	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)texPark);
+	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)savedTexRaster);
+	// Raw L3 pin only with a captured texture: a failed identity Get leaves
+	// the pointer NULL and SetTexture(0, NULL) would clear a valid bind we
+	// cannot see. The L1 set above still re-anchors the rw cache either way.
+	if(savedDevTex0)
+		d3d9device->SetTexture(0, savedDevTex0);
+}
+
 // ---- Wave-6b: the TWO unshielded inline TempBuffer flush sites ----------
 // Test-7 (2026-11-01 18:49, Xbox mode C-nibble 0x2): giant black wedge with
 // hard diagonals, near-total world blackout, while the 0x70CF20 flush shield
@@ -1167,6 +1234,16 @@ PostFxFlush_701FE9_hook(int primType, void *verts, int nverts, void *indices, in
 	}
 	const char *forcePath = NULL;
 	bool forced = false;
+	// White-path stage-0 restore state (postfxRestoreStage0Tex). Armed ONLY by
+	// the unknown-producer white bind below: it captures the pre-bind L1 raster
+	// and holds its OWN AddRef on the identity GetTexture pointer (so the
+	// receipt-time Release of id.devTex never frees the texture the __finally
+	// restore still needs, and [postfx_flush_id] keeps printing the real
+	// s0DevTex value), then restores stage-0 right after the draw. PODs --
+	// SEH-safe inside __try/__finally.
+	bool stage0WhiteBound = false;
+	RwRaster *savedStage0Ras = NULL;
+	IDirect3DBaseTexture9 *savedStage0DevTex = NULL;
 	if(batch > 0 && d3d9device && (!config || config->spriteFlushShield)){
 		// Producer discrimination (fail-open gate): the shared TempBuffer is
 		// ALSO the game's 2D text/HUD/font lane. Only a corona/pointlight/
@@ -1206,7 +1283,20 @@ PostFxFlush_701FE9_hook(int primType, void *verts, int nverts, void *indices, in
 			DWORD devBlend = 1;	// pre-seed blend-ON (fail open = no force)
 			if(d3d9device)
 				d3d9device->GetRenderState(D3DRS_ALPHABLENDENABLE, &devBlend);
-			if(devBlend == 0){
+			// ---- SCREEN-COPY GATE (white-quad fix, 2026-11-17) ----
+			// family=0 with the front/camera raster bound at stage 0 is a
+			// screen blit, not a glow sprite (see isFrontOrCameraRaster): it
+			// must NOT be white-shielded. Take the same path the blend1 lane
+			// takes -- leave the draw completely alone (no white bind, no
+			// capture/force/close, so no [SpriteDepthFix] churn either) --
+			// and name the decision in one throttled receipt. The blend-0
+			// black-quad repair below is untouched for every other raster.
+			if(isFrontOrCameraRaster(id.ras)){
+				if(dbglog_once("texflush_screenblit_first") ||
+				   dbglog_throttle("texflush_screenblit"))
+					dbglog("[texflush] skip-screenblit family=0 ras=%p nverts=%d",
+					       (void*)id.ras, nverts);
+			}else if(devBlend == 0){
 				// (a) bind neutral white through all three layers (park-and-
 				// set L1, L2 driver, raw L3) so the batch samples a defined
 				// white instead of the leaked black raster, then run the SAME
@@ -1242,6 +1332,19 @@ PostFxFlush_701FE9_hook(int primType, void *verts, int nverts, void *indices, in
 				forcePath = "PostFxFlush_701FE9/postfx-white";
 				forced = true;
 				texAction = "white";
+				// Arm the post-draw stage-0 restore: the 3L white bind above
+				// is NOT covered by spriteFlushShieldClose (states only).
+				// id.ras is the pre-bind L1 raster (flushBatchIdentity read it
+				// before any shield write). savedStage0DevTex takes its OWN
+				// AddRef so the identity ref stays on id.devTex's normal
+				// Release line below ([postfx_flush_id] keeps printing the
+				// real s0DevTex); the __finally restore Releases this ref.
+				savedStage0Ras = id.ras;
+				if(id.devTex){
+					id.devTex->AddRef();
+					savedStage0DevTex = id.devTex;
+				}
+				stage0WhiteBound = true;
 			}
 		}
 		// Per-site receipt: the batch's stage-0 identity + whether the force
@@ -1280,6 +1383,15 @@ PostFxFlush_701FE9_hook(int primType, void *verts, int nverts, void *indices, in
 	}__finally{
 		if(forced)
 			spriteFlushShieldClose(forcePath);
+		// White-path stage-0 handback (runs on the faulted path too, like the
+		// close above): the white bind lasted exactly this draw's raster, then
+		// the pre-bind raster/device texture go back so the leak class the
+		// 3L white bind would otherwise create never reaches the next draw.
+		if(stage0WhiteBound){
+			postfxRestoreStage0Tex(savedStage0Ras, savedStage0DevTex);
+			if(savedStage0DevTex)
+				savedStage0DevTex->Release();	// this path's own AddRef
+		}
 	}
 }
 
