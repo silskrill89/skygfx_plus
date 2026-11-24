@@ -333,28 +333,50 @@ WakeDirectFlush2_hook(RwPrimitiveType primType, RwImVertexIndex *indices, RwInt3
 	return WakeDirectFlush_Draw(2, primType, indices, numIndices);
 }
 
-// [S1 double-render kill-switch] This junior-era temp-buffer re-render draws
-// the game's water TempBuffer through the water pipe shader at four
-// intercepted call sites, while waterPipe's M-series (WaterSwell::Height law,
-// src/extras/water_swell.h) is the intended single water renderer. Running
-// both produces the elevated pale-blue sheet that eats the mid-ground house
-// band (the "hole" symptom). waterTempBufferHook (default 0) disables this
-// re-render so only the vanilla RenderAndEmptyRenderBuffer draw + the M-series
-// remain; 1 restores the pipe path. Parity gap: the ripple/wake presentation
-// this hook carried is not re-routed to the M-series yet (pending the
+// [S1 / W2e mixed-path gate] This temp-buffer re-render draws the game's
+// water TempBuffer through the water pipe shader at four intercepted call
+// sites. The original S1 kill-switch (waterTempBufferHook, default 0) was
+// added because running this re-render ALONGSIDE waterPipe's other water
+// renderer produced the elevated pale-blue sheet that eats the mid-ground
+// house band (the "hole" symptom). W2e (2026-11-24) re-verified the
+// double-draw premise against the CURRENT code and it is FALSE — every
+// TempBuffer renderer empties the buffer and suppresses the next one:
+//   * this hook's pipe path empties TempBuffer after the draw (see the
+//     TempBufferVerticesStored = 0 below) and never calls the original
+//     RenderAndEmptyRenderBuffer on success;
+//   * waterPipe_directFlushRoute empties on success (waterPipe.cpp, the
+//     draw-AND-empty in its success block) and the W1 caller skips the
+//     original Im3D draw when it returns TRUE;
+//   * every fall-through path hands the buffer to the ONE vanilla draw,
+//     which empties it (vanilla RenderAndEmptyRenderBuffer contract).
+// So each filled buffer has exactly one renderer per fill. What S1=0 DID
+// cause under the old gate: this body path fell through to vanilla FFP
+// while the W1 direct flushes kept drawing through the pipe — MIXED
+// pipe/FFP water in one frame (the ×28/session "[water] gate failed
+// (enable=1 ...)" receipts). W2e drops the kill-switch from the gate: the
+// body draw routes through the pipe whenever the pipe can run (INI enable +
+// style shader + non-empty buffer), so a frame is uniformly pipe
+// (waterParallaxEnable=1) or uniformly FFP (=0). The INI key and the config
+// default are untouched (config.cpp still owns the symbol); the two S1
+// receipts below stay byte-stable and now only fire when the pipe genuinely
+// cannot run. Parity gap (unchanged): the ripple/wake presentation this
+// hook carried is not re-routed to the M-series yet (pending the
 // waterPipe.cpp lane).
 bool g_waterTempBufferHook = false;	// shared with config.cpp (local extern)
 void (*CWaterLevel__RenderAndEmptyRenderBuffer)(void);
 void
 CWaterLevel__RenderAndEmptyRenderBuffer_hook(void)
 {
-	// Gate: only take over the water draw when (a) the S1 kill-switch is ON,
-	// (b) the water pipe can run (INI-enabled AND style-selected shader
-	// compiled). Otherwise fall through to the game's original draw — stale
-	// PBR VS/PS left bound from a previous pipe was producing garbage water.
+	// Gate (W2e): only take over the water draw when the water pipe can run
+	// — INI-enabled AND style-selected shader compiled AND a non-empty
+	// buffer. g_waterTempBufferHook no longer participates in this decision
+	// (see the block comment above: the double-draw premise is disproven by
+	// the empty-on-success contract, and keeping the switch here was what
+	// mixed FFP body water with pipe direct-flush water in one frame).
+	// Otherwise fall through to the game's original draw — stale PBR VS/PS
+	// left bound from a previous pipe was producing garbage water.
 	void *waterPS = waterPipe_pixelShader();
-	bool canUseWaterPipe = g_waterTempBufferHook &&
-	                       TempBufferVerticesStored != 0 &&
+	bool canUseWaterPipe = TempBufferVerticesStored != 0 &&
 	                       config->waterParallaxEnable &&
 	                       waterPS && Water_VS;
 	if(!canUseWaterPipe){
@@ -404,6 +426,12 @@ CWaterLevel__RenderAndEmptyRenderBuffer_hook(void)
 	waterPipe_setRenderState();
 
 	if(g_waterParallaxActive){
+		// W2e one-shot proof receipt (ADDITIVE, new key): the temp-buffer
+		// body draw ran through the pipe under the live INI. Fires once per
+		// session; log-only, no render path reads it.
+		if(dbglog_once("water_s1_routed"))
+			dbglog("[water] temp-buffer body routed through the pipe (waterTempBufferHook=%d) -> single renderer: buffer emptied here, original suppressed",
+			       g_waterTempBufferHook ? 1 : 0);
 		// ---- pin the raw draw stage, immediately before the flush ----
 		// (a) Force a NULL transition through BOTH layers first. The RW
 		// setter is value-compare gated against 0x8E2448/0x8E244C, so a

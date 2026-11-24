@@ -67,8 +67,14 @@
 //   2 = + refraction/scene copy + depth copy sampling + foam + shore blend
 //   3 = + sun pierce + extra fine normal layer x3.7 + wide 5-tap shore depth
 // The depth copy (PostFX_CopyDepthToTexture) only runs on the C++ side when
-// tier >= 2; when it is unavailable the shader falls back to a distance
-// driven column estimate so the ramp stays monotonic and artifact-free.
+// tier >= 2; when it is unavailable (depthHookEnable=0 / no INTZ,
+// clipPlanes.z == 0) the shader falls back to the W2d depthless shore column
+// (WaterDepthlessShore / WaterDepthlessColumn): the authored vertex alpha IS
+// the game's own shore marking (water.dat's out-of-poly fade quads carry
+// 13/255 at the land side), so the shallow->deep ramp, the shore coverage,
+// the junction and the body opacity key off shore proximity instead of view
+// distance — open ocean reads the sane DEEP default, the waterline still
+// dissolves, and no foam ring follows the camera.
 //
 // VIEW FROM BELOW (defects "underwater refraction/caustics wrong at some
 // angles", "ped through water not refracted", "seams from underwater"):
@@ -269,19 +275,44 @@ SurfBase WaterSetup(VS_OUTPUT IN)
 // c19.x = 0 -> exactly the pre-W2b normal (stale-pipe escape hatch, the
 // c16/c17/c18 doctrine); bounded to [0,4] so a foreign c19 written by another
 // pipe before this draw can never run the normal away.
-float2 WaterSwellNormal(float2 slope)
+//
+// W2c — swell-shading facet residual (screenshot gta_sa_mOrssEGuo1.jpg):
+// water.dat's independent 80-600 m quads sample the 45 m / 23 m analytic
+// waves at unrelated corner phases, so the per-vertex slope interpolates as
+// unrelated per-TRIANGLE values — the diamond/pyramid facets — and every step
+// is amplified at grazing incidence (fresnel) and by the tight style spec
+// lobe (white specular triangles). Three bounded gates apply to the SHADING
+// contribution ONLY; the Water_VS position deform keeps its full amplitude
+// (geometry policy unchanged):
+//   * magnitude clamp — bounds the worst corner-to-corner step (the natural
+//     component max with gust is ~0.15; 0.05 caps the normal step near 3°);
+//   * range fade — far water goes calm, the same doctrine as the
+//     detail-normal distance damping (distFactor: 0 near -> 1 at ~12% of
+//     the far clip, floor 0.25);
+//   * elevation fade — a water-level view (the facet screenshot) sees every
+//     normal step amplified by fresnel/spec; keep the full glint for
+//     plunging views, calm the sheet edge-on (|V.z|: 0 at the horizon ->
+//     full by ~23° elevation).
+// All three are pure functions of existing inputs (c19.x, slope,
+// distFactor, |V.z|) — no new constant, register, sampler or interpolator,
+// and c19.x = 0 still returns exactly 0 regardless of the gates.
+float2 WaterSwellNormal(float2 slope, float distFactor, float elev)
 {
-    return slope * min(max(swellParams.x, 0.0), 4.0);
+    float k = min(max(swellParams.x, 0.0), 4.0);
+    float2 bounded = clamp(slope, -0.05, 0.05);
+    float rangeFade = 1.0 - 0.75 * saturate(distFactor);
+    float elevFade = saturate(elev * 2.5);
+    return bounded * (k * rangeFade * elevFade);
 }
 
-// Depth-free crest-foam weight. Every shore-keyed foam term in the cores
-// below needs the s2 depth copy (WaterSoftIsec / shoreFade / the V core's
-// foamMask): when that copy cannot run (clipPlanes.z == 0 — depth hook off,
-// no INTZ, see waterPipe_setRenderState) those terms are forced to 0 and the
-// whole foam stack renders nothing. This keeps the depth-independent HEIGHT
-// mask alive in that configuration ONLY, so foam still rides the wave crests
-// instead of vanishing. Exactly 0 when the depth copy is live -> pre-change
-// output bit-identical.
+// Depth-free crest-foam weight. With the depth copy gone (clipPlanes.z == 0
+// — depth hook off, no INTZ, see waterPipe_setRenderState) the W2d shore
+// column keeps the WATERLINE stack alive (shoreFade / softIsec / the band
+// key off the authored vertex alpha — see WaterDepthlessShore), but OPEN
+// water has no depthless shore signal at all: this keeps the
+// depth-independent HEIGHT mask alive there too, so foam still rides the
+// wave crests instead of vanishing. Exactly 0 when the depth copy is live
+// -> pre-change output bit-identical.
 float WaterDepthlessCrest(void)
 {
     return 1.0 - saturate(clipPlanes.z);
@@ -855,16 +886,53 @@ float WaterBodyOpacity(float thickness, float NdotV, float frontFade,
     return saturate(t);
 }
 
+// ============================================================================
+// W2d — depth-free water column (clipPlanes.z == 0: depthHookEnable=0 / no
+// INTZ) — the graceful-degrade shore ramp
+// ============================================================================
+// The old depth-free branch of SampleWaterColumn returned a VIEW-DISTANCE
+// estimate (thickness = saturate(viewZ*0.02) * deep column) with frontFade
+// pinned to 0 — every depth-keyed term then keyed off "how far is this
+// pixel from the camera" instead of "how much water is over the ground":
+// the shore foam band followed the camera as a ring, the shallow->deep
+// colour ramp restarted at the near clip, near water lost its reflection
+// lobe (RefractGate of the tiny estimate) and the waterline junction never
+// dissolved. The authored vertex alpha IS the game's own shore marking:
+// water.dat's out-of-poly fade quads carry 13/255 at the land side and
+// interpolate toward 255 on the sea side, so 1 - alpha ramps exactly across
+// the waterline — zero fetches, style-agnostic, and open ocean (full alpha)
+// reads the sane DEEP default (opaque body, deep colour, coverage 1, no
+// foam band — matching what the real depth copy reports over open water,
+// where the scene depth is the far plane). Sane defaults: at the waterline
+// thickness 0 / frontFade 1 (junction dissolves, no reflection, shallow
+// colour, the shore foam window opens); in open water the deep column /
+// frontFade 0. Gated to the depth-free state ONLY — with the copy live the
+// real sceneZ column runs bit-identical to before.
+// Returns (thickness, frontFade) with SampleWaterColumn's semantics.
+float WaterDepthlessShore(float vtxA)
+{
+    // 13/255 = 0.051 -> full shore; >= ~0.35 alpha -> open water.
+    // S.vtxA already remaps an exact 0 to 1.0 ("no fade"), so an
+    // unpopulated alpha can never read as a shoreline.
+    return 1.0 - saturate((vtxA - 0.051) * (1.0 / 0.299));
+}
+
+float2 WaterDepthlessColumn(float shoreP)
+{
+    float deepCol = max(shallowColor.w * 2.0, 1.0);   // the P3 deep column (12 m)
+    return float2(deepCol * (1.0 - shoreP), saturate(shoreP));
+}
+
 // Water-column thickness (metres of water below this pixel) + the near-
 // junction fade where ANOTHER surface (land or water drawn in an earlier
-// buffer flush) meets this one. Only fetches depth when tier >= 2 AND the
-// depth copy is live (clipPlanes.z); otherwise a distance-driven estimate
-// keeps the shallow->deep ramp monotonic (no artifacts, zero fetches).
+// buffer flush) meets this one. Fetches depth when the copy is live
+// (clipPlanes.z); otherwise the W2d authored-alpha shore column above runs
+// (zero fetches, shore-keyed instead of distance-keyed).
 // Returns (thickness, frontFade).
-float2 SampleWaterColumn(float2 screenUV, float waterViewZ, int tier)
+float2 SampleWaterColumn(float2 screenUV, float waterViewZ, int tier, float vtxA)
 {
     if(clipPlanes.z < 0.5)
-        return float2(saturate(waterViewZ * 0.02) * max(shallowColor.w * 2.0, 1.0), 0.0);
+        return WaterDepthlessColumn(WaterDepthlessShore(vtxA));
 
     float2 px = screenSize.zw;
     float z0 = tex2D(depthTex, screenUV).x;
@@ -1051,7 +1119,7 @@ float4 WaterXbox(VS_OUTPUT IN)
     float frontFade = 0.0;
     float deepFactor = 0.65;   // tier 0: flat timecyc colour mix
     if(tier >= 2){
-        float2 col = SampleWaterColumn(S.screenUV, S.viewZ, tier);
+        float2 col = SampleWaterColumn(S.screenUV, S.viewZ, tier, S.vtxA);
         thickness = col.x;
         frontFade = col.y;
         // Zero-slope approach to full depth: a plain saturate() hit 1.0 with a
@@ -1118,8 +1186,9 @@ float4 WaterXbox(VS_OUTPUT IN)
     // before the one normalize — the two layer, neither replaces the other,
     // so wave crests/troughs light from the direction their geometry faces.
     // flatXY stays detail-only, so the M2 foam's len(flatNormal.xy) term is
-    // unchanged.
-    float3 N = normalize(float3(flatXY + WaterSwellNormal(IN.swellSlope), 1.0));
+    // unchanged. W2c (see WaterSwellNormal) bounds/fades the shading copy
+    // with magnitude + range + elevation — the vertex deform is untouched.
+    float3 N = normalize(float3(flatXY + WaterSwellNormal(IN.swellSlope, distFactor, abs(S.V.z)), 1.0));
 
     // ---- View from below: the shading normal points up, away from an
     // underwater camera — flip it to face the viewer or NdotV/fresnel collapse
@@ -1181,8 +1250,9 @@ float4 WaterXbox(VS_OUTPUT IN)
         // mask resolves to exactly 1.0 -> the pre-M6 line bit-identical.
         float isecMask = WaterIsecFoamMask(tuv1 * 0.22 + float2(-0.003, 0.004) * time);
         // Depth-free crest fallback (WaterDepthlessCrest): with no s2 depth
-        // copy `band` lands on view distance and `isec` is exactly 0, so the
-        // stack above paints nothing — keep the height mask alive so foam
+        // copy the W2d shore column keeps `band`/`isec` keyed to the authored
+        // shoreline instead of view distance, but OPEN water has no depthless
+        // shore signal at all — keep the height mask alive there so foam
         // still rides the wave crests. Exactly 0 when the copy is live.
         foam = (band * pattern
               + isec * saturate(waterFxParams.z) * pattern * isecMask * (1.0 - band) * 0.5
@@ -1197,11 +1267,12 @@ float4 WaterXbox(VS_OUTPUT IN)
 
     // ---- M5 caustics (Cry WaterCausticsPass.cfi port — WaterCaustics) ----
     // Shallow/soft-intersection band only (fades out by the deepRange colour
-    // ramp and at the exact junction via RefractGate), tier >= 2 + depth copy
-    // (the band keys off the real thickness), day-gated (there is no light to
+    // ramp and at the exact junction via RefractGate), tier >= 2 (the band
+    // keys off the water column — the live depth copy or the W2d depthless
+    // shore column), day-gated (there is no light to
     // focus at night), above-water only. c17.y = 0 -> exactly 0 (pre-M5).
     float caus = 0.0;
-    if(tier >= 2 && below < 0.5 && clipPlanes.z > 0.5)
+    if(tier >= 2 && below < 0.5)
         caus = WaterCaustics(IN.worldPos.xy, time, waterFxParams2.z)
              * saturate(1.0 - thickness / max(shallowColor.w, 1e-3))
              * RefractGate(thickness)
@@ -1245,7 +1316,11 @@ float4 WaterXbox(VS_OUTPUT IN)
     float legacyOp = saturate(deepColor.w * specParams.z * lerp(0.35, 1.0, deepFactor)
                               * shoreFade * S.vtxA) * saturate(1.0 - frontFade * 0.85);
     if(below > 0.5)
-        legacyOp = saturate(WaterBelowOpacity(NdotV) * saturate(1.0 - frontFade * 0.5));
+        // W3 flood-fade gap fix: the below-water legacy opacity carried the
+        // vertex-alpha fade in IV (:legacyOp * S.vtxA) and V but not here —
+        // an out-of-poly slab seen from under the surface painted full
+        // strength (the ghost-quad family). Same * S.vtxA form as IV/V.
+        legacyOp = saturate(WaterBelowOpacity(NdotV) * S.vtxA * saturate(1.0 - frontFade * 0.5));
 
     if(tier >= 2){
         float2 refractOffset = N.xy * clipPlanes.w * RefractGate(thickness)
@@ -1304,7 +1379,7 @@ float4 WaterIV(VS_OUTPUT IN)
     float frontFade = 0.0;
     float deepFactor = 0.65;
     if(tier >= 2){
-        float2 col = SampleWaterColumn(S.screenUV, S.viewZ, tier);
+        float2 col = SampleWaterColumn(S.screenUV, S.viewZ, tier, S.vtxA);
         thickness = col.x;
         frontFade = col.y;
         deepFactor = smoothstep(0.0, 1.0, thickness / max(shallowColor.w, 1e-3));
@@ -1353,10 +1428,14 @@ float4 WaterIV(VS_OUTPUT IN)
     // ("the effect is lost" well inside the view).
     float nFade = 0.25 + 0.75 * saturate(1.0 - S.dist * S.dist * max(qualityParams.y, 0.0));
     float2 dN = (n1.xy * 0.0512 + n2.xy * 0.256) * waterParams.x * B.norm;
-    // W2b: swell slope summed AFTER the IV distance fade (the displaced
-    // geometry is not distance-faded, so its shading must not be either) —
-    // dN itself stays detail-only for the texFoam len(dN * nFade) term.
-    float3 N = normalize(float3(dN * nFade + WaterSwellNormal(IN.swellSlope), 1.00001));
+    // W2b: swell slope summed AFTER the IV detail distance fade so the two
+    // layers stay independent — dN itself stays detail-only for the texFoam
+    // len(dN * nFade) term. W2c (see WaterSwellNormal) applies the swell's
+    // OWN magnitude/range/elevation gates to the shading copy (replacing the
+    // old "never distance-fade the swell shading" rule: the coarse-quads
+    // facet residual outweighed the far-shading continuity, and the vertex
+    // DEFORM still carries the swell to the horizon untouched).
+    float3 N = normalize(float3(dN * nFade + WaterSwellNormal(IN.swellSlope, S.distFactor, abs(S.V.z)), 1.00001));
 
     // View from below: face the camera (see WaterXbox for the full note).
     if(below > 0.5)
@@ -1421,20 +1500,22 @@ float4 WaterIV(VS_OUTPUT IN)
         pierce = SunPierce(S.V, N, S.L, thickness) * qualityParams.z * dayF;
 
     // ---- M5 caustics (Cry WaterCausticsPass.cfi port — WaterCaustics) ----
-    // Shallow/soft-intersection band, tier >= 2 + depth copy, day-gated,
+    // Shallow/soft-intersection band, tier >= 2 (depth copy or the W2d
+    // depthless shore column), day-gated,
     // above-water only (see WaterXbox for the full note). c17.y = 0 -> 0.
     float caus = 0.0;
-    if(tier >= 2 && below < 0.5 && clipPlanes.z > 0.5)
+    if(tier >= 2 && below < 0.5)
         caus = WaterCaustics(IN.worldPos.xy, time, waterFxParams2.z)
              * saturate(1.0 - thickness / max(shallowColor.w, 1e-3))
              * RefractGate(thickness)
              * saturate(waterFxParams2.y) * dayF;
 
     // ---- M7 SSS crest scatter (Cry Water.cfx:1202-1210): crests glow toward
-    //      the sun when the view aligns with the light. tier >= 2 + depth
-    //      copy + day + above-water gated (branchless); c18.x = 0 -> exactly 0.
+    //      the sun when the view aligns with the light. tier >= 2 + day +
+    //      above-water gated (branchless; the column is the live depth copy
+    //      or the W2d depthless shore column); c18.x = 0 -> exactly 0.
     float sss = WaterSSS(S.V, S.L, t1.w, thickness, specParams.w * B.shore)
-              * dayF * (1.0 - below) * saturate((float)tier - 1.0) * saturate(clipPlanes.z);
+              * dayF * (1.0 - below) * saturate((float)tier - 1.0);
 
     // ---- Composite (fresnel split — see the block comment by WaterSplitOpaque)
     float3 highlights = spec * float3(1.0, 0.97, 0.9) * WaterSpecTint()
@@ -1528,7 +1609,7 @@ float4 WaterV(VS_OUTPUT IN)
     float frontFade = 0.0;
     float deepFactor = 0.65;
     if(tier >= 2){
-        float2 col = SampleWaterColumn(S.screenUV, S.viewZ, tier);
+        float2 col = SampleWaterColumn(S.screenUV, S.viewZ, tier, S.vtxA);
         thickness = col.x;
         frontFade = col.y;
         deepFactor = smoothstep(0.0, 1.0, thickness / max(shallowColor.w, 1e-3));
@@ -1588,9 +1669,10 @@ float4 WaterV(VS_OUTPUT IN)
     float strength = waterParams.x * B.norm * (1.0 - 0.55 * S.distFactor);
     float2 dN = (n1.xy + n2.xy * 0.7) * strength * (0.75 + 0.5 * cellMask);
     // W2b: swell slope summed with the detail gradient before the one
-    // normalize (see WaterSwellNormal). dN stays detail-only so the V core's
-    // FoamMask*(len(dN)*0.27+0.44) shore term is unchanged.
-    float3 N = normalize(float3(dN + WaterSwellNormal(IN.swellSlope), 1.0));
+    // normalize (see WaterSwellNormal; its W2c magnitude/range/elevation
+    // gates bound the shading copy only). dN stays detail-only so the V
+    // core's FoamMask*(len(dN)*0.27+0.44) shore term is unchanged.
+    float3 N = normalize(float3(dN + WaterSwellNormal(IN.swellSlope, S.distFactor, abs(S.V.z)), 1.0));
 
     // View from below: face the camera (see WaterXbox for the full note).
     if(below > 0.5)
@@ -1677,10 +1759,11 @@ float4 WaterV(VS_OUTPUT IN)
         // water_terrainfoam.psFoamDeferred port). c16.x/c17.w both 0 -> the
         // mask resolves to exactly 1.0 -> the pre-M6 line bit-identical.
         float isecMask = WaterIsecFoamMask(uv1 * 0.22 + float2(-0.003, 0.004) * time);
-        // Depth-free crest fallback: V's shore gate is the thickness-driven
-        // foamMask/shoreFade pair, both 0-without-depth in effect (they key
-        // off the distance estimate) — the RAGE height mask keeps crests
-        // foaming. Exactly 0 when the s2 depth copy is live.
+        // Depth-free crest fallback: the W2d shore column keeps V's
+        // thickness-driven foamMask/shoreFade pair keyed to the authored
+        // shoreline without the copy — the RAGE height mask covers OPEN
+        // water, where the depthless column has no shore signal. Exactly 0
+        // when the s2 depth copy is live.
         float crestFoam = foamTex * (length(dN) * 0.27 + 0.44) * 0.45
                         * WaterDepthlessCrest();
         foam = foamBand * foamTex * shoreFade
@@ -1695,10 +1778,11 @@ float4 WaterV(VS_OUTPUT IN)
         pierce = SunPierce(S.V, N, S.L, thickness) * qualityParams.z * dayF;
 
     // ---- M5 caustics (Cry WaterCausticsPass.cfi port — WaterCaustics) ----
-    // Shallow/soft-intersection band, tier >= 2 + depth copy, day-gated,
+    // Shallow/soft-intersection band, tier >= 2 (depth copy or the W2d
+    // depthless shore column), day-gated,
     // above-water only (see WaterXbox for the full note). c17.y = 0 -> 0.
     float caus = 0.0;
-    if(tier >= 2 && below < 0.5 && clipPlanes.z > 0.5)
+    if(tier >= 2 && below < 0.5)
         caus = WaterCaustics(IN.worldPos.xy, time, waterFxParams2.z)
              * saturate(1.0 - thickness / max(shallowColor.w, 1e-3))
              * RefractGate(thickness)
@@ -1714,10 +1798,11 @@ float4 WaterV(VS_OUTPUT IN)
                 * dayF * WaterFoamGate() * B.glitter;
 
     // ---- M7 SSS crest scatter (Cry Water.cfx:1202-1210): crests glow toward
-    //      the sun when the view aligns with the light. tier >= 2 + depth
-    //      copy + day + above-water gated (branchless); c18.x = 0 -> exactly 0.
+    //      the sun when the view aligns with the light. tier >= 2 + day +
+    //      above-water gated (branchless; the column is the live depth copy
+    //      or the W2d depthless shore column); c18.x = 0 -> exactly 0.
     float sss = WaterSSS(S.V, S.L, t1.w, thickness, specParams.w * B.shore)
-              * dayF * (1.0 - below) * saturate((float)tier - 1.0) * saturate(clipPlanes.z);
+              * dayF * (1.0 - below) * saturate((float)tier - 1.0);
 
     // ---- Composite: fresnel split (V's exp depth colour blend becomes the
     //      BODY colour of the transmission lobe — see WaterSplitOpaque) ----
@@ -1790,11 +1875,18 @@ float4 WaterV(VS_OUTPUT IN)
                          + skyReflect * reflAmt + highlights;
             // Junction blend: at the waterline the pixel reproduces the scene
             // behind it (refractOffset -> 0 there, so refr = the exact scene).
-            float junction = saturate(shoreFade * (1.0 - frontFade * 0.85));
+            // W3 flood-fade gap fix: this exit's junction never carried the
+            // vertex-alpha fade (the legacyOp exits do, via * S.vtxA) — a
+            // low-alpha slab on this path painted its reflection/highlights
+            // at full strength (the dark/ghost-quad family). floodFade is
+            // WaterFloodFade(S.vtxA): 1.0 for opaque/alpha-less water ->
+            // strict no-op (bit-identical),13/255 -> the hardware-blend
+            // fade the tier>=2 opaque pin stopped applying.
+            float junction = saturate(shoreFade * (1.0 - frontFade * 0.85) * floodFade);
             // From below the sheet is see-through face-on / a mirror at grazing —
             // the depth-driven junction would paint the underside solid.
             if(below > 0.5)
-                junction = saturate(WaterBelowOpacity(NdotV) * (1.0 - frontFade * 0.5));
+                junction = saturate(WaterBelowOpacity(NdotV) * (1.0 - frontFade * 0.5) * floodFade);
             return float4(saturate(lerp(refr, surfV, junction)), 1.0);
         }
         return float4(saturate(WaterSplitOpaque(refr, skyReflect, baseCol,

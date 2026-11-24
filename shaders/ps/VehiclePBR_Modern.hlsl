@@ -57,7 +57,16 @@ float4 nmParams     : register(c48);
 // Forward+ clustered lights
 sampler2D clusterTex  : register(s5);  // tile index texture (RGBA8 POINT/CLAMP)
 float4 clusterParams  : register(c45); // (tileSizePx, gridW, gridH, lightCount)
-float4 layerCfg   : register(c46);  // x = vehPBRLayers layer bitmask
+// x = vehPBRLayers layer bitmask
+// y = sunGlowScale   (m2275): how much SUN-derived gloss main() may add.
+//     0 when the player is COVERED (cull zone / interior -> no sky reach),
+//     else timecycle directional luma x the fixed white-gloss tone-down.
+// z = envGlossScale  (m2275): fixed tone-down of the additive env-gloss layer.
+// .y/.z were written as 0 and read by nobody before m2275, so carrying the
+// gate here spends no extra register (ps_3_0 budget unchanged) and needs no
+// second upload site. Both are 1.0/1.0 on the non-Modern pipes that share
+// this cb (CAR_ENV / CAR_NEO) -> bit-identical output = the OFF escape hatch.
+float4 layerCfg   : register(c46);
 // PBR BUILDING env — uploaded per mesh by the PBR cb (buildingPipe.cpp).
 // {x = enable, y = material env-map weight, z = sky reflect strength, w = 0}
 // See the env block at the end of main_building().
@@ -592,6 +601,18 @@ float4 main(PS_INPUT IN, float4 vpos : VPOS) : COLOR
     float3 sunContrib = directCol.rgb;
     float NdotL_sun = max(dot(N, L), 0.0);
 
+    // ---- m2275 white-glow gate (PS c46.y/.z) ----
+    // sunGlow scales EVERY sun-derived gloss term below: the GGX sun lobe and
+    // its clearcoat, the sun-direction env glint, the standalone Mobile glint
+    // and the Fresnel rim. It is 0 under cover (cull zone/interior) and falls
+    // with the timecycle directional luma, so night needs no hardcoded hour.
+    // It deliberately does NOT touch the 6-extra-directional loop, the
+    // Forward+ cluster lights or layer1 (VS game lighting): those are the real
+    // light sources that must keep lighting a covered/night car.
+    // envGloss tones the additive env layer (layer2) down globally.
+    float sunGlow  = saturate(layerCfg.y);
+    float envGloss = saturate(layerCfg.z);
+
     // ---- Environment Reflection: clearcoat Fresnel drives visibility ----
     // Car paint has a clearcoat — env reflections visible at all angles, stronger at grazing
     float3 R_world = reflect(-V, N);
@@ -708,7 +729,7 @@ float4 main(PS_INPUT IN, float4 vpos : VPOS) : COLOR
     // reflections; no darkening anywhere, so default output stays ~parity).
     float envPow = max(fxParams.y, 1.0f);
     float envGlint = pow(saturate(dot(R_world, L)), envPow);
-    float3 envTerm = iblBlend * reflTint * envContent * (1.0 + 0.5 * envGlint);
+    float3 envTerm = iblBlend * reflTint * envContent * (1.0 + 0.5 * envGlint * sunGlow);
     // Clearcoat coverage scalar (carcols-shade safe): paint dominates face-on
     // (kr ~0.15); carcols shininess widens the env band toward grazing. This is
     // the weight of the ADDITIVE env layer below, never a body replacement.
@@ -733,7 +754,7 @@ float4 main(PS_INPUT IN, float4 vpos : VPOS) : COLOR
     // envMask's 0.15..0.50 range. envTerm keeps the newer envContent/envGlint
     // factors and envTexMod restores the target's texture-AO/dirt modulation.
     float3 envTexMod = max(diff.rgb, float3(0.05, 0.05, 0.05));
-    float3 layer2 = envTerm * (saturate(kr) * 0.5) * envTexMod;
+    float3 layer2 = envTerm * (saturate(kr) * 0.5) * envTexMod * envGloss;
 
     // [missing term: standalone MOBILE sun glint]
     // main_mobileVehicle adds pow(dot(reflectV, sunDir), 10) * strength * 2
@@ -745,26 +766,28 @@ float4 main(PS_INPUT IN, float4 vpos : VPOS) : COLOR
     // bitmask can switch it off independently.
     if(chromeParams.w > 0.0){
         float mobileGlint = pow(saturate(dot(R_world, L)), 10.0);
-        layer2 += reflTint * sunContrib * (mobileGlint * chromeParams.w * 2.0) * LF(2);
+        layer2 += reflTint * sunContrib * (mobileGlint * chromeParams.w * 2.0) * LF(2) * sunGlow;
     }
 
     // ---- Specular: GGX/Smith for direct sun highlight ----
     // glTF KHR_materials_pbrSpecularGlossiness: D_GGX and V_SmithCorrelated
     // take σ = (1 - glossiness) and square internally to get α = σ²
     float3 specTotal = float3(0, 0, 0);
-    if(NdotL_sun > 0.0){
+    // sunGlow > 0 guard as well as NdotL: under cover sunGlow is exactly 0 and
+    // this branch must add nothing (an Inf/NaN inside a x0 term would not).
+    if(NdotL_sun > 0.0 && sunGlow > 0.0){
         float3 H = normalize(V + L);
         float NdotH = max(dot(N, H), 0.0);
         float LdotH = max(dot(L, H), 0.0);
         float D = D_GGX(NdotH, 1.0 - glossiness);
         float Vis = V_SmithCorrelated(NdotV, NdotL_sun, 1.0 - glossiness);
         float3 F = F_SchlickLH(LdotH, F0);
-        specTotal += D * F * Vis * NdotL_sun * sunContrib;
+        specTotal += D * F * Vis * NdotL_sun * sunContrib * sunGlow;
         // Clearcoat specular: white dielectric highlight on top of paint
         float D_cc = D_GGX(NdotH, 0.25);  // very smooth clearcoat
         float Vis_cc = V_SmithCorrelated(NdotV, NdotL_sun, 0.25);
         float3 F_cc = F_SchlickLH(LdotH, float3(0.04, 0.04, 0.04));  // clearcoat F0
-        specTotal += D_cc * F_cc * Vis_cc * NdotL_sun * sunContrib * ccStr * LF(6);
+        specTotal += D_cc * F_cc * Vis_cc * NdotL_sun * sunContrib * ccStr * LF(6) * sunGlow;
     }
     for(int i = 0; i < 6; i++){
         float3 Ll = -lightDir[i];
@@ -798,7 +821,7 @@ float4 main(PS_INPUT IN, float4 vpos : VPOS) : COLOR
     // Edge highlight: subtle Fresnel rim catches sun at grazing angles.
     // Reduced from 0.45 — game lighting already has edge detail from VS.
     float rimFresnel = pow(1.0 - saturate(NdotV), 2.0);
-    float3 rimLight = sunContrib * rimFresnel * 0.10 * LF(3);
+    float3 rimLight = sunContrib * rimFresnel * 0.10 * LF(3) * sunGlow;
 
     specTotal *= 1.0 * LF(2);  // visible sun glints
     // Part A3 (envSpecularityMult, PS c44.y): the CPU surfProps.specular mult was

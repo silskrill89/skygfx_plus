@@ -1900,17 +1900,23 @@ void waterPipe_setRenderState(void)
         }
     }
     // W2b receipt (ADDITIVE — every existing [water]/[water_rt] string is
-    // byte-identical): depthValid is the master gate for PS c8.z, c16.z,
-    // c17.x/c17.y and for the VS shore gate c12.z/c12.w. When it reads 0 at
-    // tier >= 2 every depth-keyed shore term is silently off — the
-    // soft-intersection foam band, the shore fade / junction ramp,
-    // refraction validity, caustics, SSS — and SampleWaterColumn falls back
-    // to its distance-driven estimate with frontFade pinned to 0, so the
-    // sheet renders opaque against a razor waterline with no foam band. The
-    // usual cause is upstream of this file: depthHookEnable==0 at
-    // DepthHook_Install leaves g_intzTex NULL (depthhook.cpp), so
-    // PostFX_CopyDepthToTexture bails before it copies anything
-    // (postfx_ssao.cpp). Throttled; log-only, no render path reads it.
+    // byte-identical): depthValid is the master gate for PS c8.z (the
+    // clipPlanes.z depth flag) and for the VS shore gate c12.z/c12.w. W2d
+    // (2026-11-24) moved the rest off it: c16.z / c17.x / c17.y now ride
+    // the RT tier alone, and SampleWaterColumn's depth-free branch runs the
+    // authored-alpha shore column (WaterDepthlessShore/WaterDepthlessColumn)
+    // instead of the old distance-driven estimate — so shore fade, the
+    // junction ramp, softIsec foam, caustics and SSS key off shore
+    // proximity without the copy. Still keyed to the copy (dead at
+    // depthValid==0): the M4 depth-mismatch refraction validation, the VS
+    // per-vertex depth shore gate (swell flat-lock) and the real sceneZ
+    // column — the receipt
+    // string below stays byte-stable (strings frozen) but its "off" list is
+    // now historical. The usual cause of depthValid==0 is upstream of this
+    // file: depthHookEnable==0 at DepthHook_Install leaves g_intzTex NULL
+    // (depthhook.cpp), so PostFX_CopyDepthToTexture bails before it copies
+    // anything (postfx_ssao.cpp). Throttled; log-only, no render path reads
+    // it.
     if(needRT && !depthValid && dbglog_throttle("water_nodepth"))
         dbglog("[water] depth copy unavailable at tier>=2 -> shore fade / "
                "softIsec foam / refraction-validity / caustics / SSS off "
@@ -2465,11 +2471,12 @@ void waterPipe_setRenderState(void)
     // foamTexWeight: M2 RAGE foam-texture blend weight (0.6 = moderate: the
     //   procedural octaves keep the multi-scale edge dissolve, the texture
     //   adds the cellular/white-noise pattern on top).
-    // softIsecGain: M3 Cry softIsec shallow-intersection feather gain,
-    //   gated on depthValid — the term reads the s2 depth copy through the
-    //   water column thickness; without the copy the thickness estimate is
-    //   distance-driven and the feather would key off view distance instead
-    //   of real geometry intersections.
+    // softIsecGain: M3 Cry softIsec shallow-intersection feather gain.
+    //   W2d (2026-11-24): no longer gated on depthValid — the depth-free
+    //   water column is the authored-alpha shore ramp (PS
+    //   WaterDepthlessColumn), so the feather keys off shore proximity
+    //   instead of view distance and the term runs at every RT tier.
+    //   0 = off (tier 0/1 never reach the foam block).
     // reflMix: config->waterReflectionMix (INI waterReflectionMix, default
     //   0.7 — see the header comment). Null-config guard -> 0.7 (the shipped
     //   default) so a pre-init draw can never upload garbage. Uploaded EVERY
@@ -2478,7 +2485,7 @@ void waterPipe_setRenderState(void)
     float reflMixUser = config ? config->waterReflectionMix : 0.7f;
     float waterFx[4] = {(needRT && g_foamTex) ? 1.0f : 0.0f,
                         g_foamTex ? 0.6f : 0.0f,
-                        depthValid ? 0.55f : 0.0f,
+                        needRT ? 0.55f : 0.0f,
                         waterClampF(reflMixUser, 0.0f, 1.0f, 0.7f)};
     RwD3D9SetPixelShaderConstant(16, waterFx, 1);
 
@@ -2489,25 +2496,28 @@ void waterPipe_setRenderState(void)
     // wrote it) — the register carried stale garbage from a prior consumer,
     // so the M4/M5/M6 gates could flip on unpredictably. Uploaded every draw
     // like c14-c16 so a style/PS switch never inherits stale values.
-    //   refractValidGain (M4): 1 whenever the s2 depth copy is live (the
-    //     depth validation reads it; the off-screen clamp term runs
-    //     regardless and is harmless), 0 otherwise -> pre-M4 bit-identical.
-    //   causticsScale (M5): 1 when depth copy + foam texture both live (the
-    //     term keys off the real thickness + the s4 .g caustic channel),
+    //   refractValidGain (M4): 1 whenever the scene-copy tier is live. The
+    //     depth-mismatch term inside WaterRefractValid self-gates on
+    //     clipPlanes.z (s2 is unbound without the copy), while the
+    //     off-screen clamp fade runs either way and kills the edge smear
+    //     depth-free (W2d wave). 0 at tier 0/1 -> pre-M4 bit-identical.
+    //   causticsScale (M5): 1 when the foam texture is live at the RT tier
+    //     (the band keys off the water column — the real depth copy or the
+    //     W2d depthless shore column — plus the s4 .g caustic channel),
     //     0 otherwise -> exactly 0 (pre-M5).
     //   causticsSpeed (M5): 1 (the Cry PB_time scroll, c17.z multiplier).
     //   isecFoamGain (M6, per-texel isec foam mask): 1 when the foam texture
     //     exists, else 0 -> the mask resolves to 1.0 (pre-M6 identity).
     // F3 wiring (keys default ON -> upload bit-identical to shipped):
-    //   x ANDs the M4 depth-validated-refraction key, y AND z AND the M5
-    //   caustics key (shared waterM5CausticsGate, which also gates the
-    //   texture .gb channels at bake). w (M3/M6 isec-foam mask) is
-    //   deliberately NOT keyed. Key OFF -> gate multiplies to 0 ->
-    //   pre-feature bit-identical.
+    //   x ANDs the M4 refraction key, y AND z AND the M5 caustics key
+    //   (shared waterM5CausticsGate, which also gates the texture .gb
+    //   channels at bake) — both W2d: RT-tier-only, depth-copy-independent.
+    //   w (M3/M6 isec-foam mask) is deliberately NOT keyed. Key OFF ->
+    //   gate multiplies to 0 -> pre-feature bit-identical.
     RwBool refractOn = config ? config->waterRefractionValid : 1;
     RwBool causOn = waterM5CausticsGate();
-    float waterFx2[4] = { (depthValid && refractOn) ? 1.0f : 0.0f,
-                          (depthValid && g_foamTex && causOn) ? 1.0f : 0.0f,
+    float waterFx2[4] = { (needRT && refractOn) ? 1.0f : 0.0f,
+                          (needRT && g_foamTex && causOn) ? 1.0f : 0.0f,
                           causOn ? 1.0f : 0.0f,
                           g_foamTex ? 1.0f : 0.0f };
     RwD3D9SetPixelShaderConstant(17, waterFx2, 1);

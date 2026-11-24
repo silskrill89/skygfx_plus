@@ -1791,6 +1791,44 @@ CloudRegionFlush_7273D0_hook(void)
 		       "entry block restored)", s_pinned, s_empty);
 }
 
+// ---- CFont::RenderFontBuffer (0x719840) exit — depth-contract enforce ----
+// CFont::RenderFontBuffer IS the game caller that owns the whole font/HUD
+// 2D window: inside its body it runs the 0x70CF20 sprite flush (0x719B26)
+// and THEN our hooked 0x7273D0 glyph flush (0x719B2B —
+// CloudRegionFlush_7273D0_hook, which enforces the depth contract at ITS
+// exit). The glyph flush's empty path (batch <= 0) returns WITHOUT that
+// enforce, and anything the font/HUD 2D path parks AFTER our glyph-flush
+// enforce (the Im2D depth pair: ZWRITE=0 / ZENABLE=0 / ZFUNC=ALWAYS — the
+// N2 dead-depth repair this file documents at spriteEnforceDepthContract)
+// escapes RenderFontBuffer to the next pipe entry as dead depth. Field
+// evidence (log 2026-11-17 08:21, the pre-9b1256a build): 234x
+// `[zfix] pipe entry depth drift repaired ... dev zwrite=0 zen=0 zfunc=8`
+// out of 490 [zfix] receipts, recurring ~2s while the same frames' glyph
+// flushes report their own repairs ([SpriteDepthFix] CloudRegionFlush_7273D0
+// ... enforcing) — i.e. the drift re-appears INSIDE the window between our
+// glyph-flush enforce and RenderFontBuffer's return (or on a path where
+// that enforce never ran). Wrapping the game's call sites so the enforce
+// ALSO runs when RenderFontBuffer returns closes the window no matter
+// which internal path ran — belt-and-braces, same doctrine as
+// spriteEnforceDepthContract's own header comment.
+// Signature: void(void) — disassembled from the 1.0 US exe: function entry
+// 0x719840 (mov eax,[guard]; sub esp,0x18; cmp; je) through plain `ret` at
+// 0x719B3E, no call site pushes an argument, and the body overwrites ecx
+// immediately (not thiscall), so the wrapper forwards nothing.
+static void (*CFont_RenderFontBuffer_orig)(void);
+static void
+CFont_RenderFontBuffer_hook(void)
+{
+	// Plain call-through: orig runs the full body — sprite flush, glyph
+	// flush, guard store, epilogue — and the enforce below then covers
+	// every exit path, including the glyph flush's empty path that skips
+	// its own enforce. Cheap: spriteEnforceDepthContract early-outs on two
+	// device reads once the device already holds the contract.
+	if(CFont_RenderFontBuffer_orig)
+		CFont_RenderFontBuffer_orig();
+	spriteEnforceDepthContract("CFont_RenderFontBuffer");
+}
+
 // ---- Frame-boundary safety close for the corona/cone shield window ------
 // SilentPatchSA defers the corona batch past CCoronas::Render's return, so a
 // window can legitimately outlive the hook. Any window still open when a
@@ -2425,6 +2463,37 @@ rwFixes_installHooks(void)
 			if(okCR)
 				InterceptCall(&CloudRegionFlush_7273D0_orig,
 					CloudRegionFlush_7273D0_hook, 0x719B2B);
+		}
+		// CFont::RenderFontBuffer (0x719840) EXIT depth-contract enforce:
+		// wrap the game's THREE call sites — 0x57BF70 (HUD/menu caller),
+		// 0x719B5D (the sibling CFont entry that begins right after
+		// RenderFontBuffer's ret) and 0x719F43 (buffer-drain caller) — so
+		// spriteEnforceDepthContract("CFont_RenderFontBuffer") also runs
+		// when RenderFontBuffer returns; see CFont_RenderFontBuffer_hook
+		// above for the defect this closes. Byte-verification discipline is
+		// cloud_flush_install's exactly: each site must be E8 with the
+		// extracted target 0x719840; on MISMATCH skip THAT site only (the
+		// vanilla call remains — nothing gets corrupted). All three sites
+		// extract the same target, so the shared orig pointer is the
+		// CPointLights two-site idiom, not a double wrap.
+		{
+			static const DWORD s_fontBufSites[] = { 0x57BF70, 0x719B5D, 0x719F43 };
+			for(size_t i = 0; i < sizeof(s_fontBufSites)/sizeof(s_fontBufSites[0]); i++){
+				const DWORD site = s_fontBufSites[i];
+				BYTE opFB = *(BYTE*)site;
+				DWORD tFB = 0;
+				if(opFB == 0xE8) tFB = *(DWORD*)(site + 1) + site + 5;
+				const bool okFB = (opFB == 0xE8 && tFB == 0x719840);
+				dbglog("[fontbuf_install] 0x%08X op=%02X orig=%08X%s "
+				       "(expect op=E8 orig=719840; MISMATCH = intercept "
+				       "SKIPPED, vanilla path kept, RenderFontBuffer exit "
+				       "unenforced at this site)",
+				       (unsigned)site, (unsigned)opFB, (unsigned)tFB,
+				       okFB ? "OK" : "MISMATCH");
+				if(okFB)
+					InterceptCall(&CFont_RenderFontBuffer_orig,
+						CFont_RenderFontBuffer_hook, site);
+			}
 		}
 		// [PtLightGlow] one-shot shield-lever receipt (03:01-run black squares):
 		// the flush installs above verified OK, yet the force NEVER ran —

@@ -41,6 +41,11 @@
 // slope carries the SAME swAmp * ampMod gate as the displacement (identical
 // wavelengths, phases, wind directions), so a vertex whose swell is gated to
 // 0 (flat-locked shore band) delivers a slope of exactly 0 and stays flat.
+// W2c (PS-side, 2026-11-24): Water_Parallax's WaterSwellNormal bounds and
+// range/elevation-fades the SHADING copy of this slope to kill the
+// coarse-quad diamond facets — the displacement above keeps its full
+// amplitude, so this function and the swell geometry are untouched by the
+// facet fix (c19.x = 0 still zeroes the shading term exactly).
 //
 // Constants:
 //   c0-c3 = WorldViewProjection

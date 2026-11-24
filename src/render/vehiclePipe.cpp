@@ -2916,6 +2916,17 @@ vehEnvElideLog(void)
 	memset(s, 0, sizeof(*s));
 }
 
+// ---------------------------------------------------------------------------
+// m2275 — Modern white-glow cut (see the c46 note in VehiclePBR_Modern.hlsl).
+// Every additive SUN/ENV gloss term on Modern car paint loses 65% of its
+// amplitude. FIXED and mode-neutral on purpose: no INI key, so the deployed
+// skygfx.default.ini / config.cpp parse/EMIT/reset/save defaults and the
+// debug-menu row are all untouched. The pre-existing escape hatches still
+// multiply these terms to zero on demand — vehEnvIntensity=0 (env coverage),
+// envSpecularityMult=0 (final spec combine) and the vehPBRLayers bits.
+// ---------------------------------------------------------------------------
+static const float VEH_WHITE_GLOSS_TONEDOWN = 0.35f;
+
 void
 CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *object, RwUInt8 type, RwUInt32 flags)
 {
@@ -3150,6 +3161,58 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 			config->vehEnvGlint
 		};
 		RwD3D9SetPixelShaderConstant(44, chromeParams, 1);
+	}
+	// ---- m2275 white-glow gate — PS c46 = {vehPBRLayers, sun, env, 0} -------
+	// Computed ONCE per callback (everything it reads is per-frame) and consumed
+	// by BOTH c46 upload sites below (tire branch + opaque paint branch), so
+	// every main()/main_rubber draw in this cb sees the same pair. c46.y/.z
+	// were written as 0.0 and read by no shader before m2275, so this spends no
+	// extra register (ps_3_0 budget unchanged) and adds no upload site.
+	//   sunGlowScale  — amplitude of the SUN-derived gloss in the PS (GGX sun
+	//                   lobe + clearcoat, sun-direction env glint, Mobile glint,
+	//                   Fresnel rim). Exactly 0 when COVERED, because a cull
+	//                   zone/interior means the vehicle has no sky/sun reach;
+	//                   otherwise timecycle directional luma x the fixed cut.
+	//   envGlossScale — global tone-down of the additive env-gloss layer.
+	// Identity escape hatch: CAR_ENV and CAR_NEO share this cb but are not the
+	// Modern pipe the defect names, so they upload 1.0/1.0 -> bit-identical
+	// output. Xbox/PS2/GTAIV/Mobile/Leeds never enter this cb.
+	float sunGlowScale = 1.0f;
+	float envGlossScale = 1.0f;
+	if(config->vehiclePipe == CAR_MODERN){
+		// Brightness data: the timecycle DIRECT (sun/moon) light. CColourSet
+		// stores directionalR/G/B already normalised to 0..1 — weather.cpp:549
+		// -555 interpolates them against altR/255.0f and clamps to [0,1], and
+		// postfx_colourfilter.cpp:363-366 documents the same convention (do
+		// NOT divide by 255 again). Night timecyc entries carry a near-zero
+		// directional, so the glow fades with the game's own brightness data —
+		// no hardcoded hour anywhere.
+		const CColourSet &tc = CTimeCycle__m_CurrentColours;
+		float dirLuma = 0.299f*tc.directionalR + 0.587f*tc.directionalG + 0.114f*tc.directionalB;
+		// Game-memory scrub (white-blowout audit idiom): a foreign stomp or an
+		// uninitialised CColourSet can hand us NaN, which survives max/min into
+		// the upload. Clamp to the plausible physical range.
+		if(!(dirLuma >= 0.0f)) dirLuma = 0.0f;
+		if(dirLuma > 1.0f) dirLuma = 1.0f;
+		// Covered proxy — DOCUMENTED CHOICE, no new address:
+		// WaterDrops::NoRain() is this repo's canonical cull-zone composite
+		// (declared neopipe.h:202, defined neopipe.cpp:2009-2011 =
+		// CCullZones::CamNoRain || CCullZones::PlayerNoRain ||
+		// *CGame__currArea != 0 (interior) || NoDrops() (underwater/entry-exit)).
+		// The two cull-zone wrappers are the in-repo RE'd SA 1.0 US entries
+		// 0x72DDB0 / 0x72DDC0 (neopipe.cpp:1133-1136, upstream aap skygfx
+		// neoWaterdrops.cpp:139-141) and are already trusted by the rain lane
+		// (neopipe.cpp:2011), the exposure lane (postfx_colourfilter.cpp:400
+		// -403) and this file's own ambient dampening (:589-598, :1932-1941).
+		// Tunnels, underpasses and garages are no-rain cull zones, so "no rain
+		// can fall here" == "the sun cannot reach here" == covered.
+		bool covered = WaterDrops::NoRain();
+		sunGlowScale  = covered ? 0.0f : dirLuma * VEH_WHITE_GLOSS_TONEDOWN;
+		envGlossScale = VEH_WHITE_GLOSS_TONEDOWN;
+		if(dbglog_throttle("vehSunGlow"))
+			dbglog("[VehiclePBR] sunGlow: pipe=%d covered=%d dirLuma=%.3f sunScale=%.3f envScale=%.3f",
+			       (int)config->vehiclePipe, covered ? 1 : 0,
+			       dirLuma, sunGlowScale, envGlossScale);
 	}
 	// Mask term is CPU-gated on the TXD actually loading (see the c20.w upload
 	// below) — say so once instead of silently losing the PS2/Specular/Neo
@@ -3646,7 +3709,9 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 		// raw (pipeUploadPBR contract, per-material). s3 + its sampler states +
 		// c4 live in vehEnvIblAndCloudShadow (whole block, once per callback).
 		{
-			float layerCfg[4] = { (float)config->vehPBRLayers, 0.0f, 0.0f, 0.0f };
+			// c46 = {vehPBRLayers, sunGlowScale, envGlossScale, 0} — m2275
+			// white-glow gate, computed once per cb before the mesh loop.
+			float layerCfg[4] = { (float)config->vehPBRLayers, sunGlowScale, envGlossScale, 0.0f };
 			vehEnvUploadPS(46, layerCfg, 1);
 		}
 
@@ -3939,7 +4004,9 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 		}
 		// c46.x = PBR layer bitmask - config-only, exact-compare elision.
 		{
-			float layerCfg[4] = { (float)config->vehPBRLayers, 0.0f, 0.0f, 0.0f };
+			// c46 = {vehPBRLayers, sunGlowScale, envGlossScale, 0} — m2275
+			// white-glow gate, computed once per cb before the mesh loop.
+			float layerCfg[4] = { (float)config->vehPBRLayers, sunGlowScale, envGlossScale, 0.0f };
 			vehEnvUploadPS(46, layerCfg, 1);
 		}
 		// s3 IBL bind + 4 CLAMP/LINEAR sampler writes + c4 cloud shadow: all
