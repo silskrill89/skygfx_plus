@@ -382,6 +382,12 @@ IDirect3DTexture9 *RunFrameExposure(float adaptSpeed)
 	// luminance (and therefore the auto-exposure key) is diluted/offset by
 	// garbage. Build an 8x8-position quad whose UVs span exactly
 	// (screenW/fbW, screenH/fbH) — the valid 1920x1080 content region.
+	// CONTRACT with LuminanceReduce.hlsl (bottom-strip under-sample fix): the
+	// shader takes each destination pixel's tile SIZE from this quad's UV
+	// gradient (ddx/ddy) and the tile INDEX from VPOS, so this quad must keep
+	// spanning exactly the content sub-rect across the full 8x8 viewport —
+	// a 0..1 quad (or a partial-viewport draw) would shrink the sampled
+	// footprint again and reintroduce the never-sampled bottom strip.
 	RwIm2DVertex lumaQuad[4];
 	int lumaScrW = 0, lumaScrH = 0;
 	RwRaster *lumaFB = CPostEffects::pRasterFrontBuffer;

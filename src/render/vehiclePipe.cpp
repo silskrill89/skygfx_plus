@@ -1104,6 +1104,36 @@ static bool vehiclePipe_setupMaterial(RxD3D9InstanceData *inst, RwUInt32 flags,
 }
 
 // ============================================================
+// m2293 — SHARED SOLIDITY CONTRACT (Leeds/PS2/PC parity).
+//
+// texalpha.h is explicit about what a classification means for EVERY pipe:
+//   TAC_OPAQUE  — the texture's alpha channel is UNUSED (empty DXT3 nibbles
+//                 decode tex.a ~ 0) -> "pipes force shader alpha 1", and it
+//                 must not blend.
+//   TAC_CUTOUT  — hard 0/255 mask -> "alpha test, blending off".
+// A pipe that ignores this draws a solid body at tex.a ~ 0 through
+// SRCALPHA/INVSRCALPHA (or loses it outright to the GREATER-EQUAL@ref alpha
+// test) -> the see-through car the Env cb's TAC arm exists to prevent.
+//
+// This is the single place that decides "this mesh must be forced opaque":
+//   - the Env (Modern) cb pays it in PS c48.w (shaderAlpha), and
+//   - the Xbox cb pays it in the stage-0 ALPHAOP (fixed-function, no PS).
+// Leeds/PS2/PC reach the same outcome through vehiclePipe_setupMaterial +
+// simplePS, so both self-implemented pipes now answer to one predicate and
+// cannot drift apart again.
+//
+// Glass is EXCLUDED: it is a genuine transmission surface (its branch forces
+// blending and writes its own c48.w afterwards), so "solid" never applies.
+// ============================================================
+static bool
+vehClassForceOpaque(int tac, bool isGlass)
+{
+	if(isGlass)
+		return false;
+	return tac == TAC_OPAQUE;
+}
+
+// ============================================================
 // Instrumentation only (dbg-pipes-logging lane) — NO behaviour change.
 //
 // Each vehicle render cb tags its bind points here; a 2s throttled
@@ -2157,6 +2187,38 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *ob
 			RwD3D9SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
 			RwD3D9SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG2);
 			RwD3D9SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
+		}
+		// m2293 — solidity parity with the Env (Modern) cb, via the SHARED
+		// vehClassForceOpaque() predicate (Leeds/PS2/PC outcome = solid body).
+		// This cb is fixed-function (no PS), so it has no c48.w to force
+		// output alpha with; it pays the same texalpha.h TAC_OPAQUE contract
+		// ("pipes force shader alpha 1") in the stage-0 ALPHAOP instead.
+		// Without it a solid body whose texture carries an UNUSED alpha
+		// channel (empty DXT3 nibbles -> tex.a ~ 0) decodes alpha ~ 0, the
+		// GREATER-EQUAL@ref alpha test discards it and the car renders
+		// see-through/absent — the identical defect class the Env cb's TAC
+		// arm guards. Only the ALPHA is forced (TFACTOR.a -> 1, RGB left as
+		// the env branches authored it) and only for TAC_OPAQUE non-glass
+		// meshes; the blend decision above and every other mesh are untouched,
+		// so this can only make a mesh MORE opaque (monotone — it can never
+		// introduce transparency). The next mesh re-enters the stage-0
+		// if/else above and rewrites ALPHAOP unconditionally, so nothing
+		// carries over; cb exit restores TEXTUREFACTOR from xboxState.
+		if(material->texture && config && config->texAlphaClassify){
+			int xboxTac = TexAlpha_Classify(material->texture);
+			const char *xboxTexName = material->texture->name;
+			bool xboxGlass = xboxTexName && xboxTexName[0] &&
+				VehShaders_GetSurfaceType(xboxTexName) == SURFACE_CAR_GLASS;
+			if(vehClassForceOpaque(xboxTac, xboxGlass)){
+				RwD3D9SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+				RwD3D9SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TFACTOR);
+				if(d3d9device){
+					DWORD tf = 0xFFFFFFFFu;
+					d3d9device->GetRenderState(D3DRS_TEXTUREFACTOR, &tf);
+					d3d9device->SetRenderState(D3DRS_TEXTUREFACTOR,
+						(tf & 0x00FFFFFFu) | 0xFF000000u);
+				}
+			}
 		}
 		vehTexDiag(material, diffuseBound, texBranch, hasEnv1, hasEnv2, hasSpec);
 		D3D9RenderDual(config->dualPassVehicle, resEntryHeader, instancedData);
@@ -3406,8 +3468,24 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 		// inversion that pushed solid car bodies into the transparent pass.
 		// matTranslucent excludes the paint marker, so alpha==16 cannot
 		// re-enable blending here either.
-		if(tac == TAC_OPAQUE || tac == TAC_CUTOUT)
-			blendOn = matTranslucent ? 1 : 0;
+		//
+		// m2293 translucent-car reconcile: the old arm re-opened blending for
+		// exactly the case this comment forbids — `blendOn = matTranslucent ?
+		// 1 : 0` set blendOn=1 for ANY real material translucency (live
+		// receipts: vehiclegeneric256 matA=128 / matA=207), while the
+		// matTranslucent block ABOVE had already zeroed shaderAlpha. A texture
+		// the classifier proved OPAQUE carries an UNUSED alpha channel
+		// (tex.a ~ 0), so the body then drew at alpha ~ 0 through
+		// SRCALPHA/INVSRCALPHA -> see-through car. texalpha.h's contract for
+		// both classes is "alpha test, blending off", and TAC_OPAQUE
+		// additionally "pipes force shader alpha 1" (otherwise the
+		// GREATER-EQUAL@ref test discards the unused-alpha texels). This arm
+		// is now the authority for BOTH fields; glass keeps its own blended
+		// path via the override further below.
+		if(tac == TAC_OPAQUE || tac == TAC_CUTOUT){
+			blendOn = 0;
+			shaderAlpha = vehClassForceOpaque(tac, isGlassMesh) ? 1.0f : 0.0f;
+		}
 
 		// Glass always keeps its own blended path, even when the classifier
 		// skipped the texture (tac=0). Its branch overrides c48.w to 1.0.

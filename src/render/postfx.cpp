@@ -1983,7 +1983,25 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 	LogColorfilterVerts();
 	g_postfxDumpFrame++;
 
-	// Generate normal buffer from stereo disparity (before SSAO)
+	// Generate normal buffer (depth-reconstruction — NormalBuffer.hlsl; the
+	// old stereo-disparity wording was stale).
+	//
+	// m2293 C1 VERIFIED (2026-11-25): this is CHAIN ENTRY — the first pass of
+	// ColourFilter_switch, ahead of EVERY consumer in the postfx pipe:
+	//   SSAO dispatch   :2040 (s2, plus prev-normal s6 in the overhaul),
+	//   CopyDepthToPrev :2080, PipeChain :2087 (s1),
+	//   pre-tonemap FX group :2295, colour filter, lens/grade/atmosphere
+	//   tail, and SMAA in DrawFinalEffects :2846 (edge pass s4 + temporal s4).
+	// Geometry-phase consumers (buildingPipe/vehiclePipe PBR s4) draw BEFORE
+	// this hook in the same frame and therefore read the PREVIOUS frame's
+	// buffer by design (g_normalBufferHasContent contract, :3749-:3752).
+	// Content validity: hasContent is cleared on entry (:3581), set only
+	// after a completed write (:3752), and a fresh RT is pre-cleared to the
+	// invalid-normal marker (:3438) — no consumer can read driver garbage.
+	// Producer runs ONCE per frame (single call site) and only under the
+	// master switch; every consumer keys on normalBufferEnable or on
+	// hasContent (which is only true post-write), so enable=0 => no producer
+	// and no consumer (the perf gate IS the switch itself).
 	if(config->normalBufferEnable){
 		PERF_SCOPE("NormalBuf");
 		PF_SCOPE("NormalBuffer");

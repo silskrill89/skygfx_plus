@@ -330,6 +330,35 @@ static bool DrawSMAA_EdgeDetect(float smaaThreshold, float cameraMovement, const
 	else
 		d3d9device->SetTexture(3, NULL);
 
+	// m2293 C2 — normal-buffer edge assist: bind the half-res view-space
+	// normal buffer on stage 4 for SMAA_EdgeMotionDepth.hlsl's normal-
+	// gradient term (geometric edges on flat-coloured surfaces, where the
+	// luma helper finds nothing). Gate = master switch + content latch,
+	// same contract as the temporal pass's s4 bind (below, :1316) and the
+	// pipes' s4 binds (buildingPipe.cpp:3228): normalBufferEnable=0 means
+	// DrawNormalBufferToTexture (postfx.cpp:2005) never ran, so s4 must be
+	// NULL — the shader's unit-length guard then reads a defined zero,
+	// returns edge (0,0) and takes the ORIGINAL luma-only path incl. its
+	// no-edge discard => bit-identical output (escape-hatch doctrine).
+	// LINEAR/CLAMP (not the temporal pass's POINT): the buffer is HALF-RES
+	// while this pass runs full-res, so the shader taps +/-2 full-res px
+	// (= one half-res texel) — LINEAR lands on texel centres for a true
+	// neighbour difference; CLAMP keeps border taps on-screen. Sampler
+	// state is returned to the LINEAR/WRAP default by smaaRestoreSamplerStates
+	// (:410, s1..s4) at DrawSMAA exit — the scene-phase PBR s4 consumer
+	// (buildingPipe.cpp) raw-binds without setting samplers and relies on it.
+	if(config->normalBufferEnable && g_normalBufferTex && g_normalBufferHasContent){
+		d3d9device->SetTexture(4, g_normalBufferTex);
+		d3d9device->SetSamplerState(4, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+		d3d9device->SetSamplerState(4, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+		d3d9device->SetSamplerState(4, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+		d3d9device->SetSamplerState(4, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+	} else {
+		// Never let the edge shader sample a foreign s4: D3D9 stage state
+		// (textures) is persistent, NULL is a defined (zero) read.
+		d3d9device->SetTexture(4, NULL);
+	}
+
 	// Temporal always on — lower motion threshold for better stabilization
 	float motionThresh = 0.5f;
 	float edgeP[4] = {smaaThreshold, motionThresh, 2.0f, cameraMovement};
@@ -344,10 +373,12 @@ static bool DrawSMAA_EdgeDetect(float smaaThreshold, float cameraMovement, const
 		rwPRIMTYPETRILIST, verts, 4, colorfilterIndices, 6,
 		"smaa_edge");
 
-	// Unbind velocity (s3) on ALL paths — it must not leak into Pass1/Pass2
-	// sampler state (Pass2's cleanup also clears it; this keeps the window
-	// between passes clean).
+	// Unbind velocity (s3) and the normal buffer (s4) on ALL paths — they
+	// must not leak into Pass1/Pass2 sampler state (Pass2's cleanup also
+	// clears them; this keeps the window between passes clean). Runs even
+	// when guardedIm2DRender faulted (it returns, it does not unwind).
 	d3d9device->SetTexture(3, NULL);
+	d3d9device->SetTexture(4, NULL);
 	// Restore depth hook after edge pass if it was suspended (blend weight doesn't sample depth)
 	if(depthSuspended){
 		d3d9device->SetTexture(2, NULL); // unbind INTZ before Restore (mirrors DrawHeightFog)
@@ -459,14 +490,16 @@ static void smaaGuardBail(IDirect3DDevice9 *dev, RwRaster *drawBuffer, const D3D
 	g_inGuardedIm2DPass = 0;
 	g_renderPhase = "";
 	s_smaaBroken = true;
-	// Edge-detect raw-binds s2=g_ssaoDepthTex / s3=g_velocityTex and pass1
-	// binds s1/s2 (area/search) — mirror the success-path unbind so a fault
-	// mid-pass doesn't leave an INTZ/velocity texture on a stage while
-	// DepthHook still re-binds it as the depth-stencil (feedback lock).
+	// Edge-detect raw-binds s2=g_ssaoDepthTex / s3=g_velocityTex /
+	// s4=g_normalBufferTex (m2293 C2) and pass1 binds s1/s2 (area/search) —
+	// mirror the success-path unbind so a fault mid-pass doesn't leave an
+	// INTZ/velocity/normal texture on a stage while DepthHook still re-binds
+	// it as the depth-stencil (feedback lock).
 	if(dev){
 		dev->SetTexture(1, NULL);
 		dev->SetTexture(2, NULL);
 		dev->SetTexture(3, NULL);
+		dev->SetTexture(4, NULL);
 		// Bail paths return BEFORE the final cleanup block, so any
 		// POINT/CLAMP set mid-chain (Pass1 s1/s2, Pass3 s2/s3/s4) would
 		// leak into the scene render. Restore here — every DrawSMAA bail
