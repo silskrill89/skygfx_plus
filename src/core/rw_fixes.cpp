@@ -33,6 +33,9 @@
 //   g_inCoronasRender       window open: producer entry .. first post-body flush
 //   g_coronaBodyDone        body finished; the next buffered flush closes it
 //   g_inCloudsRender        producer flag: flush picks ONE/ONE for CClouds
+//   g_inPointLightsRender   body-scoped CPointLights gate leg: hook entry ..
+//                           orig return (covers the mid-body overflow flushes
+//                           the g_coronaBodyDone close would otherwise drop)
 //   g_coronaPreValid        pre-window capture completed this window
 //   g_coronaPreFuncRw/RefRw, g_coronaPreFuncDev/RefDev
 //                           pre-window ALPHAFUNC/ALPHAREF (L1 + L3 snapshots)
@@ -139,6 +142,32 @@ static bool g_coronaBodyDone = false;
 // ("/clouds" vs "/corona") and documents which producer owned the batch.
 // POD, render-thread only; armed/cleared in CClouds__Render_hygiene.
 bool g_inCloudsRender = false;	// SHARED: set by main.cpp CClouds__Render_hygiene (extern in main.cpp)
+// ---- FIX A: body-scoped CPointLights gate leg (street-lamp fog cones) ----
+// DEFECT (Nov-25 01:04 street batch, build 4eb4361): the fog-cone batch
+// fails the reconcile gate (family=0 window=0, ras=05189E70 — the cone
+// texture is dynamic, NOT one of the four coronaFamilyTexture statics) and
+// keeps the world's normal-alpha -> the additive-authored glow texture
+// (black RGB x a~0.8) REPLACES the background -> black pyramids.
+// WHY window=0 inside the producer: CPointLights__Render_shield_hook arms
+// g_inCoronasRender/g_coronaBodyDone BEFORE orig (see below), so the FIRST
+// flush of the body — an appender-overflow flush; RenderFogEffect emits
+// hundreds of cone/dot quads into the 384-sprite batch already holding
+// SilentPatch's deferred corona quads — consumes g_coronaBodyDone and runs
+// the canonical 5/6 resync MID-BODY (docs/plans/2026-10-26-sdk-
+// compare-sprites.md:141/274). Every cone appended after that flush
+// rasterises at a later body flush with window=0 -> fail open.
+// This leg spans the WHOLE orig call instead: set at hook entry, cleared
+// right after orig returns. Safe because every flush during the body drains
+// the shared sprite batch (0xC6A158) whose only producers are CCoronas/
+// CPointLights/CClouds — all additive-authored; the font/HUD lanes flush
+// through 0x7273D0/0x701FE9, never through 0x70CF20. Cones cannot outlive
+// the body: the CPointLights tail is an unconditional jmp into the shared
+// flush (0x700BCD, see the shield-hook block below), so every cone quad
+// drains inside orig.
+// consulted ONLY by spriteBlendContract() on the spriteFlushShield=0 path
+// — the shield=1 force/close code and effectsForceAlphaBlock (reads
+// g_inCoronasRender only) are untouched. POD, render-thread only.
+static bool g_inPointLightsRender = false;
 
 // ---- Pre-window state captured at the CCoronas hook entry ---------------
 // The entry "normalize" block used to force ALPHAFUNC=GREATEREQUAL /
@@ -726,10 +755,14 @@ static SpriteFlushIndexedDraw_t SpriteFlushIndexedDraw_orig;
 // is glow-family when its L1 stage-0 raster is one of the corona/pointlight/
 // cloud glow rasters (flushBatchIdentity — the same verdict
 // PostFxFlush_701FE9_hook already uses) OR a producer window is open
-// (g_inCoronasRender / g_inCloudsRender — the exact triple
-// effectsForceAlphaBlock's producer gate trusts). Glyph/font/HUD/screen-blit
-// batches therefore keep their authored normal-alpha (the 2026-11-01
-// washed-out-font class), and the blend!=0 fail-open elsewhere is untouched.
+// (g_inCoronasRender / g_inCloudsRender / g_inPointLightsRender — the
+// first two are the exact triple effectsForceAlphaBlock's producer gate
+// trusts; the third is the FIX A body-scoped CPointLights leg that keeps
+// the street-lamp fog-cone batch covered after a mid-body overflow flush
+// consumes g_coronaBodyDone — see the flag's block comment). Glyph/font/
+// HUD/screen-blit batches therefore keep their authored normal-alpha (the
+// 2026-11-01 washed-out-font class), and the blend!=0 fail-open elsewhere
+// is untouched.
 // The writes run INSIDE the SEH fence around the orig draw so the pre-flush
 // block is always put back; the spriteFlushShield=1 branch keeps its own
 // eleven-state capture/force/close byte-for-byte unchanged (this block is
@@ -738,13 +771,14 @@ struct SpriteBlendContract
 {
 	bool pass;	// glow-family -> reconcile the contract for this draw
 	bool family;	// flushBatchIdentity(): L1 stage-0 = glow raster
-	bool window;	// g_inCoronasRender || g_inCloudsRender
+	bool window;	// g_inCoronasRender || g_inCloudsRender || g_inPointLightsRender
 	RwRaster *ras;	// L1 stage-0 raster (receipt only)
 };
 // Defined beside flushBatchIdentity()/isFrontOrCameraRaster() further down
 // (those helpers are declared AFTER this hook in the file), so the call
 // site below needs this forward declaration.
 static SpriteBlendContract spriteBlendContract(void);
+static bool isFrontOrCameraRaster(RwRaster *ras);	// FIX B screenblit gate
 
 static void __cdecl
 SpriteFlushIndexedDraw_hook(int primType, void *verts, int nverts, void *indices, int nindices)
@@ -995,6 +1029,69 @@ SpriteFlushIndexedDraw_hook(int primType, void *verts, int nverts, void *indices
 				pipeDeviceStateSet(D3DRS_DESTBLEND, (DWORD)D3DBLEND_ONE);
 				pipeDeviceStateSet(D3DRS_BLENDOP, (DWORD)D3DBLENDOP_ADD);
 			}
+			// ---- FIX B: fail-CLOSED normal-alpha for non-glow blend-0 -----
+			// DEFECT (Nov-25 street batch): crash/damage smoke puff quads
+			// (and the grey-box cars they occlude) rasterise with device
+			// ALPHABLENDENABLE=0 at flush entry — the DefPipe entry contract
+			// leaves blend OFF (render_callbacks.cpp:359-360 'leaving them
+			// behind is the repair'; pipelinecommon.cpp:2416-2434
+			// canonicalises the L2=1/L3=0 split to OFF) — so the puff's
+			// authored alpha is never applied and the quad REPLACES the
+			// background as an opaque grey square. The gate above correctly
+			// fails OPEN for it (family=0, window=0) — that protects
+			// glyph/HUD lanes whose authored blend is already right — but
+			// blend==0 is never an authored *alpha* choice for a sprite
+			// batch: it means 'alpha was never turned on'. Mirror the
+			// fail-closed arm the postfx white path has (blend==0 ->
+			// repair) for the general non-glow case: force the CANONICAL
+			// NORMAL-ALPHA block (ALPHABLENDENABLE=TRUE, SRCBLEND=SRCALPHA,
+			// DESTBLEND=INVSRCALPHA, BLENDOP=ADD) through the same 3-layer
+			// chokepoint for THIS draw only.
+			// GATES (all required): glowContractPending (so spriteBatch>0 =
+			// non-empty batch, AND the lever-OFF else-branch — which is only
+			// reachable when config!=NULL && spriteFlushShield==0, so the
+			// config==NULL escape hatch keeps failing open by construction),
+			// entry devBlend==0 (blend!=0 non-glow stays authored: glyphs/
+			// HUD untouched), !gate.pass (entry blend==0 + glow family is
+			// FIX A's reconcile above — mutually exclusive), and NOT
+			// front/camera (isFrontOrCameraRaster: a screenblit's blend-0
+			// output is an opaque screen copy — never repaired, never
+			// white-shielded, same verdict PostFxFlush_701FE9_hook uses).
+			// Snapshot -> ARM -> force reuses the glowPre* PODs and
+			// glowContractForced, so the existing __finally replays the
+			// pre-flush block verbatim on every path — no new SEH fence,
+			// no new locals outside POD (C2712-safe).
+			bool failClosed = false;
+			if(!reconcile && !gate.pass && devBlend == 0 &&
+			   !isFrontOrCameraRaster(gate.ras)){
+				failClosed = true;
+				glowPreBlendEn = devBlend;
+				glowPreSrcBlend = devSrc;
+				glowPreDstBlend = devDst;
+				glowPreBlendOp = devOp;
+				glowContractForced = true;	// ARM before the first write
+				pipeDeviceStateSet(D3DRS_ALPHABLENDENABLE, TRUE);
+				pipeDeviceStateSet(D3DRS_SRCBLEND, (DWORD)D3DBLEND_SRCALPHA);
+				pipeDeviceStateSet(D3DRS_DESTBLEND, (DWORD)D3DBLEND_INVSRCALPHA);
+				pipeDeviceStateSet(D3DRS_BLENDOP, (DWORD)D3DBLENDOP_ADD);
+			}
+			// ONE new receipt for FIX B: names the entry state the opaque
+			// square inherited and the repair taken. First hit unstarvable
+			// (dbglog_once), then the 2s bucket; FNV-1a 1024-clean vs the
+			// project's 473 tags (checked at skygfx.h:122 before adding).
+			// Supersedes the 'fail open' wording of the root-cause receipt
+			// above for THIS class: the gate skipped the glow reconcile, but
+			// the fail-closed arm then repaired the blend.
+			if(failClosed &&
+			   (dbglog_once("ptlightglow_fc1") || dbglog_throttle("ptlightglow_fc")))
+				dbglog("[PtLightGlow] non-glow blend0 fail-closed: flush entry "
+				       "blend=0 src=%d dst=%d op=%d ras=%p nverts=%d family=%d "
+				       "window=%d — canonical normal-alpha (TRUE/SRCALPHA/"
+				       "INVSRCALPHA/ADD) pushed L1+L2+L3 for this draw only, "
+				       "pre-flush block restored after (screenblit excluded, "
+				       "blend!=0 non-glow untouched)",
+				       (int)devSrc, (int)devDst, (int)devOp, (void*)gate.ras,
+				       nverts, gate.family ? 1 : 0, gate.window ? 1 : 0);
 			// ONE new receipt for this fix: names the root cause (the entry
 			// state the deferred batch inherited) and which gate leg matched.
 			// First hit unstarvable (dbglog_once), then the 2s bucket.
@@ -1134,6 +1231,12 @@ CPointLights__Render_shield_hook(void)
 	// inside the shield while the window stayed open past the body. POD
 	// write; left set even if orig faults, so the next flush still closes.
 	g_coronaBodyDone = true;
+	// FIX A: body-scoped gate leg for the fog-cone batch (see the flag's
+	// block comment). Spans the WHOLE orig call — unlike g_coronaBodyDone,
+	// which the first mid-body overflow flush consumes — so every flush that
+	// can rasterise cone quads evaluates gate.window=1. Set here (entry),
+	// cleared right after orig returns below. POD write.
+	g_inPointLightsRender = true;
 	// ---- [PtLightColor] wave-6b diagnostic receipt (test-7, 2026-11-01) ----
 	// Discriminates "lights REGISTERED black" from "blend broken at draw":
 	// the glow-sprite colour is read straight from this registry by the
@@ -1180,6 +1283,13 @@ CPointLights__Render_shield_hook(void)
 	}
 	if(CPointLights__Render_orig)
 		CPointLights__Render_orig();
+	// FIX A: close the body-scoped gate leg at body exit — the tail flush
+	// (unconditional jmp 0x700BCD) has drained every cone/dot quad inside
+	// orig, so nothing cone-owned can rasterise after this point. Plain POD
+	// write on the render thread. If orig faulted, the leg stays set until
+	// the next entry re-arm or CoronaWindow_Close (frame boundary) — same
+	// bounded stuck-flag contract as g_inCoronasRender.
+	g_inPointLightsRender = false;
 }
 
 // ---- Producer discrimination for the two wave-6b TempBuffer flush sites ---
@@ -1329,21 +1439,24 @@ isFrontOrCameraRaster(RwRaster *ras)
 // rest of the tree already trusts — a POSITIVE stage-0 glow-raster match
 // (strictly L1: the device-layer OR is the documented 2026-11-01 font false
 // positive), or a live producer window (CCoronas/CPointLights =
-// g_inCoronasRender, CClouds = g_inCloudsRender; the same triple
-// effectsForceAlphaBlock uses to keep its canonical normal-alpha sweep off
-// glow batches). Anything else returns pass=false and the caller leaves the
-// batch's authored blend untouched — glyph/font/HUD/screen-blit lanes stay
-// on SRCALPHA/INVSRCALPHA, and the blend!=0 fail-open in
-// PostFxFlush_701FE9_hook is untouched. id.devTex is diagnostics-only
-// (GetTexture AddRef) and is released here, exactly as the other caller
-// releases it after logging.
+// g_inCoronasRender, CClouds = g_inCloudsRender, plus the FIX A
+// body-scoped CPointLights leg g_inPointLightsRender that covers the
+// fog-cone batch for the WHOLE RenderFogEffect body — the first two are
+// the same triple effectsForceAlphaBlock uses to keep its canonical
+// normal-alpha sweep off glow batches). Anything else returns pass=false
+// and the caller leaves the batch's authored blend untouched — glyph/font/
+// HUD/screen-blit lanes stay on SRCALPHA/INVSRCALPHA, and the blend!=0
+// fail-open in PostFxFlush_701FE9_hook is untouched. id.devTex is
+// diagnostics-only (GetTexture AddRef) and is released here, exactly as the
+// other caller releases it after logging.
 static SpriteBlendContract
 spriteBlendContract(void)
 {
 	SpriteBlendContract gate;
 	FlushBatchId id = flushBatchIdentity();
 	gate.family = id.family;
-	gate.window = (g_inCoronasRender || g_inCloudsRender);
+	gate.window = (g_inCoronasRender || g_inCloudsRender ||
+	               g_inPointLightsRender);
 	gate.ras = id.ras;
 	gate.pass = (id.family || gate.window);
 	if(id.devTex)
@@ -1845,6 +1958,10 @@ CoronaWindow_Close(void)
 {
 	g_inCoronasRender = false;
 	g_coronaBodyDone = false;
+	// FIX A stuck-flag net: if CPointLights orig faulted before its
+	// post-call clear, the body-scoped gate leg survives to the frame
+	// boundary — clear it here with the other window flags (POD write).
+	g_inPointLightsRender = false;
 	// R3 (H1 residual): complete the depth contract on EVERY close, capture
 	// or not. The effects-exit close consumes the snapshot, so the LAST
 	// close before the 2D/HUD tail (and the next frame's scene_start) runs

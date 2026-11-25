@@ -686,8 +686,76 @@ void DepthHook_Restore(void) {
 	// driver cache / raw device) so none is left disagreeing with the device.
 	Transparency_SetZEnabled(g_savedZenable ? true : false);
 
-	// Re-bind the game DS directly (bypasses hook). INTZ will be re-substituted
-	// on the next SetDepthStencilSurface call through hook_SetDS.
+	// Re-substitute INTZ directly: leave the window on the SAME surface
+	// hook_SetDS would install for the next screen SetDepthStencilSurface, so
+	// the device never parks on the plain g_gameDS in between.
+	//
+	// Why the old contract (bind g_gameDS here; INTZ re-substituted on the
+	// next SetDepthStencilSurface through hook_SetDS) failed in the field:
+	// that re-issue is SetDepthStencilSurface(g_gameDS) — the very pointer
+	// RW's value-cache already holds — so the call is suppressed, hook_SetDS
+	// never runs, and the device stays on g_gameDS. Every INTZ consumer then
+	// reads a surface the scene is no longer writing: the water flush's
+	// PostFX_CopyDepthToTexture sees oldDS != g_intzSurf (postfx_ssao.cpp:413
+	// — the only remaining bail) and returns false, so depthValid=0 kills the
+	// refraction-validity / shore-foam / caustics guards and foreground
+	// geometry bleeds into the water sheet (waterline ghost/band; the
+	// vehiclePipe split is the tell — CAR_MODERN's RenderSphereReflections
+	// re-issues SetDS and substitutes, CAR_GTAIV/Leeds do not).
+	//
+	// orig_SetDS is the RAW runtime vtable pointer saved at install
+	// (DepthHook_Install, vtable[39]), so this bind bypasses hook_SetDS AND
+	// every RW/driver value cache: nothing on the path can suppress it. It is
+	// a SINGLE bind — Suspend already left the device on NULL, so there is no
+	// NULL-then-INTZ unbind window.
+	//
+	// Gate: g_intzSurf only (depthHookEnable=0 / INTZ-not-yet-created skips
+	// this block entirely and the g_gameDS path below runs byte-identically
+	// to the old behaviour), and only when both descs are readable and INTZ
+	// is at least as large as the bound RT — D3D9 rejects a DS smaller than
+	// the RT, and a failed bind would leave DS=NULL with ZENABLE=TRUE (every
+	// draw fails, world blank). Anything unverifiable falls through to the
+	// old g_gameDS rebind.
+	if(g_intzSurf) {
+		D3DSURFACE_DESC izd;
+		bool intzFits = false;	// stays false unless BOTH descs are readable
+		if(SUCCEEDED(g_intzSurf->GetDesc(&izd))) {
+			IDirect3DSurface9 *boundRT = NULL;
+			if(SUCCEEDED(dev->GetRenderTarget(0, &boundRT)) && boundRT) {
+				D3DSURFACE_DESC rtd;
+				if(SUCCEEDED(boundRT->GetDesc(&rtd)))
+					intzFits = ((int)izd.Width >= (int)rtd.Width &&
+					            (int)izd.Height >= (int)rtd.Height);
+				boundRT->Release();
+			}
+		}
+		if(intzFits) {
+			// INTZ becomes the DS: drop it from any sampler a pass left it on
+			// (D3D9 texture/depth-stencil feedback rule — same scrub the
+			// hook_SetDS substitution runs; a no-op when the passes already
+			// unbound it, which they do before calling Restore).
+			DpUnbindIntzFromSamplers(dev);
+			orig_SetDS(dev, g_intzSurf);
+			// Throttled additive receipt (tag bucket 491 — no FNV collision
+			// with any existing dbglog_throttle tag): proves the rebind in the
+			// next session's log, and verifies the device really reports INTZ
+			// afterwards (same pointer-identity test postfx_ssao.cpp:413 uses).
+			if(dbglog_throttle("restore_intz")) {
+				IDirect3DSurface9 *nowDS = NULL;
+				dev->GetDepthStencilSurface(&nowDS);
+				bool onIntz = (nowDS == g_intzSurf);
+				if(nowDS) nowDS->Release();
+				dbglog("[DepthHook] restore re-substituted INTZ (deviceDS_is_intz=%d)",
+				       onIntz ? 1 : 0);
+			}
+			return;
+		}
+		// INTZ too small for the bound RT, or either desc unreadable: fall
+		// through to the g_gameDS rebind below — byte-identical to today.
+	}
+
+	// Fallback: re-bind the game DS directly (bypasses hook). Reached only
+	// when INTZ is absent or does not fit the bound RT.
 	if(g_gameDS) {
 		// Poisoned-cache guard: g_gameDS is cached by matching the surface's
 		// dims against the screen. A camera-raster swap frame can poison it

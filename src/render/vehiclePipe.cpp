@@ -1062,6 +1062,16 @@ vehBindDiffuse3L(RwTexture *tex, int stage)
 	}
 }
 
+// m2293 forward declaration: the SHARED SOLIDITY CONTRACT predicate
+// (vehClassForceOpaque, defined below right after this function) must be
+// callable from vehiclePipe_setupMaterial, which is the blendOn decider for
+// the simplePS vehicle pipes (Leeds/PS2/PC/Mobile all call it per mesh).
+// 6bfea71's contract comment claims those pipes "reach the same outcome
+// through vehiclePipe_setupMaterial + simplePS", but the commit shipped
+// call sites only in the Xbox and Env cbs — the gap this declaration and
+// the call site inside the function close. Definition unchanged.
+static bool vehClassForceOpaque(int tac, bool isGlass);
+
 // Material common setup: alpha check, texture, matcol, surfProps
 // Returns false if alpha==0 (skip this mesh)
 static bool vehiclePipe_setupMaterial(RxD3D9InstanceData *inst, RwUInt32 flags,
@@ -1077,6 +1087,29 @@ static bool vehiclePipe_setupMaterial(RxD3D9InstanceData *inst, RwUInt32 flags,
 	// material texture (NULL leaves the previous pass's raster bound on s0).
 	vehBindDiffuse3L((*outMaterial)->texture, 0);
 	*outAlpha = inst->vertexAlpha != 0 || (*outMaterial)->color.alpha != 255;
+	// m2293 — 6bfea71 shared-predicate gap-fill (this file's ONLY blendOn
+	// decider for the simplePS vehicle pipes: the Leeds cb — the defect
+	// session's cb=Leeds — calls this function per mesh, as do PS2/PC/
+	// Mobile). The commit's contract comment claims these pipes reach the
+	// TAC_OPAQUE outcome "through vehiclePipe_setupMaterial + simplePS",
+	// but no call site existed here, so a solid body whose texture carries
+	// an UNUSED alpha channel (empty DXT3 nibbles -> tex.a ~ 0) still
+	// blended at vertexAlpha through SRCALPHA/INVSRCALPHA. Identical
+	// semantics to the two existing sites (Xbox stage-0 ALPHAOP, Env
+	// PS c48.w): TAC_OPAQUE non-glass only -> blendOn = 0; glass (genuine
+	// transmission, its own blended path) and TAC_UNKNOWN (safe default)
+	// untouched. Monotone — it can only make a mesh MORE opaque. The
+	// VERTEXALPHAENABLE + layer-(2) ALPHABLENDENABLE writes below and the
+	// caller's hasAlpha read the forced value; the next mesh re-runs this
+	// function and re-derives, so nothing carries across meshes.
+	if((*outMaterial)->texture && config && config->texAlphaClassify){
+		int tac = TexAlpha_Classify((*outMaterial)->texture);
+		const char *texName = (*outMaterial)->texture->name;
+		bool isGlass = texName && texName[0] &&
+			VehShaders_GetSurfaceType(texName) == SURFACE_CAR_GLASS;
+		if(vehClassForceOpaque(tac, isGlass))
+			*outAlpha = false;
+	}
 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)*outAlpha);
 	// Layer-(2) mirror. RwRenderStateSet only touches the rw cache (L1); when
 	// the cache already held the target the set no-ops entirely and layer (2)
@@ -2347,7 +2380,52 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_leeds(RwResEntry *repEntry, void *o
 		RwD3D9SetPixelShader(simplePS);
 		vehBindPS(vTrace[VTR_LEEDS], simplePS);	// instrumentation only
 
+		// m2293 — 6bfea71 Leeds gap-fill, the shaderAlpha leg. The shared
+		// predicate call in vehiclePipe_setupMaterial forces blendOn = 0
+		// for TAC_OPAQUE non-glass meshes, but that is only half of the
+		// contract on THIS path: simplePS (buildingPipePS.hlsl: main_simple)
+		// outputs tex * color * colorscale with no c48.w slot, and
+		// main_vehicle leaves Color.a = matCol.a, so the texture's UNUSED
+		// alpha channel (empty DXT3 nibbles -> tex.a ~ 0) still decodes
+		// output alpha ~ 0 — the canonical GREATER-EQUAL@ref alpha test
+		// (forced TRUE for the whole vehicle dispatch by pipeForceAlphaBlock)
+		// then DISCARDS the mesh, and blend-off alone would trade a
+		// see-through body for an invisible one. The Xbox site pays this leg
+		// in the stage-0 ALPHAOP (TFACTOR.a = 1) and the Env site in PS
+		// c48.w ("force output alpha 1"); neither mechanism exists on this
+		// fixed/simplePS path, so "shader alpha 1" here means bypassing the
+		// alpha test for exactly this mesh's main draw. Predicate semantics
+		// identical to both existing sites (TAC_OPAQUE non-glass only; glass
+		// and TAC_UNKNOWN untouched), TexAlpha_Classify is per-raster cached,
+		// and the state is restored to the cb-entry snapshot immediately
+		// after the draw — the same discipline the FX pass below uses — so
+		// no later mesh (cutout grilles especially) inherits the ALWAYS func.
+		bool leedsForceOpaque = false;
+		if(config && config->texAlphaClassify && material->texture){
+			int leedsTac = TexAlpha_Classify(material->texture);
+			const char *leedsTexName = material->texture->name;
+			bool leedsGlass = leedsTexName && leedsTexName[0] &&
+				VehShaders_GetSurfaceType(leedsTexName) == SURFACE_CAR_GLASS;
+			leedsForceOpaque = vehClassForceOpaque(leedsTac, leedsGlass);
+		}
+		if(leedsForceOpaque){
+			RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION, (void*)rwALPHATESTFUNCTIONALWAYS);
+			RwD3D9SetRenderState(D3DRS_ALPHAFUNC, (RwUInt32)D3DCMP_ALWAYS);
+			if(d3d9device)
+				d3d9device->SetRenderState(D3DRS_ALPHAFUNC, D3DCMP_ALWAYS);
+		}
+
 		D3D9RenderDual(config->dualPassVehicle, resEntryHeader, instancedData);
+
+		if(leedsForceOpaque){
+			// Restore the cb-entry alpha test on all three layers (rw cache,
+			// RW driver cache, raw device — same trio as the FX pass restore
+			// below) before the FX pass or the next mesh can observe it.
+			RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION, (void*)state.alphafunc);
+			RwD3D9SetRenderState(D3DRS_ALPHAFUNC, pipeAlphaFuncToD3D((RwUInt32)state.alphafunc));
+			if(d3d9device)
+				d3d9device->SetRenderState(D3DRS_ALPHAFUNC, pipeAlphaFuncToD3D((RwUInt32)state.alphafunc));
+		}
 
 		//
 		// FX pass
@@ -3268,7 +3346,25 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Env(RwResEntry *repEntry, void *obj
 		// -403) and this file's own ambient dampening (:589-598, :1932-1941).
 		// Tunnels, underpasses and garages are no-rain cull zones, so "no rain
 		// can fall here" == "the sun cannot reach here" == covered.
-		bool covered = WaterDrops::NoRain();
+		// m2293 underwater sun-glow fix — SUPERSEDES the WaterDrops::NoRain()
+		// choice documented immediately above for THIS one call site (the
+		// composite itself is untouched; neopipe.cpp stays out of scope).
+		// NoRain() = the three terms below || NoDrops() (neopipe.cpp:2009-2011)
+		// and NoDrops() fires on CWeather__UnderWaterness > 0.339, so full
+		// submersion zeroed the PBR car sun-gloss underwater (log-confirmed:
+		// submerged sunScale=0.000 vs surfaced 0.350) while GTAIV — which has
+		// no such term — "looked correct"; that was the complaint. For this
+		// term only, use exactly the "sun cannot reach here" components of the
+		// NoRain body minus NoDrops(): rain/cull-zone/interior still zero the
+		// glow, underwater (and the entry-exit transition NoDrops also covers)
+		// no longer does. Named layer only — the same wrappers NoRain() itself
+		// calls, re-declared locally exactly as this file already does at the
+		// ambient-dampening sites (no new address, no hex).
+		extern bool CCullZones__CamNoRain(void);
+		extern bool CCullZones__PlayerNoRain(void);
+		extern int* CGame__currArea;
+		bool covered = CCullZones__CamNoRain() || CCullZones__PlayerNoRain() ||
+			*CGame__currArea != 0;
 		sunGlowScale  = covered ? 0.0f : dirLuma * VEH_WHITE_GLOSS_TONEDOWN;
 		envGlossScale = VEH_WHITE_GLOSS_TONEDOWN;
 		if(dbglog_throttle("vehSunGlow"))
