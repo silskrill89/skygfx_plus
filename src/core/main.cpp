@@ -2729,6 +2729,15 @@ CClouds__Render_hygiene(void)
 		d3d9device->GetRenderState(D3DRS_ZENABLE, &sZEn);
 		d3d9device->GetRenderState(D3DRS_ZFUNC, &sZFunc);
 	}
+	// L2 driver-cache legs for the depth pair (pre-seeded canonical): the
+	// disagreement guard at the restore needs the cache consensus to tell a
+	// device-only drift (the [zfix] dev zen=0 zfunc=8 signature) from a
+	// genuine entry state — ZFUNC has no rw twin, so the driver cache is its
+	// only cache leg. Same capture idiom as pipeProbeState's drvZEnable/
+	// drvZFunc; a Get the driver cannot report keeps the pre-seeded value.
+	DWORD sZEnDrv = TRUE, sZFuncDrv = D3DCMP_LESSEQUAL;
+	RwD3D9GetRenderState(D3DRS_ZENABLE, &sZEnDrv);
+	RwD3D9GetRenderState(D3DRS_ZFUNC, &sZFuncDrv);
 
 	// ---- blend/write block (cloud-corruption restore completeness) ----
 	// CClouds draws with ZWRITE=FALSE, ALPHABLEND ON, SRC/DEST=ONE/ONE and
@@ -2835,6 +2844,36 @@ CClouds__Render_hygiene(void)
 	// push garbage Z state onto the device.
 	if(sZEn > D3DZB_USEW) sZEn = TRUE;
 	if(sZFunc < D3DCMP_NEVER || sZFunc > D3DCMP_ALWAYS) sZFunc = D3DCMP_LESSEQUAL;
+	// Z-state disagreement guard (rw_fixes.cpp:463 spriteRestoreZWrite idiom,
+	// same rule as spriteFlushShieldClose's ZWRITE replay and
+	// pipeEnforceDepthContract's healthy-baseline check): the depth legs are
+	// captured per layer, so a device-only drift at window entry (the [zfix]
+	// signature rw/drv claim canonical while raw dev says zen=0 zfunc=8) used
+	// to be replayed VERBATIM here — RwD3D9SetRenderState republishes the
+	// device capture into the L2 driver cache and the raw L3 leg below pins
+	// it, converting a device-only drift into a cemented 3-layer one (the
+	// exact defect class rw_fixes.cpp:463-464 solves). When the legs
+	// disagree, or any leg holds a non-canonical value, the corrupted leg is
+	// NOT replayed: the canonical world baseline (ZENABLE=TRUE,
+	// ZFUNC=LESSEQUAL) goes to every layer instead — what the next pipe
+	// entry's [zfix] would enforce anyway. A capture whose legs all hold the
+	// canonical pair (the normal case) replays verbatim, byte-identical to
+	// the old behaviour. sZEnDrv/sZFuncDrv are capture-only (the L2 replay
+	// below re-derives from sZEn/sZFunc via RwD3D9SetRenderState), so only
+	// the three replayed locals are corrected.
+	bool depthLegsCanonical = ((sZTest ? TRUE : FALSE) == TRUE) &&
+		(sZEnDrv == TRUE) &&
+		(sZFuncDrv == (DWORD)D3DCMP_LESSEQUAL) &&
+		(sZEn == TRUE) &&
+		(sZFunc == (DWORD)D3DCMP_LESSEQUAL);
+	if(!depthLegsCanonical){
+		if(dbglog_throttle("cloud_zguard"))
+			dbglog("[CloudShield] ZFUNC guard: captured dev zfunc=%d zen=%d → canonical",
+				(int)sZFunc, (int)sZEn);
+		sZTest = TRUE;
+		sZEn = TRUE;
+		sZFunc = D3DCMP_LESSEQUAL;
+	}
 	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)(sZTest ? TRUE : FALSE));
 	RwD3D9SetRenderState(D3DRS_ZENABLE, sZEn);
 	RwD3D9SetRenderState(D3DRS_ZFUNC, sZFunc);
