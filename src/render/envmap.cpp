@@ -1,6 +1,7 @@
 #include "skygfx.h"
 #include "neopipe.h"
 #include "profiler.h"	// PF_SCOPE/PfNote (renderlane profiler API — no-op until PfInit)
+#include "postfx_underwater.h"	// m2300: PostFX_UnderwaterActive() gate for the env-sphere pass
 
 // Naked thunk in main.cpp (EAXJMP 0x7FC200). Plain-C++ declaration, same
 // idiom as pipelinecommon.cpp:19 / buildingPipe.cpp:58 / waterPipe.cpp:75 —
@@ -1139,54 +1140,138 @@ RenderSphereReflections(void)
 		RwCamera *cam = Scene.camera; // NULL curCamera faults (same class as 0x7FAD4D)
 		if(!cam) return;
 
-		// Instrumentation (additive, throttled): this path swaps the MAIN
-		// camera's rasters onto the reflection target (envFB, via
-		// reflectionCam) for the span — SphereReflectionGuard restores
-		// them deterministically. Reads only.
-		if(dbglog_throttle("envmap_sphere"))
-			dbglog("[EnvMap] RenderSphereReflections: vehiclePipe=%d swapTarget=envFB(%p %dx%d) via reflectionCam(%p) "
-			       "envMapSize=%d msaaLevel=%d distortionFix=%d",
-				(int)config->vehiclePipe,
-				(void*)envFB, envFB ? envFB->width : 0, envFB ? envFB->height : 0,
-				(void*)reflectionCam,
-				config->envMapSize, config->reflectionMsaaLevel,
-				(int)config->mirrorDistortionFix);
+		// ============================================================
+		// m2300 — UNDERWATER GATE for the env-sphere reflection capture.
+		//
+		// DEFECT: this pass points Scene.camera at envFB and renders the
+		// reflection scene from the LIVE camera, so while the camera is
+		// submerged it captures the submerged/washed view (underwater
+		// timecycle fog rides the scene render) into reflectionTex
+		// (RwTextureSetRaster(reflectionTex, envFB) in MakeEnvmapRasters) —
+		// the exact texture the Env/Modern vehicle cb binds on s1 every
+		// frame (vehiclePipe.cpp: vehEnvBindTexture(reflectionTex, 1)).
+		// GTAIV never consumes reflectionTex (its env comes from the MatFX
+		// FX pass), which is why IV looked correct.
+		//
+		// GATE SEMANTICS: PostFX_UnderwaterActive() (postfx_underwater.cpp:297)
+		// returns s_uwActive — true iff the most recent
+		// PostFX_UnderwaterTick actually drew, which requires the CAMERA
+		// >= 0.25 m below a water.dat surface at the camera XY
+		// (postfx_underwater.cpp:370-376: camera-vs-water-level, NOT the
+		// ped — swimming with a dry camera does not trip it),
+		// waterUnderwaterFog > 0 (default 1.0, config.cpp:997), not
+		// menu/paused, and the shader/front-buffer/INTZ resources alive
+		// (all default-on for CAR_MOBILE/CAR_ENV/CAR_MODERN: depthHookEnable
+		// default 1 -> g_ssaoDepthTex aliases INTZ). It had ZERO consumers
+		// before this commit. One-frame lag: the flag is written at END of
+		// frame in postfx (ColourFilter_switch) while this pass runs at
+		// START of frame.
+		//
+		// STALE-vs-CLEAR DECISION (why clear, not skip): because of that
+		// lag a plain skip would still capture the crossing frame submerged
+		// and then FREEZE that washed capture for the whole dive — envFB
+		// content only ever changes when this pass renders (BlendEnvMapTemporal
+		// has no callers; CAR_NEO's RenderEnvTex is a different pipe), so
+		// "stale" here would be stale-SUBMERGED, not the benign
+		// stale-above-water view. The vehicle cb rebinds the SAME
+		// reflectionTex every frame with no freshness test, and
+		// vehEnvFallback (skygfx.h:826) only rescues an EMPTY source (NULL
+		// raster) — stale non-NULL content is consumed as-is. Clearing
+		// envFB to skyTop (same color math as the span's clear at
+		// :1059-1074) instead guarantees no submerged pixels past the
+		// one-frame transition: flat sky while under, a fresh capture on
+		// the first frame back above. Clear runs EVERY gate-on frame, so a
+		// device-reset/size-change raster is re-cleared too.
+		//
+		// DEPTHHOOK (watch-out): gate-on frames skip the raster swap, so
+		// this pass no longer re-issues SetDS on those frames — safe after
+		// a9b83ee, where DepthHook_Restore re-substitutes INTZ directly
+		// (orig_SetDS, depthhook.cpp), and every frame's main-camera
+		// BeginUpdate still pushes the screen SetDS through hook_SetDS.
+		// Nothing else keys off this pass running: sphereRadius stays 0
+		// (GetIsOnScreen uses the normal cull), gRenderingSpheremap stays
+		// false, and spheremapfog is read only by the Sphere building cb,
+		// which only runs during the skipped render.
+		// ============================================================
+		if(PostFX_UnderwaterActive()){
+			// Clear-to-sky (semantics decision above): reflectionCam's rasters
+			// ARE envFB/envZB (MakeEnvmapRasters pairs them), so this writes
+			// the sky color without swapping Scene.camera — no guard, no SEH
+			// span, no swap. Clear-before-update is the established idiom in
+			// this TU (envmap.cpp leeds path, neopipe.cpp RenderEnvTex) and
+			// leaves the device parked on envFB exactly as the normal span
+			// already does until the game's own RwCameraBeginUpdate(Scene.camera)
+			// rebinds the screen.
+			if(envFB && RwCameraGetRaster(reflectionCam) == envFB && RwCameraGetZRaster(reflectionCam)){
+				RwRGBA color = { skyTopRed, skyTopGreen, skyTopBlue, 255 };
+				if(config->vehiclePipe == CAR_ENV){
+					// same white-blend as the span's ENV branch
+					float blendF = 0.7f;
+					color.red = color.red*blendF + 255*(1.0f - blendF);
+					color.green = color.green*blendF + 255*(1.0f - blendF);
+					color.blue = color.blue*blendF + 255*(1.0f - blendF);
+				}else{
+					// same >=64 floor as the span's other branch
+					if(color.red < 64) color.red = 64;
+					if(color.green < 64) color.green = 64;
+					if(color.blue < 64) color.blue = 64;
+				}
+				RwCameraClear(reflectionCam, &color, rwCAMERACLEARIMAGE | rwCAMERACLEARZ);
+			}
+			// ONE new throttled receipt — additive; no existing receipt
+			// string is modified (byte-stable mandate).
+			if(dbglog_throttle("env_uw_skip"))
+				dbglog("[EnvMap] reflection skip (underwater)");
+		}else{
+			// Instrumentation (additive, throttled): this path swaps the MAIN
+			// camera's rasters onto the reflection target (envFB, via
+			// reflectionCam) for the span — SphereReflectionGuard restores
+			// them deterministically. Reads only.
+			if(dbglog_throttle("envmap_sphere"))
+				dbglog("[EnvMap] RenderSphereReflections: vehiclePipe=%d swapTarget=envFB(%p %dx%d) via reflectionCam(%p) "
+				       "envMapSize=%d msaaLevel=%d distortionFix=%d",
+					(int)config->vehiclePipe,
+					(void*)envFB, envFB ? envFB->width : 0, envFB ? envFB->height : 0,
+					(void*)reflectionCam,
+					config->envMapSize, config->reflectionMsaaLevel,
+					(int)config->mirrorDistortionFix);
 
-		// Deterministic restore: capture the main camera's rasters/planes
-		// BEFORE the swap. The guard restores them at scope exit on every
-		// path, so a downstream geometry-phase reader never observes the
-		// reflection raster and an early bail cannot strand the swap.
-		SphereReflectionGuard guard(cam);
-		guard.fb = RwCameraGetRaster(cam);
-		guard.zb = RwCameraGetZRaster(cam);
-		// EXIT AUDIT (raster swap): the swap is applied only inside
-		// RenderSphereReflectionsSwappedSpan, whose outer __finally calls
-		// Disarm() on EVERY path (normal, __leave bail, swallowed fault).
-		// The two early returns above this point run before any swap; the
-		// bail below (and the destructor on any later exit) runs with
-		// armed==false, so no raster/clip restore is owed but the span
-		// globals are still cleared. No path past this line can return with
-		// the main camera left on the reflection raster.
-		// FIX 2 audit: this bail is safe — armed is still false, so the
-		// destructor performs NO raster/clip restore (none was applied yet),
-		// but it still clears lods/gRenderingSpheremap/bFudgeNow/sphereRadius.
-		if(!guard.fb || !guard.zb) return;
-		guard.farPlane = RwCameraGetFarClipPlane(cam);
-		guard.fog = RwCameraGetFogDistance(cam);
+			// Deterministic restore: capture the main camera's rasters/planes
+			// BEFORE the swap. The guard restores them at scope exit on every
+			// path, so a downstream geometry-phase reader never observes the
+			// reflection raster and an early bail cannot strand the swap.
+			SphereReflectionGuard guard(cam);
+			guard.fb = RwCameraGetRaster(cam);
+			guard.zb = RwCameraGetZRaster(cam);
+			// EXIT AUDIT (raster swap): the swap is applied only inside
+			// RenderSphereReflectionsSwappedSpan, whose outer __finally calls
+			// Disarm() on EVERY path (normal, __leave bail, swallowed fault).
+			// The two early returns above this point run before any swap; the
+			// bail below (and the destructor on any later exit) runs with
+			// armed==false, so no raster/clip restore is owed but the span
+			// globals are still cleared. No path past this line can return with
+			// the main camera left on the reflection raster.
+			// FIX 2 audit: this bail is safe — armed is still false, so the
+			// destructor performs NO raster/clip restore (none was applied yet),
+			// but it still clears lods/gRenderingSpheremap/bFudgeNow/sphereRadius.
+			if(!guard.fb || !guard.zb) return;
+			guard.farPlane = RwCameraGetFarClipPlane(cam);
+			guard.fog = RwCameraGetFogDistance(cam);
 
-		// Everything from the LOD fudge + raster swap through the reflection
-		// render runs in the POD-only SEH fence above; its tail restores
-		// unconditionally (finally-style), and the guard destructor is the
-		// idempotent backstop for this scope.
-		RenderSphereReflectionsSwappedSpan(&guard, cam);
+			// Everything from the LOD fudge + raster swap through the reflection
+			// render runs in the POD-only SEH fence above; its tail restores
+			// unconditionally (finally-style), and the guard destructor is the
+			// idempotent backstop for this scope.
+			RenderSphereReflectionsSwappedSpan(&guard, cam);
 
-		// Diagnostic: confirm env map rendered and log envFB state
-		{
-			static int envLogCount = 0;
-			if(envLogCount++ % 300 == 0){
-				dbglog("[EnvMap] RenderSphereReflections done: envFB=%p %dx%d refTex=%p raster=%p",
-					envFB, envFB ? envFB->width : 0, envFB ? envFB->height : 0,
-					reflectionTex, reflectionTex ? RwTextureGetRaster(reflectionTex) : NULL);
+			// Diagnostic: confirm env map rendered and log envFB state
+			{
+				static int envLogCount = 0;
+				if(envLogCount++ % 300 == 0){
+					dbglog("[EnvMap] RenderSphereReflections done: envFB=%p %dx%d refTex=%p raster=%p",
+						envFB, envFB ? envFB->width : 0, envFB ? envFB->height : 0,
+						reflectionTex, reflectionTex ? RwTextureGetRaster(reflectionTex) : NULL);
+				}
 			}
 		}
 

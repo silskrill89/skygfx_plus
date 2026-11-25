@@ -1393,10 +1393,24 @@ CPostEffects::Radiosity_shader(int intensityLimit, int filterPasses, int renderP
 	params[1] = 1.0f/max(RwRasterGetHeight(pRasterFrontBuffer), 1);
 	RwD3D9SetPixelShaderConstant(0, params, 1);
 	guardedIm2DRender(blurPS, rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6, "blur_v");
-	// Never leave FB bound on s0 while UpdateFrontBuffer makes it the RT:
+	// Never leave FB bound on s0 while the staging copy makes it the RT:
 	// D3D9 would be sampling the same surface it is rendering to.
 	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)NULL);
-	UpdateFrontBuffer();
+	// Staging copy: work buffer (blur_v output — this window's camera
+	// raster) -> front buffer, full blit at 0,0. UpdateFrontBuffer() can
+	// never do it here: its screen-size doctrine (see :624-640) rejects
+	// the non-screen camRas by design and would latch the front buffer
+	// invalid, skipping the composite below. Use the established
+	// non-screen copy idiom instead (Blur_VCS's lastFrameBuffer copy at
+	// :1227-1231 — same EndUpdate/PushContext/RenderFast/Pop/BeginUpdate
+	// dance UpdateFrontBuffer itself uses). Same blit, no doctrine change.
+	RwCameraEndUpdate(Scene.camera);
+	RwRasterPushContext(pRasterFrontBuffer);
+	RwRaster *radWorkCopyV = RwRasterRenderFast(workBuffer, 0, 0);
+	RwRasterPopContext();
+	RwCameraBeginUpdate(Scene.camera);
+	if(!radWorkCopyV)
+		PfFrontBufferFailed(PfFrontBufferCopyHr());
 	radFbOk = PfFrontBufferValid();
 	if(radFbOk){
 		// Blur horizontally
@@ -1406,7 +1420,17 @@ CPostEffects::Radiosity_shader(int intensityLimit, int filterPasses, int renderP
 		RwD3D9SetPixelShaderConstant(0, params, 1);
 		guardedIm2DRender(blurPS, rwPRIMTYPETRILIST, colorfilterVerts, 4, colorfilterIndices, 6, "blur_h");
 		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)NULL);
-		UpdateFrontBuffer();
+		// Staging copy: work buffer (blur_h output) -> front buffer at
+		// 0,0 — same non-screen idiom as the blur_v copy above. A
+		// UpdateFrontBuffer() here would trip the screen-size doctrine
+		// and skip the composite below.
+		RwCameraEndUpdate(Scene.camera);
+		RwRasterPushContext(pRasterFrontBuffer);
+		RwRaster *radWorkCopyH = RwRasterRenderFast(workBuffer, 0, 0);
+		RwRasterPopContext();
+		RwCameraBeginUpdate(Scene.camera);
+		if(!radWorkCopyH)
+			PfFrontBufferFailed(PfFrontBufferCopyHr());
 		radFbOk = PfFrontBufferValid();
 	}
 

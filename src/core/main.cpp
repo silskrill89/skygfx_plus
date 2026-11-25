@@ -735,7 +735,24 @@ derivePipelineFromPipes(Config *c)
 	// but never rewrite the profile's pipes/filter (the PBR lock would otherwise
 	// undo PS2/Xbox/GTAIV via the every-frame ColourFilter_switch path). Other
 	// config slots are not mode-owned and keep the legacy lock.
+	// m2300 (user complaint: "pbr pipe and modern ones are connected and can't
+	// be chosen individually"): the every-frame caller (ColourFilter_switch,
+	// postfx.cpp:1937) and the menu-open derive (debugmenu_ui.cpp:4491) re-run
+	// this function with NO adoption intent — firing the rewrite there stomped
+	// an independently chosen vehiclePipe/colorFilter the moment buildingPipe
+	// sat at BUILDING_PBR (log: `vp 9->10 cf 7->8 rule=3 trigger=per-frame`,
+	// one frame after the raw vehiclePipe row edit; never-revert then parked
+	// it). User-intent latch: fire ONLY on adoption-time callers —
+	// s_pipeDeriveTrigger is set around the derive call by readIniFile
+	// (config.cpp:339, INI pipeline-key parse) and by refreshIni (below, INI
+	// reload/setConfig/named-config) and cleared right after; per-frame/menu
+	// callers leave it NULL, so they only update the `c->pipeline` mirror
+	// above. Writers that legitimately change all three fields do not need
+	// this rewrite: ApplyPipelineFromMenu (menu pipeline row) and the mode
+	// profiles write the fields themselves, and mode-owned live configs stay
+	// excluded by the guard below.
 	if(derived == PIPELINE_PBR && rule == 3 &&
+	   s_pipeDeriveTrigger != NULL &&
 	   !(c == config && modeOwnsPipes())){
 		if(c->buildingPipe != BUILDING_PBR)
 			c->buildingPipe = BUILDING_PBR;

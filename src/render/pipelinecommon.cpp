@@ -2410,16 +2410,34 @@ pipeExitAlphaMode(PipeAlphaState saved)
 	// (the L1 rw leg follows devEnableL2 in the SEV1 block below); a
 	// CLEAN capture keeps its verbatim restore, so legacy-parity item 6's
 	// goal (a clean test-off capture still restores test-off) is untouched
-	// — only DISAGREEMENT across the captured layers trips this. Enable
-	// ends blend OFF, test ends TRUE, op ends ADD — the entry's canonical
-	// force, the values the span itself ran with.
+	// — only DISAGREEMENT across the captured layers trips this.
+	// HANDOFF DOCTRINE (grey-puff upstream repair): the repair target is
+	// COHERENT layers — all three layers publish ONE canonical value,
+	// never layered disagreement — and at this EXIT the enable leg's
+	// canonical is TRUE (canonical normal-alpha: enable ON, factors still
+	// follow the captured L1 pair, test ends TRUE, op ends ADD), NOT the
+	// blend-OFF this rule used to cement. Why the value moved: after
+	// geometry, effects/sprites expect normal-alpha to be AVAILABLE, so
+	// publishing OFF at the last exit is what left every later sprite/
+	// particle batch rasterising with device blend==0 — authored alpha
+	// never applied (the grey puff quads / grey-box cars / opaque sprite
+	// class; the downstream flush-entry fail-closed in rw_fixes.cpp
+	// repairs it per-draw, this exit removes the upstream source).
+	// Geometry cannot inherit the ON: every geometry entry re-forces its
+	// own canonical blend OFF (pipeEnterAlphaMode's entry force, the
+	// DefPipe entry contract in render_callbacks.cpp, pipeApplyWorld-
+	// Baseline at the frame boundaries) — the GEOMETRY-entry canonical
+	// is unchanged by this repair; only the EXIT/cross-boundary handoff
+	// value moved. The "never re-create a pre-entry desync at exit" rule
+	// (pipeEnterCullMode/ped sticky pair above) stays intact: the split
+	// itself is still never replayed per-layer.
 	bool stickyEnable = (saved.capMask & PAACAP_BLENDENABLE) &&
 		(saved.alphaBlendEnable != saved.alphaBlendEnableDev);
 	bool stickyTest = (saved.capMask & PAACAP_TESTENABLE) &&
 		(saved.alphaTestEnable != saved.alphaTestEnableDev);
 	bool stickyOp = (saved.capMask & PAACAP_BLENDOP) &&
 		(saved.blendOp != saved.blendOpDev);
-	if(stickyEnable){ devEnableL2 = FALSE; devEnableL3 = FALSE; }
+	if(stickyEnable){ devEnableL2 = TRUE; devEnableL3 = TRUE; }
 	if(stickyTest){ devTestL2 = TRUE; devTestL3 = TRUE; }
 	if(stickyOp){ devOpL2 = (RwUInt32)D3DBLENDOP_ADD; devOpL3 = (RwUInt32)D3DBLENDOP_ADD; }
 	// Source-kill trace (N1, 2026-11-08): the L2=1/L3=0 blend-enable split
@@ -2496,6 +2514,20 @@ pipeExitAlphaMode(PipeAlphaState saved)
 			(unsigned)saved.alphaBlendEnable, (unsigned)saved.alphaBlendEnableDev,
 			(unsigned)saved.alphaTestEnable, (unsigned)saved.alphaTestEnableDev,
 			(unsigned)saved.blendOp, (unsigned)saved.blendOpDev);
+
+	// Additive receipt (the frozen line above stays byte-stable — its
+	// legacy "canonical enable=0" tail predates the handoff doctrine and
+	// still reports the CAPTURE): names what the enable leg actually
+	// publishes now, so the repaired handoff value is greppable beside
+	// the frozen capture line. Fires only on the enable leg (the value
+	// that moved); first hit unstarvable (dbglog_once), then the 2s
+	// bucket. Tags FNV-clean in their own tables (checked before adding):
+	// "pipe_alpha_sticky_handoff1" once-table 256 bucket 132 / 0 coll,
+	// "pipe_alpha_sticky_handoff" throttle-table 1024 bucket 989 / 0 coll.
+	if(stickyEnable &&
+	   (dbglog_once("pipe_alpha_sticky_handoff1") || dbglog_throttle("pipe_alpha_sticky_handoff")))
+		dbglog("[PipeAlpha] sticky exit handoff: split enable capture L2=%u L3=%u -> canonical enable=1 (normal-alpha) published L1+L2+L3 coherently; geometry entries still re-force blend OFF",
+			(unsigned)saved.alphaBlendEnable, (unsigned)saved.alphaBlendEnableDev);
 
 	// Instrumentation (additive, throttled): state-restore receipt —
 	// the exact values handed back to the caller's baseline.

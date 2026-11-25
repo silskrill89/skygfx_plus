@@ -30,6 +30,16 @@ extern void setZWriteTwoLayer(RwBool on);                     // main.cpp
 // declaration near the skidmark draw (line ~1240) sits after this use.
 extern void pipeForceAlphaBlock(void);
 
+// pipelinecommon.cpp — the default-pipe entry contract below routes EVERY
+// render-state write through pipeDeviceStateSet (the shared 3-layer
+// chokepoint: L1 rw twin + L2 driver pending[] + L3 raw device from the
+// ONE value, so the contract can never birth an L2=1/L3=0 split) and then
+// commits pending[]->applied[] with _rwD3D9RenderStateFlushCache (the RW
+// driver-cache flush, main.cpp WRAPPER — same local-extern idiom
+// buildingPipe.cpp:60 / water.cpp:28 use). Local-extern idiom as above.
+extern void pipeDeviceStateSet(D3DRENDERSTATETYPE state, DWORD value);
+void _rwD3D9RenderStateFlushCache(void);
+
 // Atomic-level analogue of D3D9RenderDual's per-mesh gate (see the
 // `dual && hasAlpha && zwrite` test in D3D9RenderDual). That helper reads
 // D3DRS_ALPHABLENDENABLE — the vertex-alpha state the callback has ALREADY
@@ -352,56 +362,69 @@ myDefaultCallback(RpAtomic *atomic)
 		// (vanilla restores nothing there), and these atomics ghosted
 		// (additive opaque geometry, no depth writes). Force the canonical
 		// world signature through ALL THREE layers (rw cache / RW driver
-		// cache / raw device, dev null-guarded) BEFORE the draw, mirroring
-		// the ped entry contract above. The zwrite read above
-		// deliberately stays FIRST: the dual-pass gate must keep sampling
-		// the INHERITED state (vanilla semantics), not the forced value.
-		// No save/restore: these ARE the world's own normal-state values,
-		// so leaving them behind is the repair, not a leak. BLENDOP and
-		// ALPHATESTENABLE have no rw render state (same rule as
-		// pipeForceAlphaBlock) — they ride L2/L3 only. ALPHAFUNC/ALPHAREF
-		// DO have rw twins and are forced through ALL THREE layers
-		// (fix-34): without them the markers alpha-tested at whatever ref
-		// the previous pass inherited (e.g. envmap.cpp:448's outdoor park
-		// at 140), discarding every marker texel below the leaked ref.
-		// (1) rw cache
-		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
-		RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
-		RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
-		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
-		RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
-		RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION, (void*)rwALPHATESTFUNCTIONGREATEREQUAL);
-		RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTIONREF, (void*)1);
-		// (2) RW D3D9 driver cache (pending[], flushed pre-draw)
-		RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
-		RwD3D9SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
-		RwD3D9SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
-		RwD3D9SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
-		RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
-		RwD3D9SetRenderState(D3DRS_ZENABLE, TRUE);
+		// cache / raw device) BEFORE the draw, mirroring the ped entry
+		// contract above. The zwrite read above deliberately stays FIRST:
+		// the dual-pass gate must keep sampling the INHERITED state
+		// (vanilla semantics), not the forced value.
+		// COHERENT-PIN DOCTRINE (grey-puff upstream repair): every state
+		// below goes through pipeDeviceStateSet — the shared 3-layer
+		// chokepoint (pipelinecommon.cpp) that derives the L1 rw twin, the
+		// L2 driver pending[] and the L3 raw device from the SAME value —
+		// instead of the old hand-rolled L1 block + L2 block + a SEPARATE
+		// raw L3 pin. That hand-rolled shape is how an L2=1/L3=0 split was
+		// born here: the contract pinned the device raw while applied[]
+		// still shadowed the pre-contract value, so a later cache-only
+		// write of that old value value-compared equal against applied[]
+		// and the applied[]-gated pre-draw flush SKIPPED — stranding the
+		// raw-pinned device at blend OFF under a cache that says ON (the
+		// exact "wrong device value survives the whole scene" mechanism
+		// pipeDeviceStateSet's block comment documents). The single
+		// _rwD3D9RenderStateFlushCache() after the writes commits
+		// pending[]->applied[] while it holds the canonical values, so
+		// the contract hands off pending==applied==device and every later
+		// cache-only write becomes a REAL transition the flush must push.
+		// No save/restore: the VALUE left behind is still the world's own
+		// geometry-entry normal state (blend OFF — the opaque world; the
+		// same canonical pipeEnterAlphaMode forces at every pipe entry,
+		// unchanged by this repair), so leaving it behind is the repair,
+		// not a leak. What this repair changes is the COHERENCE of that
+		// handoff: the repair target is all three layers AGREEING, never
+		// layered disagreement — a split is the defect class (grey puff
+		// quads / grey-box cars / opaque sprites downstream), not a
+		// resting state. BLENDOP and ALPHATESTENABLE have no rw render
+		// state (same rule as pipeForceAlphaBlock) — the chokepoint rides
+		// L2/L3 only for those. ALPHAFUNC/ALPHAREF DO have rw twins and
+		// are forced through ALL THREE layers (fix-34): without them the
+		// markers alpha-tested at whatever ref the previous pass inherited
+		// (e.g. envmap.cpp:448's outdoor park at 140), discarding every
+		// marker texel below the leaked ref.
 		// ZFUNC has no rw render state (L2+L3 paired, same rule as
-		// pipeForceAlphaBlock / pedOpaqueEnforce). Build-11 "props draw over
-		// CJ": this contract forced ZTEST/ZENABLE but never ZFUNC, so a
-		// postfx/DepthHook raw drift (pipelinecommon :1400 evidence
+		// pipeForceAlphaBlock / pedOpaqueEnforce). Build-11 "props draw
+		// over CJ": this contract forced ZTEST/ZENABLE but never ZFUNC, so
+		// a postfx/DepthHook raw drift (pipelinecommon :1400 evidence
 		// "ZFUNC drv=4/dev=8" — device at D3DCMP_ALWAYS) survived here and
 		// every prop/markers draw after CJ passed its depth test over him.
-		RwD3D9SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
-		RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
-		RwD3D9SetRenderState(D3DRS_ALPHAFUNC, pipeAlphaFuncToD3D(rwALPHATESTFUNCTIONGREATEREQUAL));
-		RwD3D9SetRenderState(D3DRS_ALPHAREF, 1);
-		// (3) raw device — repairs drift the caches can't see
-		if(d3d9device){
-			d3d9device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
-			d3d9device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
-			d3d9device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
-			d3d9device->SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
-			d3d9device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
-			d3d9device->SetRenderState(D3DRS_ZENABLE, TRUE);
-			d3d9device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
-			d3d9device->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
-			d3d9device->SetRenderState(D3DRS_ALPHAFUNC, pipeAlphaFuncToD3D(rwALPHATESTFUNCTIONGREATEREQUAL));
-			d3d9device->SetRenderState(D3DRS_ALPHAREF, 1);
-		}
+		// (1)+(2)+(3) — one coherent chokepoint write per state:
+		pipeDeviceStateSet(D3DRS_ALPHABLENDENABLE, FALSE);
+		pipeDeviceStateSet(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+		pipeDeviceStateSet(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+		pipeDeviceStateSet(D3DRS_BLENDOP, D3DBLENDOP_ADD);
+		pipeDeviceStateSet(D3DRS_ZWRITEENABLE, TRUE);
+		pipeDeviceStateSet(D3DRS_ZENABLE, TRUE);
+		pipeDeviceStateSet(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+		pipeDeviceStateSet(D3DRS_ALPHATESTENABLE, TRUE);
+		pipeDeviceStateSet(D3DRS_ALPHAFUNC, pipeAlphaFuncToD3D(rwALPHATESTFUNCTIONGREATEREQUAL));
+		pipeDeviceStateSet(D3DRS_ALPHAREF, 1);
+		// Doctrine step: commit pending[]->applied[] NOW, while it holds
+		// the canonical values (the pipeEnterAlphaMode / pipeApplyWorld-
+		// Baseline flush idiom). Null-device safe: with no device the
+		// chokepoint early-outs before even the L1 leg, so there is no
+		// pending state to commit (the old code wrote L1/L2 unconditionally
+		// and only guarded the raw pin — inert either way: this callback
+		// only runs from a live draw, and a recreated device is re-pinned
+		// by pipeApplyWorldBaseline("DeviceReset")).
+		if(d3d9device)
+			_rwD3D9RenderStateFlushCache();
 		// One-shot throttled log tag "defpipe_contract".
 		static bool defpipeLogged = false;
 		if(!defpipeLogged && dbglog_throttle("defpipe_contract")){
