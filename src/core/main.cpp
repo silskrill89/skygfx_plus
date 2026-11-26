@@ -3136,6 +3136,13 @@ InitialiseGame_hook(void)
 	dbglog("InitialiseGame_hook: calling original CGame::Initialise...");
 	static DWORD s_initCrashCode;
 	static EXCEPTION_POINTERS* s_initCrashPtrs;
+	// TODO(g_allowCrashPassThrough, m0271): the flag's only read — the
+	// `if(g_allowCrashPassThrough)` in the VEH — was DEAD (both branches
+	// returned EXCEPTION_CONTINUE_SEARCH) and was removed at the
+	// crashhandler.cpp de-merge.  The reads are gone but these writes are
+	// kept: main.cpp is single-writer-sensitive here.  Remove flag + these
+	// writes + the debug_handl.h decl as ONE unit when this file is safe to
+	// touch for that purpose (see the DEAD READ note in debug_handl.h).
 	g_allowCrashPassThrough = 1;
 	__try {
 		InitialiseGame();

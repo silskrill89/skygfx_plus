@@ -9,6 +9,12 @@
 // Section order (log -> ring -> scope -> dbglog -> crash VEH -> watchdog ->
 // crashhandler -> menu) is preserved and matters: the crashhandler static
 // installer must run after the diag_* statics are initialised.
+// (m0271 de-merge, 2026-11-26: crash handling moved BACK to its own TU,
+// src/core/crashhandler.cpp — this header stays the API home for all of it.
+// The ordering note above is now historical: the CrashHandlerInstaller
+// static lives in crashhandler.cpp and its work — SetUnhandledExceptionFilter,
+// the WER registry backup, the spec-pool guard patch — depends on no
+// debug_handl.cpp static, so cross-TU init order is moot.)
 
 #pragma once
 
@@ -24,6 +30,13 @@
 
 #ifndef DIAGNOSTICS_H
 #define DIAGNOSTICS_H
+
+// Ring-buffer slot width.  Was a file-local #define in debug_handl.cpp;
+// promoted here at the 2026-11-26 crash de-merge (m0271) because the VEH's
+// GUARD-FAULT receipt now lives in crashhandler.cpp and must pack into the
+// exact slot width the ring writer (diag_ringPut) allocates.
+#define RING_MSG_LEN 160
+
 #ifdef DIAGNOSTICS_DISABLED
 
 // Stubs — all diagnostic calls become no-ops
@@ -61,9 +74,16 @@ extern const char *g_renderPhase;
 const char* diag_getLogPath(void);
 
 // Call from heartbeat points to tell the watchdog the game is alive.
+// DEAD (m0271): grep 2026-11-26 found zero callers anywhere in src/ — the
+// watchdog was removed at merge time (see main.cpp's "diag_startWatchdog()
+// removed" note).  Declaration kept on purpose (other TUs may compile
+// against it); the definition in debug_handl.cpp stays too.  Do NOT delete.
 void diag_heartbeat(void);
 
 // Check for crash marker from previous session — show dialog if found.
+// DEAD (m0271): grep 2026-11-26 found zero callers AND zero definitions in
+// src/ (callers would fail to link).  Declaration kept on purpose — do NOT
+// delete; re-wire before use (needs a definition).
 void diag_checkCrashMarker(void);
 
 // One-line end-of-session summary of crash-relevant counters (VEH catches,
@@ -77,6 +97,12 @@ void diag_dumpStats(void);
 
 // Guard flag: set by InitialiseGame_hook to let SEH handlers fire during
 // CGame::Initialise (defined in main.cpp).
+// DEAD READ (m0271): the VEH's `if(g_allowCrashPassThrough)` was removed in
+// the crashhandler.cpp de-merge — both branches were the identical
+// EXCEPTION_CONTINUE_SEARCH disposition, so the flag had no semantics.
+// The writes in main.cpp (single-writer-sensitive) are kept with a TODO at
+// the site; remove decl + def + writes as one unit when that file is safe
+// to touch for this purpose.
 extern volatile int g_allowCrashPassThrough;
 
 // Scope tag registry count (defined in debug_handl.cpp).
@@ -182,8 +208,11 @@ void DebugInvalidatePipelineCache(void);
 // g_diagLevel = c->diagLevel.
 extern int g_diagLevel;
 
-// ---- CRASH HANDLING (was crashhandler.cpp) ----
+// ---- CRASH HANDLING (was crashhandler.cpp; own TU again since m0271) ----
 //
-// No public API.  The unhandled-exception filter self-installs from a
-// namespace-scope static object (s_crashInstaller) during CRT init, so
-// there is nothing to declare or call from outside the TU.
+// No public API.  Implementation now lives in src/core/crashhandler.cpp:
+// the unhandled-exception filter self-installs from a namespace-scope static
+// object (s_crashInstaller) during CRT init, the diagnostic VEH installs via
+// diag_installVEH() from main.cpp DllMain, and the 0x5D97E6 spec-pool guard
+// self-installs from the same static (receipt-gated on diag_installVEH) —
+// so there is nothing to declare or call from outside those TUs.

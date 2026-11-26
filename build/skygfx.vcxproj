@@ -182,6 +182,11 @@
     <ClCompile Include="..\src\peds\peds_pipe.cpp" />
     <ClCompile Include="..\src\peds\skin.cpp" />
     <ClCompile Include="..\src\core\debug_handl.cpp" />
+    <!-- crashhandler: diagnostic VEH + forensics + fatal unhandled filter +
+         the 0x5D97E6 shutdown-UAF guards (de-merged from debug_handl.cpp,
+         m0271). Unique basename — no ObjectFileName override, no LNK4042
+         duplicate-basename risk. -->
+    <ClCompile Include="..\src\core\crashhandler.cpp" />
     <ClCompile Include="..\src\render\depthhook.cpp" />
     <ClCompile Include="..\src\render\transparency.cpp" />
     <ClCompile Include="..\src\render\envmap.cpp" />
