@@ -2,7 +2,9 @@
 // crash-relevant stats), crash-forensics primitives, the fatal
 // unhandled-exception filter (log / FORENSICS / ring / flush / minidump /
 // WER backup), and the crash 0x5D97E6 shutdown-ordering-UAF resolutions
-// (Phase 2 FIX A + FIX B, m0271). Bodies are byte-identical to the blocks
+// (Phase 2 FIX A + FIX B, m0271) plus the second latent quit-UAF in the
+// RpMatFX material destructor (Phase 2 FIX C, 0x810CB2, 2026-11-26).
+// Bodies are byte-identical to the blocks
 // de-merged from src/core/debug_handl.cpp (that file absorbed this TU on
 // 2026-10-26; the de-merge restored it 2026-11-26, original ancestor at
 // _backup/src/core/crashhandler.cpp). Owns:
@@ -18,8 +20,9 @@
 //   * crashAppendLog / crashAppendForensics / crashFlushLog / crashWriteDump,
 //     crashUnhandledFilter + step fences, crashInstallWerBackup,
 //     CrashHandlerInstaller (CRT static self-install)
-//   * CrashHandler_InstallSpecPoolGuard (Phase 2 FIX A) and the 0x5D97E6
-//     conjunctive VEH skip (Phase 2 FIX B) — see the PHASE 2 sections
+//   * CrashHandler_InstallSpecPoolGuard (Phase 2 FIX A), the 0x5D97E6
+//     conjunctive VEH skip (Phase 2 FIX B) and the 0x810CB2 MatFX data-UAF
+//     conjunctive VEH skip (Phase 2 FIX C) — see the PHASE 2 sections
 // Install: diag_installVEH() is called once from main.cpp DllMain at the
 // original install position (right after diag_init); the unhandled filter
 // and FIX A also self-install from the CrashHandlerInstaller namespace-scope
@@ -292,6 +295,74 @@ crashSpecPoolSkipSafe(DWORD site, DWORD esi, DWORD *outWhy, DWORD *outPool)
 	return skip;
 }
 // ============================================================
+// PHASE 2 / FIX C — 0x810CB2 RpMatFX data-struct shutdown-UAF skip
+// ============================================================
+// Root cause (proven 2026-11-26, same quit chain as 0x5D97E6): the RpMatFX
+// material plugin (registered by RpMatFXPluginAttach 0x810AA0; offset global
+// MatFXMaterialDataOffset @ 0xC9AB74) stores a 4-BYTE POINTER at
+// material+offset to a separately-allocated data struct.  Its destructor
+// (0x810C60) loads that pointer and hands it to the effect-teardown helper
+// (0x810CA0), whose switch reads [data+0x14] at 0x810CB2
+// (`mov eax,[esi+0x10]`, esi=data+4).  At QUIT the material is still alive
+// but the data struct was already freed WITHOUT the field being nulled
+// (early freer unidentified — same DestroyPipe-before-RwTerminate ordering
+// family as the specpool bug; no skygfx hook touches 0x810xxx), so the read
+// AVs on unmapped heap.  FIX A removed the first quit-UAF (0x5D97E6); this
+// is the next one destruction reaches.  Conjuncts (ALL must hold):
+//   code == 0xC0000005 && accessType == READ      (AV read only)
+//   AND ExceptionAddress == 0x810CB2              (EXACT faulting instruction)
+//   AND [esp+0x10] == 0x810C78                    (return into the dtor ONLY —
+//      excludes the helper's second caller at 0x811CDF, whose frame differs)
+//   AND ExceptionInformation[1] == ebp + 0x14     (fault is data+0x14; ebp=data)
+//   AND image bytes match: 0x810CB2 = 8B 46 10 48, 0x810C9B = 8B C7 5F 5E
+//   AND a safe read of data+0x14 FAULTS            (freed struct confirmed;
+//      readable -> skip=0, fault propagates — never-swallow discipline)
+// Recovery (frame math verified against the captured dump):
+//   ESP_crash = dtor ESP0-0x20 (helper pushed ebx,ebp,esi,edi; no sub esp),
+//   so [ESP_crash+0] = helper's saved edi = the dtor's EDI = the material,
+//   and ESP_crash+0x18 = the dtor's own saved-edi slot (ESP0-8).  Redirect:
+//   Edi = material; Esp += 0x18; Eip = 0x810C9B
+//   (`mov eax,edi; pop edi; pop esi; ret`) — skips the manager FREE (no
+//   double-free of the already-freed block) and the field zero (the material
+//   is dying anyway), restores the registry caller's edi/esi from the dtor
+//   frame, returns the object in EAX per the CB convention, lands exactly on
+//   ret-to-0x80875D (_rwPluginRegistryApply).  Stack-neutral vs the dtor.
+static const DWORD kMatFxFault    = 0x810CB2; // mov eax,[esi+0x10] — [data+0x14] load
+static const DWORD kMatFxCallerRet= 0x810C78; // ret into dtor 0x810C60 (call at 0x810C73)
+static const DWORD kMatFxRecover  = 0x810C9B; // mov eax,edi; pop edi; pop esi; ret
+static const DWORD kMatFxFaultByte= 0x4810468B; // 8B 46 10 48 @ 0x810CB2
+static const DWORD kMatFxRecovByte= 0x5E5FC78B; // 8B C7 5F 5E @ 0x810C9B
+// Read-only probe targets; addresses live in this declaration layer per the
+// HARD RULE (install/forensics-layer exemption documented in crashhandler.h).
+
+// POD-only SEH island (same pattern as crashSpecPoolSkipSafe): any probe
+// fault inside the evidence reads degrades per-branch — only a fault on the
+// DATA read itself means "skip".  Returns 1 = safe to skip.
+static int __declspec(noinline)
+crashMatFxSkipSafe(DWORD site, DWORD esp, DWORD ebp, DWORD accessType,
+	DWORD faultAddr, DWORD *outWhy, DWORD *outMaterial)
+{
+	int skip = 0;
+	*outWhy = 0;
+	*outMaterial = 0;
+	__try {
+		if(site == kMatFxFault && accessType == 0 &&
+		   *(const volatile DWORD *)(uintptr_t)(esp + 0x10) == kMatFxCallerRet &&
+		   faultAddr == ebp + 0x14u &&
+		   *(const volatile DWORD *)(uintptr_t)kMatFxFault == kMatFxFaultByte &&
+		   *(const volatile DWORD *)(uintptr_t)kMatFxRecover == kMatFxRecovByte)
+		{
+			*outMaterial = *(const volatile DWORD *)(uintptr_t)esp; // helper saved-edi = material
+			volatile DWORD probe = *(const volatile DWORD *)(uintptr_t)faultAddr;
+			(void)probe;
+			skip = 0; *outWhy = 5;  // data+0x14 readable: NOT the UAF -> propagate
+		}
+	} __except(EXCEPTION_EXECUTE_HANDLER) {
+		skip = 1; *outWhy = 1;      // data+0x14 unmapped: freed struct confirmed
+	}
+	return skip;
+}
+// ============================================================
 // VEH crash handler — matches original skygfx crashHandler
 // Logs crashes, auto-fixes known issues, suppresses rendering crashes
 // ============================================================
@@ -358,6 +429,36 @@ diag_crashHandler(EXCEPTION_POINTERS *ep)
 			}
 			ep->ContextRecord->Eip = kSpecCbEpilogue;   // shared CB epilogue
 			ep->ContextRecord->Eax = ep->ContextRecord->Ebx;
+			return EXCEPTION_CONTINUE_EXECUTION;
+		}
+	}
+
+	// ---- PHASE 2 / FIX C — conjunctive 0x810CB2 MatFX data-UAF skip ----
+	// Same discipline as FIX B: runs before the crashCount budget and before
+	// any receipt work; all conjuncts inside the POD probe island; probe
+	// faults degrade to "no skip".  ExceptionInformation[0]=0/1/8 = READ/
+	// WRITE/DEP, [1] = the accessed address.
+	if(code == 0xC0000005){
+		DWORD mfWhy = 0, mfMaterial = 0;
+		DWORD accessType = ep->ExceptionRecord->ExceptionInformation[0];
+		DWORD faultAddr  = ep->ExceptionRecord->ExceptionInformation[1];
+		if(crashMatFxSkipSafe(
+			(DWORD)(uintptr_t)ep->ExceptionRecord->ExceptionAddress,
+			ep->ContextRecord->Esp, ep->ContextRecord->Ebp,
+			accessType, faultAddr, &mfWhy, &mfMaterial))
+		{
+			// Evidence line (throttled tag matfx_uaf_skip, FNV-clean on the
+			// 1024/256 buckets): bounded, own claim/release (Phase 3 rules).
+			if(InterlockedCompareExchange(&s_vehReceiptBusy, 1, 0) == 0){
+				if(dbglog_throttle("matfx_uaf_skip"))
+					dbglog("[matfx_uaf_skip] MatFX data UAF skip: eip=0x%08X ret=%08X data=%08X fault=%08X why=%lu -> eip=0x%08X",
+						kMatFxFault, kMatFxCallerRet, ep->ContextRecord->Ebp,
+						faultAddr, mfWhy, kMatFxRecover);
+				InterlockedExchange(&s_vehReceiptBusy, 0);
+			}
+			ep->ContextRecord->Edi = mfMaterial;   // dtor's EDI (material) for `mov eax,edi`
+			ep->ContextRecord->Esp = ep->ContextRecord->Esp + 0x18; // dtor saved-edi slot
+			ep->ContextRecord->Eip = kMatFxRecover; // skip free+zero, pops+ret to registry
 			return EXCEPTION_CONTINUE_EXECUTION;
 		}
 	}
