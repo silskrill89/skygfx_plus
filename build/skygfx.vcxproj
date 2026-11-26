@@ -181,11 +181,18 @@
     <ClCompile Include="..\src\entities\softbody.cpp" />
     <ClCompile Include="..\src\peds\peds_pipe.cpp" />
     <ClCompile Include="..\src\peds\skin.cpp" />
-    <ClCompile Include="..\src\core\debug_handl.cpp" />
+    <!-- m0272 layer split: debug_handl.cpp was deleted — its logging half
+         (log path, ring, frame stamps, dbglog, diag_init) is log.cpp (L0)
+         and its scope-registry half is diagnostics.cpp (L2); crash handling
+         is crashhandler.cpp (L1) below. Unique basenames — no
+         ObjectFileName override, no LNK4042 duplicate-basename risk. -->
+    <ClCompile Include="..\src\core\log.cpp" />
+    <ClCompile Include="..\src\core\diagnostics.cpp" />
     <!-- crashhandler: diagnostic VEH + forensics + fatal unhandled filter +
          the 0x5D97E6 shutdown-UAF guards (de-merged from debug_handl.cpp,
-         m0271). Unique basename — no ObjectFileName override, no LNK4042
-         duplicate-basename risk. -->
+         m0271) + the guardedSetRT/guardedIm2DRender sandbox chokepoints
+         (moved from pipelinecommon.cpp, m0272). Unique basename — no
+         ObjectFileName override, no LNK4042 duplicate-basename risk. -->
     <ClCompile Include="..\src\core\crashhandler.cpp" />
     <ClCompile Include="..\src\render\depthhook.cpp" />
     <ClCompile Include="..\src\render\transparency.cpp" />

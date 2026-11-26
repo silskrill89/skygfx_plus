@@ -1,26 +1,29 @@
-// debug_handl.cpp - consolidated debug/diagnostics/menu translation unit.
+// log.cpp — L0 FOUNDATION LAYER: logging, ring buffer, frame correlation,
+// log-file lifecycle.
 //
-// Merged 2026-10-26 from THREE former TUs, concatenated in this order:
-//   1. src/core/diagnostics.cpp  - logging, ring buffer, scope tags, dbglog,
-//                                  watchdog
-//   2. src/core/crashhandler.cpp  - self-installing unhandled-exception filter
-//   3. src/core/menu_inject.cpp   - native CMenuManager settings injection
+// m0272 layer split: this file is the successor of the logging half of
+// src/core/debug_handl.cpp, which is now DELETED — every block it held has
+// an explicit layer home:
+//   * log path / g_diagLevel / ring buffer / frame correlation / dbglog /
+//     watchdog heartbeat / diag_init  ->  HERE (L0)
+//   * scope tag registry              ->  src/core/diagnostics.cpp (L2)
+//   * crash handling (VEH, forensics, dumps, WER, spec-pool guard,
+//     guarded sandbox chokepoints)    ->  src/core/crashhandler.cpp (L1)
+// The public API re-exports from src/core/debug_handl.h (the facade), so no
+// consumer include or call site changed.
 //
-// DE-MERGED 2026-11-26 (m0271): every crash-handling block moved back OUT to
-// src/core/crashhandler.cpp (its own TU again): the crash VEH + receipts +
-// stats + diag_dumpStats, the crash forensics primitives, the fatal
-// unhandled-exception filter / minidump / WER section, and
-// diag_installVEH/diag_removeVEH.  What remains here: logging, ring buffer,
-// scope tags, frame correlation, dbglog, watchdog heartbeat, diag_init.
+// L0 CONTRACT: nothing below this file's layer — log.cpp must not reference
+// a crashhandler or diagnostics symbol (it does not: grep before adding
+// one), and the ring buffer's internals (s_ring) stay static here; L1 packs
+// bytes into a slot of width RING_MSG_LEN and never sees the array.
 //
-// Bodies are verbatim; only the includes were deduped, section banners added,
-// and the single g_allowCrashPassThrough extern moved to debug_handl.h.
-// Cross-TU note: RING_MSG_LEN was promoted to debug_handl.h (the VEH receipt
-// in crashhandler.cpp packs into the same 160-byte ring slot).
-
+// Provenance: the diagnostics.cpp/h -> debug_handl merge of 2026-10-26, and
+// the crash de-merge (m0271) that first pulled the VEH back out.  Bodies
+// below are byte-identical to the blocks they came from; only this header
+// and three stale comment pointers into debug_handl.{cpp,h} were touched.
 // ---- Includes (logging half of the old deduped union) ----
 #include "skygfx.h"
-#include "debug_handl.h"
+#include "log.h"
 #include <windows.h>
 #include <stdio.h>
 #include <stdarg.h>
@@ -37,10 +40,11 @@
 //   - dbglog / dbglog_loc (debug file logging)
 //   - Log file initialization and path management
 //   - Log ring buffer (last N messages) for crash dump context
-//   - Scope tag registry (address→function name for crash backtrace)
-// (The VEH crash handler, forensics and minidump sections moved to
-// crashhandler.cpp in the 2026-11-26 de-merge; their decls stay in
-// debug_handl.h.)
+//   - frame correlation stamps (DebugFrameId/Code, debugFrameStamp)
+// (The scope tag registry moved to diagnostics.cpp at m0272; the VEH
+// crash handler, forensics and minidump sections moved to
+// crashhandler.cpp at the m0271 de-merge.  Both sets of decls stay
+// reachable through the facade, debug_handl.h.)
 // ============================================================
 // Log file path
 // ============================================================
@@ -49,7 +53,7 @@ static int  s_logInit = 0;
 
 const char* diag_getLogPath(void) { return s_logPath; }
 
-// Diagnostic verbosity latch (decl + docs: debug_handl.h).  Default 0 =
+// Diagnostic verbosity latch (decl + docs: log.h).  Default 0 =
 // current behavior; nothing changes until a lane or config raises it.
 int g_diagLevel = 0;
 
@@ -95,44 +99,9 @@ void diag_ringDump(void) {
 }
 
 // ============================================================
-// Scope tag registry
-// ============================================================
-ScopeTag g_scopeTags[SCOPE_TAG_MAX];
-int g_scopeTagCount = 0;
-int g_scopeTagLock = 0;
-
-void diag_registerScope(const char *name, void *addr) {
-	if(g_scopeTagCount >= SCOPE_TAG_MAX) return;
-	g_scopeTags[g_scopeTagCount].name = name;
-	g_scopeTags[g_scopeTagCount].addr = addr;
-	g_scopeTagCount++;
-}
-
-void diag_lookupScope(void *eip, char *outName, int outSize, int *outOffset) {
-	if(outSize <= 0) return;	// no room: outName[outSize-1] would be outName[-1]
-	outName[0] = 0;
-	*outOffset = 0;
-	uintptr_t addr = (uintptr_t)eip;
-	int best = -1;
-	int bestDist = 0x7FFFFFFF;
-	for(int i = 0; i < g_scopeTagCount; i++) {
-		int dist = (int)(addr - (uintptr_t)g_scopeTags[i].addr);
-		if(dist >= -0x400 && dist < 0x400 && abs(dist) < bestDist) {
-			bestDist = abs(dist);
-			best = i;
-			*outOffset = dist;
-		}
-	}
-	if(best >= 0) {
-		strncpy(outName, g_scopeTags[best].name, outSize - 1);
-		outName[outSize - 1] = 0;
-	}
-}
-
-// ============================================================
 // FRAME CORRELATION — frame id, packed code, pass marks
 // ============================================================
-// API + exact bit layout: debug_handl.h "FRAME CORRELATION" section.
+// API + exact bit layout: log.h "FRAME CORRELATION" section.
 // The log writer below stamps every skygfx_dbg.log line with
 // DBGLOG_FRAME_PREFIX_FMT (skygfx.h) via debugFrameStamp() — ONE tick
 // read, ONE SEH frame and ONE config deref per FRAME, not per line.
@@ -276,7 +245,7 @@ dbglog_internal(LogLevel level, const char *file, int line, const char *func, co
 	for(const char *p = file; *p; p++)
 		if(*p == '\\' || *p == '/') shortFile = p + 1;
 
-	// Frame correlation prefix (debug_handl.h): stamped immediately before
+	// Frame correlation prefix (log.h): stamped immediately before
 	// the message so every skygfx_dbg.log line carries the same
 	// [#<frameId>:<code>] the overlay lane shows on screen.  ONE combined
 	// stamp call per line (single tick read, SEH island, per-frame

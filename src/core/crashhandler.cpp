@@ -9,7 +9,10 @@
 //   * diag_crashHandler (VEH) + crashCount budget + zone classify +
 //     CRASH[n] receipts + crash counters + diag_dumpStats
 //   * diag_installVEH / diag_removeVEH (s_oldVEH) + the g_inGuardedIm2DPass /
-//     g_renderPhase definitions (their decls stay in debug_handl.h)
+//     g_renderPhase definitions (their decls: crashhandler.h)
+//   * the guarded sandbox CHOKEPOINTS guardedSetRT / guardedIm2DRender /
+//     g_guardDepth (bodies moved VERBATIM here from render/pipelinecommon.cpp
+//     at m0272; decls stay in skygfx.h:1638-1651; contract: crashhandler.h)
 //   * crash* forensics primitives (module snapshot, address classify,
 //     SEH-guarded safe-read, instruction decode)
 //   * crashAppendLog / crashAppendForensics / crashFlushLog / crashWriteDump,
@@ -27,7 +30,9 @@
 
 // ---- Includes (the crash-handling half of the old deduped union) ----
 #include "skygfx.h"
-#include "debug_handl.h"
+#include "crashhandler.h"   // own layer header (pulls L0 log.h)
+#include "postfx.h"         // overrideIm2dPixelShader — used by the
+                            // guardedIm2DRender body moved in at m0272
 #include <windows.h>
 #include <tlhelp32.h>
 #include <DbgHelp.h>
@@ -472,6 +477,100 @@ static LONG_PTR s_oldVEH = 0;
 volatile LONG g_inGuardedIm2DPass = 0;
 const char *g_renderPhase = "";
 
+
+// ---- SANDBOX CHOKEPOINTS (L1 containment primitives) — m0272 layer split ----
+// guardedSetRT / guardedIm2DRender / g_guardDepth moved VERBATIM here from
+// render/pipelinecommon.cpp: these are the chokepoints features call, and
+// containment must live in the layer that owns the VEH — g_inGuardedIm2DPass
+// and g_guardDepth are both read by the GUARD-FAULT receipt above.  Their
+// declarations stay in skygfx.h:1638-1651 (outside this lane's scope); the
+// contract new features must follow is the block at the top of
+// crashhandler.h.
+// ============================================================
+// Class-proof SEH choke-points — contract documented in skygfx.h.
+// POD-only bodies (C2712-safe): no C++ objects with destructors live
+// across the __try, so MSVC accepts SEH here and callers (DrawSMAA etc.)
+// never need __try in functions that hold C++ locals.
+// ============================================================
+volatile LONG g_guardDepth = 0;
+
+// Bind a raster as render-target 0. NULL raster fails without SEH; any fault
+// inside RwD3D9SetRenderTarget (e.g. CAMERATEXTURE raster with no D3D9
+// surface -> null COM vtable read at 0x7F9ECB) is caught, logged with the
+// phase tag, and reported as false so the caller fails open.
+bool guardedSetRT(RwRaster *ras, const char *phase)
+{
+	const char *ph = phase ? phase : "?";
+	if(!ras){
+		if(dbglog_throttle("gsetrt_null"))
+			dbglog("[GUARD] guardedSetRT: raster NULL (phase=%s)", ph);
+		return false;
+	}
+	bool ok = true;
+	LONG outerGuard = g_inGuardedIm2DPass;
+	InterlockedIncrement(&g_guardDepth);
+	g_inGuardedIm2DPass = 1;
+	__try {
+		RwD3D9SetRenderTarget(0, ras);
+	} __except(EXCEPTION_EXECUTE_HANDLER){
+		dbglog("[GUARD] guardedSetRT: FAULT phase=%s code=0x%08X raster=%p",
+			ph, GetExceptionCode(), ras);
+		ok = false;
+	}
+	g_inGuardedIm2DPass = outerGuard;
+	InterlockedDecrement(&g_guardDepth);
+	return ok;
+}
+
+// Fullscreen Im2D draw (quad + override pixel shader). Pre-checks replace the
+// common fault classes (null verts/idx, missing camera, camera not begun yet)
+// with cheap false returns; anything else is caught by SEH. Same
+// g_inGuardedIm2DPass save/restore semantics as the old inline __try blocks,
+// so calling this from inside an already-hoisted guarded region is safe.
+bool guardedIm2DRender(void *ps, RwInt32 primType, RwIm2DVertex *verts, RwInt32 numVerts,
+                       RwImVertexIndex *indices, RwInt32 numIndices, const char *phase)
+{
+	const char *ph = phase ? phase : "?";
+
+	if(!verts || !indices || numVerts <= 0 || numIndices <= 0){
+		if(dbglog_throttle("gim2d_param"))
+			dbglog("[GUARD] guardedIm2DRender: bad params (phase=%s verts=%p idx=%p n=%d/%d)",
+				ph, verts, indices, (int)numVerts, (int)numIndices);
+		return false;
+	}
+	if(!Scene.camera){
+		if(dbglog_throttle("gim2d_nocam"))
+			dbglog("[GUARD] guardedIm2DRender: Scene.camera NULL (phase=%s)", ph);
+		return false;
+	}
+	// Begun-camera gate: Scene.camera can exist before the first
+	// RwCameraBeginUpdate; Im2D dispatch dereferences the exe-side camera
+	// global pCameraBeingUpdated (0xC9BCC0) -> null deref (same Lane G gate as
+	// postfx).
+	if(pCameraBeingUpdated == NULL){
+		if(dbglog_throttle("gim2d_nobegun"))
+			dbglog("[GUARD] guardedIm2DRender: camera not begun (phase=%s)", ph);
+		return false;
+	}
+
+	bool ok = true;
+	LONG outerGuard = g_inGuardedIm2DPass;
+	InterlockedIncrement(&g_guardDepth);
+	g_inGuardedIm2DPass = 1;
+	__try {
+		overrideIm2dPixelShader = ps;
+		RwIm2DRenderIndexedPrimitive((RwPrimitiveType)primType, verts, numVerts, indices, numIndices);
+		overrideIm2dPixelShader = nil;
+	} __except(EXCEPTION_EXECUTE_HANDLER){
+		overrideIm2dPixelShader = nil;
+		dbglog("[GUARD] guardedIm2DRender: FAULT phase=%s code=0x%08X ps=%p",
+			ph, GetExceptionCode(), ps);
+		ok = false;
+	}
+	g_inGuardedIm2DPass = outerGuard;
+	InterlockedDecrement(&g_guardDepth);
+	return ok;
+}
 
 // ============================================================
 // PHASE 2 / FIX A — neutralize the spec-pool free at shutdown (primary fix)
