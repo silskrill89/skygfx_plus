@@ -1042,6 +1042,12 @@ SetLightsWithTimeOfDayColour(RpWorld *world)
 int tmpintensity;
 RwTexture **tmptexture = (RwTexture**)0xc02dc0;
 RwRGBA *CPlantMgr_AmbientColor = (RwRGBA*)0xC03A44;
+// W1 H2 discriminator - raw plant-struct colour bytes parked by
+// saveIntensity() at its read site, consumed by the one-shot [H2disc]
+// receipt in setTextureAndColor() below. Named globals only: the asm
+// references them by symbol, so NO new address literal enters this path
+// (the single raw address stays the install-layer 0x5DAE61 byte-verify).
+unsigned char s_h2RawR, s_h2RawG, s_h2RawB;	// [esi+40h..42h] colour bytes
 
 RpMaterial*
 setTextureAndColor(RpMaterial *material, RwRGBA *color)
@@ -1067,6 +1073,36 @@ setTextureAndColor(RpMaterial *material, RwRGBA *color)
 	newcolor.blue = (tmpintensity * col[2]) >> 8;
 	newcolor.alpha = color->alpha;
 	material->color = newcolor;
+
+	// ---- W1 H2 discriminator: one-shot [H2disc] receipt -------------------
+	// Answers "is the near-black card (log [veg] plant0 mat=(8,8,6,1)) the
+	// mod's intensity FACTOR or legitimately dark plant DATA":
+	//   tmpintensity = raw [esi+44h] byte saveIntensity() parked (0..255),
+	//                  applied here as (tmpintensity * col) >> 8;
+	//   plantRaw     = the patch's own read of [esi+40h..42h] (parked by
+	//                  saveIntensity, so these are the bytes as-of the site);
+	//   inColor      = what this function received (colour term, unmodulated);
+	//   col          = inColor after the optional grassAddAmbient term, i.e.
+	//                  the value that actually entered the >>8 multiply;
+	//   newcolor     = the result committed to material->color.
+	// READ: plantRaw low  => plant data itself is dark (data-side).
+	//       plantRaw bright but newcolor crushed => the >>8 factor /
+	//       tmpintensity scale is wrong (mod-side).
+	// One-shot: first plant material of the session decides it.
+	if(dbglog_once("h2_intensity_discriminator"))
+		dbglog("[H2disc] tmpintensity=%d plantRaw=(%u,%u,%u) inColor=(%u,%u,%u,%u) col=(%u,%u,%u) ambOn=%d amb=(%.3f,%.3f,%.3f) newcolor=(%u,%u,%u,%u) tex='%s'",
+		       tmpintensity,
+		       (unsigned)s_h2RawR, (unsigned)s_h2RawG, (unsigned)s_h2RawB,
+		       (unsigned)color->red, (unsigned)color->green,
+		       (unsigned)color->blue, (unsigned)color->alpha,
+		       col[0], col[1], col[2],
+		       config->grassAddAmbient ? 1 : 0,
+		       CTimeCycle_GetAmbientRed(), CTimeCycle_GetAmbientGreen(),
+		       CTimeCycle_GetAmbientBlue(),
+		       (unsigned)newcolor.red, (unsigned)newcolor.green,
+		       (unsigned)newcolor.blue, (unsigned)newcolor.alpha,
+		       (texture && texture->name[0]) ? texture->name : "(null)");
+
 	if(material->texture != texture)
 		RpMaterialSetTexture(material, texture);
 	return material;
@@ -1117,6 +1153,13 @@ saveIntensity(void)
 		mov     byte ptr [esp+10h], al	// local variable color
 		mov     byte ptr [esp+11h], cl
 		mov     byte ptr [esp+12h], dl
+		// W1 H2 receipt: park the raw plant-struct colour bytes already in
+		// al/cl/dl for setTextureAndColor()'s one-shot [H2disc] line (the
+		// intensity byte itself is already in tmpintensity above). Stores
+		// only - no register, no flag and no address literal touched.
+		mov	byte ptr [s_h2RawR], al
+		mov	byte ptr [s_h2RawG], cl
+		mov	byte ptr [s_h2RawB], dl
 		mov     eax, [esi+3Ch]	// code expects texture in eax
 		push	5DAEB7h
 		retn

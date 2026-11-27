@@ -294,6 +294,24 @@ static char s_missNames[TEXDEFS_MISS_LOG_MAX][32];
 static int s_missLogged = 0;		// distinct names stored in s_missNames
 static unsigned s_missTotal = 0;	// every failed lookup (any name)
 
+// --- W1 (2026-11-27) DISTINCT-BEYOND-CAP state (additive, tag
+// "texdefs_missbeyond" — FNV-1a 1024-bucket 152, collision-checked against
+// every tag in-tree by a file-written %TEMP% script; the dispatch's original
+// suggested tag "texdefs_misscap" hashed to bucket 377 where it would have
+// shared its 2 s throttle window with pbrbuilding_frame = mutual starvation).
+// A distinct name arriving when the 32-name `[texdefs] miss #N` cap is full
+// is counted by s_missTotal but NAMED NOWHERE — the (b) half of the white-
+// tree discriminator ("name past the 32-receipt cap"). Second BOUNDED table
+// keeps the unlogged count genuinely DISTINCT up to saturation; past it only
+// events are countable (never claimed as distinct). No allocation, no game
+// call, read-only against existing miss state.
+#define TEXDEFS_MISSBEYOND_MAX 32
+
+static char s_missBeyondNames[TEXDEFS_MISSBEYOND_MAX][32];
+static int s_missBeyondDistinct = 0;	// distinct unlogged names tracked above
+static unsigned s_missBeyondSeen = 0;	// miss events for unlogged distinct names
+static unsigned s_missBeyondOverflow = 0;	// events past BOTH caps (unnamed, distinct-unknown)
+
 static void
 TexDefsNoteMiss(const char *name)
 {
@@ -305,6 +323,9 @@ TexDefsNoteMiss(const char *name)
 			break;
 		}
 	}
+	// Captured BEFORE the store below: a name that fills the 32-slot table
+	// on THIS call must not be miscounted as beyond-cap.
+	const int missCapFull = (s_missLogged >= TEXDEFS_MISS_LOG_MAX);
 	if(fresh && s_missLogged < TEXDEFS_MISS_LOG_MAX){
 		strncpy(s_missNames[s_missLogged], name, sizeof(s_missNames[0]) - 1);
 		s_missNames[s_missLogged][sizeof(s_missNames[0]) - 1] = '\0';
@@ -315,12 +336,106 @@ TexDefsNoteMiss(const char *name)
 		       s_missLogged, name,
 		       currentTxdName[0] ? currentTxdName : "?");
 	}
+	// W1: fresh name while the naming cap was ALREADY full → it will never
+	// appear in a `miss #N` line. Track/count/name it here (throttled).
+	if(fresh && missCapFull){
+		int b = -1;
+		for(int i = 0; i < s_missBeyondDistinct; i++){
+			if(_stricmp(s_missBeyondNames[i], name) == 0){
+				b = i;
+				break;
+			}
+		}
+		if(b < 0){
+			if(s_missBeyondDistinct < TEXDEFS_MISSBEYOND_MAX){
+				strncpy(s_missBeyondNames[s_missBeyondDistinct], name,
+				        sizeof(s_missBeyondNames[0]) - 1);
+				s_missBeyondNames[s_missBeyondDistinct][sizeof(s_missBeyondNames[0]) - 1] = '\0';
+				s_missBeyondDistinct++;
+				dbglog("[texdefs] missbeyond +%d '%s' txd='%s' — distinct name "
+				       "past the %d-receipt cap (never named by a `miss #N` line)",
+				       s_missBeyondDistinct, name,
+				       currentTxdName[0] ? currentTxdName : "?",
+				       TEXDEFS_MISS_LOG_MAX);
+			}else{
+				// Past BOTH caps: event is counted, its name is not kept
+				// (bounded over growth — determinism).
+				s_missBeyondOverflow++;
+			}
+		}
+		s_missBeyondSeen++;
+		if(dbglog_throttle("texdefs_missbeyond"))
+			dbglog("[texdefs] missbeyond distinct_unlogged=%d overflow_events=%u "
+			       "seen=%u total=%u last='%s' txd='%s'",
+			       s_missBeyondDistinct, s_missBeyondOverflow,
+			       s_missBeyondSeen, s_missTotal, name,
+			       currentTxdName[0] ? currentTxdName : "?");
+	}
 	// Rate visibility stays alive after the distinct-name cap fills (a
 	// streamed draw loop can miss every frame for one texture).
 	if(dbglog_throttle("texdefs_miss"))
 		dbglog("[texdefs] miss total=%u distinct=%d last='%s' txd='%s'",
 		       s_missTotal, s_missLogged, name,
 		       currentTxdName[0] ? currentTxdName : "?");
+}
+
+// ---------------------------------------------------------------------------
+// W1 WHITE-TREE DISCRIMINATOR (2026-11-27, ADDITIVE, tag "texdefs_nulltex" —
+// FNV-1a 1024-bucket 671, collision-checked file-written vs all in-tree tags).
+// White bare trees are material->texture == NULL -> the consumer's
+// gpWhiteTexture (NOT the grey policy sentinel), so the miss/policy receipts
+// never name them. This receipt fires where a PLAIN NULL is produced/observed:
+//   site=findcb  — TexDefsFindCB's return path actually handed NULL back to
+//     the game (only reachable with the miss policy off or a failed sentinel
+//     create; stock policy never returns NULL, so a line here is itself a
+//     finding). Has the REQUESTED name + the pointer.
+//   site=getinfo — TexDefsGetInfo(NULL): a world/vegetation consumer read a
+//     material whose texture pointer is NULL (the white-tree class as the
+//     pipes observe it; buildingPipe cb's pass material->texture straight
+//     in). No name exists on a NULL texture — "(nil)" + the current TXD.
+// First TEXDEFS_NULLTEX_LOG_MAX distinct names one-shot, throttled summary
+// past that (same discipline as the `miss` receipts; `distinct` beyond the
+// cap stays visible as a count). Discriminator reading: a white-tree name
+// that appears in `nulltex site=findcb` WAS looked up and passed through
+// NULL; one appearing in `miss`/`missbeyond +` was looked up and got the
+// policy sentinel; one appearing NOWHERE while missbeyond counts are 0 means
+// the find-CB was never called for it (texture absent, plain NULL — case (a)).
+// ---------------------------------------------------------------------------
+#define TEXDEFS_NULLTEX_LOG_MAX 16
+
+static char s_nullNames[TEXDEFS_NULLTEX_LOG_MAX][32];
+static int s_nullLogged = 0;		// distinct names stored in s_nullNames
+static unsigned s_nullTotal = 0;	// every NULL-producing/observing call
+
+static void
+TexDefsNoteNullTex(const char *name, void *ptr, const char *site)
+{
+	s_nullTotal++;
+	const char *nm = (name && name[0]) ? name : "(nil)";
+	// Hot-path bound (per-material per-draw via TexDefsGetInfo): the
+	// distinct scan only feeds the store branch, so skip it once the table
+	// can no longer accept a name — then this is a counter + throttle check.
+	if(s_nullLogged < TEXDEFS_NULLTEX_LOG_MAX){
+		int fresh = 1;
+		for(int i = 0; i < s_nullLogged; i++){
+			if(_stricmp(s_nullNames[i], nm) == 0){
+				fresh = 0;
+				break;
+			}
+		}
+		if(fresh){
+			strncpy(s_nullNames[s_nullLogged], nm, sizeof(s_nullNames[0]) - 1);
+			s_nullNames[s_nullLogged][sizeof(s_nullNames[0]) - 1] = '\0';
+			s_nullLogged++;
+			dbglog("[texdefs] nulltex #%d '%s' ptr=%p site=%s txd='%s' — plain "
+			       "NULL (no sentinel; consumer falls back to gpWhiteTexture)",
+			       s_nullLogged, nm, ptr, site,
+			       currentTxdName[0] ? currentTxdName : "?");
+		}
+	}
+	if(dbglog_throttle("texdefs_nulltex"))
+		dbglog("[texdefs] nulltex total=%u distinct=%d last='%s' site=%s",
+		       s_nullTotal, s_nullLogged, nm, site);
 }
 
 // ---------------------------------------------------------------------------
@@ -911,6 +1026,24 @@ TexDefsResolveAtDraw(RwTexture *tex)
 // here — this layer has no name->TXD map and no safe load-forcing API, so
 // such names stay on the policy sentinel until a parent-link repair or an
 // explicit load-force phase.
+// W1 (2026-11-27) PHASE DECISION — load-force NOT shipped, deliberately:
+//   * The only in-repo TXD-load API is RwTexDictionaryStreamRead over a
+//     FILE-path stream (TexDefsLoadDatabase's models\*.txd, neopipe's
+//     neo.txd) — both run at boot before CGame::Initialise, read by path
+//     from getpath(), not by TXD NAME from the IMG. There is no
+//     non-reentrant "load TXD <name>" wrapper anywhere in-tree (grepped:
+//     no CTxdStore::LoadTxd / CStreaming::Request binding exists), and
+//     forcing one from inside these hooks risks re-entering the very
+//     addTxdSlot/setCurrentTxd path we are running in (streaming pumps).
+//   * Decisive: without a name->TXD map a preload has no target — it would
+//     have to guess which dictionary holds a missing texture.
+//   Shipped instead (the cheaper half, both additive + bounded):
+//   (1) pending-name retry extended to the beyond-cap names below
+//       (TexDefsDeferRetry set now includes s_missBeyondNames), so a hit
+//       IS applied when the owning dict eventually loads;
+//   (2) the distinct-beyond-cap histogram receipt `[texdefs] missbeyond`
+//       in TexDefsNoteMiss (count of unlogged distinct names — the
+//       visibility half).
 // ---------------------------------------------------------------------------
 static unsigned long s_deferLastSweep = 0;
 #define TEXDEFS_DEFER_SWEEP_MS 1000
@@ -976,11 +1109,22 @@ TexDefsDeferRetry(int slot)
 
 	// Pending name set: find-time distinct misses + unresolved draw-time
 	// sentinels, deduped, bounded by the array (no allocation beyond it).
-	const char *pending[TEXDEFS_MISS_LOG_MAX + TEXDEFS_MISS_CACHE_MAX];
+	// W1 (2026-11-27): plus the distinct-beyond-cap names — a name past the
+	// 32-receipt cap never enters s_missNames, so it was invisible to this
+	// retry set even though it holds a pending policy sentinel. Extending
+	// the set is the shipped half of the never-load residual: when the
+	// owning dict eventually loads, TexDefsDeferAccept now applies the hit
+	// for these names too (they already reach s_resolveState if a consumer
+	// drew their sentinel through TexDefsResolveAtDraw; this covers the
+	// names that never did).
+	const char *pending[TEXDEFS_MISS_LOG_MAX + TEXDEFS_MISS_CACHE_MAX
+	                    + TEXDEFS_MISSBEYOND_MAX];
 	int nPending = 0;
 	int pendingCap = (int)(sizeof(pending) / sizeof(pending[0]));
 	for(int i = 0; i < s_missLogged && nPending < pendingCap; i++)
 		pending[nPending++] = s_missNames[i];
+	for(int i = 0; i < s_missBeyondDistinct && nPending < pendingCap; i++)
+		pending[nPending++] = s_missBeyondNames[i];
 	for(auto const &e : s_resolveState){
 		if(e.second.tex)
 			continue;		// already recovered
@@ -1125,6 +1269,14 @@ TexDefsFindCB(char *name)
 		if(nmPairingEnabled())
 			nmProbePairing(tex, name);
 	}
+	// W1 white-tree discriminator: this is the ONE point where the find-CB
+	// hands a plain NULL back to the game (miss policy off / failed sentinel
+	// create — stock policy returns a sentinel instead). Name + pointer,
+	// first 16 distinct one-shot, throttled after. Absence of any
+	// `nulltex`/`miss`/`missbeyond +` line for a white-tree texture name
+	// is the case-(a) signature (lookup never reached this callback).
+	if(!tex)
+		TexDefsNoteNullTex(name, tex, "findcb");
 	return tex;
 }
 
@@ -1503,8 +1655,18 @@ TexDefsLoadDatabase(void)
 TexInfo*
 TexDefsGetInfo(RwTexture *tex)
 {
-	if(tex == nil || texdbOffset <= 0)
+	if(tex == nil || texdbOffset <= 0){
+		// W1 white-tree discriminator (consumer observation point): a
+		// world/vegetation consumer is reading a material whose texture
+		// pointer is NULL — the class that renders via gpWhiteTexture
+		// (white bare trees), never via the grey policy sentinel. Bounded
+		// distinct table + throttle; fires for the legitimate "no diffuse
+		// map" materials too, so read `total` as a rate, `site=findcb`
+		// lines as the per-name proof.
+		if(tex == nil)
+			TexDefsNoteNullTex(nil, tex, "getinfo");
 		return &faketexinfo;
+	}
 	TexInfo **plg = RWPLUGINOFFSET(TexInfo*, tex, texdbOffset);
 	if(*plg)
 		return *plg;

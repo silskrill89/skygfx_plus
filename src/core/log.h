@@ -165,3 +165,40 @@ void DebugInvalidatePipelineCache(void);
 // [SkyGfx] diagLevel into Config::diagLevel and syncs
 // g_diagLevel = c->diagLevel.
 extern int g_diagLevel;
+
+// ============================================================
+// SUPPLEMENTARY PER-MODULE LOG FILES  (m2397)   [definition: log.cpp]
+// ============================================================
+//
+// Additive split: when a line's MESSAGE opens with a routed "[Tag]" token,
+// dbglog_internal writes the SAME composed line (timestamp, level,
+// file:line, func, [#frameId:code]) to a per-module file IN ADDITION to the
+// main one — skygfx_dbg.log is byte-for-byte unchanged, the module file is
+// only ever a second copy:
+//
+//     [cloud*|CloudShield]        -> skygfx_clouds.log
+//     [PtLight*|Corona*|sprite_*] -> skygfx_corona.log
+//     [water*]                    -> skygfx_water.log
+//     [texdefs|texalpha]          -> skygfx_tex.log
+//     [SSAO|PF|PostFX]            -> skygfx_postfx.log
+//     [BPIPE|Bld*|VPIPE|Veh*]     -> skygfx_pipe.log
+//
+// Match: leading "[Tag]" only (up to the first ']', case-insensitive; a
+// trailing '*' in the pattern means prefix), so a mid-message tag never
+// routes.  Files live beside the main log (name derived from it), open
+// LAZILY on their first routed line (static handles — one WriteFile per
+// line after that) and are rotated by diag_init exactly like skygfx_dbg.log
+// -> skygfx_dbg.prev.log (skygfx_<mod>.log -> skygfx_<mod>.prev.log).
+//
+// ROUTING TABLE: s_modTags / s_modLogs in log.cpp — one row to route an
+// extra tag, one row per file.  Default ON; L0 reads no config, so the key
+// the CONFIG LANE should wire later is:
+//
+//     [SkyGfx] debugSplitLogs=1   ; 1 (default) = module files on, 0 = off
+//
+// (suggested: Config::debugSplitLogs parsed in readIniFile -> a
+// g_diagSplitLogs global read by modLogWrite, same pattern as g_diagLevel).
+//
+// No new API: the split is writer-side (dbglog_internal) + lifecycle-side
+// (diag_init), so log.h declares nothing and needs no DIAGNOSTICS_DISABLED
+// stub.

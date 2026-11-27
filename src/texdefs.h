@@ -30,6 +30,34 @@
 //     resolve keeps logging still-miss means the containing TXD never loads
 //     (see the residual noted on TexDefsResolveAtDraw / the deferred-retry
 //     block in texdefs.cpp).
+//   [texdefs] missbeyond +N '<name>' / missbeyond distinct_unlogged=...    (2026-11-27,
+//     W1, ADDITIVE, throttled key "texdefs_missbeyond" — FNV bucket 152,
+//     file-written-collision-checked; the dispatch's draft tag
+//     "texdefs_misscap" collided with pbrbuilding_frame at bucket 377):
+//     distinct-beyond-cap histogram. Names that first miss AFTER the 32
+//     `[texdefs] miss #N` slots are full are counted by `miss total` but
+//     never named by a `miss #N` line — the (b) case of the white-tree
+//     split. `+N` one-shots the first 32 of those names (own bounded table);
+//     the throttled line reports distinct_unlogged / overflow_events /
+//     seen / total. These names are also now members of the deferred-retry
+//     pending set (texdefs.cpp TexDefsDeferRetry), so a late-loading owning
+//     dict still applies the hit for them.
+//   [texdefs] nulltex #N '<name>' ptr=... site=findcb|getinfo /           (2026-11-27,
+//     [texdefs] nulltex total=... distinct=... last='...' site=...          W1,
+//     ADDITIVE, throttled key "texdefs_nulltex" — FNV bucket 671, clean):
+//     white-tree discriminator. White bare trees are material->texture ==
+//     NULL -> gpWhiteTexture, NEVER the grey sentinel, so no miss/policy
+//     receipt sees them. site=findcb = TexDefsFindCB actually handed NULL
+//     back to the game (stock miss policy does not return NULL, so this
+//     line is itself a finding; carries the requested name + pointer).
+//     site=getinfo = a consumer read a material whose texture pointer is
+//     NULL (the pipes' white-fallback observation point; a NULL texture
+//     has no name — logged as "(nil)" + current TXD). First 16 distinct
+//     names one-shot, throttled summary past the cap. READ: white-tree
+//     name in `nulltex site=findcb` -> looked up, NULL passed through;
+//     name in `miss`/`missbeyond` -> looked up, sentinel bound; name in
+//     NO receipt while missbeyond counts sit at 0 -> find-CB never called
+//     for it (texture absent from TXD — case (a)).
 //
 // --- cross-dict recovery policy (N8) ---
 // On a find miss the game's CTxdStore pool is searched via the game's own
@@ -175,6 +203,16 @@ RwTexture *TexDefsResolveAtDraw(RwTexture *tex);
 // from this layer (no name->TXD map, no safe load-forcing API) — those
 // names keep the policy sentinel until a parent-link repair / load-force
 // phase.
+// W1 (2026-11-27) resolution of this residual — the never-load preload
+// phase was AUDITED and deliberately NOT shipped: the only in-repo TXD
+// load is a boot-time file-path RwTexDictionaryStreamRead (no by-name
+// loader exists, so a preload would have no target and would risk
+// re-entering the addTxdSlot/setCurrentTxd hooks from inside themselves).
+// The two additive halves that WERE shipped: (1) TexDefsDeferRetry's
+// pending set now includes the beyond-cap miss names, so the
+// owning-dict-lates-loads hit application covers them; (2) the
+// `texdefs_missbeyond` histogram receipt counts distinct names the
+// 32-receipt cap hides (see the receipt block at the top of this file).
 // Sprite-class sentinel -> world-class sentinel, PRESERVING the requested
 // name (so the remap stays resolvable). Real/world textures pass through.
 RwTexture *TexDefsRemapToWorld(RwTexture *tex);

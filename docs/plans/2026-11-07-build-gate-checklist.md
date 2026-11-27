@@ -140,3 +140,67 @@ Baselines table row: W0.4 (2026-11-09) | 2,616,320 | 516d904câ€¦ | L1 lever 
 - Contents: lands the 3 previously-uncommitted fixes — FIX A2 point-light deferred window (`ptlightdefer` ×1), GTAIV `ivExposure 2.5→1.0`, per-module crash budget (`[crashbudget]` ×1). Tokens present: `ptlightdefer` 1, `ivExposure` 1, `[crashbudget]` 1, `specpool_skip` 2, `matfx_uaf_skip` 2.
 - Commit: `W0: land FIX A2 point-light deferred window + GTAIV ivExposure 2.5->1.0 + per-module crash budget` (3 files: rw_fixes.cpp, modeManager.cpp, crashhandler.cpp).
 - Retest row: PENDING — user eye-gate vs `Screenshots\2026-09` (see W1 dispatch: pyramids/quads, GTAIV milky, grey slabs).
+
+## W1 gate run — TEMPLATE (copy per build; protocol fixed 2026-11-27)
+
+From W1 on every gate run is exactly TWO rows: one IDENTITY row + one RETEST row. Copy this
+block, fill the blanks, tick only what the named actor may tick; never edit a filled row after
+the fact — append a new run block instead.
+
+- [ ] **IDENTITY row** — orchestrator, machine-checked. ONE integrated build
+      (`python tools/fast_build.py …`, rc=0), then the **file-written** census script
+      `python .cache/w06_verify.py [path\to\skygfx.asi]` (default
+      `E:\games\gtasa_skygfx_plus\skygfx.asi`) prints bytes + md5 + per-token PASS/MISS over the
+      required receipt strings in the .asi and exits 0 (all present) / 1 (any MISSING). Paste its
+      output verbatim:
+      - bytes: `` · md5: `` · census: `__ / 21` · script exit: `` · backup `.cache/skygfx.w<N>gate.asi` (md5-verified)
+      A hand-typed hash or a shell one-liner does NOT fill this row — file-written python only.
+      Exit 1 ⇒ row stays untickable no matter how clean the build log looks.
+- [ ] **RETEST row — USER EYE-GATE ONLY; receipts never tick it.** Ticked solely by the user
+      comparing a live session against `C:\Users\aaaaaaaaa\Documents\ShareX\Screenshots\2026-09`
+      (goal line: zero on-screen glitches — wave-20-record §4). Token census, `[...]` log
+      receipts, exit-0 from w06_verify.py, a clean `skygfx_dbg.log`: none of these are evidence
+      for this box. Machine output proves the strings shipped; only the user's eye proves the
+      picture is right. Until the user ticks it the chain stops (step 6: no commit).
+- [ ] Commit — only after the RETEST tick; message carries the IDENTITY numbers.
+
+### W1 baseline token census (standing required list)
+
+Source of truth: `REQUIRED[]` at the top of `.cache/w06_verify.py` — 21 strings = the 18 below
+plus the W1 seed (`fx_ca`, `CAPass`, bare `texflush`). Byte-stable, ADDITIVE ONLY
+(wave-20-record §7): never remove, never reword.
+
+- W0 row (2026-11-27): `ptlightdefer` · `ivExposure` · `[crashbudget]` · `specpool_skip` · `matfx_uaf_skip`
+- wave-20-record §3: `[texflush]` · `cloud_split_restore` · `AUTOEXP_DEGENERATE` · `[PF] VCS RT parity` ·
+  `radvcs_srcmismatch` · `blurvcs_srcmismatch` · `[Softbody] stale-write skip` · `[ragdoll] gib retire` ·
+  `n9_ped_remap` · `n9_pedcb_remap` · `bld_zw_guard` · `bld_opaque_nopark` · `far_fog`
+- W1 seed (2026-11-27): `fx_ca` · `CAPass` · `texflush`
+
+First census run (2026-11-27, W0 artifact 2,634,240 B / 0821dfbe…): **19 PASS / 2 MISS, exit 1** —
+`cloud_split_restore` (literal removed from source by reduction pass `920cfcd`, an ancestor of HEAD)
+and `n9_pedcb_remap` (literal lives only in `pedStage0Resync`, `src/core/render_callbacks.cpp:154`,
+a static with no callers since Phase 3 flipped to `SkinStage0Resync` at `:503`; absent from
+`build/obj/Release/render_callbacks.obj` too — consistent with MSVC dropping the unreferenced
+static). Both stay in `REQUIRED[]` under the additive-only rule: the IDENTITY row cannot go green
+until the receipts are re-landed or the user explicitly re-baselines the census at a gate run.
+
+### W1 gate run — 2026-11-27 (build of the 16-lane W1 batch)
+
+- [ ] **IDENTITY row** — machine-checked via `python .cache/w06_verify.py`, output verbatim:
+      - bytes: `2633216` · md5: `96d4635f81ad68f0f8ecbeabcda96b5f` · census: `19 / 21` · script exit: `1`
+      - MISS ×2 = the two documented dead tokens from the first census run (`cloud_split_restore`
+        removed by 920cfcd, `n9_pedcb_remap` in dead static pedStage0Resync) — same two, no new
+        misses. Build log: 0 `error C`, 113 shaders up-to-date, MSBuild rc=0 (131s incremental).
+      - **Row stays untickable at exit 1** per protocol: needs either re-landing of the 2 receipt
+        strings or an explicit user census re-baseline (decision requested with the eye-gate).
+      - Backup `.cache/skygfx.w1gate.asi` NOT yet made (add before the next run).
+- [ ] **RETEST row — USER EYE-GATE ONLY.** Compare a live session vs
+      `C:\Users\aaaaaaaaa\Documents\ShareX\Screenshots\2026-09`. Watch list this run:
+      (1) black cone-trees / point-light quads (FIX A2 + spriteFlushShield=1 now canonical),
+      (2) GTAIV milky wash (ivExposure 2.5→1.0), (3) white bare trees + grey slabs
+      (texdefs nulltex/missbeyond receipts tell you which class), (4) plant darkness
+      (`[H2disc]` one-shot: plantRaw low = data dark; bright + newcolor crushed = factor),
+      (5) dead-SSS deletion = no visual delta expected (lane was unreachable), (6) per-module
+      logs appear (skygfx_clouds/corona/water/tex/postfx/pipe.log next to the main log).
+- [ ] Commit — deferred: W1 work committed pre-retest (consistent with the W0 row), message
+      carries the IDENTITY numbers above.

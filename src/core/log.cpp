@@ -229,6 +229,120 @@ DebugLogFrameMark(const char *tag)
 }
 
 // ============================================================
+// SUPPLEMENTARY PER-MODULE LOG FILES  (m2397)
+// ============================================================
+// Additive split: when a line's MESSAGE opens with a routed "[Tag]" token,
+// the SAME composed line (timestamp + level + file:line + frame stamp) is
+// also written to skygfx_<module>.log.  This path only ever ADDS a second
+// write — skygfx_dbg.log keeps byte-for-byte the content it had before this
+// feature (main log unchanged, module file gets a copy).
+//
+// Table-driven, default ON.  L0 reads no config, so the key the config lane
+// may wire later is [SkyGfx] debugSplitLogs (documented in log.h).  Route an
+// extra tag by adding ONE row to s_modTags; a new file needs one row there
+// plus one row in s_modLogs.
+struct ModLogTag   { const char *tag; unsigned char mod; }; // tag = inside "[ ]"; trailing '*' = prefix
+struct ModLogFile  { const char *suffix; HANDLE h; };       // h lazy-opened, closed at rotate
+
+static ModLogFile s_modLogs[] = {        // index == ModLogTag::mod
+	{ "clouds", NULL },                   // 0 -> skygfx_clouds.log
+	{ "corona", NULL },                   // 1 -> skygfx_corona.log
+	{ "water",  NULL },                   // 2 -> skygfx_water.log
+	{ "tex",    NULL },                   // 3 -> skygfx_tex.log
+	{ "postfx", NULL },                   // 4 -> skygfx_postfx.log
+	{ "pipe",   NULL },                   // 5 -> skygfx_pipe.log
+};
+#define MODLOG_COUNT (sizeof(s_modLogs) / sizeof(s_modLogs[0]))
+
+static const ModLogTag s_modTags[] = {   // leading "[Tag]" of the message -> file
+	{ "cloud*",     0 }, { "CloudShield", 0 },                   // clouds
+	{ "PtLight*",   1 }, { "Corona*",     1 }, { "sprite_*", 1 },// corona
+	{ "water*",     2 },                                         // water
+	{ "texdefs",    3 }, { "texalpha",    3 },                   // tex
+	{ "SSAO",       4 }, { "PF",          4 }, { "PostFX", 4 },  // postfx
+	{ "BPIPE",      5 }, { "Bld*",        5 },                   // pipe
+	{ "VPIPE",      5 }, { "Veh*",        5 },
+};
+#define MODLOG_TAG_COUNT (sizeof(s_modTags) / sizeof(s_modTags[0]))
+
+// "<dir><base>_dbg.log" -> "<dir><base>_<suffix>.log": derived from the main
+// log so module files always land in the SAME directory and follow a renamed
+// module.  Empty out[] on overflow (caller skips).
+static void
+modLogPath(char *out, const char *suffix)
+{
+	if(!s_logPath[0]){ out[0] = '\0'; return; }   // pre-diag_init: nothing to derive from
+	strncpy(out, s_logPath, MAX_PATH - 1);
+	out[MAX_PATH - 1] = '\0';
+	size_t n = strlen(out);
+	if(n > 4 && _stricmp(out + n - 4, ".log") == 0){ out[n - 4] = '\0'; n -= 4; } // skygfx_dbg
+	if(n > 4 && _stricmp(out + n - 4, "_dbg") == 0){ out[n - 4] = '\0'; n -= 4; } // skygfx
+	if(n + strlen(suffix) + 6 > MAX_PATH){ out[0] = '\0'; return; }               // '_'+sfx+".log"+NUL
+	strcat(out, "_"); strcat(out, suffix); strcat(out, ".log");
+}
+
+// Leading "[Tag]" token of msg -> s_modLogs index, or -1 (main log only).
+// Case-insensitive; a '*' pattern matches by prefix, an exact pattern must
+// match the whole tag.  Bounded: no scan past 40 tag chars, no scan past the
+// first ']'.
+static int
+modLogRoute(const char *msg)
+{
+	if(!msg || msg[0] != '[') return -1;
+	// Bounded scan for the closing bracket: at most 40 chars, so a message
+	// that opens '[' and never closes cannot turn into a full-string walk.
+	size_t k;
+	for(k = 1; k <= 40 && msg[k] != '\0'; k++)
+		if(msg[k] == ']') break;
+	if(k > 40 || msg[k] != ']') return -1;
+	size_t tagLen = k - 1;
+	if(tagLen == 0) return -1;
+	for(size_t i = 0; i < MODLOG_TAG_COUNT; i++){
+		const char *pat = s_modTags[i].tag;
+		size_t patLen = strlen(pat);
+		if(patLen == 0) continue;
+		if(pat[patLen - 1] == '*'){
+			if(tagLen >= patLen - 1 && _strnicmp(msg + 1, pat, (int)(patLen - 1)) == 0)
+				return s_modTags[i].mod;
+		}else if(tagLen == patLen && _strnicmp(msg + 1, pat, (int)patLen) == 0){
+			return s_modTags[i].mod;
+		}
+	}
+	return -1;
+}
+
+// Append `line` to the module file for msg's tag.  Lazy open on first match
+// (same CreateFileA idiom as the main writer); the handle stays open until
+// diag_init rotates the file, so a routed line costs ONE WriteFile — no extra
+// open/close beyond what the main logger already does per line.
+static void
+modLogWrite(const char *msg, const char *line, int lineLen)
+{
+	if(!s_logPath[0]) return;                 // pre-diag_init: no path to derive from
+	int mod = modLogRoute(msg);
+	if(mod < 0 || (size_t)mod >= MODLOG_COUNT) return;   // table row out of range = no file
+	ModLogFile *f = &s_modLogs[mod];
+	if(!f->h){
+		char path[MAX_PATH];
+		modLogPath(path, f->suffix);
+		if(!path[0]) return;
+		f->h = CreateFileA(path, FILE_APPEND_DATA, FILE_SHARE_READ,
+			NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+		if(f->h == INVALID_HANDLE_VALUE){ f->h = NULL; return; }
+	}
+	DWORD written;
+	WriteFile(f->h, line, (DWORD)lineLen, &written, NULL);
+	// Same <=1 Hz flush throttle as the main writer: WriteFile data survives
+	// process death (kernel file cache), so per-line flush is pure stall.
+	static DWORD s_lastFlushMs = 0;
+	DWORD nowMs = GetTickCount();
+	if(nowMs - s_lastFlushMs >= 1000){
+		s_lastFlushMs = nowMs;
+		FlushFileBuffers(f->h);
+	}
+}
+
+// ============================================================
 // dbglog — file-based debug logging
 // ============================================================
 static const char *s_logLevelStr[] = { "INFO ", "WARN ", "ERROR", "FATAL" };
@@ -305,6 +419,11 @@ dbglog_internal(LogLevel level, const char *file, int line, const char *func, co
 		FlushFileBuffers(h);
 	}
 	CloseHandle(h);
+
+	// Supplementary per-module copy (m2397): routed ONLY by the message's
+	// leading "[Tag]", written AFTER the main line above — the main log is
+	// already committed either way, so this path can never cost it a line.
+	modLogWrite(msg, buf, hlen);
 }
 
 void
@@ -371,6 +490,29 @@ diag_init(const char *logPath)
 			// copy so the old evidence survives the truncate below.
 			CopyFileA(s_logPath, prevPath, FALSE);
 		}
+	}
+
+	// m2397: rotate the supplementary module logs exactly like the main log
+	// (skygfx_<mod>.log -> skygfx_<mod>.prev.log, one boot behind), and drop
+	// any handle first so MoveFileEx never sees one of ours open.  Normally
+	// none IS open — this runs once from DllMain, before the first dbglog —
+	// so the close is belt-and-braces.  The fresh file is NOT created here:
+	// a module log opens lazily on its first routed line (modLogWrite).
+	for(size_t i = 0; i < MODLOG_COUNT; i++){
+		ModLogFile *f = &s_modLogs[i];
+		if(f->h){ CloseHandle(f->h); f->h = NULL; }
+		char cur[MAX_PATH];
+		modLogPath(cur, f->suffix);
+		if(!cur[0]) continue;
+		char modPrev[MAX_PATH];
+		strncpy(modPrev, cur, MAX_PATH - 1);
+		modPrev[MAX_PATH - 1] = '\0';
+		size_t mlen = strlen(modPrev);
+		if(mlen > 4 && _stricmp(modPrev + mlen - 4, ".log") == 0)
+			modPrev[mlen - 4] = '\0';
+		strncat(modPrev, ".prev.log", sizeof(modPrev) - strlen(modPrev) - 1);
+		if(!MoveFileExA(cur, modPrev, MOVEFILE_REPLACE_EXISTING))
+			CopyFileA(cur, modPrev, FALSE);   // absent/locked source: harmless, same as main
 	}
 
 	// Create (now empty) log for this boot
