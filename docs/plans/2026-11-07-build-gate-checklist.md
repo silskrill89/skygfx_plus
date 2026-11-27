@@ -133,3 +133,10 @@ Baselines table row: W0.4 (2026-11-09) | 2,616,320 | 516d904câ€¦ | L1 lever 
 - [ ] Step 5 runtime receipts â€” **user retest pending** (watch-list in wave-19 record)
 - [ ] Step 6 commit (gated on retest verdict)
 - **LOG RECIPE NOTE**: `dbglog_once("cloud_texraster")` split into `cloud_texraster_passthru` / `cloud_texraster_normal` (R5); recipes matching the old token now hit both â€” distinguish by suffix.
+
+## W0 — 2026-11-27 (resumed gate chain after W0.5; first identity row since)
+- Build: `python tools/fast_build.py --fastest` rc=0, 0 `error C`, 113 shaders up-to-date, MSBuild 39.14s, total 43.13s.
+- Artifact: `E:\games\gtasa_skygfx_plus\skygfx.asi` = **2,634,240 bytes**, md5 `0821dfbe41df0f8710bfdeb6545f4cf2`, mtime 2026-11-27 (post-build, deployed, duplicate-ASI guard clean, INI preserved).
+- Contents: lands the 3 previously-uncommitted fixes — FIX A2 point-light deferred window (`ptlightdefer` ×1), GTAIV `ivExposure 2.5→1.0`, per-module crash budget (`[crashbudget]` ×1). Tokens present: `ptlightdefer` 1, `ivExposure` 1, `[crashbudget]` 1, `specpool_skip` 2, `matfx_uaf_skip` 2.
+- Commit: `W0: land FIX A2 point-light deferred window + GTAIV ivExposure 2.5->1.0 + per-module crash budget` (3 files: rw_fixes.cpp, modeManager.cpp, crashhandler.cpp).
+- Retest row: PENDING — user eye-gate vs `Screenshots\2026-09` (see W1 dispatch: pyramids/quads, GTAIV milky, grey slabs).

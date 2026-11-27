@@ -34,8 +34,13 @@
 //   g_coronaBodyDone        body finished; the next buffered flush closes it
 //   g_inCloudsRender        producer flag: flush picks ONE/ONE for CClouds
 //   g_inPointLightsRender   body-scoped CPointLights gate leg: hook entry ..
-//                           orig return (covers the mid-body overflow flushes
-//                           the g_coronaBodyDone close would otherwise drop)
+//                           first post-body flush (covers the mid-body
+//                           overflow flushes the g_coronaBodyDone close would
+//                           otherwise drop, PLUS a SilentPatch-deferred batch
+//                           that rasterises after orig returned — FIX A2)
+//   g_pointLightBodyDone    FIX A2 hand-off: set at CPointLights body exit,
+//                           consumed by the first non-empty flush after it
+//                           (or by CoronaWindow_Close at the frame boundary)
 //   g_coronaPreValid        pre-window capture completed this window
 //   g_coronaPreFuncRw/RefRw, g_coronaPreFuncDev/RefDev
 //                           pre-window ALPHAFUNC/ALPHAREF (L1 + L3 snapshots)
@@ -168,6 +173,32 @@ bool g_inCloudsRender = false;	// SHARED: set by main.cpp CClouds__Render_hygien
 // — the shield=1 force/close code and effectsForceAlphaBlock (reads
 // g_inCoronasRender only) are untouched. POD, render-thread only.
 static bool g_inPointLightsRender = false;
+// ---- FIX A2: DEFERRED close for the body-scoped CPointLights leg --------
+// DEFECT (Nov-26 field log, both sessions): the leg above is cleared at
+// CPointLights__Render_shield_hook BODY EXIT, while its sibling
+// g_inCoronasRender/g_coronaBodyDone are cleared by the FIRST FLUSH that
+// rasterises the batch (SpriteFlushIndexedDraw_hook, "Window close" below).
+// That asymmetry is the deferral hole SilentPatchSA creates: the producer
+// queues the shared TempBuffer batch and returns, so a cone/dot batch can
+// reach 0x70CF20 only AFTER orig has already run the post-call clear. The
+// flush then evaluates family=0 (the cone/dot texture is dynamic, not one
+// of the four coronaFamilyTexture statics) AND window=0 -> skip-non-glow,
+// fail open, authored normal-alpha kept -> the additive-authored glow
+// texture (opaque alpha, non-white RGB surround) REPLACES the background as
+// an opaque hard-edged quad. Field receipts for exactly that state:
+//   `[PtLightGlow] root-cause skip-non-glow: flush entry blend=1 src=5
+//    dst=6 op=1 family=0 window=0 ras=…` (skygfx_dbg.log / .prev.log).
+// FIX: hand the leg over to the FLUSH instead of dropping it at body exit —
+// set at hook entry (with the re-arm), flagged done at body exit, and
+// cleared by the FIRST flush after that (or by CoronaWindow_Close at the
+// frame boundary). Mid-body flushes are unaffected because g_pointLightBodyDone
+// is still false there, so FIX A's whole-body coverage is preserved.
+// Blast radius is exactly one flush carrying a NON-EMPTY shared batch
+// (glowContractPending already requires spriteBatch>0), whose only producers
+// this file documents as CCoronas/CPointLights/CClouds — all additive.
+// The texture-family list is NOT widened, so glyph/font/HUD/screen-blit
+// lanes keep their authored normal-alpha. POD, render-thread only.
+static bool g_pointLightBodyDone = false;
 
 // ---- Pre-window state captured at the CCoronas hook entry ---------------
 // The entry "normalize" block used to force ALPHAFUNC=GREATEREQUAL /
@@ -1191,6 +1222,33 @@ SpriteFlushIndexedDraw_hook(int primType, void *verts, int nverts, void *indices
 				       "dst=INVSRCALPHA op=ADD zwrite=1 vtxalpha=1 ztest=1)");
 		}
 	}
+	// ---- FIX A2: deferred CPointLights window close ---------------------
+	// Sibling of the g_coronaBodyDone block above: the body-scoped
+	// g_inPointLightsRender leg survives its producer's return (see the
+	// flag's block comment) so the flush that finally rasterises a
+	// SilentPatch-deferred cone/dot batch still evaluates gate.window=1 and
+	// reconciles the ONE/ONE contract. This is that flush — consume the
+	// hand-off here, AFTER the draw, so the extended window covers exactly
+	// one rasterisation and can never shield the next producer's sprites.
+	// Mid-body flushes do not reach this branch (g_pointLightBodyDone is
+	// still false until body exit), which is what preserves FIX A.
+	// POD writes; runs for every flush user on both normal and fault paths
+	// only insofar as the close sits after the SEH fence.
+	// spriteBatch > 0 is the file's own producer-ownership test (read at hook
+	// entry, before orig drains it): consuming the hand-off only on a flush
+	// that actually carries an undrained shared batch means an EMPTY flush
+	// (the flush's own second draw site after 0x70CF76, or any already-
+	// drained site) can never spend the window before the deferred batch
+	// reaches a rasteriser.
+	if(g_pointLightBodyDone && spriteBatch > 0){
+		g_pointLightBodyDone = false;
+		g_inPointLightsRender = false;
+		if(dbglog_throttle("ptlightdefer"))
+			dbglog("[PtLightGlow] deferred window closed at flush "
+			       "batch=%d nverts=%d — gate leg released after the "
+			       "rasterisation it was kept open for",
+			       spriteBatch, nverts);
+	}
 }
 
 // ---- CPointLights::Render (0x7002D0) entry — shield-window re-arm -------
@@ -1235,8 +1293,9 @@ CPointLights__Render_shield_hook(void)
 	// block comment). Spans the WHOLE orig call — unlike g_coronaBodyDone,
 	// which the first mid-body overflow flush consumes — so every flush that
 	// can rasterise cone quads evaluates gate.window=1. Set here (entry),
-	// cleared right after orig returns below. POD write.
+	// handed to the flush at body exit below (FIX A2). POD write.
 	g_inPointLightsRender = true;
+	g_pointLightBodyDone = false;	// FIX A2: no deferred flush pending yet
 	// ---- [PtLightColor] wave-6b diagnostic receipt (test-7, 2026-11-01) ----
 	// Discriminates "lights REGISTERED black" from "blend broken at draw":
 	// the glow-sprite colour is read straight from this registry by the
@@ -1283,13 +1342,22 @@ CPointLights__Render_shield_hook(void)
 	}
 	if(CPointLights__Render_orig)
 		CPointLights__Render_orig();
-	// FIX A: close the body-scoped gate leg at body exit — the tail flush
-	// (unconditional jmp 0x700BCD) has drained every cone/dot quad inside
-	// orig, so nothing cone-owned can rasterise after this point. Plain POD
-	// write on the render thread. If orig faulted, the leg stays set until
-	// the next entry re-arm or CoronaWindow_Close (frame boundary) — same
-	// bounded stuck-flag contract as g_inCoronasRender.
-	g_inPointLightsRender = false;
+	// FIX A2: hand the body-scoped gate leg over to the FLUSH instead of
+	// dropping it here. The tail flush (unconditional jmp 0x700BCD) drains
+	// every cone/dot quad inside orig on the vanilla path, but SilentPatchSA
+	// defers the shared batch, so a batch can still be undrained when orig
+	// returns — clearing the leg here is what produced window=0 at the
+	// rasterising flush. Keep g_inPointLightsRender set and flag the body
+	// done; SpriteFlushIndexedDraw_hook's window-close block consumes both
+	// on the first flush after this point (or CoronaWindow_Close does at the
+	// frame boundary). POD write. If orig faulted, the leg stays set until
+	// the next entry re-arm or CoronaWindow_Close — same bounded stuck-flag
+	// contract as g_inCoronasRender.
+	g_pointLightBodyDone = true;
+	if(dbglog_once("ptlightdefer"))
+		dbglog("[PtLightGlow] body exit hands the gate leg to the flush "
+		       "(deferred-batch window): window stays 1 until the next "
+		       "0x70CF20 flush with a non-empty shared batch");
 }
 
 // ---- Producer discrimination for the two wave-6b TempBuffer flush sites ---
@@ -1961,7 +2029,10 @@ CoronaWindow_Close(void)
 	// FIX A stuck-flag net: if CPointLights orig faulted before its
 	// post-call clear, the body-scoped gate leg survives to the frame
 	// boundary — clear it here with the other window flags (POD write).
+	// FIX A2: the deferred hand-off flag rides along so a stale leg can
+	// never be released by a flush next frame.
 	g_inPointLightsRender = false;
+	g_pointLightBodyDone = false;
 	// R3 (H1 residual): complete the depth contract on EVERY close, capture
 	// or not. The effects-exit close consumes the snapshot, so the LAST
 	// close before the 2D/HUD tail (and the next frame's scene_start) runs

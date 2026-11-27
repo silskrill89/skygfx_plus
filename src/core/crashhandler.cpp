@@ -8,7 +8,8 @@
 // de-merged from src/core/debug_handl.cpp (that file absorbed this TU on
 // 2026-10-26; the de-merge restored it 2026-11-26, original ancestor at
 // _backup/src/core/crashhandler.cpp). Owns:
-//   * diag_crashHandler (VEH) + crashCount budget + zone classify +
+//   * diag_crashHandler (VEH) + crash-receipt budget (per-module allowance +
+//     global safety cap) + zone classify +
 //     CRASH[n] receipts + crash counters + diag_dumpStats
 //   * diag_installVEH / diag_removeVEH (s_oldVEH) + the g_inGuardedIm2DPass /
 //     g_renderPhase definitions (their decls: crashhandler.h)
@@ -56,6 +57,15 @@ static volatile LONG s_statAvWrite = 0;
 static volatile LONG s_statAvDep = 0;
 static volatile LONG s_statAvOther = 0;
 static volatile LONG s_statGuardFault = 0;  // faults inside the Im2D pass guard
+
+// Crash-receipt budget accounting (m0273).  s_statVehCatch above still
+// counts EVERY non-guarded catch — it increments before FIX B/FIX C and
+// before any budget logic, so veh_catch is the truth about how many faults
+// the VEH saw.  These two explain the gap between that number and the
+// CRASH[n] lines actually in the log: receipts (granted) vs suppressed
+// (caught by the budget and therefore not printed).
+static volatile LONG s_statCrashReceipts = 0;   // CRASH[n] receipts emitted
+static volatile LONG s_statCrashSuppressed = 0; // catches the budget dropped
 
 // ============================================================
 // CRASH FORENSICS PRIMITIVES (module map, SEH-guarded probes)
@@ -363,6 +373,123 @@ crashMatFxSkipSafe(DWORD site, DWORD esp, DWORD ebp, DWORD accessType,
 	return skip;
 }
 // ============================================================
+// CRASH-RECEIPT BUDGET — per-module allowance + global safety cap (m0273)
+// ============================================================
+// Defect fixed (session forensics 2026-11-26 23:41:10 -> 23:42:04): the
+// budget was ONE global `crashCount > 20`, so a third-party ASI fault storm
+// (20x "CRASH[n] ... mod=Renewed120.asi+0xD41D NULLDEREF" inside a 143 ms
+// burst) spent the entire allowance before any skygfx fault could be
+// reported — the 148 VEH catches that followed logged NOTHING, i.e. a real
+// skygfx fault in the last 3 s would have been invisible.  A budget a single
+// external module can exhaust hides exactly the faults it exists to show.
+//
+// Shape now — two gates, both evaluated BEFORE the only file I/O in the
+// handler (dbglog opens+closes the log per line, which is what the budget
+// bounds):
+//   * per-module allowance CRASH_MOD_ALLOWANCE — a burst from ONE faulting
+//     module spends only that module's slots; every other module, and
+//     skygfx itself, keeps its receipts;
+//   * global safety cap CRASH_BUDGET_GLOBAL — hard bound on total receipt
+//     file I/O for the process (the fault-loop floor the old 20 provided).
+// Past both gates a catch is never dropped silently: s_statCrashSuppressed
+// counts it, ONE throttled [crashbudget] receipt names it, and
+// diag_dumpStats prints per-module granted/suppressed tallies.
+//
+// Invariants held (unchanged by this block):
+//   * disposition: every path still returns EXCEPTION_CONTINUE_SEARCH — the
+//     VEH is diagnostic-only and never swallows;
+//   * FIX B (specpool 0x5D97E6) and FIX C (MatFX 0x810CB2) run ABOVE this
+//     block, so a recovered UAF never spends budget and never counts as a
+//     receipt;
+//   * s_statVehCatch keeps counting everything (it increments above FIX B);
+//   * CRASH[%d] keeps its format AND its meaning (the catch ordinal).
+// Fault-path cost: one FNV-1a walk over a <=40-char module name, one
+// <=96-entry linear module scan (the Toolhelp snapshot is latched once per
+// process) and a few interlocked ops.  No heap, no std::map, no I/O.
+#define CRASH_MOD_ALLOWANCE 8    // receipts one faulting module may spend
+#define CRASH_BUDGET_GLOBAL 48    // hard cap: total receipts per process
+#define CRASH_MOD_SLOTS 8        // fixed POD tally table (heap-free, map-free)
+
+// One row per faulting module.  hash matches WITHOUT a string compare on the
+// fault path; name is copied in at install time only, so the session summary
+// can NAME the module that spent the budget instead of reporting a hash.
+struct CrashModBudget {
+	volatile LONG hash;   // FNV-1a of the module name; 0 = free row
+	LONG recv;            // receipts granted to this module
+	LONG sup;             // catches this module had suppressed
+	char name[40];        // module name for the [STATS] tally (install-time)
+};
+static CrashModBudget s_crashModBudget[CRASH_MOD_SLOTS];
+static volatile LONG  s_crashBudgetTotal = 0;  // receipts granted, all modules
+
+// FNV-1a over a module name.  0 is the free-row sentinel, so a 0 hash folds
+// to 1.  POD, no allocation, bounded by the 40-char caller buffer.
+static uint32_t crashModHash(const char *s)
+{
+	uint32_t h = 2166136261u;
+	for(const char *p = s; *p; p++){
+		h ^= (uint32)(unsigned char)*p;
+		h *= 16777619u;
+	}
+	return h ? h : 1u;
+}
+
+// Claim ONE receipt slot for faulting module `name`.  Returns 1 = granted
+// (caller prints the CRASH[n] receipt), 0 = refused; either way the module's
+// tally is updated so the gap is visible in [STATS].
+// Interlocked because the VEH can fire on any thread.  A race between threads
+// can mis-attribute a tally row or overshoot an allowance by the racing
+// thread count at most — never the global cap, which is the actual bound on
+// file I/O, so no lock is worth taking on a faulting thread.
+static int crashBudgetClaim(const char *name)
+{
+	uint32_t h = crashModHash(name);
+	int slot = -1, freeIdx = -1, lowIdx = -1;
+	LONG low = 0;
+	for(int i = 0; i < CRASH_MOD_SLOTS; i++){
+		CrashModBudget *b = &s_crashModBudget[i];
+		if(b->hash == (LONG)h){ slot = i; break; }
+		if(b->hash == 0){
+			if(freeIdx < 0) freeIdx = i;
+		}else{
+			LONG used = b->recv + b->sup;
+			if(lowIdx < 0 || used < low){ low = used; lowIdx = i; }
+		}
+	}
+	if(slot < 0)
+		slot = (freeIdx >= 0) ? freeIdx : lowIdx;  // table full: recycle the coolest row
+	if(slot < 0)
+		return 0;   // unreachable with CRASH_MOD_SLOTS > 0; fail closed (no receipt)
+
+	CrashModBudget *b = &s_crashModBudget[slot];
+	if(b->hash != (LONG)h){
+		// First occupant of this row (or a recycled one): install the key,
+		// reset the row, copy the name for the summary tally.
+		b->hash = (LONG)h;
+		b->recv = 0;
+		b->sup = 0;
+		strncpy(b->name, name, sizeof(b->name) - 1);
+		b->name[sizeof(b->name) - 1] = 0;
+	}
+
+	// Gate 1 — per-module allowance: one module's storm spends only its own
+	// slots, so an external ASI can never crowd out other/faulting modules.
+	if(InterlockedIncrement(&b->recv) > CRASH_MOD_ALLOWANCE){
+		InterlockedDecrement(&b->recv);   // recv stays "receipts granted"
+		InterlockedIncrement(&b->sup);
+		return 0;
+	}
+	// Gate 2 — global safety cap: bounds TOTAL per-process receipt file I/O
+	// when many distinct modules fault (the fault-loop floor).
+	if(InterlockedIncrement(&s_crashBudgetTotal) > CRASH_BUDGET_GLOBAL){
+		InterlockedDecrement(&s_crashBudgetTotal);
+		InterlockedDecrement(&b->recv);
+		InterlockedIncrement(&b->sup);
+		return 0;
+	}
+	return 1;
+}
+// ============================================================
 // VEH crash handler — matches original skygfx crashHandler
 // Logs crashes, auto-fixes known issues, suppresses rendering crashes
 // ============================================================
@@ -378,8 +505,9 @@ diag_crashHandler(EXCEPTION_POINTERS *ep)
 		return EXCEPTION_CONTINUE_SEARCH;
 
 	// DBG_PRINTEXCEPTION_C (0x40010006) — the benign OutputDebugString
-	// first-chance. Never a real crash: logging it burned the 20-trip
-	// crashCount and dumped ~680 junk ring-buffer lines per trip. Ignore
+	// first-chance. Never a real crash: logging it burned the whole
+	// crash-receipt budget (the old 20-trip cap) and dumped ~680 junk
+	// ring-buffer lines per trip. Ignore
 	// silently; disposition is unchanged (EXCEPTION_CONTINUE_SEARCH — the
 	// exception still reaches whoever owns it, other codes unaffected).
 	if(code == 0x40010006)
@@ -406,9 +534,10 @@ diag_crashHandler(EXCEPTION_POINTERS *ep)
 	InterlockedIncrement(&s_statVehCatch);   // stats: all non-guarded catches
 
 	// ---- PHASE 2 / FIX B — conjunctive 0x5D97E6 shutdown-UAF skip ----
-	// Runs BEFORE the crashCount budget and before any receipt work: a
-	// recovered fault must never consume the receipt budget (20 materials
-	// would starve it) and must not be reported as a catch.  Three conjuncts
+	// Runs BEFORE the crash-receipt budget and before any receipt work: a
+	// recovered fault must never consume the receipt budget (a full material
+	// set would starve its own module's allowance) and must not be reported
+	// as a catch.  Three conjuncts
 	// only; probe faults degrade to "no skip" (see crashSpecPoolSkipSafe).
 	if(code == 0xC0000005){
 		DWORD skipWhy = 0, skipPool = 0;
@@ -434,7 +563,7 @@ diag_crashHandler(EXCEPTION_POINTERS *ep)
 	}
 
 	// ---- PHASE 2 / FIX C — conjunctive 0x810CB2 MatFX data-UAF skip ----
-	// Same discipline as FIX B: runs before the crashCount budget and before
+	// Same discipline as FIX B: runs before the crash-receipt budget and before
 	// any receipt work; all conjuncts inside the POD probe island; probe
 	// faults degrade to "no skip".  ExceptionInformation[0]=0/1/8 = READ/
 	// WRITE/DEP, [1] = the accessed address.
@@ -464,19 +593,47 @@ diag_crashHandler(EXCEPTION_POINTERS *ep)
 	}
 
 	static int crashCount = 0;
-	if(++crashCount > 20) return EXCEPTION_CONTINUE_SEARCH;
+	++crashCount;   // catch ordinal — the CRASH[%d] field, meaning unchanged
 
 	CONTEXT *ctx = ep->ContextRecord;
 	DWORD eip = ctx->Eip;
 	DWORD esp = ctx->Esp;
 
-	// PHASE 3 — claim all receipt work below (format, scope lookup, file
-	// I/O).  If the claim is already held we are the nested re-entry of a
-	// fault raised inside our own receipt: hand the exception straight back
-	// with the same disposition as the normal tail — no repeated work, no
-	// loop, no swallow.
+	// PHASE 3 — claim all receipt work below (module resolve, format, scope
+	// lookup, file I/O, the budget's throttled notice).  If the claim is
+	// already held we are the nested re-entry of a fault raised inside our
+	// own receipt: hand the exception straight back with the same disposition
+	// as the normal tail — no repeated work, no loop, no swallow.
 	if(InterlockedCompareExchange(&s_vehReceiptBusy, 1, 0) != 0)
 		return EXCEPTION_CONTINUE_SEARCH;
+
+	// ---- CRASH-RECEIPT BUDGET — per-module allowance + global safety cap ----
+	// AFTER FIX B / FIX C (a recovered UAF must never spend budget) and
+	// BEFORE the only file I/O in this handler.  The module resolve below is
+	// the same source the receipt's own mod= field uses (crashFormatMod
+	// resolves eip through crashFindModule too), so budget identity and the
+	// logged mod= can never disagree.  It is a bounded linear scan of the
+	// snapshotted module list — no I/O, no allocation — so a storm already
+	// past the cap costs a few compares per catch, not a file open.
+	char modName[40];
+	if(!crashFindModule(eip, modName, sizeof(modName), NULL) || !modName[0])
+		memcpy(modName, "(unmapped)", sizeof("(unmapped)"));
+
+	if(!crashBudgetClaim(modName)){
+		// Suppressed, but never SILENTLY: counted here, named by ONE
+		// throttled receipt per window (dbglog_throttle, the same 2 s bucket
+		// discipline FIX B/C evidence lines use), and tallied per module in
+		// diag_dumpStats.  Release the claim before the tail so the next
+		// catch's notice can run.
+		InterlockedIncrement(&s_statCrashSuppressed);
+		if(dbglog_throttle("crash_budget"))
+			dbglog("[crashbudget] crash receipt budget exhausted: last mod=%s suppressed=%ld granted=%ld (global cap=%d per-module=%d)",
+				modName, (long)s_statCrashSuppressed, (long)s_crashBudgetTotal,
+				(int)CRASH_BUDGET_GLOBAL, (int)CRASH_MOD_ALLOWANCE);
+		InterlockedExchange(&s_vehReceiptBusy, 0);
+		return EXCEPTION_CONTINUE_SEARCH;
+	}
+	InterlockedIncrement(&s_statCrashReceipts);
 
 	// Determine crash context from EIP range
 	const char *crashZone = "UNKNOWN";
@@ -571,6 +728,33 @@ diag_dumpStats(void)
 	dbglog("[STATS] session summary: veh_catch=%ld av_read=%ld av_write=%ld av_dep=%ld av_other=%ld guard_fault=%ld",
 		(long)s_statVehCatch, (long)s_statAvRead, (long)s_statAvWrite,
 		(long)s_statAvDep, (long)s_statAvOther, (long)s_statGuardFault);
+
+	// ADDITIVE receipt (m0273), the line above is byte-stable and stays:
+	// veh_catch counts EVERY non-guarded catch, receipts= how many became
+	// CRASH[n] lines, suppressed= the gap.  suppressed != 0 means the log has
+	// catches it could not show, and the per-module rows NAME who spent the
+	// budget (name:granted/suppressed) — so a third-party ASI fault storm is
+	// visible in the same session summary instead of reading as a silent
+	// gap between veh_catch and the CRASH[n] lines.
+	char rows[CRASH_MOD_SLOTS * 64 + 8];
+	int p = 0;
+	rows[0] = 0;
+	for(int i = 0; i < CRASH_MOD_SLOTS; i++){
+		const CrashModBudget *b = &s_crashModBudget[i];
+		if(b->hash == 0) continue;   // free row
+		if(p >= (int)sizeof(rows) - 64) break;   // room for name + 2 counts
+		int w = _snprintf(rows + p, (int)sizeof(rows) - p, "%s%s:%ld/%ld",
+			p ? " " : "", b->name[0] ? b->name : "(unnamed)",
+			(long)b->recv, (long)b->sup);
+		if(w < 0) w = 0;
+		p += w;
+		if(p > (int)sizeof(rows) - 1) p = (int)sizeof(rows) - 1;
+		rows[p] = 0;   // _snprintf may not terminate on truncation
+	}
+	dbglog("[STATS] crash budget: receipts=%ld suppressed=%ld global_cap=%d per_module=%d mods=%s",
+		(long)s_statCrashReceipts, (long)s_statCrashSuppressed,
+		(int)CRASH_BUDGET_GLOBAL, (int)CRASH_MOD_ALLOWANCE,
+		rows[0] ? rows : "(none)");
 }
 #endif // DIAGNOSTICS_DISABLED
 

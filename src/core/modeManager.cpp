@@ -590,8 +590,19 @@ static const ModeValue kValuesGTAIV[] = {
 
 	// IV grade sliders (DrawIVGrade, live every frame; ivMode=1 above makes
 	// the pass run). Owned so the grade never reads a leaked ULTRA base.
-	MV_F(ivExposure, 2.5f),		// shipped IV preset value; DrawIVGrade applies
-					// pow(ex,1/2.2) => 1.52x display-space, not raw 2.5x
+	// 2026-11-27 defect (d): 2.5 shipped here as the "IV preset value", but
+	// DrawIVGrade runs on a DISPLAY-referred frame under the GTAIV filter
+	// (pure bypass, no tonemap — postfx_colourfilter.cpp:1764 pow(ex,1/2.2)),
+	// so it was a flat +52% whole-frame lift with nothing to compensate it:
+	//   log 2026-11-26 23:41:44  [PF] DrawIVGrade RUN c0=(expDisp 1.52 ...)
+	//   log 2026-11-26 23:41:44  tonemapRan=0  (filter=7 never runs CF_Modern)
+	//   log 2026-11-26 22:52:48  [PostFX] DrawIVGrade: ... exposure=2.50
+	// vs the base-INI / None path (the Sept goal-line grade) which runs
+	// exposure=0.98 -> expDisp 0.99 (log 2026-11-26 22:53:23). This profile
+	// row is post-Sept (added 84ef232, 2026-11-02), i.e. it never existed at
+	// the goal line. 1.0f => expDisp 1.00: grade-neutral, matches the base path.
+	MV_F(ivExposure, 1.0f),		// was 2.5 (=> 1.52x display lift); DrawIVGrade
+					// applies pow(ex,1/2.2), so 1.0 = identity
 	MV_F(ivSaturation, 0.3f),	// IV look: moderate grade desaturation
 	MV_F(ivCurves, 1.0f),		// neutral curves (1.0 = no S-curve push)
 	MV_F(ivDesaturation, 0.0f),	// no extra luma desat on top of ivSaturation
