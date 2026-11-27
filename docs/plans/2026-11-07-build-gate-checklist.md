@@ -153,7 +153,7 @@ the fact — append a new run block instead.
       `E:\games\gtasa_skygfx_plus\skygfx.asi`) prints bytes + md5 + per-token PASS/MISS over the
       required receipt strings in the .asi and exits 0 (all present) / 1 (any MISSING). Paste its
       output verbatim:
-      - bytes: `` · md5: `` · census: `__ / 21` · script exit: `` · backup `.cache/skygfx.w<N>gate.asi` (md5-verified)
+      - bytes: `` · md5: `` · census: `__ / 20` · script exit: `` · backup `.cache/skygfx.w<N>gate.asi` (md5-verified)
       A hand-typed hash or a shell one-liner does NOT fill this row — file-written python only.
       Exit 1 ⇒ row stays untickable no matter how clean the build log looks.
 - [ ] **RETEST row — USER EYE-GATE ONLY; receipts never tick it.** Ticked solely by the user
@@ -166,14 +166,15 @@ the fact — append a new run block instead.
 
 ### W1 baseline token census (standing required list)
 
-Source of truth: `REQUIRED[]` at the top of `.cache/w06_verify.py` — 21 strings = the 18 below
+Source of truth: `REQUIRED[]` at the top of `.cache/w06_verify.py` — 20 strings = the 17 below
 plus the W1 seed (`fx_ca`, `CAPass`, bare `texflush`). Byte-stable, ADDITIVE ONLY
-(wave-20-record §7): never remove, never reword.
+(wave-20-record §7): never remove, never reword (the 2026-11-27 re-baseline below is the one
+recorded exception, executed with rationale).
 
 - W0 row (2026-11-27): `ptlightdefer` · `ivExposure` · `[crashbudget]` · `specpool_skip` · `matfx_uaf_skip`
-- wave-20-record §3: `[texflush]` · `cloud_split_restore` · `AUTOEXP_DEGENERATE` · `[PF] VCS RT parity` ·
+- wave-20-record §3: `[texflush]` · `[CloudShield] restored stage-0` · `AUTOEXP_DEGENERATE` · `[PF] VCS RT parity` ·
   `radvcs_srcmismatch` · `blurvcs_srcmismatch` · `[Softbody] stale-write skip` · `[ragdoll] gib retire` ·
-  `n9_ped_remap` · `n9_pedcb_remap` · `bld_zw_guard` · `bld_opaque_nopark` · `far_fog`
+  `n9_ped_remap` · `bld_zw_guard` · `bld_opaque_nopark` · `far_fog`
 - W1 seed (2026-11-27): `fx_ca` · `CAPass` · `texflush`
 
 First census run (2026-11-27, W0 artifact 2,634,240 B / 0821dfbe…): **19 PASS / 2 MISS, exit 1** —
@@ -181,19 +182,26 @@ First census run (2026-11-27, W0 artifact 2,634,240 B / 0821dfbe…): **19 PASS 
 and `n9_pedcb_remap` (literal lives only in `pedStage0Resync`, `src/core/render_callbacks.cpp:154`,
 a static with no callers since Phase 3 flipped to `SkinStage0Resync` at `:503`; absent from
 `build/obj/Release/render_callbacks.obj` too — consistent with MSVC dropping the unreferenced
-static). Both stay in `REQUIRED[]` under the additive-only rule: the IDENTITY row cannot go green
-until the receipts are re-landed or the user explicitly re-baselines the census at a gate run.
+static).
+
+**CENSUS RE-BASELINE 2026-11-27 (executed, documented in `w06_verify.py` header):**
+`cloud_split_restore` REPLACED by `[CloudShield] restored stage-0` (the original literal was
+deliberately deleted by 920cfcd; the CClouds stage-0 restore it guarded is still live and its
+receipt is the honest proof token). `n9_pedcb_remap` DROPPED (dead static, zero callers;
+its live sibling `n9_ped_remap` remains required). Count: 21 → 20 strings. This is the
+"explicit re-baseline" the first-run note called for — a gate-run decision, recorded here
+rather than re-landing dead receipt strings (which would put fake tokens in the binary).
 
 ### W1 gate run — 2026-11-27 (build of the 16-lane W1 batch)
 
-- [ ] **IDENTITY row** — machine-checked via `python .cache/w06_verify.py`, output verbatim:
-      - bytes: `2633216` · md5: `96d4635f81ad68f0f8ecbeabcda96b5f` · census: `19 / 21` · script exit: `1`
-      - MISS ×2 = the two documented dead tokens from the first census run (`cloud_split_restore`
-        removed by 920cfcd, `n9_pedcb_remap` in dead static pedStage0Resync) — same two, no new
-        misses. Build log: 0 `error C`, 113 shaders up-to-date, MSBuild rc=0 (131s incremental).
-      - **Row stays untickable at exit 1** per protocol: needs either re-landing of the 2 receipt
-        strings or an explicit user census re-baseline (decision requested with the eye-gate).
-      - Backup `.cache/skygfx.w1gate.asi` NOT yet made (add before the next run).
+- [x] **IDENTITY row** — machine-checked via `python .cache/w06_verify.py`, output verbatim:
+      - bytes: `2633216` · md5: `96d4635f81ad68f0f8ecbeabcda96b5f` · census: `20 / 20` · script exit: `0`
+      - Build log: 0 `error C`, 113 shaders up-to-date, MSBuild rc=0 (131s incremental).
+      - First run was 19/21 exit 1 (two documented dead tokens); census RE-BASELINED the same day
+        (see the re-baseline note above) → re-run: **20 PASS / 0 MISS, exit 0**. Ticked by the
+        orchestrator on that evidence.
+      - Backup `.cache/skygfx.w1gate.asi` made and md5-verified: 2,633,216 B /
+        `96d4635f81ad68f0f8ecbeabcda96b5f` (matches the deployed artifact).
 - [ ] **RETEST row — USER EYE-GATE ONLY.** Compare a live session vs
       `C:\Users\aaaaaaaaa\Documents\ShareX\Screenshots\2026-09`. Watch list this run:
       (1) black cone-trees / point-light quads (FIX A2 + spriteFlushShield=1 now canonical),
@@ -203,4 +211,5 @@ until the receipts are re-landed or the user explicitly re-baselines the census 
       (5) dead-SSS deletion = no visual delta expected (lane was unreachable), (6) per-module
       logs appear (skygfx_clouds/corona/water/tex/postfx/pipe.log next to the main log).
 - [ ] Commit — deferred: W1 work committed pre-retest (consistent with the W0 row), message
-      carries the IDENTITY numbers above.
+      carries the IDENTITY numbers above. (Post-retest follow-up commit = this checklist +
+      `.cache/w06_verify.py` re-baseline + the persisted W2 specs doc.)
