@@ -108,10 +108,15 @@ const PresetConfig presetConfigs[NUM_PRESETS] = {
 // Apply a preset to the config
 void ApplyPreset(Config *c, int preset)
 {
-	if(preset < 0 || preset >= NUM_PRESETS){
+	// Presets disabled (2026-11-28): legacy game presets (III/VC/SA/LCS/VCS/IV/
+	// Best PC / skygfxplusultramaxdeluxe) overwrote pipes, colour filter and
+	// effect keys in ways that interacted badly with the mode-profile system.
+	// Reimplement later as a simple list with an empty default that touches
+	// nothing. For now ApplyPreset is a no-op so no preset can mutate Config.
+	(void)preset;
+	if(c)
 		c->preset = PRESET_CUSTOM;
-		return;
-	}
+	return;
 
 	// A preset is a direct whole-Config write that bypasses the mode
 	// manager. Drop any active mode latch BEFORE writing grade/ivMode so
