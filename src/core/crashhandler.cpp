@@ -344,6 +344,23 @@ static const DWORD kMatFxCallerRet= 0x810C78; // ret into dtor 0x810C60 (call at
 static const DWORD kMatFxRecover  = 0x810C9B; // mov eax,edi; pop edi; pop esi; ret
 static const DWORD kMatFxFaultByte= 0x4810468B; // 8B 46 10 48 @ 0x810CB2
 static const DWORD kMatFxRecovByte= 0x5E5FC78B; // 8B C7 5F 5E @ 0x810C9B
+// FIX G (2026-11-28): SECOND MatFX destructor UAF at quit — the cascade after
+// FIX C. Log 09:48:18: [matfx_uaf_skip] 0x810CB2 skipped, then immediately
+// CRASH[2] WRITE at 0x74E190 accessing 0x20712CC4 (the SAME freed data block;
+// EBP = fault addr). 0x74E190 = `C7 45 00 00 00 00 00` (mov [ebp],0),
+// reached from RpGeometryDestroy (esp+0x10 = 0x74CD3E) -> RpClumpDestroy
+// (esp+0x1C = 0x749576) inside RwFreeListForAllUsed at shutdown. FIX C's
+// skip left this second destructor still holding the dead pointer. Recovery
+// = Eip 0x74E197 (`5E 5B 33 C0 5F` = pop esi; pop ebx; xor eax,eax; pop edi)
+// — skips the bad store, leaves the epilogue stack-neutral, EAX=0 (fail-open
+// result). Runtime bytes verified in the probe (static exe bytes unreliable:
+// Hoodlum runtime-unpacks). Never-swallow: a readable target => propagate.
+static const DWORD kMatFx2Fault     = 0x74E190;
+static const DWORD kMatFx2GeomRet   = 0x74CD3E;
+static const DWORD kMatFx2ClumpRet  = 0x749576;
+static const DWORD kMatFx2Recover   = 0x74E197;
+static const DWORD kMatFx2FaultB    = 0x000045C7; // C7 45 00 00 @ fault
+static const DWORD kMatFx2RecovB    = 0xC05B335E; // 5E 5B 33 C0 @ recover
 // FIX D (2026-11-28): Rw plugin-destructor NULL-container UAF at shutdown.
 // 0x801D50 = push ebx/ebp/esi/edi; mov edi,[esp+0x14]; the arg (freed
 // CustomSpecMap data) is NULL -> 0x801D58 `mov esi,[edi+0x10]` faults at 0x10.
@@ -436,6 +453,27 @@ crashMatFxSkipSafe(DWORD site, DWORD esp, DWORD ebp, DWORD accessType,
 		skip = 1; *outWhy = 1;      // data+0x14 unmapped: freed struct confirmed
 	}
 	return skip;
+}
+// FIX G probe island — POD only, no inline (C2712-safe).  All conjuncts read
+// before the probe so a fault on any of them propagates the original AV.
+static int __declspec(noinline)
+crashMatFx2SkipSafe(DWORD site, DWORD esp, DWORD ebp, DWORD accessType, DWORD faultAddr)
+{
+	__try {
+		if(accessType == 1 && site == kMatFx2Fault && faultAddr == ebp &&
+		   *(const volatile DWORD *)(uintptr_t)(esp + 0x10) == kMatFx2GeomRet &&
+		   *(const volatile DWORD *)(uintptr_t)(esp + 0x1C) == kMatFx2ClumpRet &&
+		   *(const volatile DWORD *)(uintptr_t)kMatFx2Fault == kMatFx2FaultB &&
+		   *(const volatile DWORD *)(uintptr_t)kMatFx2Recover == kMatFx2RecovB)
+		{
+			volatile DWORD probe = *(const volatile DWORD *)(uintptr_t)faultAddr;
+			(void)probe;
+			return 0;   // target readable: a different WRITE fault -> propagate
+		}
+	} __except(EXCEPTION_EXECUTE_HANDLER) {
+		return 1;       // target unmapped: freed MatFX data confirmed
+	}
+	return 0;
 }
 // FIX E probe island — POD only, no inline (C2712-safe like FIX B/C).  The
 // probeArmed flag ensures only a fault on the DATA read sets "skip": a fault
@@ -754,6 +792,23 @@ diag_crashHandler(EXCEPTION_POINTERS *ep)
 			ep->ContextRecord->Edi = mfMaterial;   // dtor's EDI (material) for `mov eax,edi`
 			ep->ContextRecord->Esp = ep->ContextRecord->Esp + 0x18; // dtor saved-edi slot
 			ep->ContextRecord->Eip = kMatFxRecover; // skip free+zero, pops+ret to registry
+			return EXCEPTION_CONTINUE_EXECUTION;
+		}
+
+		// ---- FIX G: 0x74E190 second MatFX destructor WRITE to the same freed data ----
+		// Runs above the receipt budget; a recovered UAF must never spend a slot.
+		if(accessType == 1 &&
+		   (DWORD)(uintptr_t)ep->ExceptionRecord->ExceptionAddress == kMatFx2Fault &&
+		   crashMatFx2SkipSafe(kMatFx2Fault, ep->ContextRecord->Esp,
+		                        ep->ContextRecord->Ebp, accessType, faultAddr))
+		{
+			if(InterlockedCompareExchange(&s_vehReceiptBusy, 1, 0) == 0){
+				if(dbglog_throttle("matfx2_geom_uaf"))
+					dbglog("[matfx2_geom_uaf] second MatFX destructor WRITE skip: eip=0x%08X data=%08X -> eip=0x%08X (FIX C cascade)",
+					       kMatFx2Fault, faultAddr, kMatFx2Recover);
+				InterlockedExchange(&s_vehReceiptBusy, 0);
+			}
+			ep->ContextRecord->Eip = kMatFx2Recover; // bad store skipped; epilogue sets EAX=0
 			return EXCEPTION_CONTINUE_EXECUTION;
 		}
 	}
