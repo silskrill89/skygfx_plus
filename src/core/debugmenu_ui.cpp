@@ -2949,99 +2949,6 @@ DrawModesSection(void)
 // and IV go through ApplyPreset (the same path the Style combo uses);
 // "Modern" has no GamePreset entry yet, so it sets the pipes directly
 // (derivePipelineFromPipes() then locks pipeline=PBR + Modern colour filter).
-static void
-DrawPresetsTab(void)
-{
-	// Modes first: ModeManager owns whole-config snapshots, so a mode
-	// switch is best made before touching the preset rows below.
-	DrawModesSection();
-
-	static const char *styleStr[] = { "PS2", "Xbox", "PC", "Custom Maxed" };
-	int presetIdx = 3;
-	if(config->preset == PRESET_SA_PS2) presetIdx = 0;
-	else if(config->preset == PRESET_SA_XBOX) presetIdx = 1;
-	else if(config->preset == PRESET_SA_PC) presetIdx = 2;
-	// This combo is the SINGLE home of the Style setting (the old Graphics
-	// tab's copy was removed in the dedup pass). Gate on the Combo result:
-	// applying the preset / loading the newest custom config EVERY FRAME
-	// while the tab is visible continuously stomped the live config and
-	// fought every other config writer (pipes, filter, toggles churned/frame).
-	if(ImGui::Combo("Style (gamePreset)", &presetIdx, styleStr, 4)){
-		if(presetIdx <= 2){
-			static const int kStylePreset[3] = { PRESET_SA_PS2, PRESET_SA_XBOX, PRESET_SA_PC };
-			ApplyPreset(config, kStylePreset[presetIdx]);
-			resetValues();
-		}else{
-			// "Custom Maxed" = the newest configs\*.ini
-			// (no-op when none exist - keeps current state)
-			LoadNewestCustomConfig();
-			config->preset = PRESET_CUSTOM;
-		}
-	}
-	if(ImGui::IsItemHovered())
-		ImGui::SetTooltip("Applies the preset (or the newest saved config) and stores it as gamePreset.");
-
-	// Full preset list (III/VC/SA/LCS/VCS/IV/Best/max). The four-entry Style
-	// combo above is the quick path; this one makes every ApplyPreset entry
-	// reachable without editing gamePreset by hand.
-	static int s_fullPreset = 0;
-	if(config->preset >= 0 && config->preset < NUM_PRESETS)
-		s_fullPreset = config->preset;
-	if(s_fullPreset < 0 || s_fullPreset >= NUM_PRESETS)
-		s_fullPreset = 0;
-	ImGui::PushItemWidth(240.0f);
-	if(ImGui::Combo("Apply game preset", &s_fullPreset, presetNames, NUM_PRESETS)){
-		ApplyPreset(config, s_fullPreset);
-		resetValues();
-	}
-	ImGui::PopItemWidth();
-	if(ImGui::IsItemHovered())
-		ImGui::SetTooltip("Every preset in presets.cpp. Applying one overwrites the pipe/filter/effect keys\n"
-			"the preset carries; the current values below are the live result.");
-
-	DrawGlassHeader("Pipeline presets", ImVec2(0.0f, 24.0f));
-	ImGui::Text("Pipeline presets (set pipes + colour filter):");
-	if(ImGui::Button("PS2")){ PfNote("preset PS2"); ApplyPreset(config, PRESET_SA_PS2); resetValues(); }
-	ImGui::SameLine();
-	if(ImGui::Button("Xbox")){ PfNote("preset Xbox"); ApplyPreset(config, PRESET_SA_XBOX); resetValues(); }
-	ImGui::SameLine();
-	if(ImGui::Button("PC")){ PfNote("preset PC"); ApplyPreset(config, PRESET_SA_PC); resetValues(); }
-	ImGui::SameLine();
-	if(ImGui::Button("IV")){ PfNote("preset IV"); ApplyPreset(config, PRESET_IV_PC); resetValues(); }
-	ImGui::SameLine();
-	if(ImGui::Button("Modern")){
-		bool wasIV = PipeFamilyIsIV();	// before the direct pipe write below
-		config->buildingPipe = BUILDING_PBR;
-		config->vehiclePipe = CAR_MODERN;
-		config->colorFilter = COLORFILTER_MODERN;
-		config->preset = PRESET_CUSTOM;
-		// Same defect class as the combo/raw rows: this button sets pipes
-		// directly (no ApplyPreset, so nothing else writes ivMode) and must
-		// not leave the IV grade compositing over the PBR pipes it just set.
-		SyncIvModeFromPipeFamily(wasIV);
-		resetValues();
-	}
-	if(ImGui::IsItemHovered())
-		ImGui::SetTooltip("No GamePreset entry for PBR yet - sets the pipes directly.\nderivePipelineFromPipes() then reports pipeline=PBR.");
-	ImGui::SameLine();
-	if(ImGui::Button("Reload INI"))
-		reloadAllInis();
-
-	DrawAccentSeparator();
-	ImGui::TextDisabled("PS2    -> building=PS2    vehicle=PS2     filter=PS2");
-	ImGui::TextDisabled("Xbox   -> building=Xbox   vehicle=Xbox    filter=PC");
-	ImGui::TextDisabled("PC     -> building=Xbox   vehicle=PC      filter=PC");
-	ImGui::TextDisabled("IV     -> building=GTAIV  vehicle=GTAIV   filter=GTAIV");
-	ImGui::TextDisabled("Modern -> building=PBR    vehicle=Modern  filter=Modern");
-	DrawAccentSeparator();
-	ImGui::Text("Current: building=%s  vehicle=%s  water=%s  filter=%s",
-		s_buildNames[config->buildingPipe >= 0 && config->buildingPipe < 5 ? config->buildingPipe : 3],
-		(config->vehiclePipe >= 0 && config->vehiclePipe < 12 && s_vehNames[config->vehiclePipe]) ? s_vehNames[config->vehiclePipe] : "?",
-		(config->waterStyle >= 0 && config->waterStyle < 3) ? s_waterSty[config->waterStyle] : "?",
-		(config->colorFilter >= 0 && config->colorFilter < 9) ? s_cfNames[config->colorFilter] : "?");
-	DrawEffectiveSummary();
-}
-
 // INI Keys tab â€” every row, every key, greys included. Uses the global
 // settings filter at the top of the window; a greyed row has no live variable.
 static void
@@ -3131,7 +3038,6 @@ struct MenuSection {
 
 // Custom pane bodies (each draws its own glass header):
 static void DrawMainPane(void);
-static void DrawPresetsPane(void);
 static void DrawProfilerPane(void);
 static void DrawReferencePane(void);
 static void DrawAllSettingsTab(void);	// defined below (own header inside)
@@ -3142,9 +3048,6 @@ static const MenuSection s_menuSections[] = {
 	{ "Main", "Switchboard", MC_SETUP,
 	  "Master switch for every effect, pipes, rendering features and state repairs.",
 	  -1, DrawMainPane },
-	{ "Presets", "Presets", MC_SETUP,
-	  "Modes, style presets and pipe sets.",
-	  -1, DrawPresetsPane },
 	// --- Effects ------------------------------------------------------------
 	{ "SMAA", "SMAA", MC_EFFECTS,
 	  "Subpixel morphological anti-aliasing. No other settings - this switch is the whole feature.",
@@ -4016,14 +3919,6 @@ DrawAllSettingsTab(void)
 // ============================================================
 
 // Presets pane: the five pipeline presets (pipe combos reachable).
-static void
-DrawPresetsPane(void)
-{
-	DrawGlassHeader("Presets  //  modes and pipe sets", ImVec2(0.0f, 28.0f));
-	DrawAccentSeparator();
-	DrawPresetsTab();
-}
-
 // Profiler pane: live pass/frame timings, draw counters, shader binds.
 // Instrumentation lives in src/render/profiler.cpp (PF_SCOPE); this pane
 // only reads its snapshot accessors.
@@ -4139,244 +4034,6 @@ ModeUpper(char *dst, int n, const char *src)
 	dst[i] = '\0';
 }
 
-static void
-DrawModeChipRow(void)
-{
-	if(!config)
-		return;
-
-	const ImGuiStyle &st = ImGui::GetStyle();
-	const int n = (int)(sizeof(kModeChips)/sizeof(kModeChips[0]));
-	const ImVec2 start = ImGui::GetCursorScreenPos();
-	const float avail = ImGui::GetContentRegionAvail().x;
-	const float gap = 6.0f;
-	const float h = ImGui::GetTextLineHeight() + 9.0f;
-
-	// RESTORE INI sits immediately after the last chip behind a 1px rule.
-	// Measured up front so the chip row gives up padding instead of letting
-	// the action run off the right edge on a narrow menu.
-	static const char *const kRestoreLabel = "Restore INI";
-	static const char *const kRestoreTip =
-		"Only the fields the active mode owns go back to the values stored in skygfx.ini.\n"
-		"Every other setting is left untouched, and this window stays open.";
-	const float restoreW = ImGui::CalcTextSize(kRestoreLabel).x + st.FramePadding.x * 2.0f;
-	const float restoreGap = 24.0f;
-	const float reserve = (ModeManager_GetMode() != MODE_NONE)
-		? restoreW + restoreGap + 8.0f : 0.0f;
-
-	// Chip padding gives way before anything clips. The measured top tab
-	// strip below keeps its own padding and metrics untouched.
-	float padX = 13.0f;
-	float rowW = 0.0f;
-	for(;;){
-		rowW = gap * (float)(n - 1);
-		for(int i = 0; i < n; i++)
-			rowW += ImGui::CalcTextSize(kModeChips[i].label).x + padX * 2.0f;
-		if(rowW + reserve <= avail || padX <= 5.0f)
-			break;
-		padX -= 1.0f;
-	}
-
-	ModeId cur = ModeManager_GetMode();
-	ImDrawList *dl = ImGui::GetWindowDrawList();
-	const float r = g_dmMetrics.frameRounding;
-	float x = start.x;
-
-	for(int i = 0; i < n; i++){
-		const ModeChipDef &c = kModeChips[i];
-		const ImVec2 ts = ImGui::CalcTextSize(c.label);
-		const float w = ts.x + padX * 2.0f;
-		const bool on = (cur == c.id);
-
-		ImGui::SetCursorScreenPos(ImVec2(x, start.y));
-		ImGui::PushID((int)c.id);
-		// EnableNav: chips are reachable with Tab / activated with Enter or
-		// Space; ImGuiCol_NavCursor (accent) draws the focus cue.
-		const bool pressed = ImGui::InvisibleButton("chip", ImVec2(w, h),
-			ImGuiButtonFlags_EnableNav);
-		const bool hovered = ImGui::IsItemHovered();
-		ImGui::PopID();
-
-		const ImVec2 a(x, start.y);
-		const ImVec2 b(x + w, start.y + h);
-		const ImVec2 tp(a.x + (w - ts.x) * 0.5f, a.y + (h - ts.y) * 0.5f);
-
-		if(on){
-			// Accent fill plus a 2px halo: the one saturated state in the row.
-			// Hover brightens to accentHover so the toggle-off click is visible.
-			dl->AddRectFilled(ImVec2(a.x - 2.0f, a.y - 2.0f), ImVec2(b.x + 2.0f, b.y + 2.0f),
-				DmColU32(g_dmPalette.accent, 0.12f), r + 2.0f);
-			dl->AddRectFilled(a, b,
-				DmColU32(hovered ? g_dmPalette.accentHover : g_dmPalette.accent, 1.0f), r);
-			dl->AddRect(a, b, DmColU32(g_dmPalette.accentHover, 1.0f), r, 1.0f);
-			// bgDeep on accent keeps the label using the existing palette's
-			// dark-on-yellow contrast instead of adding a text colour.
-			dl->AddText(tp, DmColU32(g_dmPalette.bgDeep, 1.0f), c.label);
-		}else{
-			dl->AddRectFilled(a, b,
-				DmColU32(hovered ? g_dmPalette.bgHover : g_dmPalette.bgRaised, 1.0f), r);
-			dl->AddRect(a, b,
-				DmColU32(hovered ? g_dmPalette.borderLight : g_dmPalette.border, 1.0f),
-				r, 1.0f);
-			dl->AddText(tp,
-				DmColU32(hovered ? g_dmPalette.textPrimary : g_dmPalette.textSecondary, 1.0f),
-				c.label);
-		}
-
-		if(hovered)
-			ImGui::SetTooltip("%s", c.tip);
-
-		if(pressed){
-			ModeKeepMenuOpen keepMenu;	// UI flag must survive the Config swap
-			ModeManager_SetMode(c.id);	// same id = toggle off, restores the pre-mode base
-			if(dbglog_throttle("mode_click"))
-				dbglog("[ModeUI] click %s -> mode=%d menuOpen=%d", c.label,
-					(int)ModeManager_GetMode(), (int)config->debugMenuOpen);
-			PfNote("mode -> %s", c.label);
-			resetValues();			// same refresh as the Presets tab's Modes rows
-		}
-
-		x += w + gap;
-	}
-
-	// A chip click may have engaged or disengaged this frame: re-read the
-	// mode so the action and the banner never show a one-frame lie.
-	cur = ModeManager_GetMode();
-	bool active = (cur != MODE_NONE);
-	int owned = active ? ModeManager_GetOwnedCount(cur) : 0;
-
-	// --- RESTORE INI: visible only while a mode is engaged --------------
-	// Explicit, lossless escape hatch: Disengage restores only the fields
-	// the profile owns, so this never touches a setting the mode left alone.
-	if(active){
-		const float btnX = start.x + rowW + restoreGap;
-		dl->AddLine(ImVec2(btnX - 13.0f, start.y + 4.0f),
-			ImVec2(btnX - 13.0f, start.y + h - 4.0f),
-			DmColU32(g_dmPalette.border, 0.90f), 1.0f);
-		ImGui::SetCursorScreenPos(ImVec2(btnX, start.y));
-		ImGui::PushStyleColor(ImGuiCol_Button, DmCol(g_dmPalette.bgRaised, 0.95f));
-		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, DmCol(g_dmPalette.bgHover, 1.0f));
-		ImGui::PushStyleColor(ImGuiCol_ButtonActive, DmCol(g_dmPalette.bgActive, 1.0f));
-		ImGui::PushStyleColor(ImGuiCol_Border, DmCol(g_dmPalette.accentDim, 0.85f));
-		ImGui::PushStyleColor(ImGuiCol_Text, DmCol(g_dmPalette.accent));
-		const bool restore = ImGui::Button(kRestoreLabel, ImVec2(0.0f, h));
-		ImGui::PopStyleColor(5);
-		if(ImGui::IsItemHovered())
-			ImGui::SetTooltip("%s", kRestoreTip);
-		if(restore){
-			const ModeId was = cur;
-			const int wasOwned = owned;
-			const char *wasAlias = ModeManager_GetAlias(was);
-			ModeKeepMenuOpen keepMenu;	// disengage replaces the whole Config
-			ModeManager_Disengage();
-			resetValues();			// same post-change refresh as the chips
-			dbglog("[ModeUI] Restore INI -> disengaged %s owned=%d", wasAlias, wasOwned);
-			PfNote("mode -> none");
-			// Banner + button state for THIS frame follow the new mode.
-			cur = ModeManager_GetMode();
-			active = (cur != MODE_NONE);
-			owned = active ? ModeManager_GetOwnedCount(cur) : 0;
-		}
-	}
-
-	// --- active-mode banner --------------------------------------------
-	// Full-width glass strip: 2px accent bar, MODE + name + owned-field
-	// count, then the way back; the exact INI value sits at the right edge.
-	// Always one line at 1000px and wider - the tail and the provenance
-	// label each drop whole rather than clip.
-	const float barH = ImGui::GetTextLineHeight() + 15.0f;
-	ImGui::SetCursorScreenPos(ImVec2(start.x, start.y + h + st.ItemSpacing.y));
-	ImGui::Dummy(ImVec2(avail, barH));
-	const ImVec2 ba = ImGui::GetItemRectMin();
-	const ImVec2 bb = ImGui::GetItemRectMax();
-
-	if(active){
-		dl->AddRectFilled(ba, bb, DmColU32(g_dmPalette.bgRaised, 0.62f), r);
-		dl->AddRect(ba, bb, DmColU32(g_dmPalette.accentDim, 0.55f), r, 1.0f);
-		dl->AddRectFilled(ImVec2(ba.x + 1.0f, ba.y + 1.0f),
-			ImVec2(ba.x + 3.0f, bb.y - 1.0f), DmColU32(g_dmPalette.accent, 0.95f), 1.0f);
-	}else{
-		dl->AddRectFilled(ba, bb, DmColU32(g_dmPalette.bgPanel, 0.55f), r);
-		dl->AddRect(ba, bb, DmColU32(g_dmPalette.border, 0.85f), r, 1.0f);
-		dl->AddRectFilled(ImVec2(ba.x + 1.0f, ba.y + 1.0f),
-			ImVec2(ba.x + 3.0f, bb.y - 1.0f), DmColU32(g_dmPalette.accentDim, 0.45f), 1.0f);
-	}
-
-	char modeName[24];
-	char detailBuf[48];
-	const char *label = active ? ModeChipLabel(cur) : NULL;
-	if(!label)
-		label = (cur == MODE_NONE) ? ModeManager_GetAlias(cur) : ModeUiName(cur);
-	ModeUpper(modeName, (int)sizeof(modeName), label);
-	if(active){
-		if(owned == 1)
-			snprintf(detailBuf, sizeof(detailBuf), "1 field owned");
-		else
-			snprintf(detailBuf, sizeof(detailBuf), "%d fields owned", owned);
-	}else{
-		snprintf(detailBuf, sizeof(detailBuf), "no mode engaged");
-	}
-
-	const ImVec2 tsMode = ImGui::CalcTextSize("MODE");
-	const ImVec2 tsName = ImGui::CalcTextSize(modeName);
-	const ImVec2 tsDetail = ImGui::CalcTextSize(detailBuf);
-	const char *tail;
-	if(!active)
-		tail = "pick a chip to load a profile - your INI values stay put";
-	else if(ModeHasChip(cur))
-		tail = "click the lit chip or press Restore INI to get your INI values back";
-	else
-		tail = "switch it off from the Presets tab";
-	const float tailW = ImGui::CalcTextSize(tail).x;
-	const float innerRight = bb.x - 14.0f;
-	const float ty = ba.y + (barH - ImGui::GetTextLineHeight()) * 0.5f;
-	// Drawn 1px rules, not glyph separators: the menu font is ASCII-only.
-	const float sepPad = 14.0f;
-	float tx = ba.x + 14.0f;
-
-	dl->AddText(ImVec2(tx, ty), DmColU32(g_dmPalette.textDisabled, 1.0f), "MODE");
-	tx += tsMode.x + 10.0f;
-	dl->AddText(ImVec2(tx, ty),
-		DmColU32(active ? g_dmPalette.accent : g_dmPalette.textSecondary, 1.0f), modeName);
-	tx += tsName.x + 14.0f;
-	dl->AddText(ImVec2(tx, ty),
-		DmColU32(active ? g_dmPalette.textPrimary : g_dmPalette.textDisabled, 1.0f), detailBuf);
-	tx += tsDetail.x;
-
-	// Recovery hint: contiguous with the state, dropped whole when it cannot
-	// fit so the line never clips on a narrow menu.
-	if(tx + sepPad * 2.0f + 1.0f + tailW <= innerRight){
-		dl->AddLine(ImVec2(tx + sepPad, ba.y + 8.0f),
-			ImVec2(tx + sepPad, bb.y - 8.0f),
-			DmColU32(g_dmPalette.borderLight, 0.75f), 1.0f);
-		dl->AddText(ImVec2(tx + sepPad + 1.0f + sepPad, ty),
-			DmColU32(g_dmPalette.textSecondary, 1.0f), tail);
-		tx += sepPad * 2.0f + 1.0f + tailW;
-	}
-
-	// Provenance at the right edge: the exact value written to skygfx.ini.
-	// Drawn only with clearance from the hint, so it never collides.
-	char iniBuf[48];
-	snprintf(iniBuf, sizeof(iniBuf), "skygfx.ini  active=%s", ModeManager_GetAlias(cur));
-	const float iniW = ImGui::CalcTextSize(iniBuf).x;
-	if(tx + 40.0f + iniW <= innerRight)
-		dl->AddText(ImVec2(innerRight - iniW, ty),
-			DmColU32(g_dmPalette.textDisabled, 1.0f), iniBuf);
-
-	// --- reset discoverability: one line, no new popup ------------------
-	ImGui::SetCursorScreenPos(ImVec2(start.x + 14.0f, bb.y + st.ItemSpacing.y));
-	ImGui::TextDisabled("%s", active
-		? "right-click any row to reset it to the mode default"
-		: "right-click any row to reset it to its built-in default");
-}
-
-// Debug correlation overlay (defined in the overlay section at EOF):
-// appends the "F <id> | C 0x<code>" readout to the CURRENT ImGui frame's
-// foreground draw list. While the debug menu is open, DrawUnifiedDebugMenu
-// calls this right before its own Render, so the overlay does NOT need to
-// run a second ImGui frame that frame (a second frame per frame drains the
-// shared input-event queue and consumes the menu's mouse-down edge - that
-// is what killed menu clicks; see DebugOverlayDraw).
 static void DebugOverlayAppendTextIfEnabled(void);
 
 void DrawUnifiedDebugMenu(IDirect3DDevice9 *device)
@@ -4440,9 +4097,10 @@ void DrawUnifiedDebugMenu(IDirect3DDevice9 *device)
 			ImGui::SameLine();
 			ImGui::TextDisabled("Filters every section.");
 
-			// Always-visible mode selector: eight chips + one state line,
-			// OUTSIDE the master-detail child so it stays pinned above it.
-			DrawModeChipRow();
+			// Presets/mode-chip UI removed (2026-11-28): the mode/profile
+			// system stays in the config layer but is no longer exposed in
+			// the menu — the chip row + preset tab were fighting the live
+			// config and causing regressions.
 
 			// === Master-detail area ====================================
 			// LEFT: the section list (category-grouped Selectables with
