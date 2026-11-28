@@ -303,6 +303,7 @@ myDefaultCallback(RpAtomic *atomic)
 	int alpharef = 1;
 	int dodual = 0;
 	int detach = 0;
+	bool defContract = false;	// default-pipe entry contract armed (Spec 10 exit leg)
 
 	// Atomic guard (audit reorder): every atomic deref below (atomic->pipeline
 	// here, atomic->clump / Skin_ClassifyAtomic in the PedsPipe acquire) is now
@@ -410,6 +411,7 @@ myDefaultCallback(RpAtomic *atomic)
 		// "ZFUNC drv=4/dev=8" — device at D3DCMP_ALWAYS) survived here and
 		// every prop/markers draw after CJ passed its depth test over him.
 		// (1)+(2)+(3) — one coherent chokepoint write per state:
+		defContract = true;	// entry contract armed � exit leg publishes canonical normal-alpha
 		pipeDeviceStateSet(D3DRS_ALPHABLENDENABLE, FALSE);
 		pipeDeviceStateSet(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
 		pipeDeviceStateSet(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
@@ -698,6 +700,27 @@ myDefaultCallback(RpAtomic *atomic)
 		}
 	}else
 		pipe = RxPipelineExecute(pipe, atomic, 1);
+
+	// ===== DEFAULT-pipe EXIT contract (Spec 10) =====
+	// Publishes canonical normal-alpha (TRUE/SRCALPHA/INVSRCALPHA/ADD) through
+	// L1+L2+L3 + flush, mirroring the sticky-exit doctrine
+	// (pipelinecommon.cpp:2328-2347). Gated on defContract (only pipe==NULL
+	// path sets it); ped atomics take SkinExitContract and never reach here.
+	if(defContract){
+		pipeDeviceStateSet(D3DRS_ALPHABLENDENABLE, TRUE);
+		pipeDeviceStateSet(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+		pipeDeviceStateSet(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+		pipeDeviceStateSet(D3DRS_BLENDOP, D3DBLENDOP_ADD);
+		if(d3d9device)
+			_rwD3D9RenderStateFlushCache();
+		static bool defpipeExitLogged = false;
+		if(!defpipeExitLogged && dbglog_throttle("defpipe_contract_exit")){
+			defpipeExitLogged = true;
+			dbglog("[DefPipe] exit contract published canonical normal-alpha "
+			       "(vtxalpha=1 src=SRCALPHA dst=INVSRCALPHA op=ADD) via L1+L2+L3 "
+			       "+ flush; handoff to effects/sprite phase");
+		}
+	}
 
 	// Restore original ambient after ped rendering — SkinAmbientOverrideExit
 	// on the module path (re-entrant: no-op unless Enter ran this span),
