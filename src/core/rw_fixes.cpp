@@ -922,7 +922,11 @@ SpriteFlushIndexedDraw_hook(int primType, void *verts, int nverts, void *indices
 		// INI spriteFlushShield (default 1 = ON): 0 = no capture / force /
 		// close at the flush boundary at all (the vanilla batch state is
 		// drawn untouched — bisect lever for the producer-gated force).
-		if(spriteBatch > 0 && d3d9device && (!config || config->spriteFlushShield)){
+		// W2-1: ONE family-identity predicate for both lever states. Hoisted so
+	// lever-ON uses the same gate as lever-OFF (family || window, screenblit
+	// excluded). See docs/plans/2026-11-27-w2-specs.md SPEC 9 W2-1.
+	SpriteBlendContract gate = spriteBlendContract();
+	if(spriteBatch > 0 && d3d9device && (!config || config->spriteFlushShield)){
 			if(dbglog_once("sprite_flush_force")){
 				int blend = -1, src = -1, dst = -1, zw = -1;
 				if(d3d9device){
@@ -935,30 +939,38 @@ SpriteFlushIndexedDraw_hook(int primType, void *verts, int nverts, void *indices
 				dbglog("[probe] sprite_flush force=1 pre blend=%d src=%d dst=%d zw=%d",
 					blend, src, dst, zw);
 			}
-			// Capture the PRE-force eleven-state block on every layer BEFORE
-			// the first shield write; spriteFlushShieldClose replays it
-			// immediately after the draw.
-			spriteFlushShieldCapture();
-			// Vanilla CCoronas / CPointLights / CClouds all draw ONE/ONE
-			// additive (their glow textures have a black RGB surround with
-			// opaque alpha). Both producers now force the SAME pair; the
-			// g_inCloudsRender flag only selects the close-path label below.
-			if(g_inCloudsRender){
-				coronaDrawRawShield("SpriteFlush_70CF20", true,
-					(DWORD)D3DBLEND_ONE, (DWORD)D3DBLEND_ONE);
-				spriteForcePath = "SpriteFlush_70CF20/clouds";
+			// W2-1: ONE family-identity predicate for both lever states.
+			// gate.pass is (family || window) && !screenblit.
+			if(gate.pass){
+				// Capture the PRE-force eleven-state block on every layer BEFORE
+				// the first shield write; spriteFlushShieldClose replays it
+				// immediately after the draw.
+				spriteFlushShieldCapture();
+				// Vanilla CCoronas / CPointLights / CClouds all draw ONE/ONE
+				// additive (their glow textures have a black RGB surround with
+				// opaque alpha). Both producers now force the SAME pair; the
+				// g_inCloudsRender flag only selects the close-path label below.
+				if(g_inCloudsRender){
+					coronaDrawRawShield("SpriteFlush_70CF20", true,
+						(DWORD)D3DBLEND_ONE, (DWORD)D3DBLEND_ONE);
+					spriteForcePath = "SpriteFlush_70CF20/clouds";
+				}else{
+					coronaDrawRawShield("SpriteFlush_70CF20", true);
+					spriteForcePath = "SpriteFlush_70CF20/corona";
+				}
+				spriteForced = true;
+				// One-shot receipt per producer: the first forced flush of each
+				// kind names the pair. dbglog_once is not time-based.
+				if(dbglog_once(g_inCloudsRender ? "cloud_shield_clouds"
+				                                : "cloud_shield_sprites"))
+					dbglog(g_inCloudsRender
+						? "[CloudShield] flush batch=clouds forced ONE/ONE"
+						: "[CloudShield] flush batch=sprites forced ONE/ONE");
 			}else{
-				coronaDrawRawShield("SpriteFlush_70CF20", true);
-				spriteForcePath = "SpriteFlush_70CF20/corona";
+				// Non-glow batch: delegate to the SHARED in-fence arm
+				// (same fail-closed/skip decision as lever-OFF).
+				glowContractPending = true;
 			}
-			spriteForced = true;
-			// One-shot receipt per producer: the first forced flush of each
-			// kind names the pair. dbglog_once is not time-based.
-			if(dbglog_once(g_inCloudsRender ? "cloud_shield_clouds"
-			                                : "cloud_shield_sprites"))
-				dbglog(g_inCloudsRender
-					? "[CloudShield] flush batch=clouds forced ONE/ONE"
-					: "[CloudShield] flush batch=sprites forced ONE/ONE");
 		}else if(spriteBatch > 0 && d3d9device){
 			// [PtLightGlow] UNSHIELDED-FLUSH diagnostic (03:01-run black
 			// squares): the batch IS about to rasterise but the flush-

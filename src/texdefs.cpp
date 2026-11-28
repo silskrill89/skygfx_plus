@@ -1278,18 +1278,12 @@ TexDefsFindCB(char *name)
 	// (TexDefsMissPolicyEnable(false)) — then the legacy NULL return stands.
 	if(!tex && s_texDefsMissPolicyOn){
 		TexDefsMissClass cls = TexDefsMissClassify();
-		// Draw-time sentinel is applied by our pipes (bldPolicyTexture /
-		// vehPolicyTexture / SkinStage0Resync / render_callbacks), NOT by the
-		// game's material->texture — so the game receives NULL and keeps its
-		// own texture streaming / recovery path alive (faithful-descendant
-		// doctrine: zeroed settings = vanilla, features added on top).
-		// The sentinel pointer is only needed for the miss-policy receipt's
-		// action field; use the class singleton (no clone allocated) since
-		// nothing is returned.
 		RwTexture *sent = (cls == TEXDEFS_MISS_WORLD)
-		                  ? s_missSentinelGrey
-		                  : s_missSentinelClear;
+		                  ? TexDefsMissSentinelWorld()
+		                  : TexDefsMissSentinelSprite();
 		TexDefsNoteMissPolicy(name ? name : "", cls, sent);
+		// A1: return NULL to game so its own streaming/recovery can fire.
+		// Grey sentinel applied at draw time by our pipes (bld/veh/skin/cb).
 		return NULL;
 	}
 	if(tex){
