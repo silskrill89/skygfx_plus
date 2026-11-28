@@ -184,6 +184,11 @@ extern bool &CMenuManager__m_bMenuActive;
 extern int &CMenuManager__m_PrefsBrightness;
 extern int* CGame__currArea;
 extern int* CEntryExitManager__ms_exitEnterState;
+// Game state + VideoPlayer's DirectShow media control (named layer; addresses
+// in gta.cpp). Used by the WndProc WM_ACTIVATEAPP guard — vanilla GTA:SA
+// dereferences GetMediaControl() during the logo/intro even when it is NULL.
+extern int &gGameState;
+extern void *&g_pvMediaControl;
 
 struct CustomEnvMapPipeMaterialData
 {

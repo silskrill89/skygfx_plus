@@ -20,6 +20,14 @@ void *&pCameraBeingUpdated = *(void**)0xC9BCC0;
 uint32 &RwD3D9RasterExtOffset = *(uint32*)0xB4E9E0;
 CPedPool *&pedPool = *(CPedPool**)0xB74490;
 
+// Named layer for the game state + VideoPlayer media control (HARD RULE:
+// addresses live here only). WndProc.cpp WM_ACTIVATEAPP calls
+// VideoPlayer::GetMediaControl() (returns pvMediaControl at 0xC920D8) then
+// mc->GetState(10,..) during GAME_STATE_PLAYING_LOGO(2)/PLAYING_INTRO(4) —
+// a NULL media control at that instant faults at gta_sa.exe+0x3480DB.
+int &gGameState = *(int*)0xC8D4C0;
+void *&g_pvMediaControl = *(void**)0xC920D8;
+
 
 float *gfLaRiotsLightMult = (float*)0x8CD060;
 float *ambientColors = (float*)0xB7C4A0;

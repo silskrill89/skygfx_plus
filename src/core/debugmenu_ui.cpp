@@ -117,6 +117,15 @@ static LRESULT CALLBACK ImGuiWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
 				return 0;
 		}
 	}
+	// Vanilla WM_ACTIVATEAPP race (gta_sa.exe+0x3480DB): during the logo/intro
+	// the game calls VideoPlayer::GetMediaControl()->GetState(10,..) even when
+	// the DirectShow media control is still NULL -> NULL deref at startup.
+	// ImGui subclasses the window, so guard it here and drop that one focus
+	// message until the media control exists. Both states are harmless to
+	// skip focus handling for; all other messages (and all normal game states)
+	// go through untouched.
+	if(msg == WM_ACTIVATEAPP && (gGameState == 2 || gGameState == 4) && !g_pvMediaControl)
+		return 0;
 	return CallWindowProc(s_originalWndProc, hWnd, msg, wParam, lParam);
 }
 
