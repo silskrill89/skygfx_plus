@@ -950,14 +950,19 @@ SpriteFlushIndexedDraw_hook(int primType, void *verts, int nverts, void *indices
 				// the first shield write; spriteFlushShieldClose replays it
 				// immediately after the draw.
 				spriteFlushShieldCapture();
-				// Vanilla CCoronas / CPointLights / CClouds all draw ONE/ONE
-				// additive (their glow textures have a black RGB surround with
-				// opaque alpha). Both producers now force the SAME pair; the
-				// g_inCloudsRender flag only selects the close-path label below.
+				// CCoronas / CPointLights glow textures are black-RGB + opaque
+				// alpha -> ONE/ONE additive is correct. CLOUD PUFF textures are
+				// the opposite: white RGB with a MEANINGFUL alpha channel, so
+				// forcing ONE/ONE on the cloud flush adds the white surround at
+				// full strength -> opaque WHITE SQUARES with no texture/blending
+				// (the 2026-11-28 report). Clouds must use the authored normal-
+				// alpha pair (SRCALPHA/INVSRCALPHA) so their alpha is respected.
 				if(g_inCloudsRender){
 					coronaDrawRawShield("SpriteFlush_70CF20", true,
-						(DWORD)D3DBLEND_ONE, (DWORD)D3DBLEND_ONE);
-					spriteForcePath = "SpriteFlush_70CF20/clouds";
+						(DWORD)D3DBLEND_SRCALPHA, (DWORD)D3DBLEND_INVSRCALPHA);
+					spriteForcePath = "SpriteFlush_70CF20/clouds-normalalpha";
+					if(dbglog_once("cloud_flush_normalalpha"))
+						dbglog("[CloudShield] flush batch=clouds normal-alpha (SRCALPHA/INVSRCALPHA) — puff white surround must blend, not add");
 				}else{
 					coronaDrawRawShield("SpriteFlush_70CF20", true);
 					spriteForcePath = "SpriteFlush_70CF20/corona";
