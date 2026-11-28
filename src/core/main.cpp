@@ -3509,8 +3509,12 @@ InjectDelayedPatches()
 	// hook — see CClouds__Render_hygiene for the inherited-state analysis.
 	// InterceptCall keeps the original target in CClouds__Render_orig, so
 	// cloudRenderFix=0 simply passes straight through.
-	InterceptCall(&CClouds__Render_orig, CClouds__Render_hygiene, 0x53DCA2);
-	InterceptCall(&CClouds__Render_orig, CClouds__Render_hygiene, 0x53DFA0);
+	// Vanilla-fallback doctrine: only install the cloud hygiene hooks when
+	// the lever is on; zeroed = stock CClouds::Render.
+	if(cloudRenderFix){
+		InterceptCall(&CClouds__Render_orig, CClouds__Render_hygiene, 0x53DCA2);
+		InterceptCall(&CClouds__Render_orig, CClouds__Render_hygiene, 0x53DFA0);
+	}
 	// 0x53D81C call CSky::Render (0x714650) — sky-dome stage, verified but
 	// deliberately NOT intercepted. Disassembly (1.0 US) shows 0x714650 sets
 	// its OWN state before any rasterisation: TEXRASTER=NULL / ZTEST=off /
@@ -3707,7 +3711,9 @@ DllMain(HINSTANCE hInst, DWORD reason, LPVOID)
 
 		InjectHook(0x5BCF14, afterStreamIni, PATCH_JUMP);
 		InjectHook(0x7491C0, myDefaultCallback, PATCH_JUMP);
-		InjectHook(0x5BF8EA, CPlantMgr_Initialise);
+		if(config->grassAddAmbient || config->fixGrassPlacement ||
+		   config->ps2ModulateGrass || config->grassInstancing)
+			InjectHook(0x5BF8EA, CPlantMgr_Initialise);
 		static const unsigned char s_exp_756DFE[5] = { 0x3B, 0xC7, 0x74, 0x15, 0xA1 };
 		static const unsigned char s_exp_7FAD30[8] = { 0x8B, 0x54, 0x24, 0x08, 0x8B, 0x44, 0x24, 0x04 };
 		static const unsigned char s_exp_7FAD90[8] = { 0x8B, 0x44, 0x24, 0x04, 0x8B, 0x54, 0x24, 0x08 };
@@ -3730,10 +3736,13 @@ DllMain(HINSTANCE hInst, DWORD reason, LPVOID)
 		// and the DK22Pac hooks never installed.
 
 		// 0x5DA610 is hooked by TexDefsTryAttachExternal() when rwnormal plugin is active
-		static const unsigned char s_exp_5DAE61[8] = { 0x0F, 0xB6, 0x46, 0x44, 0x89, 0x44, 0x24, 0x28 };
-		if(verifyBytes((void*)0x5DAE61, s_exp_5DAE61, 8, "0x5DAE61"))
-			InjectHook(0x5DAE61, saveIntensity, PATCH_JUMP);
-		Patch(0x5DAEC8, setTextureAndColor);
+		if(config->grassAddAmbient || config->fixGrassPlacement ||
+		   config->ps2ModulateGrass || config->grassInstancing){
+			static const unsigned char s_exp_5DAE61[8] = { 0x0F, 0xB6, 0x46, 0x44, 0x89, 0x44, 0x24, 0x28 };
+			if(verifyBytes((void*)0x5DAE61, s_exp_5DAE61, 8, "0x5DAE61"))
+				InjectHook(0x5DAE61, saveIntensity, PATCH_JUMP);
+			Patch(0x5DAEC8, setTextureAndColor);
+		}
 
 		// add dual pass for PC pipeline
 		InjectHook(0x5D9EEB, D3D9RenderDefault_DUAL);
