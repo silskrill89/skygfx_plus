@@ -1943,6 +1943,18 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 	// tonemap sets it later in this same call.
 	PostfxResetTonemapHandshake();
 
+	// Pause/menu frames: the game draws its own menu into the camera raster
+	// BEFORE this hook, so every pass below (grade, tonemap, motion blur,
+	// height fog, god rays, CA/grain/vignette) smears the menu text. The
+	// per-pass gates already skip some of them; this single chain-entry gate
+	// guarantees NONE touch the paused frame. SMAA still runs later in
+	// DrawFinalEffects (the one effect the user allows on menus).
+	if(PostfxMenuPauseOnly()){
+		if(dbglog_throttle("pf_chain_menu_skip"))
+			dbglog("[PF] ColourFilter_switch: menu/pause -> ALL postfx passes skipped (game menu stays untouched)");
+		return;
+	}
+
 	// test-4 Symptom B: frame-entry L2/L3 divergence check. Coronas/particles
 	// draw in the scene phase BEFORE this entry, so a divergence created out
 	// there (the corona_blend dev=1/drv=0 signature) is still live here —
@@ -2904,7 +2916,7 @@ CPostEffects::DrawFinalEffects(void)
 		if(dbglog_throttle("pf_fxaa"))
 			dbglog("[PF] FXAA3 slot: fxaaEnable=%d smaaWins=%d (DrawFXAA3 self-gates)",
 				config->fxaaEnable, (int)(config->smaaEnable && SMAA_Edge ? 1 : 0));
-		if(PfFrontBufferValid())
+		if(PfFrontBufferValid() && !PostfxMenuPauseOnly())
 			DrawFXAA3();
 		if(dbglog_throttle("pf_fxaa2"))
 			dbglog("[PF] FXAA3 slot done: camera raster = final displayed surface");
