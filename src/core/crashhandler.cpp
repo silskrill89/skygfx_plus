@@ -349,12 +349,35 @@ static const DWORD kMatFxRecovByte= 0x5E5FC78B; // 8B C7 5F 5E @ 0x810C9B
 // CustomSpecMap data) is NULL -> 0x801D58 `mov esi,[edi+0x10]` faults at 0x10.
 // Called from the MatFX dtor at 0x810C8C. NULL-return epilogue at 0x801D83
 // (pop edi;pop esi;pop ebp;xor eax,eax;pop ebx;ret) is stack-neutral and
-// returns NULL � the fail-open result for a missing material-data lookup.
+// returns NULL � the fail-open result for a missing material-data lookup.
 static const DWORD kUafNullFault   = 0x801D58;
 static const DWORD kUafNullCaller  = 0x810C8C;
 static const DWORD kUafNullRecover = 0x801D83;
 static const DWORD kUafNullFaultB  = 0x8B10778B; // 8B 77 10 8B @ fault
 static const DWORD kUafNullRecovB  = 0x335D5E5F; // 5F 5E 5D 33 @ recover
+// FIX E (2026-11-28): FxManager_c::DestroyFxSystem -> List_c::RemoveItem UAF.
+// Field log 06:11:20: CRASH[3212] WRITE at 0x4A8E49 accessing 0x3F800004,
+// EAX=0x3F800000 (float 1.0f bit pattern used as a LIST LINK POINTER),
+// ESI=EDI=0x229C5D18 (the FxSystem being removed, still valid),
+// [ESP+4]=0x4A9886 (the ONLY caller: the call in DestroyFxSystem at 0x4A9881).
+// The instruction is `89 50 04` (mov [eax+4],edx = next->prev = item->prev);
+// EAX (= item->m_link.next) is already garbage, so the write AVs.  The prior
+// unlink already stored 1.0f into prev->next (a valid block) — that damage is
+// done and this is the LAST fx system torn down at quit, so the list is not
+// traversed again.  Recovery: skip ONLY the faulting instruction (+3 bytes,
+// runtime bytes confirmed by the [FORENSIC] instr= dump); RemoveItem's own
+// tail (fix-10 style count decrement at 0x4A8E4C..: 8B 41 08 / 8D 50 FF /
+// 89 51 08) and its normal epilogue then run, so NO manual frame surgery is
+// needed — registers and stack stay exactly as the function expects.
+// Conjuncts (ALL must hold; probe faults => no skip, never swallow):
+//   code==0xC0000005, accessType==WRITE(1), EIP==0x4A8E49,
+//   faultAddr==EAX+4, EAX==0x3F800000, ESI==EDI, [ESP+4]==0x4A9886.
+// Static image bytes at 0x4A8E30 are NOT code (Hoodlum runtime-unpacked EXE) —
+// the runtime instruction bytes are taken from the crash receipt itself.
+static const DWORD kFxListFault   = 0x4A8E49;
+static const DWORD kFxListNext    = 0x4A8E4C; // +3 (mov [eax+4],edx is 3 bytes)
+static const DWORD kFxListCaller  = 0x4A9886; // ret into DestroyFxSystem
+static const DWORD kFxListBadLink = 0x3F800000; // 1.0f bits as a pool link
 // Read-only probe targets; addresses live in this declaration layer per the
 // HARD RULE (install/forensics-layer exemption documented in crashhandler.h).
 
@@ -382,6 +405,31 @@ crashMatFxSkipSafe(DWORD site, DWORD esp, DWORD ebp, DWORD accessType,
 		}
 	} __except(EXCEPTION_EXECUTE_HANDLER) {
 		skip = 1; *outWhy = 1;      // data+0x14 unmapped: freed struct confirmed
+	}
+	return skip;
+}
+// FIX E probe island — POD only, no inline (C2712-safe like FIX B/C).  The
+// probeArmed flag ensures only a fault on the DATA read sets "skip": a fault
+// in any conjunct read propagates the original exception (never-swallow).
+static int __declspec(noinline)
+crashFxListSkipSafe(DWORD site, DWORD esp, DWORD accessType, DWORD faultAddr,
+                    DWORD eaxValue, DWORD esiValue, DWORD ediValue)
+{
+	int skip = 0;
+	volatile bool probeArmed = false;
+	__try {
+		if(accessType == 1 && site == kFxListFault &&
+		   faultAddr == eaxValue + 4 && eaxValue == kFxListBadLink &&
+		   esiValue == ediValue &&
+		   *(const volatile DWORD *)(uintptr_t)(esp + 4) == kFxListCaller)
+		{
+			probeArmed = true;
+			volatile DWORD probe = *(const volatile DWORD *)(uintptr_t)faultAddr;
+			(void)probe;
+			skip = 0;   // link readable: a different fault class -> propagate
+		}
+	} __except(EXCEPTION_EXECUTE_HANDLER) {
+		if(probeArmed) skip = 1;   // all conjuncts held + data unmapped -> UAF
 	}
 	return skip;
 }
@@ -607,6 +655,28 @@ diag_crashHandler(EXCEPTION_POINTERS *ep)
 			ep->ContextRecord->Eip = kUafNullRecover;
 			return EXCEPTION_CONTINUE_EXECUTION;
 		}
+	}
+	// ---- FIX E: 0x4A8E49 FxManager destroy LIST link UAF (quit) ----
+	// Runs above the crash-receipt budget like FIX B/C/D: a recovered fault
+	// must not consume a receipt slot.  All conjuncts are checked in the POD
+	// probe island so any non-UAF fault propagates (never-swallow).  Recovery
+	// skips only the 3-byte faulting store; RemoveItem's own epilogue restores
+	// EBX/ESI/EDI/ESP, so no register or stack surgery is performed here.
+	if(accessType == 1 &&
+	   crashFxListSkipSafe(
+	       (DWORD)(uintptr_t)ep->ExceptionRecord->ExceptionAddress,
+	       ep->ContextRecord->Esp, accessType, faultAddr,
+	       ep->ContextRecord->Eax, ep->ContextRecord->Esi, ep->ContextRecord->Edi))
+	{
+		if(InterlockedCompareExchange(&s_vehReceiptBusy, 1, 0) == 0){
+			if(dbglog_throttle("fxlist_uaf_skip"))
+				dbglog("[fxlist_uaf_skip] FxManager LIST UAF skip: eip=0x%08X link=%08X fault=0x%08X item=%08X -> eip=0x%08X",
+				       kFxListFault, ep->ContextRecord->Eax, faultAddr,
+				       ep->ContextRecord->Esi, kFxListNext);
+			InterlockedExchange(&s_vehReceiptBusy, 0);
+		}
+		ep->ContextRecord->Eip = kFxListNext;   // skip only the bad store
+		return EXCEPTION_CONTINUE_EXECUTION;
 	}
 		if(crashMatFxSkipSafe(
 			(DWORD)(uintptr_t)ep->ExceptionRecord->ExceptionAddress,
