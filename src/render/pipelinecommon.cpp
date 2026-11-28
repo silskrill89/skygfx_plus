@@ -2515,7 +2515,8 @@ pipeExitAlphaMode(PipeAlphaState saved)
 //     cbs themselves draw INSIDE the pair, where the entry force still
 //     owns ALPHATESTENABLE=TRUE â€” unchanged.
 //
-//   * vehiclePipe.cpp Switch (~:3166-3303): PARTIAL GAP, pre-existing
+//   * vehiclePipe.cpp Switch (~:4401-4577): was a PARTIAL GAP; resolved
+//     2026-11-27 — the layer-3 re-assert now reads the captured values
 //     code, vehiclePipe.cpp is outside this change's write scope: right
 //     after pipeExitAlphaMode it re-asserts a blend quartet at layer (3)
 //     raw (vehiclePipe.cpp:3289-3296) with ALPHABLENDENABLE derived from
