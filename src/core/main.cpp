@@ -2692,7 +2692,7 @@ CClouds__Render_hygiene(void)
 	// READ-ONLY probe (throttled) — records what is actually armed at sky
 	// time so the next run answers this with evidence instead of inference.
 	// A non-NULL ps/vs here is the smoking gun.
-	if(dbglog_throttle("sky_ps")){
+	if(dbglog_throttle("sky_probe2")){
 		IDirect3DVertexShader9 *pSkyVS = NULL;
 		IDirect3DPixelShader9  *pSkyPS = NULL;
 		DWORD sAlphaTest = 0xDEAD, sAlphaFn = 0xDEAD, sAlphaRef = 0xDEAD, sBlend = 0xDEAD;
@@ -2955,7 +2955,7 @@ CClouds__Render_hygiene(void)
 		(sZEn == TRUE) &&
 		(sZFunc == (DWORD)D3DCMP_LESSEQUAL);
 	if(cloudZFixOn && !depthLegsCanonical){
-		if(dbglog_throttle("cloud_zguard"))
+		if(dbglog_throttle("cloud_depthguard"))
 			dbglog("[CloudShield] ZFUNC guard: captured dev zfunc=%d zen=%d → canonical",
 				(int)sZFunc, (int)sZEn);
 		sZTest = TRUE;
