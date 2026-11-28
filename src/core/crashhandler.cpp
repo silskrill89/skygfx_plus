@@ -396,11 +396,17 @@ static const DWORD kFxListBadLinkHi = 0x3FFFFFFF; // ~2.0f bits (any float in [0
 // RemoveItem call at 0x4A9881 (FIX E catches that one again if it faults).
 // Conjuncts (ALL must hold; probe faults => no skip, never swallow):
 //   code==0xC0000005, accessType==READ(0), EIP==0x4A981E, faultAddr==0x1B,
-//   EAX==0, EBP==0, [ESP+0xC]==0x4A9AD3, runtime fault bytes match.
+//   EAX==0, [ESP+0xC]==0x4A9AD3, [ESP+4]==[ESP+8]==0x00A9AE80 (FxManager),
+//   runtime fault bytes match.
+// EBP is NOT a conjunct: it was 0 in the 07:03 crash but 0x3D12AE5F in the
+// 07:12 recurrence (leftover garbage in this frame), which made FIX F miss
+// the second crash entirely.  The two FxManager stack slots are stable in
+// BOTH receipts and replace it as the frame-identity proof.
 static const DWORD kFxMgrFault    = 0x4A981E;
 static const DWORD kFxMgrCaller   = 0x4A9AD3; // ret into FxManager_c::Update
 static const DWORD kFxMgrRecover  = 0x4A9879; // jle target (cl==0 path)
 static const DWORD kFxMgrFaultB   = 0x481B488A; // 8A 48 1B 48 @ fault
+static const DWORD kFxMgrGlobal   = 0x00A9AE80; // FxManager (ESP+4 / ESP+8)
 // Read-only probe targets; addresses live in this declaration layer per the
 // HARD RULE (install/forensics-layer exemption documented in crashhandler.h).
 
@@ -710,13 +716,14 @@ diag_crashHandler(EXCEPTION_POINTERS *ep)
 	// block would have done) — no stack surgery, ECX (this/FxManager) intact.
 	if(code == 0xC0000005 && accessType == 0 &&
 	   (DWORD)(uintptr_t)ep->ExceptionRecord->ExceptionAddress == kFxMgrFault &&
-	   faultAddr == 0x1Bu && ep->ContextRecord->Eax == 0 &&
-	   ep->ContextRecord->Ebp == 0)
+	   faultAddr == 0x1Bu && ep->ContextRecord->Eax == 0)
 	{
 		bool verified = false;
 		__try {
 			verified = *(const volatile DWORD *)(uintptr_t)kFxMgrFault == kFxMgrFaultB &&
-			           *(const volatile DWORD *)(uintptr_t)(ep->ContextRecord->Esp + 0xC) == kFxMgrCaller;
+			           *(const volatile DWORD *)(uintptr_t)(ep->ContextRecord->Esp + 0xC) == kFxMgrCaller &&
+			           *(const volatile DWORD *)(uintptr_t)(ep->ContextRecord->Esp + 0x4) == kFxMgrGlobal &&
+			           *(const volatile DWORD *)(uintptr_t)(ep->ContextRecord->Esp + 0x8) == kFxMgrGlobal;
 		} __except(EXCEPTION_EXECUTE_HANDLER){ verified = false; }
 		if(verified){
 			if(InterlockedCompareExchange(&s_vehReceiptBusy, 1, 0) == 0){

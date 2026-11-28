@@ -826,17 +826,19 @@ BuildSettingRows(void)
 		"pass's shader). 0 = legacy behaviour.");
 	// Cloud render-state granular sub-fixes (2026-11-28): each is an
 	// independent on/off; no single switch can disable cloud correctness.
-	rWn("cloudNoiseFix", "Cloud: ois", &config->cloudNoiseFix,
+	// Dedicated Effects > Clouds section (user m3384) — all six rows live there.
+	G("Clouds", "Render-state hygiene");
+	rWn("cloudNoiseFix", "Noise field (s9)", &config->cloudNoiseFix,
 		"1 = s9 noise bind / SkyNoise upload once per frame. 0 = disable ONLY this sub-fix.");
-	rWn("cloudFilterFix", "Cloud: ilte", &config->cloudFilterFix,
+	rWn("cloudFilterFix", "Linear filtering", &config->cloudFilterFix,
 		"1 = LINEAR texture filter (removes hard alpha edges). 0 = disable ONLY this sub-fix.");
-	rWn("cloudAlphaFix", "Cloud: lph", &config->cloudAlphaFix,
+	rWn("cloudAlphaFix", "Alpha-test fringe", &config->cloudAlphaFix,
 		"1 = ALWAYS alpha-test / ref 0 (preserves soft fringe). 0 = disable ONLY this sub-fix.");
-	rWn("cloudFogFix", "Cloud: o", &config->cloudFogFix,
+	rWn("cloudFogFix", "Fog off", &config->cloudFogFix,
 		"1 = fog off (stops far clouds dissolving). 0 = disable ONLY this sub-fix.");
-	rWn("cloudStage0Fix", "Cloud: tage", &config->cloudStage0Fix,
+	rWn("cloudStage0Fix", "Stage-0 + shader hygiene", &config->cloudStage0Fix,
 		"1 = stage-0 raster save/restore + PS/VS neutralize. 0 = disable ONLY this sub-fix.");
-	rWn("cloudZFix", "Cloud: ", &config->cloudZFix,
+	rWn("cloudZFix", "Depth guard", &config->cloudZFix,
 		"1 = ZENABLE/ZFUNC three-layer disagreement guard. 0 = disable ONLY this sub-fix.");
 	// m0970 bisect lane — render-state systems that were compiled ON with no
 	// gate at all. Every default is 1 (= current behaviour), so nothing
@@ -3108,6 +3110,9 @@ static const MenuSection s_menuSections[] = {
 	{ "Water", "Water", MC_EFFECTS,
 	  "Style, quality, appearance and the feature switches of the custom water pipe. Always drawn.",
 	  -1, NULL },
+	{ "Clouds", "Clouds", MC_EFFECTS,
+	  "Cloud render-state integrity: noise field, filtering, alpha fringe, fog, stage-0 and depth guards. Six independent sub-fixes, each default ON.",
+	  -1, NULL },
 	// --- World ------------------------------------------------------------
 	{ "Buildings", "Buildings", MC_WORLD,
 	  "Building pipe selector (PS2/Xbox/GTAIV/PBR) and the PBR building reflection terms.",
@@ -4118,7 +4123,7 @@ void DrawUnifiedDebugMenu(IDirect3DDevice9 *device)
 
 			// Presets/mode-chip UI removed (2026-11-28): the mode/profile
 			// system stays in the config layer but is no longer exposed in
-			// the menu � the chip row + preset tab were fighting the live
+			// the menu � the chip row + preset tab were fighting the live
 			// config and causing regressions.
 
 			// === Master-detail area ====================================
