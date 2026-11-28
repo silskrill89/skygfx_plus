@@ -750,6 +750,7 @@ BuildSettingRows(void)
 	G("Main", "Effects");
 	rW("ssaoEnable", "SSAO", &config->ssaoEnable);			// mirror: SSAO tab
 	rW("smaaEnable", "SMAA", &config->smaaEnable);			// mirror: SMAA tab
+	rW("fxaaEnable", "FXAA3", &config->fxaaEnable);			// mirror: SMAA tab
 	rW("godRaysEnable", "God rays", &config->godRaysEnable);
 	rW("heightFogEnable", "Height fog", &config->heightFogEnable);
 	rW("motionBlurEnable", "Motion blur", &config->motionBlurEnable);
@@ -760,13 +761,13 @@ BuildSettingRows(void)
 		"Colour filter dropdown on Rendering pipes).\n"
 		"0 = bypass the pass entirely (black-screen isolation). Toggles record\n"
 		"user intent via main.cpp's latch (silent-write self-heal).\n"
-		"Mirrored on the PostFX tab with the same latch.");
+		"Main > Effects is the one home for this switch.");
 	A("ivMode", "IV mode", RK_BOOL, &config->ivMode, 0, 0, NULL, 0, ivModeRowEdit,
 		"Toggling ON enters ModeManager MODE_GTAIV: the IV pipe/filter preset (building=GTAIV,\n"
 		"vehicle=GTAIV, colour filter=GTAIV, ivMode on) is applied on a snapshot of the live\n"
 		"config, so the grade sliders on the IV grade tab are NOT reset. Toggling OFF leaves the\n"
 		"mode (pre-mode config restored, ivMode back to 0).\n"
-		"Mirrored on the PostFX tab with the same onEdit.");
+		"Main > Effects is the one home for this switch.");
 	rW("grainEnable", "Film grain", &config->grainEnable);
 	rW("sssEnable", "Screen-space SSS", &config->sssEnable);	// mirror: SSS tab
 	rW("sssPostProcessEnable", "SSS post-process blur", &config->sssPostProcessEnable);
@@ -1076,7 +1077,7 @@ BuildSettingRows(void)
 	// ================= TAB: God rays =================
 	G("God rays", "God rays");
 	rWn("godRaysEnable", "God rays on", &config->godRaysEnable,
-		"Master switch (mirror of Main > Effects / PostFX checklist).\n0 = the shaft pass is skipped this frame.");
+		"Master switch (mirror of Main > Effects).\n0 = the shaft pass is skipped this frame.");
 	rF("godRaysExposure", "Exposure", &config->godRaysExposure, 0.0f, 0.05f);
 	rF("godRaysDecay", "Decay", &config->godRaysDecay, 0.0f, 2.0f);
 	rF("godRaysDensity", "Density", &config->godRaysDensity, 0.0f, 2.0f);
@@ -1086,7 +1087,7 @@ BuildSettingRows(void)
 	// ================= TAB: Height fog =================
 	G("Height fog", "Height fog");
 	rWn("heightFogEnable", "Height fog on", &config->heightFogEnable,
-		"Master switch (mirror of Main > Effects / PostFX checklist).\n0 = the fog pass is skipped this frame.");
+		"Master switch (mirror of Main > Effects).\n0 = the fog pass is skipped this frame.");
 	rFn("heightFogDensity", "Density", &config->heightFogDensity, 0.0f, 0.01f,
 		"Exponential distance density. 0 = default 0.0015; clamped to 0.004 in-game so fog never becomes a wall.");
 	rFn("heightFogHeightFalloff", "Height falloff", &config->heightFogHeightFalloff, 0.0f, 5.0f,
@@ -1106,7 +1107,7 @@ BuildSettingRows(void)
 	// ================= TAB: Pipe chain =================
 	G("Pipe chain", "Pipe chain");
 	rWn("pipeChainEnable", "Pipe chain / SSR on", &config->pipeChainEnable,
-		"Master switch (mirror of Main > Effects / PostFX checklist).\nIntensity and the reflection kill-switch below are inactive while this is 0.");
+		"Master switch (mirror of Main > Effects).\nIntensity and the reflection kill-switch below are inactive while this is 0.");
 	rFn("pipeChainIntensity", "Intensity", &config->pipeChainIntensity, 0.0f, 1.0f,
 		"Strength of the screen-space reflections packed by the geometry pipes\n(dull wood/road ~invisible, chrome mirror, car paint a clearcoat hint).");
 	rWn("pipeChainReflEnable", "Reflection pass", &config->pipeChainReflEnable,
@@ -1117,7 +1118,7 @@ BuildSettingRows(void)
 	// ================= TAB: Radiosity =================
 	G("Radiosity", "Radiosity");
 	rWn("doRadiosity", "Radiosity on", &config->doRadiosity,
-		"Master switch (mirror of Main > Effects / PostFX checklist).\nThe post-processing half has its own switch (radiosityEnable, below).");
+		"Master switch (mirror of Main > Effects).\nThe post-processing half has its own switch (radiosityEnable, below).");
 	rE("radiosity", "Radiosity type", &config->radiosity, s_rad, 0);
 	rI("radiosityFilterPasses", "Filter passes", &config->radiosityFilterPasses, 0, 8);
 	rI("radiosityRenderPasses", "Render passes", &config->radiosityRenderPasses, 0, 8);
@@ -1142,6 +1143,12 @@ BuildSettingRows(void)
 	rIn("blurTop", "Crop offset top", &config->offTop, -1000, 1000, "config->offTop");
 	rIn("blurRight", "Crop offset right", &config->offRight, -1000, 1000, "config->offRight");
 	rIn("blurBottom", "Crop offset bottom", &config->offBottom, -1000, 1000, "config->offBottom");
+	G("Colour filter", "Lens group");
+	rFn("caIntensity", "Chromatic aberration", &config->caIntensity, 0.0f, 1.0f,
+		"0 = off. RGB channel offset toward the screen edges.");
+	rFn("vignetteIntensity", "Vignette", &config->vignetteIntensity, 0.0f, 1.0f,
+		"0 = off. Radius/contrast are hard-coded 0.85/0.45 in FxVignette and have\n"
+		"no INI key or reader; the IV grade carries its own live vignette knobs.");
 
 	// (grainFilter retagged to the Film grain section - both halves of the
 	// grain feature share one pane now.)
@@ -1166,11 +1173,15 @@ BuildSettingRows(void)
 	rFn("tonemapCurveMid", "Curve Mid Point", &config->tonemapCurveMid, 0.0f, 1.0f,
 		"Pivot where the low-curve region ends and the high-curve region begins.");
 	rF("tonemapBlackLift", "Black lift", &config->tonemapBlackLift, 0.0f, 0.1f);
+	rEn("tonemapOperator", "Operator", &config->tonemapOperator, s_tonemapOps, 0,
+		"0 = filmic (default), 1 = ACES 1.3, 2 = ACES 2.0, 3 = AgX, 4 = Frostbite, 5 = GT7.\n"
+		"Swap only when > 0 - the stock Hable/Uncharted2 filmic curve stays put at 0.\n"
+		"Applied by postfx_colourfilter.cpp (FxTonemapLut pass).");
 
 	// ================= TAB: IV grade =================
 	G("IV grade", "GTA IV grade");
-	// ivMode master switch mirrored here (Main pane + PostFX checklist carry
-	// the same row): the section's pane is where the grade is tuned, so the
+	// ivMode master switch lives here and on Main > Effects (same row): the
+	// section's pane is where the grade is tuned, so the
 	// on/off lives next to its sliders. Same onEdit - the toggle is routed
 	// through the mode manager, the single owner of the IV preset.
 	rWn("ivMode", "IV grade on", &config->ivMode,
@@ -1218,7 +1229,7 @@ BuildSettingRows(void)
 	// ================= TAB: VCS trails =================
 	G("VCS trails", "VCS trails");
 	rWn("vcsTrails", "VCS trails on", &config->vcsTrails,
-		"Master switch (mirror of Main > Effects / PostFX checklist).\n0 = no trail draws at all.");
+		"Master switch (mirror of Main > Effects).\n0 = no trail draws at all.");
 	rI("trailsLimit", "Trail limit", &config->trailsLimit, 0, 255);
 	rI("trailsIntensity", "Trail intensity", &config->trailsIntensity, 0, 255);
 	rI("trailsResolution", "Trail resolution", &config->trailsResolution, 1, 4);
@@ -1316,83 +1327,9 @@ BuildSettingRows(void)
 	rF("waterShoreFade", "Shore fade", &config->waterShoreFade, 0.0f, 20.0f);
 	rF("waterTranslucency", "Translucency", &config->waterTranslucency, 0.0f, 2.0f);
 
-	// ================= TAB: PostFX — systematic post-FX checklist =================
-	// One row per pass, every row individually toggleable, grouped by effect
-	// so a feature can be checked off / switched off one at a time (the
-	// full-screen-black hunt). Master switches first, then each effect's own
-	// detail rows. The per-effect EFFECTS sections (SSAO / Tonemap /
-	// IV grade / ...) mirror the SAME Config fields — one home per variable,
-	// two places to reach it, exactly the Switchboard <-> section pattern.
-	G("PostFX", "PostFX passes - switch ONE off at a time");
-	rW("ssaoEnable", "SSAO", &config->ssaoEnable);
-	rWn("ssaoTemporalEnable", "SSAO overhaul (quarter-res temporal)", &config->ssaoTemporalEnable,
-		"The overhaul the SSAO lane shipped: quarter-res AO + temporal\n"
-		"reprojection + blur. 0 = the pre-overhaul single-pass SSAO path.");
-	rW("smaaEnable", "SMAA", &config->smaaEnable);
-	rWn("fxaaEnable", "FXAA3", &config->fxaaEnable,
-		"Late AA slot - SMAA wins when both are enabled (FXAA is suppressed).");
-	rW("motionBlurEnable", "Motion blur", &config->motionBlurEnable);
-	rW("tonemapAutoExposure", "Adaptive tonemapper", &config->tonemapAutoExposure);
-	rW("bloomEnable", "Bloom", &config->bloomEnable);
-	rW("sunShaftsEnable", "Sun shafts", &config->sunShaftsEnable);
-	rW("dofEnable", "Depth of field", &config->dofEnable);
-	rW("grainEnable", "Film grain", &config->grainEnable);
-	A("ivMode", "IV grade", RK_BOOL, &config->ivMode, 0, 0, NULL, 0, ivModeRowEdit,
-		"Mirror of the Main-pane switch (same onEdit): ON enters ModeManager MODE_GTAIV\n"
-		"(IV pipes + colour filter applied on a config snapshot), OFF leaves the mode\n"
-		"(pre-mode config restored). Grade sliders are carried through the snapshot.");
-
-	// Every remaining post pass, so nothing in the chain is un-reachable.
-	G("PostFX", "Other post passes (detail on their own tabs)");
-	rWn("godRaysEnable", "God rays", &config->godRaysEnable, "Detail sliders: God rays tab.");
-	rWn("heightFogEnable", "Height fog", &config->heightFogEnable, "Detail sliders: Height fog tab.");
-	rWn("sssEnable", "Screen-space SSS", &config->sssEnable, "Detail sliders: SSS tab.");
-	rWn("sssPostProcessEnable", "SSS post-process blur", &config->sssPostProcessEnable,
-		"Blurs the whole scene with edge preservation - low strength only.");
-	rWn("doRadiosity", "Radiosity", &config->doRadiosity, "Detail sliders: Radiosity tab.");
-	rWn("radiosityEnable", "Radiosity (post-processing)", &config->radiosityEnable,
-		"The shader radiosity pass (radiosity type on the Radiosity tab).");
-	A("colorFilterEnable", "Colour filter", RK_BOOL, &config->colorFilterEnable, 0, 0, NULL, 0, cfEnableRowIntent,
-		"Mirror of the Main-pane gate (same intent latch). 0 = bypass the pass\n"
-		"entirely - the first thing to try when the screen goes black.");
-	rWn("pipeChainEnable", "Pipe chain / SSR", &config->pipeChainEnable,
-		"BRDF-classified screen-space reflections packed by the geometry pipes.");
-	rWn("vcsTrails", "VCS trails", &config->vcsTrails, "Detail sliders: VCS trails tab.");
-	rWn("waterParallaxEnable", "Water (post-water composite)", &config->waterParallaxEnable,
-		"Master switch of the whole water pipe: 0 = the game's original water draw.");
-
-	G("PostFX", "Anti-aliasing (SMAA / FXAA3)");
-	rWn("smaaEnable", "SMAA", &config->smaaEnable,
-		"Mirror of the master switch above. SMAA has no other settings - quality\n"
-		"is fixed by the implementation, so this switch is the whole feature.");
-	rWn("fxaaEnable", "FXAA3", &config->fxaaEnable,
-		"Mirror of the master switch above.");
-
-	G("PostFX", "Adaptive tonemapper");
-	rW("tonemapAutoExposure", "Frame-adaptive exposure", &config->tonemapAutoExposure);
-	rF("tonemapAdaptSpeed", "Adapt speed", &config->tonemapAdaptSpeed, 0.01f, 1.0f);
-	rF("tonemapKeyStrength", "Key strength", &config->tonemapKeyStrength, 0.0f, 1.0f);
-	rFn("tonemapMinExposure", "Min exposure", &config->tonemapMinExposure, -0.5f, 0.5f,
-		"Floor of the auto-exposure window; readIniFile clamps [-0.5..0.5].\nNegative values darken deliberately; Min is pinned to Max if it exceeds it.");
-	rFn("tonemapMaxExposure", "Max exposure", &config->tonemapMaxExposure, 0.2f, 4.0f,
-		"Ceiling of the auto-exposure window; readIniFile clamps [0.2..4.0].\nMust stay above Min exposure.");
-
-	G("PostFX", "Tonemap operator (LUT)");
-	rEn("tonemapOperator", "Operator", &config->tonemapOperator, s_tonemapOps, 0,
-		"0 = filmic (default), 1 = ACES 1.3, 2 = ACES 2.0, 3 = AgX, 4 = Frostbite, 5 = GT7.\n"
-		"Swap only when > 0 - the stock Hable/Uncharted2 filmic curve stays put at 0.\n"
-		"Applied by postfx_colourfilter.cpp (FxTonemapLut pass).");
-	rFn("tonemapCurveLows", "Curve lows", &config->tonemapCurveLows, -0.35f, 0.35f,
-		"Shadows (region below Curve Mid Point): negative darkens, positive lifts.");
-	rFn("tonemapCurveHighs", "Curve highs", &config->tonemapCurveHighs, -0.35f, 0.35f,
-		"Highlights (region above Curve Mid Point). Outside +/-0.35 the curve is\nforced to identity - -1.0 mapped pure white to 0.");
-	rFn("tonemapCurveMid", "Curve mid point", &config->tonemapCurveMid, 0.0f, 1.0f,
-		"Pivot where the low-curve region ends and the high-curve region begins.");
-	rF("tonemapBlackLift", "Black lift", &config->tonemapBlackLift, 0.0f, 0.1f);
-
-	// Bloom / Sun shafts / DOF / Film grain retagged out of the PostFX
+	// Bloom / Sun shafts / DOF / Film grain each own an Effects section.
 	// checklist into their own Effects sections (the checklist keeps the
-	// master switches; the sliders live with their effect).
+	// One home per key - no duplicate checklist pane.
 	G("Bloom", "Bloom");
 	rW("bloomEnable", "Bloom on", &config->bloomEnable);
 	rEn("bloomQuality", "Quality", &config->bloomQuality, s_bloomQ, 0,
@@ -1412,9 +1349,8 @@ BuildSettingRows(void)
 	rF("dofBokehRadius", "Bokeh radius", &config->dofBokehRadius, 1.0f, 10.0f);
 	rF("dofMaxBlur", "Max blur", &config->dofMaxBlur, 0.0f, 1.0f);
 
-	// Film grain family: the new FX grain pass rows moved here from the
-	// PostFX checklist; the legacy grainFilter kernel combo joins them from
-	// the Colour filter tab. One section, both halves of the feature.
+	// Film grain family: the new FX grain pass rows and the legacy grainFilter
+	// kernel combo share one section - both halves of the feature.
 	G("Film grain", "Film grain (FX pass)");
 	rW("grainEnable", "Grain filter", &config->grainEnable);
 	rFn("grainIntensity", "Intensity", &config->grainIntensity, 0.0f, 1.0f,
@@ -1425,40 +1361,6 @@ BuildSettingRows(void)
 	// halves of the grain feature live in one section).
 	G("Film grain", "Grain kernel (legacy type)");
 	rE("grainFilter", "Grain filter", &config->grainFilter, s_ps2pc, 0);
-
-	G("PostFX", "Chromatic aberration");
-	rFn("caIntensity", "Intensity", &config->caIntensity, 0.0f, 1.0f,
-		"0 = off. RGB channel offset toward the screen edges.");
-
-	G("PostFX", "Vignette");
-	rFn("vignetteIntensity", "Intensity", &config->vignetteIntensity, 0.0f, 1.0f,
-		"0 = off. Binds the legacy Config vignetteIntensity field (skygfx.h) -\n"
-		"the same member postfx.cpp's FxVignette pass reads.\n"
-		"Radius and contrast are NOT settings: FxVignette hard-codes 0.85/0.45\n"
-		"(postfx_newfx.cpp), and vignetteRadius/vignetteContrast have no INI key\n"
-		"and no reader, so they stay out of the inventory. The IV grade has its\n"
-		"own live knobs (ivVignetteRadius/Contrast on the IV grade section).");
-
-	G("PostFX", "SSAO detail");
-	rF("ssaoRadius", "Radius", &config->ssaoRadius, 0.0f, 5.0f);
-	rF("ssaoPower", "Power", &config->ssaoPower, 0.5f, 4.0f);
-	rSFn("ssaoKernelSize", "Kernel size", &config->ssaoKernelSize,
-		"Not wired to the shader - AO spread is Radius. Parsed and saved for INI "
-		"compat only, so the row is read-only: an edit would persist and be read "
-		"back on load, but nothing consumes it.");
-	rSn("ssaoSampleCount", "Sample count", &config->ssaoSampleCount,
-		"Fixed at 16 samples in the shader. Parsed and saved for INI compat "
-		"only, so the row is read-only: nothing consumes it.");
-	rF("ssaoTemporalBlend", "Temporal blend", &config->ssaoTemporalBlend, 0.01f, 0.95f);
-	rI("ssaoBlurPasses", "Blur passes", &config->ssaoBlurPasses, 0, 3);
-	rF("ssaoBlurRadius", "Blur radius", &config->ssaoBlurRadius, 1.0f, 8.0f);
-	rF("ssaoDepthThreshold", "Depth threshold", &config->ssaoDepthThreshold, 0.001f, 0.1f);
-
-	G("PostFX", "Motion blur detail");
-	rF("motionBlurStrength", "Strength", &config->motionBlurStrength, 0.0f, 1.0f);
-	rF("motionBlurRadial", "Radial", &config->motionBlurRadial, 0.0f, 1.0f);
-	rF("motionBlurSpeedFactor", "Speed factor", &config->motionBlurSpeedFactor, 0.0f, 2.0f);
-	rW("motionBlurCameraAware", "Camera-aware", &config->motionBlurCameraAware);
 
 	// ================= TAB: Vegetation =================
 	// Everything grass/tree in one category: the W8-3 instancing gate, the
@@ -3040,7 +2942,7 @@ enum MenuCategory {
 	MC_SETUP = 0,		// Switchboard, Presets
 	MC_EFFECTS,			// the opt-in post/scene effects
 	MC_WORLD,			// vehicle / vegetation / peds / shields
-	MC_DIAG,			// PostFX checklist, Profiler, Diagnostics
+	MC_DIAG,			// Profiler, Diagnostics
 	MC_SYSTEM,			// Utility
 	MC_REFERENCE,		// INI Keys, All Settings
 	MC__COUNT
@@ -3139,9 +3041,6 @@ static const MenuSection s_menuSections[] = {
 	  "Render-state bisect levers: sprite/corona/flush shields, alpha blocks, raster repairs.",
 	  -1, NULL },
 	// --- Diagnostics --------------------------------------------------------
-	{ "PostFX", "PostFX checklist", MC_DIAG,
-	  "Every post pass, one row each, grouped by effect. Switch ONE off at a time to isolate what turns the screen black.",
-	  -1, NULL },
 	{ "Profiler", "Profiler", MC_DIAG,
 	  "Live pass/frame timings, draw counters and shader binds (PF_SCOPE).",
 	  -1, DrawProfilerPane },
