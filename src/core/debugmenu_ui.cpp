@@ -180,6 +180,26 @@ static void EnsureImGuiInit(IDirect3DDevice9 *device)
 	unifiedImGuiInited = true;
 }
 
+// Draw-surface validity: the ImGui font atlas texture is invalidated pre-Reset
+// and rebuilt post-Reset (depthhook.cpp), and on a clean exit the game can
+// release the device while our postfx hook still fires. Rendering with a lost
+// device or a destroyed atlas produces psychedelic garbage on the menu. Skip
+// the whole ImGui frame in that window. Conservative: WantCreate is allowed
+// (the DX9 backend creates the texture on the first RenderDrawData call).
+static bool ImGuiDrawSurfaceValid(IDirect3DDevice9 *device)
+{
+	if(!device || !unifiedImGuiInited) return false;
+	HRESULT hr = device->TestCooperativeLevel();
+	if(hr == D3DERR_DEVICELOST || hr == D3DERR_INVALIDCALL) return false;
+	ImGuiIO &io = ImGui::GetIO();
+	ImFontAtlas *atlas = io.Fonts;
+	ImTextureData *tex = (atlas != NULL) ? atlas->TexData : NULL;
+	if(!atlas || atlas->Fonts.Size == 0 || !tex) return false;
+	if(tex->Status == ImTextureStatus_Destroyed) return false;
+	return true;
+}
+
+
 // ============================================================
 // Font-atlas diagnostics
 // ============================================================
@@ -3972,7 +3992,11 @@ void DrawUnifiedDebugMenu(IDirect3DDevice9 *device)
 {
 	if(!device) return;
 	EnsureImGuiInit(device);
-	if(!unifiedImGuiInited) return;
+	if(!ImGuiDrawSurfaceValid(device)){
+		if(dbglog_throttle("imgui_surface_skip"))
+			dbglog("[ovl] menu frame skipped: device/atlas not drawable (teardown window)");
+		return;
+	}
 
 	ImGui_ImplWin32_NewFrame();
 	ImGui_ImplDX9_NewFrame();
@@ -4392,7 +4416,7 @@ DebugOverlayDraw(IDirect3DDevice9 *device)
 	// it is safe - and running it is the overlay's whole purpose.
 	if(config && config->debugMenuOpen) return;
 	EnsureImGuiInit(device);
-	if(!unifiedImGuiInited) return;
+	if(!ImGuiDrawSurfaceValid(device)) return;
 
 	const unsigned fid  = DebugFrameId();
 	const unsigned code = DebugFrameCode();
