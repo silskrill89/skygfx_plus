@@ -479,7 +479,6 @@ buildingPipe_restoreRenderState(const BuildingRenderState *state)
 	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)state->src);
 	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)state->dst);
 	RwRenderStateSet(rwRENDERSTATEFOGCOLOR, (void*)state->fog);
-	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)state->zwrite);
 	RwRenderStateSet(rwRENDERSTATETEXTUREADDRESS, (void*)state->textureaddress);
 	if(d3d9device){
 		for(int i = 0; i < 3; i++){
@@ -1823,11 +1822,6 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PS2(RwResEntry *repEntry, void *ob
 	// unconditional on every path out of this cb (see treeWind.h).
 	TreeAlpha_ApplyAlphaRef(atomic, rs.alpharef);
 
-	// Per-callback decal depth tracking (Xbox :2147-2151 / PBR :2983-2986):
-	// set when a blended mesh forced ZWRITE off, so the next non-decal mesh
-	// gets the callback baseline (ZWRITE TRUE, forced by the Switch guard)
-	// back before it draws.
-	bool decalZWriteOff = false;
 
 	// Per-mesh write elision (POD locals, reset every callback): the L1 blend
 	// enable is skipped only when THIS callback already pushed the same value,
@@ -1836,7 +1830,6 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PS2(RwResEntry *repEntry, void *ob
 	// (buildingAmbient is refreshed once per frame), so its compare is
 	// exact-bitwise and the first mesh always uploads.
 	int elideLastVtxAlpha = -1;
-	int elideLastZWrite = -1;
 	RwTexture *elideLastTex0 = NULL;
 	bool elideTex0Valid = false;
 	bool elideAmbientValid = false;
@@ -2233,34 +2226,6 @@ static RwUInt32 s_bldSwitchSavedCull = (RwUInt32)rwCULLMODECULLBACK;
 // named instead of guessed.
 static int s_bldMeshLogged = 0;
 
-// BldZWriteParkGuard — RAII loop-exit guarantee for the decal ZWRITE park
-// (2026-11-09 BldZW audit). The decal policy parks ZWRITE (3 layers) on
-// blended meshes and restores it at loop end (or at the next non-decal mesh).
-// The loop-end close is a plain `if` after the mesh loop: a future early
-// `return`/`goto`/SEH unwind that skips it would leave ZWRITE parked across
-// the frame boundary (the prior-session draw-over-ped window). This guard's
-// destructor runs on EVERY function exit and re-applies the 3-layer
-// ZWRITE-TRUE restore if the park is still open, then clears the flag so the
-// normal loop-end close (and the Switch's own restore) stay no-ops. Park
-// semantics are unchanged — the guard only ever RESTORES, never parks.
-struct BldZWriteParkGuard {
-	bool *parked;
-	const char *lane;
-	BldZWriteParkGuard(bool *p, const char *l) : parked(p), lane(l) {}
-	~BldZWriteParkGuard(void)
-	{
-		if(!parked || !*parked)
-			return;
-		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
-		RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
-		if(d3d9device)
-			d3d9device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
-		*parked = false;
-		if(dbglog_throttle("bld_zw_guard"))
-			dbglog("[BldZW] %s: loop-exit guard restored ZWRITE (3L) — park was still open at function exit (early-return/SEH path); victims if leaked: CJ/peds, vehicles, markers (draw-over-CJ)",
-			       lane);
-	}
-};
 
 void
 CCustomBuildingDNPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *object, RwUInt8 type, RwUInt32 flags)
@@ -2425,7 +2390,6 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *o
 	// gets the callback baseline (ZWRITE TRUE, forced by the Switch guard)
 	// back before it draws.
 	bool decalZWriteOff = false;
-	BldZWriteParkGuard zwGuard(&decalZWriteOff, "Xbox");
 
 	// Per-mesh write elision (POD locals, reset every callback): sentinels
 	// force the first write, texture stage 0 only re-binds a changed
@@ -3044,18 +3008,12 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 		RwD3D9SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
 
 		// Switch forced zwrite TRUE at entry; the IBL pass can leave the
-		// raw DEVICE side off again — and this re-assert was a 2-layer
-		// write (L1 rw cache + L2 driver cache only), so the applied[]-gated
-		// L2 set could no-op against an unchanged cache while the device
-		// kept ZWRITE off for the whole mesh loop: the building meshes then
-		// drew without depth writes and every later draw (CJ/peds, vehicles,
-		// markers) depth-tested against an uncarved buffer. 3-layer paired
-		// burst only (M2 rule) — raw L3 completes the pair.
-		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
-		RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
-		if(d3d9device)
-			d3d9device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
-	}
+		// raw DEVICE side off again. Re-assert through the shared contract
+		// (pipeEnforceDepthContract, pipelinecommon.cpp:1456) instead of a
+		// hand-rolled 3-layer burst � REUSE rule, adds ZENABLE/ZFUNC repair
+		// and a [zfix] receipt on drift. (W2 spec 11 item 5.)
+		pipeEnforceDepthContract();
+}
 	// Re-assert the pipe cull (Im2D fullscreen pass may leave CULLNONE):
 	// rw-only was not enough — when the rw cache already said BACK the
 	// set no-opped while the device kept the pass's leftover value
@@ -3073,7 +3031,7 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 	// gate counted DRAWS, not frames, and produced 25,886 lines (31% of the
 	// log) in a run. Same pattern as vehiclePipe.cpp "vehpbr_env".
 	if(dbglog_throttle("pbrbuilding_frame"))
-		dbglog("PBRBuilding: frame %d object=%p type=%d flags=0x%X", pbrFrameCount, object, type, flags);
+		dbglog("PBRBuilding: frame %d object=%p type=%d flags=0x%X", ++pbrFrameCount, object, type, flags);
 
 	RpAtomic *atomic = (RpAtomic*)object;
 
@@ -3311,7 +3269,6 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 	// forced ZWRITE off, so the next non-decal mesh gets the callback baseline
 	// (ZWRITE TRUE, forced by the Switch guard) back before it draws.
 	bool decalZWriteOff = false;
-	BldZWriteParkGuard zwGuard(&decalZWriteOff, "PBR");
 
 	// Per-mesh write elision (POD locals, reset every callback): sentinels
 	// force the first write, textures only re-bind when the RwTexture*
@@ -3867,9 +3824,6 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_PBR(RwResEntry *repEntry, void *ob
 void
 CCustomBuildingDNPipeline__CustomPipeRenderCB_Switch(RwResEntry *repEntry, void *object, RwUInt8 type, RwUInt32 flags)
 {
-//	if(GetAsyncKeyState(VK_F4) & 0x8000)
-//		return;
-
 	// ONE-SHOT (2026-11-16): proves whether the building cb ever runs —
 	// unthrottled static, immune to the throttle key/bucket budget.
 	static bool s_switchEntered = false;
@@ -3914,10 +3868,11 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Switch(RwResEntry *repEntry, void 
 	// faithfully re-emit the leak and make it permanent. Treat any captured
 	// layer of 0 as desynced and restore the canonical TRUE instead.
 	bool zwriteWasDesync = (!savedZWriteRw || !savedZWriteDrv || !savedZWriteDev);
-	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
-	RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
-	if(d3d9device)
-		d3d9device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+	// W2 ZWRITE owner-map: Switch entry force DELETED � redundant with O1
+	// (pipeEnforceDepthContract, pipelinecommon.cpp:1456-1501, runs via
+	// pipeEnterCullMode at :3834 before this capture). Capture stays so the
+	// exit restore keeps its desync hardening (O3). See
+	// docs/plans/2026-11-27-w2-specs.md SPEC 11.
 
 	// ZTEST/ZFUNC depth-test force (build-11 "buildings draw over CJ", root
 	// family "Z-test state leaked into the draw"): the guard above repairs

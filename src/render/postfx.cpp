@@ -4064,10 +4064,12 @@ void PipeChain_ClassifyEnd(void)
 		// guess — the two can legitimately disagree).
 		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, s_classifyVtxAlpha);
 		RwRenderStateSet(rwRENDERSTATEFOGENABLE, s_classifyFog);
-		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, s_classifyZWrite);
 		RwD3D9SetRenderState(D3DRS_ALPHABLENDENABLE, s_classifyBlendDev);
 		RwD3D9SetRenderState(D3DRS_FOGENABLE, s_classifyFogDev);
-		RwD3D9SetRenderState(D3DRS_ZWRITEENABLE, s_classifyZWriteDev);
+		// L1/L2 ZWRITE restore deleted (W2 spec 11 item 6): pipeDeviceStateSet
+		// at :4083 re-asserts L1+L2+L3 coherently from the device capture,
+		// unconditionally after this SEH scope. The old L1/L2-only writes
+		// could re-create an L1-vs-L2/L3 split when Begin's capture was split.
 	} __except(EXCEPTION_EXECUTE_HANDLER){
 		if(dbglog_throttle("pc_classifyend"))
 			dbglog("[PipeChain] ClassifyEnd L1/L2 fault 0x%08X — L3 raw still restores",

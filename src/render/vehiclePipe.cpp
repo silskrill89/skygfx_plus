@@ -135,9 +135,6 @@ extern RwUInt32 pipeAlphaFuncToD3D(RwUInt32 rwFunc);	// pipelinecommon.cpp — r
 float black4f[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 float white4f[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
 
-int betaEnvmaptest = 0;
-float envmap1tweak = 1.0f;
-float envmap2tweak = 1.0f;
 
 CPool<CustomEnvMapPipeAtomicData> *&gEnvMapPipeAtmDataPool = *(CPool<CustomEnvMapPipeAtomicData>**)0xC02D2C;
 
@@ -263,13 +260,9 @@ CCustomCarEnvMapPipeline__Init(void)
 
 	if(carfx_env1Frame == NULL){
 		carfx_env1Frame = RwFrameCreate();
-if(betaEnvmaptest)
-		RwMatrixRotate(RwFrameGetMatrix(carfx_env1Frame), &axis_X, 60.0f, rwCOMBINEREPLACE);
-else{
 		RwMatrixRotate(RwFrameGetMatrix(carfx_env1Frame), &axis_X, 33.0, rwCOMBINEREPLACE);
 		RwMatrixRotate(RwFrameGetMatrix(carfx_env1Frame), &axis_Y, -33.0, rwCOMBINEPOSTCONCAT);
 		RwMatrixRotate(RwFrameGetMatrix(carfx_env1Frame), &axis_Z, 50.0, rwCOMBINEPOSTCONCAT);
-}
 		RwFrameUpdateObjects(carfx_env1Frame);
 		RwFrameGetLTM(carfx_env1Frame);
 	}
@@ -349,10 +342,6 @@ CCustomCarEnvMapPipeline__Env1Xform(RwMatrix *envmat,
 	// cb uses for GetScaleX/Y (:2314-2317).
 	if(!(sclx > 0.0f)) sclx = 1.0f;
 	if(!(scly > 0.0f)) scly = 1.0f;
-if(betaEnvmaptest){
-sclx *= envmap1tweak;
-scly *= envmap1tweak;
-}
 	// fractional parts of pos/scl
 	envXform[0] = (envmat->pos.x - ((float)(int)(envmat->pos.x/sclx))*sclx)/sclx;
 	envXform[1] = (envmat->pos.y - ((float)(int)(envmat->pos.y/scly))*scly)/scly;
@@ -1488,7 +1477,6 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_PS2(RwResEntry *repEntry, void *obj
 		hasEnv1  = !!(materialFlags & 1);
 		hasEnv2  = !!(materialFlags & 2);
 		hasSpec  = !!(materialFlags & 4) && !renderingWheel;
-if(betaEnvmaptest) hasSpec = false;
 		// Needed: materialFlags bits can be set even when the matFX effect is not
 		// envmap (bump/other effects); without this guard envData below would be invalid.
 		if(RpMatFXMaterialGetEffects(material) != rpMATFXEFFECTENVMAP){
@@ -1527,10 +1515,6 @@ if(betaEnvmaptest) hasSpec = false;
 			CCustomCarEnvMapPipeline__Env1Xform(&envmat, envData, &envXform.x);
 			envXform.z = envData->GetScaleX();
 			envXform.w = envData->GetScaleY();
-if(betaEnvmaptest){
-	envXform.z *= envmap2tweak;
-	envXform.w *= envmap2tweak;
-}
 			fxpass = 1;
 		}else if(hasEnv2){
 			fxParams.fxSwitch = 2;
@@ -1953,8 +1937,6 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *ob
 	// Save render state at entry
 	VehicleRenderState xboxState;
 	vehiclePipe_saveRenderState(&xboxState);
-	RwBool xboxZwrite;
-	RwRenderStateGet(rwRENDERSTATEZWRITEENABLE, &xboxZwrite);
 
 	noFx = !!(CVisibilityPlugins__GetAtomicId(atomic) & 0x6000);
 	// pDirect NULL guard (audit): the sun upload below guards pDirect
@@ -2270,7 +2252,6 @@ CCustomCarEnvMapPipeline__CustomPipeRenderCB_Xbox(RwResEntry *repEntry, void *ob
 	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)xboxState.src);
 	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)xboxState.dst);
 	RwRenderStateSet(rwRENDERSTATEFOGCOLOR, (void*)xboxState.fog);
-	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)xboxZwrite);
 	// TFACTOR leak plug (audit item 1): the env branches above push
 	// D3DRS_TEXTUREFACTOR (L2) per env mesh and NOTHING restored it — the
 	// VehicleRenderState snapshot field existed only for
@@ -4604,13 +4585,6 @@ int CCarFXRenderer__IsCCPCPipelineAttached(RpAtomic *atomic)
 	return false;
 }
 
-RwTexture *RwTextureRead_HACK(const RwChar * name, const RwChar * maskName)
-{
-	if(strcmp(name, "xvehicleenv128") == 0)
-		return RwTextureRead("vehicleenvmap128", maskName);
-	return RwTextureRead(name, maskName);
-}
-
 void
 hookVehiclePipe(void)
 {
@@ -4620,11 +4594,6 @@ hookVehiclePipe(void)
 	InjectHook(0x5D9FE9, setVehiclePipeCB);
 	InterceptCall(&CCustomCarEnvMapPipeline__PreRenderUpdate_orig, CCustomCarEnvMapPipeline__PreRenderUpdate, 0x5D5B10);
 	InjectHook(0x7323C0, CVisibilityPlugins__RenderWheelAtomicCB, PATCH_JUMP);
-
-	// temp hack RwTextureRead to read other env map
-	if(betaEnvmaptest){
-		InjectHook(0x80483C, RwTextureRead_HACK);
-	}
 
 }
 

@@ -1440,6 +1440,7 @@ void pipeL3Set(D3DRENDERSTATETYPE state, DWORD value);
 // any fullscreen Im2D pass (buildingPipe:731, vehicle Env cb).
 // ============================================================
 RwUInt32 pipeEnterCullMode(void);
+void pipeEnforceDepthContract(void);  // shared depth contract, pipelinecommon.cpp:1456
 void pipeExitCullMode(RwUInt32 saved);
 void pipeForceCullMode(RwUInt32 rwCull);
 

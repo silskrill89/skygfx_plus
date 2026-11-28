@@ -69,8 +69,6 @@ static bool			s_grassInstPSTried = false;
 void
 GrassResetShaderLatches(void)
 {
-	s_grassInstPS = NULL;
-	s_grassInstPSTried = false;
 
 	// S6 (test-4) — the LIVE plant mod PS is a reset casualty too.
 	// grassPixelShader (main.cpp:121) is created exactly once by
@@ -261,13 +259,13 @@ GrassEnforceDepthContract(void)
 		RwTexture **plantTex = (RwTexture**)0xC02DC0;	// game CPlantMgr current texture (main.cpp tmptexture)
 		extern void *grassPixelShader;					// main.cpp:121 — live plant mod PS
 		extern void *treeAlphaPS;						// treeWind.cpp — console tree overlay PS
-		dbglog("[veg] tex0: dev=%p hr=0x%08X l1ras=%p plantTex=%p name='%s' | ps: dev=%p grassPS=%p hr=0x%08X | c0=(%.3f,%.3f,%.3f,%.3f) hr=0x%08X | latches: instPS=%p tried=%d treeAlphaPS=%p",
+		dbglog("[veg] tex0: dev=%p hr=0x%08X l1ras=%p plantTex=%p name='%s' | ps: dev=%p grassPS=%p hr=0x%08X | c0=(%.3f,%.3f,%.3f,%.3f) hr=0x%08X | latches: treeAlphaPS=%p",
 		       (void*)tex0, (unsigned)hrT, (void*)l1Ras,
 		       (plantTex && *plantTex) ? (void*)*plantTex : NULL,
 		       (plantTex && *plantTex) ? (*plantTex)->name : "",
 		       (void*)ps0, grassPixelShader, (unsigned)hrP,
 		       c0[0], c0[1], c0[2], c0[3], (unsigned)hrC,
-		       (void*)s_grassInstPS, (int)s_grassInstPSTried, treeAlphaPS);
+		       treeAlphaPS);
 		if(tex0)
 			tex0->Release();
 		if(ps0)

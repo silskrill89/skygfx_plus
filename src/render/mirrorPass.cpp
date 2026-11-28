@@ -254,9 +254,6 @@ MirrorPass_CompositeRestore(const MirrorCompositeSaved *s)
 			MirrorRestoreState3L(rwRENDERSTATEZTESTENABLE, D3DRS_ZENABLE,
 				s->savedZTest ? 0u : 1u, s->savedZTest,
 				s->savedZTest ? 0u : 1u, s->savedZTest);
-			MirrorRestoreState3L(rwRENDERSTATEZWRITEENABLE, D3DRS_ZWRITEENABLE,
-				s->savedZWrite ? 0u : 1u, s->savedZWrite,
-				s->savedZWrite ? 0u : 1u, s->savedZWrite);
 			// RwBlendFunction == D3DBLEND 1:1 for rwBLENDZERO..SRCALPHASAT;
 			// a captured out-of-domain value (raw-only D3DBLEND_BLENDFACTOR
 			// = 14, the SSS blend-back family) has no rw twin -> L1 leg
