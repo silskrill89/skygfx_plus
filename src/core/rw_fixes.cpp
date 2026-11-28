@@ -2017,9 +2017,22 @@ CFont_RenderFontBuffer_hook(void)
 	// every exit path, including the glyph flush's empty path that skips
 	// its own enforce. Cheap: spriteEnforceDepthContract early-outs on two
 	// device reads once the device already holds the contract.
+	DWORD eDevZw = TRUE, eDrvZw = TRUE;  RwUInt32 eRwZw = (RwUInt32)TRUE;
+	if(d3d9device){
+		(void)d3d9device->GetRenderState(D3DRS_ZWRITEENABLE, &eDevZw);
+		(void)RwD3D9GetRenderState(D3DRS_ZWRITEENABLE, &eDrvZw);
+		RwRenderStateGet(rwRENDERSTATEZWRITEENABLE, &eRwZw);
+	}
 	if(CFont_RenderFontBuffer_orig)
 		CFont_RenderFontBuffer_orig();
+	bool carried = !(eRwZw && eDrvZw && eDevZw);
+	if(carried){ eDevZw = eDrvZw = TRUE; eRwZw = (RwUInt32)TRUE; }
+	spriteRestoreZWrite(eDevZw, eDrvZw, eRwZw);
 	spriteEnforceDepthContract("CFont_RenderFontBuffer");
+	if(carried && (dbglog_once("font_zw1") || dbglog_throttle("font_zw")))
+		dbglog("[FontZ] RenderFontBuffer entry ZWRITE not canonical "
+		       "rw=%u drv=%u dev=%u -> canonical TRUE pushed at exit",
+		       (unsigned)eRwZw, (unsigned)eDrvZw, (unsigned)eDevZw);
 }
 
 // ---- Frame-boundary safety close for the corona/cone shield window ------
@@ -2761,4 +2774,15 @@ rwFixes_installHooks(void)
 		s_rwfixLogged = true;
 		dbglog("[rwfix] install OK (6 machines)");
 	}
+}
+
+// W2-2 (partial): exported predicate for cross-TU gate (main.cpp effectsForceAlphaBlock).
+// Full struct refactor pending; for now ORs the existing producer flags.
+bool spriteProducerWindowActive(void)
+{
+	return g_inCoronasRender || g_inCloudsRender || g_inPointLightsRender || s_spriteForceValid;
+}
+void spriteProducerWindowClouds(bool on)
+{
+	g_inCloudsRender = on;
 }

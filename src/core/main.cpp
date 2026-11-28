@@ -1926,7 +1926,10 @@ extern bool g_inCoronasRender;	// rw_fixes.cpp - corona shield window flag
 extern bool g_inCloudsRender;	// rw_fixes.cpp - clouds producer flag (flush label)
 extern bool s_spriteForceValid;	// rw_fixes.cpp - in-flight forced sprite batch
 
-static void
+extern bool spriteProducerWindowActive(void);
+extern void spriteProducerWindowClouds(bool);
+
+void
 effectsForceAlphaBlock(const char *tag)
 {
 	// ---- INI bisect lever (effectsAlphaBlock, default 1 = ON) ----
@@ -1946,7 +1949,7 @@ effectsForceAlphaBlock(const char *tag)
 	// ONE/ONE to SRCALPHA/INVSRCALPHA (whether via the 2/2 substitution or
 	// pipeForceAlphaBlock's canonical block) paints the black rectangle
 	// around the bright core. Return BEFORE any body write.
-	if(g_inCoronasRender || g_inCloudsRender || s_spriteForceValid){
+	if(spriteProducerWindowActive()){
 		if(dbglog_once("fxalpha_producer_skip"))
 			dbglog("[FxAlpha] %s: producer owns additive state — canonical "
 			       "alpha block skipped", tag);
@@ -2744,9 +2747,9 @@ CClouds__Render_hygiene(void)
 		// natively ONE/ONE). Both producers now force the same ONE/ONE pair;
 		// this flag is the receipt label. POD writes, no SEH on this path.
 		if(CClouds__Render_orig){
-			g_inCloudsRender = true;
+			spriteProducerWindowClouds(true);
 			CClouds__Render_orig();
-			g_inCloudsRender = false;
+			spriteProducerWindowClouds(false);
 			// Stage-0 raster restore for this path too (park-and-set through
 			// L1, then the raw L3 texture that was bound when we entered).
 			restoreStage0Tex(savedTexRaster, savedDevTex0, "cloud_texraster_passthru");
@@ -2885,9 +2888,9 @@ CClouds__Render_hygiene(void)
 	// ROUGH REDUCTION (2026-11-10): SEH __try/__except removed — call the
 	// original directly (AAP style; no fault-path restore gymnastics). The
 	// producer flag still wraps the call so the flush shield sees ONE/ONE.
-	g_inCloudsRender = true;	// producer flag: flush shield must pick ONE/ONE
+	spriteProducerWindowClouds(true);	// producer flag: flush shield must pick ONE/ONE
 	CClouds__Render_orig();
-	g_inCloudsRender = false;
+	spriteProducerWindowClouds(false);
 
 	// ---- restore: rw cache first (so later Gets agree), then the raw force
 	// closes the gap where the cache already read the saved value ----
