@@ -3839,7 +3839,7 @@ CCustomBuildingDNPipeline__CustomPipeRenderCB_Switch(RwResEntry *repEntry, void 
 	// pass's CULLNONE reaches the assert intact).
 	s_bldSwitchSavedCull = savedCull;
 	PipeAlphaState savedAlpha = pipeEnterAlphaMode();
-	// ZWRITE three-layer guard — mirrors vehiclePipe.cpp:2570. The alpha guard
+	// ZWRITE three-layer guard — mirrors vehiclePipe.cpp:4423. The alpha guard
 	// above covers blend/alpha-test but NOT zwrite. postfx raw
 	// D3DRS_ZWRITEENABLE writes (postfx.cpp:3451, 3630, 3703, 3741, 3791,
 	// 5140) leave the DEVICE with zwrite off while the rw cache still says
