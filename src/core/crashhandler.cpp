@@ -371,13 +371,15 @@ static const DWORD kUafNullRecovB  = 0x335D5E5F; // 5F 5E 5D 33 @ recover
 // needed — registers and stack stay exactly as the function expects.
 // Conjuncts (ALL must hold; probe faults => no skip, never swallow):
 //   code==0xC0000005, accessType==WRITE(1), EIP==0x4A8E49,
-//   faultAddr==EAX+4, EAX==0x3F800000, ESI==EDI, [ESP+4]==0x4A9886.
+//   faultAddr==EAX+4, EAX is a float bit pattern [0x3F000000..0x3FFFFFFF]
+//   (0.5f..2.0f — any float-as-link, not just 1.0f), ESI==EDI, [ESP+4]==0x4A9886.
 // Static image bytes at 0x4A8E30 are NOT code (Hoodlum runtime-unpacked EXE) —
 // the runtime instruction bytes are taken from the crash receipt itself.
 static const DWORD kFxListFault   = 0x4A8E49;
 static const DWORD kFxListNext    = 0x4A8E4C; // +3 (mov [eax+4],edx is 3 bytes)
 static const DWORD kFxListCaller  = 0x4A9886; // ret into DestroyFxSystem
-static const DWORD kFxListBadLink = 0x3F800000; // 1.0f bits as a pool link
+static const DWORD kFxListBadLinkLo = 0x3F000000; // 0.5f bits — float-as-link range
+static const DWORD kFxListBadLinkHi = 0x3FFFFFFF; // ~2.0f bits (any float in [0.5,2))
 // Read-only probe targets; addresses live in this declaration layer per the
 // HARD RULE (install/forensics-layer exemption documented in crashhandler.h).
 
@@ -419,7 +421,8 @@ crashFxListSkipSafe(DWORD site, DWORD esp, DWORD accessType, DWORD faultAddr,
 	volatile bool probeArmed = false;
 	__try {
 		if(accessType == 1 && site == kFxListFault &&
-		   faultAddr == eaxValue + 4 && eaxValue == kFxListBadLink &&
+		   faultAddr == eaxValue + 4 &&
+		   eaxValue >= kFxListBadLinkLo && eaxValue <= kFxListBadLinkHi &&
 		   esiValue == ediValue &&
 		   *(const volatile DWORD *)(uintptr_t)(esp + 4) == kFxListCaller)
 		{
