@@ -380,6 +380,27 @@ static const DWORD kFxListNext    = 0x4A8E4C; // +3 (mov [eax+4],edx is 3 bytes)
 static const DWORD kFxListCaller  = 0x4A9886; // ret into DestroyFxSystem
 static const DWORD kFxListBadLinkLo = 0x3F000000; // 0.5f bits — float-as-link range
 static const DWORD kFxListBadLinkHi = 0x3FFFFFFF; // ~2.0f bits (any float in [0.5,2))
+// FIX F (2026-11-28): the SECOND fault in the same DestroyFxSystem chain.
+// Field log 07:03:23: [fxlist_uaf_skip] fired at 0x4A8E49 (FIX E OK), then
+// IMMEDIATELY CRASH[2] READ at 0x4A981E accessing 0x1B, EAX=0, EBP=0,
+// ESI=EDI=0x21BD28E8 (same FxSystem), [ESP+0xC]=0x4A9AD3 (ret into
+// FxManager_c::Update).  DestroyFxSystem loads a field pointer that is NULL
+// and reads a flag byte at +0x1B: runtime bytes (Hoodlum-unpacked, so taken
+// from the [FORENSIC] instr= dump) are
+//   0x4A981E 8A 48 1B   mov cl,[eax+0x1B]
+//   0x4A9821 33 DB      xor ebx,ebx
+//   0x4A9823 84 C9      test cl,cl
+//   0x4A9825 7E 52      jle +0x52 -> 0x4A9879
+// With cl==0 (the flag-off case the code expects for a null/missing field),
+// the jle lands at 0x4A9879 — a safe continuation ~8 bytes before the
+// RemoveItem call at 0x4A9881 (FIX E catches that one again if it faults).
+// Conjuncts (ALL must hold; probe faults => no skip, never swallow):
+//   code==0xC0000005, accessType==READ(0), EIP==0x4A981E, faultAddr==0x1B,
+//   EAX==0, EBP==0, [ESP+0xC]==0x4A9AD3, runtime fault bytes match.
+static const DWORD kFxMgrFault    = 0x4A981E;
+static const DWORD kFxMgrCaller   = 0x4A9AD3; // ret into FxManager_c::Update
+static const DWORD kFxMgrRecover  = 0x4A9879; // jle target (cl==0 path)
+static const DWORD kFxMgrFaultB   = 0x481B488A; // 8A 48 1B 48 @ fault
 // Read-only probe targets; addresses live in this declaration layer per the
 // HARD RULE (install/forensics-layer exemption documented in crashhandler.h).
 
@@ -680,6 +701,34 @@ diag_crashHandler(EXCEPTION_POINTERS *ep)
 		}
 		ep->ContextRecord->Eip = kFxListNext;   // skip only the bad store
 		return EXCEPTION_CONTINUE_EXECUTION;
+	}
+	// ---- FIX F: 0x4A981E FxManager destroy NULL-field deref (after FIX E) ----
+	// Runs above the crash-receipt budget like FIX B/C/D/E.  Every conjunct is
+	// checked inside a POD probe island so a non-UAF fault at this address
+	// propagates (never-swallow).  Recovery takes the runtime-proven cl==0 jle
+	// path to 0x4A9879 with EBX already zeroed (the xor ebx,ebx that the skipped
+	// block would have done) — no stack surgery, ECX (this/FxManager) intact.
+	if(code == 0xC0000005 && accessType == 0 &&
+	   (DWORD)(uintptr_t)ep->ExceptionRecord->ExceptionAddress == kFxMgrFault &&
+	   faultAddr == 0x1Bu && ep->ContextRecord->Eax == 0 &&
+	   ep->ContextRecord->Ebp == 0)
+	{
+		bool verified = false;
+		__try {
+			verified = *(const volatile DWORD *)(uintptr_t)kFxMgrFault == kFxMgrFaultB &&
+			           *(const volatile DWORD *)(uintptr_t)(ep->ContextRecord->Esp + 0xC) == kFxMgrCaller;
+		} __except(EXCEPTION_EXECUTE_HANDLER){ verified = false; }
+		if(verified){
+			if(InterlockedCompareExchange(&s_vehReceiptBusy, 1, 0) == 0){
+				if(dbglog_throttle("fxmgr_uaf_skip"))
+					dbglog("[fxmgr_uaf_skip] FxManager destroy NULL field: eip=0x%08X fault=0x%08X system=%08X -> cl=0 path 0x%08X",
+					       kFxMgrFault, faultAddr, ep->ContextRecord->Esi, kFxMgrRecover);
+				InterlockedExchange(&s_vehReceiptBusy, 0);
+			}
+			ep->ContextRecord->Ebx = 0;   // the skipped `xor ebx,ebx` (cl==0 path)
+			ep->ContextRecord->Eip = kFxMgrRecover;
+			return EXCEPTION_CONTINUE_EXECUTION;
+		}
 	}
 		if(crashMatFxSkipSafe(
 			(DWORD)(uintptr_t)ep->ExceptionRecord->ExceptionAddress,
