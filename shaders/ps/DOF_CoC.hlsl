@@ -85,7 +85,7 @@ float4 main(float2 uv : TEXCOORD0) : COLOR0
     // near plane (nearP <= 0: lin would collapse toward 0 and smear the whole
     // frame as extreme near field).
     float lin;
-    if(dAvg <= 1e-6 || nearP <= 0.0)
+    if(dAvg <= 1e-6 || nearP <= 0.0 || dAvg >= 0.999f)
         lin = focus;
     else
         lin = LinearizeDepth(dAvg, nearP, farP);

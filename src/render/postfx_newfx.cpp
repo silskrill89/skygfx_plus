@@ -158,12 +158,12 @@ void FxResetShaderLatches(void)
 //                stay valid for the LUT pass), PLUS c9 = {operator, 0, 0, 0}
 //                with operator 1-5 (ACES 1.3/2.0, AgX, Frostbite, GT7).
 //
-//   SunShafts    GodRays.hlsl-compatible (the in-repo template the lane most
-//                likely follows): c0 = {sunScreenX, sunScreenY, 0, 0},
-//                c1 = {exposure, decay, density, weight}, c2 = {numSamples,0,0,0}.
-//                ADDITIVE rays-only output contract like GodRays (drawn
-//                ONE/ONE — safe degrade if the shader is composite instead).
-//                exposure/weight/samples use the GodRays defaults below.
+//   SunShafts    EXACT layout of the SHIPPED CONSUMER shaders/ps/SunShafts.hlsl
+//                (single-source-of-truth: shader header). c0 = {sunScreenX,
+//                sunScreenY, 0, 0}, c1 = {density, decay, exposure, weight},
+//                c2 = {tintR, tintG, tintB, intensity}. ADDITIVE rays-only.
+//                The shader self-blacks when exposure<=0 OR intensity<=0
+//                (SunShafts.hlsl:75-77); c2.x is TINT, not a sample count.
 //
 //   Grain        plan-doc §6.3: s0 = scene, c0 = {intensity, frameIndex,
 //                luminanceScale, coloredGrain}
@@ -181,9 +181,10 @@ void FxResetShaderLatches(void)
 
 // SunShafts assumed defaults (GodRays.hlsl knob values; only density/decay
 // have config keys in this lane).
-static const float kSunShaftsExposure = 0.0034f;
-static const float kSunShaftsWeight   = 1.0f;
-static const float kSunShaftsSamples  = 20.0f;
+static const float kSunShaftsExposure = 0.0f;    // EYE-GATE: 0 = visually OFF
+static const float kSunShaftsWeight   = 1.0f;    // c1.w
+static const float kSunShaftsTintRGB  = 1.0f;   // c2.rgb = white
+// kSunShaftsSamples deleted � SHAFT_SAMPLES is compile-time in the shader
 
 // --- Scratch render targets (D3DPOOL_DEFAULT, recreated on res change) ------
 // DOF: two half-res intermediates (CoC, bokeh) + one half-res tent blur.
@@ -616,14 +617,30 @@ void DrawSunShafts(void)
 	// Sanitize like DrawGodRays: zero-init config must not collapse the pass.
 	float density = (config->sunShaftsDensity > 0.0f) ? config->sunShaftsDensity : 0.84f;
 	float decay   = (config->sunShaftsDecay > 0.0f && config->sunShaftsDecay <= 1.0f) ? config->sunShaftsDecay : 1.0f;
+	// EYE-GATE: exposure<=0 is exactly the shader's own black-out branch
+	// (SunShafts.hlsl:75-77), so skipping the draw is pixel-neutral vs today
+	// (ONE/ONE adds 0) and is PROVABLE in the log.
+	if(kSunShaftsExposure <= 0.0f){
+		if(dbglog_once("fx_shafts_gate"))
+			dbglog("[FX] SunShafts eye-gate: exposure=0 -> draw skipped");
+		return;
+	}
+
 	float c0[4] = { sunX, sunY, 0.0f, 0.0f };
 	RwD3D9SetPixelShaderConstant(0, c0, 1);
-	float c1[4] = { kSunShaftsExposure, decay, density, kSunShaftsWeight };
+	float c1[4] = { density, decay, kSunShaftsExposure, kSunShaftsWeight };
 	RwD3D9SetPixelShaderConstant(1, c1, 1);
-	float c2[4] = { kSunShaftsSamples, 0.0f, 0.0f, 0.0f };
+	float c2[4] = { kSunShaftsTintRGB, kSunShaftsTintRGB, kSunShaftsTintRGB, 1.0f };
 	RwD3D9SetPixelShaderConstant(2, c2, 1);
 
+	if(dbglog_once("fx_shafts_layout"))
+		dbglog("[FX] SunShafts c1=(%.3f,%.3f,%.4f,%.3f) c2=(%.1f,%.1f,%.1f,%.1f)",
+		       c1[0], c1[1], c1[2], c1[3], c2[0], c2[1], c2[2], c2[3]);
+
 	FxFramePass(s_fx.sunShafts, NULL, NULL, true, "fx_sunshafts");
+	if(dbglog_once("fx_shafts_armed"))
+		dbglog("[FX] SunShafts armed+drawn: sun=(%.2f,%.2f) exposure=%.4f",
+		       sunX, sunY, kSunShaftsExposure);
 }
 
 // 2) DOF — CoC -> bokeh -> tent on half-res intermediates, combine full-res.

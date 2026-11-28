@@ -183,38 +183,10 @@ void InitSSAOResources(void)
 			return;
 		}
 
-		// Fallback: depthhook not available — try creating our own INTZ.
-		// NOTE: This texture is NEVER bound as DS, so depth consumers will read garbage.
-		// This path exists only for the case where depthhook is disabled by INI.
-		IDirect3D9 *d3d = NULL;
-		if(SUCCEEDED(dev->GetDirect3D(&d3d)) && d3d){
-			dbglog("InitSSAOResources: checking INTZ support (fallback, no depthhook)");
-			HRESULT hr = d3d->CheckDeviceFormat(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL,
-				D3DFMT_X8R8G8B8, D3DUSAGE_DEPTHSTENCIL, D3DRTYPE_TEXTURE,
-				(D3DFORMAT)MAKEFOURCC('I','N','T','Z'));
-			if(SUCCEEDED(hr)){
-				dbglog("InitSSAOResources: INTZ supported, creating depth texture (fallback)");
-				hr = dev->CreateTexture(w, h, 1, D3DUSAGE_DEPTHSTENCIL,
-					(D3DFORMAT)MAKEFOURCC('I','N','T','Z'),
-					D3DPOOL_DEFAULT, &g_ssaoDepthTex, NULL);
-				if(SUCCEEDED(hr)){
-					g_ssaoDepthTex->GetSurfaceLevel(0, &g_ssaoDepthSurf);
-					dbglog("InitSSAOResources: INTZ depth texture created OK (fallback)");
-					SSAOAllocReceipt("ssaoDepth(INTZ-fallback)", w, h);
-					CreatePrevDepthTexture(dev, w, h);
-					d3d->Release();
-					dbglog("InitSSAOResources: done");
-					return;
-				}else{
-					dbglog("InitSSAOResources: CreateTexture INTZ failed hr=0x%08X", hr);
-				}
-			}else{
-				dbglog("InitSSAOResources: INTZ format not supported, SSAO disabled");
-			}
-			d3d->Release();
-		}
 		if(!g_ssaoDepthTex){
-			dbglog("InitSSAOResources: SSAO disabled - depth texture not available");
+			if(dbglog_once("ssao_depth_missing") || dbglog_throttle("ssao_depth_missing_t"))
+				dbglog("[PostFX] InitSSAOResources: no depth source (g_intzTex=NULL, depthHookEnable/INTZ unavailable) "
+				       "-> SSAO + every depth consumer stay OFF this session (INTZ-fallback deleted: it was never bound as DS)");
 			return;
 		}
 		dbglog("InitSSAOResources: done");

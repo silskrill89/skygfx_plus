@@ -207,6 +207,27 @@ static void DpInvalidateSsaoDepthAlias(void)
 	if(g_ssaoDepthSurf == g_intzSurf) g_ssaoDepthSurf = NULL;
 }
 
+// Heal-on-NULL re-alias (2026-11-27, paired with DpInvalidateSsaoDepthAlias).
+// Called from BOTH hook_SetDS recreate sites, at the first moment g_intzTex
+// AND g_intzSurf are valid again. Heal-on-NULL only.
+static void DpRebindSsaoDepthAlias(void)
+{
+	extern IDirect3DTexture9 *g_ssaoDepthTex;
+	extern IDirect3DSurface9 *g_ssaoDepthSurf;
+	if(!g_intzTex || !g_intzSurf) return;
+	if(g_ssaoDepthTex){
+		if(g_ssaoDepthTex != g_intzTex && dbglog_once("intz_rebind"))
+			dbglog("[DepthHook] alias non-NULL foreign %p (INTZ=%p) - not rebinding",
+			       (void*)g_ssaoDepthTex, (void*)g_intzTex);
+		return;
+	}
+	g_ssaoDepthTex  = g_intzTex;
+	g_ssaoDepthSurf = g_intzSurf;
+	if(dbglog_once("intz_rebind") || dbglog_throttle("intz_rebind_t"))
+		dbglog("[DepthHook] re-alias g_ssaoDepthTex=%p g_ssaoDepthSurf=%p <- g_intzTex=%p surf=%p (device-lifecycle heal)",
+		       (void*)g_ssaoDepthTex, (void*)g_ssaoDepthSurf, (void*)g_intzTex, (void*)g_intzSurf);
+}
+
 // ============================================================
 // Vtable hook: SetDepthStencilSurface (index 39)
 // ============================================================
@@ -296,6 +317,7 @@ static HRESULT STDMETHODCALLTYPE hook_SetDS(IDirect3DDevice9 *dev, IDirect3DSurf
 				D3DPOOL_DEFAULT, &g_intzTex, NULL);
 			if(SUCCEEDED(hr)) {
 				g_intzTex->GetSurfaceLevel(0, &g_intzSurf);
+				DpRebindSsaoDepthAlias();
 				g_dsWidth = lw;
 				g_dsHeight = lh;
 				dbglog("DepthHook: lazy INTZ recreate %dx%d after Reset", lw, lh);
@@ -350,6 +372,7 @@ static HRESULT STDMETHODCALLTYPE hook_SetDS(IDirect3DDevice9 *dev, IDirect3DSurf
 					D3DPOOL_DEFAULT, &g_intzTex, NULL);
 				if(SUCCEEDED(hr)) {
 					g_intzTex->GetSurfaceLevel(0, &g_intzSurf);
+					DpRebindSsaoDepthAlias();
 					g_dsWidth = (int)desc.Width;
 					g_dsHeight = (int)desc.Height;
 					dbglog("DepthHook: INTZ recreated %dx%d", (int)desc.Width, (int)desc.Height);
