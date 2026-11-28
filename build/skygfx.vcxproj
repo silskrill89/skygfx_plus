@@ -230,6 +230,10 @@
     <!-- neopipe: merged neo + neoCarpipe + neoWaterdrops. Unique basename —
          no ObjectFileName override, no LNK4042 duplicate-basename risk. -->
     <ClCompile Include="..\src\render\neopipe.cpp" />
+    <ClCompile Include="..\src\render\softparticles.cpp" />
+    <ClCompile Include="..\src\render\smoke.cpp" />
+    <ClCompile Include="..\src\render\fire.cpp" />
+    <ClCompile Include="..\src\render\watersplash.cpp" />
     <!-- texdefs: unified texdb.txt metadata + <diffuse>_n pairing + DK22Pac
          external normal-map lane. Unique basename — no ObjectFileName override,
          no LNK4042 duplicate-basename risk. -->
