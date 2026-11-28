@@ -3579,7 +3579,8 @@ InjectDelayedPatches()
 	// by treeWind (default 0 this round); treeWind=1 keeps the stock routine.
 	if(config && config->treeWind){
 		dbglog("  HOOK: TreeWind ::ModifyMatrixForTreeInWind (0x534E90)");
-		InjectHook(0x534E90, TreeWind_ModifyMatrixForTreeInWind, PATCH_JUMP);
+		if(config->treeWind)
+			InjectHook(0x534E90, TreeWind_ModifyMatrixForTreeInWind, PATCH_JUMP);
 	}
 
 	// FBWP probe: DLL-init install point (sky audit rework item 1) — VEH on
@@ -3698,8 +3699,9 @@ DllMain(HINSTANCE hInst, DWORD reason, LPVOID)
 		defaultColourTopVOffset = CPostEffects::m_colourTopVOffset;
 		defaultColourBottomVOffset = CPostEffects::m_colourBottomVOffset;
 
-		// moon mask
-		InjectHook(0x713C4C, renderMoonMask, PATCH_JUMP);
+		// moon mask (gated on its lever)
+		if(config->moonMaskAlpha)
+			InjectHook(0x713C4C, renderMoonMask, PATCH_JUMP);
 		dbglog("  moon mask OK");
 
 		// Apply delayed patches directly from DllMain instead of hooking 0x74872D (IsAlreadyRunning).
@@ -3766,10 +3768,14 @@ DllMain(HINSTANCE hInst, DWORD reason, LPVOID)
 		// 0x53E12B  call CCoronas::RenderSunReflection (0x6FBAA0)
 		// (CClouds::Render itself is already intercepted at 0x53DCA2 /
 		//  0x53DFA0 and forces the same block in its hygiene hook.)
-		InterceptCall(&RenderEffects_orig, RenderEffects_hook, 0x53EAD3);
-		InterceptCall(&CCoronas__RenderReflections_orig, CCoronas__RenderReflections_hook, 0x53DCAC);
-		InterceptCall(&CCoronas__RenderReflections_orig, CCoronas__RenderReflections_hook, 0x53DFD8);
-		InterceptCall(&CCoronas__RenderSunReflection_orig, CCoronas__RenderSunReflection_hook, 0x53E12B);
+		// Vanilla-fallback doctrine: corona/state-repair intercepts only when
+		// the corona blend shield lever is on; zeroed = stock CCoronas::Render.
+		if(config->coronaBlendShield){
+			InterceptCall(&RenderEffects_orig, RenderEffects_hook, 0x53EAD3);
+			InterceptCall(&CCoronas__RenderReflections_orig, CCoronas__RenderReflections_hook, 0x53DCAC);
+			InterceptCall(&CCoronas__RenderReflections_orig, CCoronas__RenderReflections_hook, 0x53DFD8);
+			InterceptCall(&CCoronas__RenderSunReflection_orig, CCoronas__RenderSunReflection_hook, 0x53E12B);
+		}
 		// RenderWare-level FIX machinery (corona/flush/font/pointlight shields)
 		// moved to rw_fixes.cpp - rwFixes_installHooks(), gated on rwFixesEnable.
 		rwFixes_installHooks();
