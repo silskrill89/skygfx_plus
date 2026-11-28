@@ -872,7 +872,7 @@ static RwTexture *
 vehPolicyTexture(RwTexture *tex)
 {
 	if(!tex)
-		return NULL;	// case 2 — legitimate "no diffuse map" (white)
+		return TexDefsMissSentinelWorld();	// A1: NULL from find-CB (miss) -> grey sentinel at draw (game keeps NULL)
 	// Draw-time resolution (2026-11-16): policy sentinel -> real texture if
 	// its TXD has loaded since the load-time miss (twin bldPolicyTexture).
 	tex = TexDefsResolveAtDraw(tex);
@@ -972,8 +972,7 @@ vehBindDiffuse3L(RwTexture *tex, int stage)
 	// is NOT a miss and must stay byte-for-byte unchanged.
 	RwTexture *resolved = vehPolicyTexture(tex);
 	if(!resolved)
-		resolved = gpWhiteTexture;
-
+		resolved = TexDefsMissSentinelWorld();	// A1: NULL from find-CB (miss) -> grey sentinel at draw (game keeps NULL)
 	// [bind-elision] resolve the L3 target FIRST so the elision check can run
 	// before ANY driver call. A NULL extraction leaves the device state
 	// unprovable — the cache must never hit on it (invalidation (b) below).
@@ -2902,10 +2901,11 @@ vehEnvBindTexture(RwTexture *tex, int stage)
 	// MUST be the pointer that would actually be bound, so the policy
 	// re-map happens BEFORE the key is taken — a sprite-class sentinel is
 	// bound as the dim-grey world sentinel, and the key says exactly that.
-	// A NULL texture still resolves to gpWhiteTexture (legitimate, unchanged).
+	// A NULL texture (find-CB miss with policy on) resolves to the grey
+	// world sentinel at draw (A1: game keeps NULL for streaming).
 	RwTexture *resolved = vehPolicyTexture(tex);
 	if(!resolved)
-		resolved = gpWhiteTexture;
+		resolved = TexDefsMissSentinelWorld();	// A1: NULL from find-CB (miss) -> grey sentinel at draw (game keeps NULL)
 	if(stage >= 0 && stage < VEH_ENV_STAGE_MAX &&
 	   s_vehEnvElide.texKnown[stage] &&
 	   s_vehEnvElide.texVal[stage] == (const void*)resolved){
@@ -4610,6 +4610,9 @@ RwTexture *RwTextureRead_HACK(const RwChar * name, const RwChar * maskName)
 void
 hookVehiclePipe(void)
 {
+	// VANILLA (faithful-descendant doctrine): stock pipe = no custom pipe.
+	if(config && config->vehiclePipe == CAR_VANILLA)
+		return;
 	InjectHook(0x5D9FE9, setVehiclePipeCB);
 	InterceptCall(&CCustomCarEnvMapPipeline__PreRenderUpdate_orig, CCustomCarEnvMapPipeline__PreRenderUpdate, 0x5D5B10);
 	InjectHook(0x7323C0, CVisibilityPlugins__RenderWheelAtomicCB, PATCH_JUMP);

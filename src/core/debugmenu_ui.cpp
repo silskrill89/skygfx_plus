@@ -383,8 +383,8 @@ struct SettingRow {
 
 // --- enum label tables (exact spellings readIniFile's StrAssoc maps use) ---
 static const char *const s_pipeNames[]   = { "PBR", "PS2", "Xbox", "Mobile", "GTAIV", NULL };
-static const char *const s_buildNames[]  = { "PS2", "Xbox", "GTAIV", "PBR", NULL };
-static const char *const s_vehNames[]    = { "PS2", "PC", "Xbox", "Specular", "Mobile", "Neo", "Leeds", "VCS", "Env", "GTAIV", "Modern", NULL };
+static const char *const s_buildNames[]  = { "PS2", "Xbox", "GTAIV", "PBR", "Vanilla", NULL };
+static const char *const s_vehNames[]    = { "PS2", "PC", "Xbox", "Specular", "Mobile", "Neo", "Leeds", "VCS", "Env", "GTAIV", "Modern", "Vanilla", NULL };
 static const char *const s_cfNames[]     = { "None", "PS2", "PC", "Mobile", "III", "VC", "VCS", "GTAIV", "Modern", NULL };
 static const char *const s_waterSty[]    = { "Xbox", "IV", "V", NULL };
 static const char *const s_waterQ[]      = { "Low", "Medium", "High", "Ultra", NULL };
@@ -3035,8 +3035,8 @@ DrawPresetsTab(void)
 	ImGui::TextDisabled("Modern -> building=PBR    vehicle=Modern  filter=Modern");
 	DrawAccentSeparator();
 	ImGui::Text("Current: building=%s  vehicle=%s  water=%s  filter=%s",
-		s_buildNames[config->buildingPipe >= 0 && config->buildingPipe < 4 ? config->buildingPipe : 3],
-		(config->vehiclePipe >= 0 && config->vehiclePipe < 11 && s_vehNames[config->vehiclePipe]) ? s_vehNames[config->vehiclePipe] : "?",
+		s_buildNames[config->buildingPipe >= 0 && config->buildingPipe < 5 ? config->buildingPipe : 3],
+		(config->vehiclePipe >= 0 && config->vehiclePipe < 12 && s_vehNames[config->vehiclePipe]) ? s_vehNames[config->vehiclePipe] : "?",
 		(config->waterStyle >= 0 && config->waterStyle < 3) ? s_waterSty[config->waterStyle] : "?",
 		(config->colorFilter >= 0 && config->colorFilter < 9) ? s_cfNames[config->colorFilter] : "?");
 	DrawEffectiveSummary();

@@ -233,6 +233,7 @@ enum CarPipeline
 	CAR_ENV,
 	CAR_GTAIV,
 	CAR_MODERN, // PBR with glass, 4 color channels, GGX specular
+	CAR_VANILLA, // stock game pipeline (no custom pipe attached) — faithful descendant
 
 	NUMCARPIPES
 };
@@ -243,6 +244,7 @@ enum BuildingPipeline
 	BUILDING_XBOX,
 	BUILDING_GTAIV,
 	BUILDING_PBR,
+	BUILDING_VANILLA, // stock game pipeline (no custom pipe attached) — faithful descendant
 
 	NUMBUILDINGPIPES
 };

@@ -1386,14 +1386,56 @@ bldPolicyTexture(RwTexture *tex)
 		       (tex && tex->name[0]) ? tex->name : "");
 	}
 	if(!tex)
-		return NULL;	// legitimate "no diffuse map" (resolved -> white)
+		return TexDefsMissSentinelWorld();	// A1: NULL from find-CB (miss) -> grey sentinel at draw (game keeps NULL for streaming)
 	// Draw-time resolution (2026-11-16): if this is a policy sentinel whose
 	// parent TXD has since loaded, swap in the REAL texture — this is the
 	// one chokepoint all four building cbs (PS2/Xbox/PBR/Sphere) bind stage
 	// 0 through, so the untextured-world class dies here.
 	tex = TexDefsResolveAtDraw(tex);
 	if(TexDefsMissTextureKind(tex) == TEXDEFS_MISS_TEX_SPRITE)
-		return TexDefsRemapToWorld(tex);	// sprite class -> world action (name kept)
+		tex = TexDefsRemapToWorld(tex);	// sprite class -> world action (name kept)
+
+	// =========================================================================
+	// SLAB DISCRIMINATOR (2026-11-27, ADDITIVE; throttle key "bld_slabbind" —
+	// FNV-1a 1024 bucket 125, file-written-collision-checked against every
+	// in-tree tag with the %TEMP% fnv_check_tags script).
+	//
+	// DEFECT (screenshots 2026-11-27 11:42-11:45): giant flat untextured wall
+	// slabs. Two classes produce them and the log could not tell them apart:
+	//   class (a) a WORLD-class policy sentinel (1x1 dim grey 96,96,96)
+	//            bound into material->texture at DFF load and never recovered;
+	//   class (b) material->texture == NULL at all (no texture reference
+	//            reached the find-CB) -> gpWhiteTexture.
+	// `first-slab` names the (a) class — name + pointer of the FIRST slab
+	// texture that SURVIVED draw-time resolution, i.e. the first flat-grey
+	// wall actually bound. Its ABSENCE next to the existing
+	// `[BldTex-FIRST] tex='(null)'` line (buildingPipe_texDiag, the (b)
+	// observation point) is the (b) signature. The throttled `slab-bind` line
+	// carries the running count so one stuck name reads differently from a
+	// whole city of them. Fires ONLY while a sentinel is still bound — a
+	// session where recovery works produces neither line.
+	// =========================================================================
+	static bool  s_bldFirstSlab   = false;
+	static unsigned s_bldSlabCount  = 0;
+	static unsigned s_bldSlabLogged = 0;
+	if(TexDefsMissTextureKind(tex) == TEXDEFS_MISS_TEX_WORLD){
+		s_bldSlabCount++;
+		if(!s_bldFirstSlab){
+			s_bldFirstSlab = true;
+			dbglog("[BldTex] first-slab tex=%p kind=%d name='%s' — class (a): the world grey sentinel survived TexDefsResolveAtDraw and is about to be bound",
+			       (void*)tex, TEXDEFS_MISS_TEX_WORLD,
+			       tex->name[0] ? tex->name : "(unnamed)");
+		}
+		// The throttle is only consulted while the count moved, so a healthy
+		// (zero-slab) session pays one integer compare per mesh and logs
+		// nothing at all.
+		if(s_bldSlabCount != s_bldSlabLogged && dbglog_throttle("bld_slabbind")){
+			s_bldSlabLogged = s_bldSlabCount;
+			dbglog("[BldTex] slab-bind world=%u last='%s' ptr=%p — flat grey wall sample still bound after draw-time resolve",
+			       s_bldSlabCount, tex->name[0] ? tex->name : "(unnamed)",
+			       (void*)tex);
+		}
+	}
 	return tex;			// real texture, or the world sentinel already
 }
 
@@ -1407,7 +1449,7 @@ bldBindDiffuse3L(RwTexture *tex, int stage)
 	// vehBindDiffuse3L (:968-970).
 	RwTexture *resolved = bldPolicyTexture(tex);
 	if(!resolved)
-		resolved = gpWhiteTexture;
+		resolved = TexDefsMissSentinelWorld();	// A1: NULL from find-CB (miss) -> grey sentinel at draw (game keeps NULL)
 
 	// [bind-elision] resolve the L3 target FIRST so the elision check can run
 	// before ANY driver call. A NULL extraction leaves the device state
@@ -1531,7 +1573,7 @@ buildingPipe_bindTexStage(RwTexture *tex, int stage, RwTexture **last, bool *val
 	// alpha-fails GREATEREQUAL@1 and the LOD building vanishes.
 	RwTexture *resolved = bldPolicyTexture(tex);
 	if(!resolved)
-		resolved = gpWhiteTexture;
+		resolved = TexDefsMissSentinelWorld();	// A1: NULL from find-CB (miss) -> grey sentinel at draw (game keeps NULL)
 	if(last && valid && *valid && *last == resolved){
 		// Site B ([BldBind] ALWAYS-reached contract, twin of bldBindDiffuse3L's
 		// Site A hit): the same-texture RESOLVED-pointer tracker only proves
@@ -4308,6 +4350,11 @@ CCustomBuildingRenderer__IsCBPCPipelineAttached(RpAtomic *atomic)
 void
 hookBuildingPipe(void)
 {
+	// VANILLA (faithful-descendant doctrine): when the user selects the stock
+	// pipe, do NOT install the CreatePipe hooks — the game's own pipeline
+	// stays in place and no custom pipe attaches to any atomic.
+	if(config && config->buildingPipe == BUILDING_VANILLA)
+		return;
 	InterceptCall(&CustomBuildingPipeline__Update_orig, CustomBuildingPipeline__Update, 0x53C15E);
 	InjectHook(0x5D7100, CCustomBuildingDNPipeline__CreateCustomObjPipe_PS2);
 	InjectHook(0x5D7D90, CCustomBuildingPipeline__CreateCustomObjPipe_PS2);

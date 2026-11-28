@@ -303,11 +303,12 @@ readIniFile(const char *modulePath, Config *c)
 
 	// Explicit buildingPipe/vehiclePipe INI values override pipeline mapping
 	static StrAssoc buildingPipeMap[] = {
-		{"PS2",    BUILDING_PS2},
-		{"Xbox",   BUILDING_XBOX},
-		{"GTAIV",  BUILDING_GTAIV},
-		{"PBR",    BUILDING_PBR},
-		{"",       -1},
+		{"PS2",     BUILDING_PS2},
+		{"Xbox",    BUILDING_XBOX},
+		{"GTAIV",   BUILDING_GTAIV},
+		{"PBR",     BUILDING_PBR},
+		{"Vanilla", BUILDING_VANILLA},
+		{"",        -1},
 	};
 	int bpOverride = StrAssoc::get(buildingPipeMap, cfg.get("SkyGfx", "buildingPipe", "").c_str());
 	if(!modePipesOwned && bpOverride >= 0)	// M1a: owned key ignored while a mode is active
@@ -325,6 +326,7 @@ readIniFile(const char *modulePath, Config *c)
 		{"Env",     CAR_ENV},
 		{"GTAIV",   CAR_GTAIV},
 		{"Modern",  CAR_MODERN},
+		{"Vanilla", CAR_VANILLA},
 		{"",        -1},
 	};
 	int vpOverride = StrAssoc::get(vehiclePipeMap, cfg.get("SkyGfx", "vehiclePipe", "").c_str());
@@ -693,24 +695,14 @@ readIniFile(const char *modulePath, Config *c)
 	//                           alpha cleanup) but NOT floored — toggleable
 	//                           lever, unlike the floored members above.
 	c->texAlphaClassify = readint2(cfg, "Effects", "texAlphaClassify", 1);
-	// SAFETY DEFAULT: floor to 1 (same H1 semantics as stateBaselineEnable).
-	if(c->texAlphaClassify < 1) c->texAlphaClassify = 1;
+	// Vanilla-fallback doctrine (2026-11-27): 0 means OFF — no parse floor.
+	// Default 1 keeps stock-enhanced behaviour; a user who zeroes the lever
+	// (or runs with all settings zeroed) gets the stock game path.
+	if(c->texAlphaClassify < 0) c->texAlphaClassify = 0;
 	if(c->texAlphaClassify > 1) c->texAlphaClassify = 1;
 	c->stateBaselineEnable = readint2(cfg, "Core", "stateBaselineEnable", 1);
-	// RESOLUTION of the H1 drift (docs/plans/2026-11-09-h1-residual-
-	// attribution.md §2): stateBaselineEnable is a SAFETY DEFAULT, not a
-	// user-opt-in lever, so it must be structurally ON through every path.
-	// The old clamp let an INI-authored 0 survive: skygfx.ini:199 carried 0,
-	// [Modes] active=None applied no profile (so no MV_I(...,1) landed at
-	// startup), and a later Xbox->GTAV mode switch reverted the field to the
-	// 0 base because GTAV owns only water knobs (modeManager.cpp kValuesGTAV
-	// has no stateBaselineEnable row) — re-creating the device-only depth
-	// drift every frame. Flooring here fixes it at the single authoritative
-	// point: the per-slot mode base snapshot (modeManager.cpp s_baseConfig)
-	// is taken from this parsed value, so every profile revert now restores
-	// ON too. (The debug menu still has a runtime toggle — the one remaining
-	// writer, and it resets to 1 on the next INI reload.)
-	if(c->stateBaselineEnable < 1) c->stateBaselineEnable = 1;
+	// Vanilla-fallback doctrine: 0 means OFF — no parse floor. Default 1.
+	if(c->stateBaselineEnable < 0) c->stateBaselineEnable = 0;
 	if(c->stateBaselineEnable > 1) c->stateBaselineEnable = 1;
 	// 2026-11-16 particle-alpha cleanup: default restored to 1 (a8aecb7
 	// flipped it to 0 under "run vanilla settings"; with the shields OFF the
@@ -759,14 +751,14 @@ readIniFile(const char *modulePath, Config *c)
 	if(c->shadowContractEnable < 0) c->shadowContractEnable = 0;
 	if(c->shadowContractEnable > 1) c->shadowContractEnable = 1;
 	c->defaultCbShaderHygiene = readint2(cfg, "Core", "defaultCbShaderHygiene", 1);
-	// SAFETY DEFAULT: floor to 1 (same H1 semantics as stateBaselineEnable).
-	if(c->defaultCbShaderHygiene < 1) c->defaultCbShaderHygiene = 1;
+	// Vanilla-fallback doctrine: 0 means OFF — no parse floor. Default 1.
+	if(c->defaultCbShaderHygiene < 0) c->defaultCbShaderHygiene = 0;
 	if(c->defaultCbShaderHygiene > 1) c->defaultCbShaderHygiene = 1;
 	// Ped opaque contract (myDefaultCallback): 1 = enforce blend-off,
 	// zwrite/ztest on, alpha test GREATEREQUAL@1 for the skin pipeline.
 	c->pedOpaqueContract = readint(cfg.get("SkyGfx", "pedOpaqueContract", ""), 1);
-	// SAFETY DEFAULT: floor to 1 (same H1 semantics as stateBaselineEnable).
-	if(c->pedOpaqueContract < 1) c->pedOpaqueContract = 1;
+	// Vanilla-fallback doctrine: 0 means OFF — no parse floor. Default 1.
+	if(c->pedOpaqueContract < 0) c->pedOpaqueContract = 0;
 	if(c->pedOpaqueContract > 1) c->pedOpaqueContract = 1;
 	// Ped A/B levers for the view-angle visibility report (myDefaultCallback
 	// isPedPipe branch). pedCullMode valid set: -1 preserve the game's raw
@@ -1562,12 +1554,12 @@ saveConfigTo(const char *path)
 		cfg.set("Modes", "active", modeIniAlias(s_activeModeIni));
 
 	// Pipe overrides (written by readIni from INI)
-	static const char* buildPipeNames[] = {"PS2", "Xbox", "GTAIV", "PBR"};
-	if(c->buildingPipe >= 0 && c->buildingPipe < 4)
+	static const char* buildPipeNames[] = {"PS2", "Xbox", "GTAIV", "PBR", "Vanilla"};
+	if(c->buildingPipe >= 0 && c->buildingPipe < 5)
 		cfg.set("SkyGfx", "buildingPipe", buildPipeNames[c->buildingPipe]);
 
-	static const char* vehPipeNames[] = {"PS2", "PC", "Xbox", "Specular", "Mobile", "Neo", "Leeds", "VCS", "Env", "GTAIV", "Modern"};
-	if(c->vehiclePipe >= 0 && c->vehiclePipe < 11)
+	static const char* vehPipeNames[] = {"PS2", "PC", "Xbox", "Specular", "Mobile", "Neo", "Leeds", "VCS", "Env", "GTAIV", "Modern", "Vanilla"};
+	if(c->vehiclePipe >= 0 && c->vehiclePipe < 12)
 		cfg.set("SkyGfx", "vehiclePipe", vehPipeNames[c->vehiclePipe]);
 
 	static const char* colorFilterNames[] = {"None", "PS2", "PC", "Mobile", "III", "VC", "VCS", "GTAIV", "Modern"};

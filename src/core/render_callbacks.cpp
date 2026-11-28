@@ -211,7 +211,7 @@ pedStage0Resync(RpAtomic *atomic, PedPipeState *pdsState)
 			resolved = TexDefsRemapToWorld(resolved);	// name-preserving world remap
 		}
 		if(!resolved)
-			resolved = gpWhiteTexture;
+			resolved = TexDefsMissSentinelWorld();	// A1: NULL from find-CB (miss) -> grey sentinel at draw (game keeps NULL)
 		// L1 rw cache — park-and-set (vehBindDiffuse3L stage-0 discipline).
 		if(resolved && resolved->raster){
 			RwRaster *whiteRas = (gpWhiteTexture && gpWhiteTexture->raster)

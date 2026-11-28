@@ -58,6 +58,25 @@
 //     name in `miss`/`missbeyond` -> looked up, sentinel bound; name in
 //     NO receipt while missbeyond counts sit at 0 -> find-CB never called
 //     for it (texture absent from TXD — case (a)).
+//   [texdefs] resolve '<name>' -> HIT ... / -> still-miss ...   (2026-11-27,
+//     RE-KEYED: the dbglog_throttle key moved "texdefs_resolve" ->
+//     "texdefs_drawres". RECEIPT BYTES UNCHANGED. The old key shared FNV-1a
+//     bucket 577 with postfx.cpp's per-frame "pf_ibl" and was starved to
+//     exactly ONE line across the whole on-disk log history (a single
+//     `still-miss`, zero HITs) — recovery was running but unobservable.
+//     Bucket 489 is unique across every in-tree throttle tag).
+//   [texdefs] miss-policy lever texDefsMissPolicy=%d -> ...      (2026-11-27,
+//     ADDITIVE, one-shot at TexDefsLoadDatabase: the N9 master lever finally
+//     wired — see TexDefsMissPolicyEnable below. Absent INI key == 1 ==
+//     unchanged behaviour).
+//   [BldTex] first-slab tex=%p kind=%d name='%s'                 (2026-11-27,
+//   [BldTex] slab-bind world=%u last='%s' ptr=%p                 ADDITIVE,
+//     one-shot + throttled key "bld_slabbind", bucket 125): buildingPipe's
+//     bldPolicyTexture names the FIRST WORLD-class policy sentinel that
+//     SURVIVED TexDefsResolveAtDraw — the (a)-vs-(b) slab discriminator. Its
+//     absence beside the existing `[BldTex-FIRST] tex='(null)'` line (the (b)
+//     observation point, buildingPipe_texDiag) is the class-(b) signature.
+//     Neither line is produced by a session where draw-time recovery works.
 //
 // --- cross-dict recovery policy (N8) ---
 // On a find miss the game's CTxdStore pool is searched via the game's own
@@ -165,7 +184,17 @@ IDirect3DTexture9 *TexDefsGetD3DTexture(RwTexture *tex, int *outWhy = NULL, uint
 //     TexDefsMissPolicyEnable if a probe class misbehaves.
 //
 // Policy controls + consumer handoff:
-void TexDefsMissPolicyEnable(bool on);       // 0/1 — future INI lever hook; default ON
+// N9 MISS-POLICY LEVER — REFACTORED 2026-11-27 (faithful-descendant doctrine):
+//   ON  (default 1): TexDefsFindCB returns NULL on a miss so the game keeps
+//        its OWN texture streaming / recovery path alive; our pipes apply the
+//        grey sentinel at DRAW time (bldPolicyTexture / vehPolicyTexture /
+//        SkinStage0Resync / render_callbacks). With a Vanilla pipe (no custom
+//        pipe attached) the game binds NULL exactly as before the policy
+//        existed — turning our additions OFF restores stock behaviour.
+//   OFF (0): legacy NULL return stands (game binds NULL -> white fallback).
+// Read once from TexDefsLoadDatabase with the config lane's own linb::ini
+// parser. Full note in texdefs.cpp above TexDefsReadMissPolicyLever.
+void TexDefsMissPolicyEnable(bool on);       // 0/1 — driven by texDefsMissPolicy; default ON
 bool TexDefsMissPolicyIsEnabled(void);
 RwTexture *TexDefsMissSentinelWorld(void);   // 1x1 opaque dim grey, lazily created
 RwTexture *TexDefsMissSentinelSprite(void);  // 1x1 transparent magenta

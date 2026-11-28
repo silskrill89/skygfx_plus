@@ -45,7 +45,9 @@
 #include <chrono>
 #include <string.h>
 #include <ctype.h>
+#include <stdlib.h>		// atoi — N9 miss-policy master lever
 #include <rpnormmap.h>
+#include "ini_parser.hpp"	// linb::ini — same parser/file the config lane reads
 
 // ---- RW ATOMIC PLUGIN SLOTS (moved from src/rw/extendedplg.cpp + src/rw/pipeplg.cpp) ----
 
@@ -455,7 +457,15 @@ TexDefsNoteNullTex(const char *name, void *ptr, const char *site)
 // dict is always logged for diagnosability. Genuinely-absent names still miss
 // (NULL -> consumer white fallback, unchanged).
 // ---------------------------------------------------------------------------
-#define TEXDEFS_MISS_CACHE_MAX 64
+// Bounded per-name pin/miss cache. SIZE RAISED 64 -> 192 (2026-11-27): 64
+// SATURATED in the 11:42 session — 32 `[texdefs] miss #N` names + 32
+// `missbeyond +N` names = 64 distinct misses, and past that TexDefsCacheUpsert
+// is a silent no-op, so a RECOVERED name can never pin: every later material
+// load of that texture re-enters the `ci < 0` first-miss branch and re-runs the
+// WHOLE CTxdStore pool sweep at find time (O(pool) per ask, on the DFF-load
+// path, during a streaming burst). 192 = 3x headroom over the observed working
+// set; still a fixed static array (no allocation, determinism preserved).
+#define TEXDEFS_MISS_CACHE_MAX 192
 
 struct TexDefsMissEntry {
 	char name[32];
@@ -598,6 +608,11 @@ TexDefsDictSweep(const char *name, int *outSlot, char *outDict,
 
 // Invalidate the cache (a new TXD was pushed/registered). Clears pinned
 // fallbacks AND known-miss records so names retry under the new dict set.
+// (2026-11-27 review: deliberately NOT narrowed to the known-miss records —
+// the wipe is what forces a re-SWEEP for a name already declared "no dict
+// holds it", so a pin surviving a registration would suppress exactly the
+// recovery this hook exists for. Saturation, not policy, was the defect; the
+// fix is the raised TEXDEFS_MISS_CACHE_MAX above.)
 static void
 TexDefsMissCacheReset(void)
 {
@@ -975,12 +990,22 @@ TexDefsResolveAtDraw(RwTexture *tex)
 		}
 		st.dictSlot = (hitSlot >= 0) ? hitSlot : -1;
 		st.tex = real;
-		if(dbglog_throttle("texdefs_resolve"))
+		// THROTTLE KEY (2026-11-27): "texdefs_resolve" -> "texdefs_drawres".
+		// RECEIPT BYTES UNCHANGED — only the dbglog_throttle key moved. The
+		// old key hashed (FNV-1a & 1023) to bucket 577, SHARED with
+		// postfx.cpp's "pf_ibl" (a per-frame IBL gate) which claims the
+		// bucket first every window: across the entire on-disk log history
+		// exactly ONE `[texdefs] resolve` line ever printed (a single
+		// `still-miss`, 2026-11-26 23:41:38) and ZERO `-> HIT` lines —
+		// recovery was effectively unobservable while it was running.
+		// Bucket 489 is unique across every in-tree throttle tag (checked
+		// file-written with the %TEMP% fnv_check_tags script).
+		if(dbglog_throttle("texdefs_drawres"))
 			dbglog("[texdefs] resolve '%s' -> HIT (dict='%s' slot=%d) — world texture restored",
 			       name, hitDict[0] ? hitDict : "?", st.dictSlot);
 		return real;
 	}
-	if(dbglog_throttle("texdefs_resolve"))
+	if(dbglog_throttle("texdefs_drawres"))
 		dbglog("[texdefs] resolve '%s' -> still-miss (keeping policy sentinel)", name);
 	return tex;
 }
@@ -1058,10 +1083,23 @@ TexDefsDeferAccept(const char *name, RwTexture *tex, int dictSlot, const char *d
 	if(TexDefsMissTextureKind(tex) != TEXDEFS_MISS_TEX_NONE)
 		return;		// a sentinel is not a recovery
 	auto it = s_resolveState.find(name);
-	if(it != s_resolveState.end()){
-		it->second.tex = tex;		// next draw binds the real texture
-		it->second.dictSlot = dictSlot;
+	if(it == s_resolveState.end()){
+		// 2026-11-27: a lifecycle HIT routinely lands BEFORE the first draw
+		// of that material (the owning TXD loads during streaming, the mesh
+		// becomes visible later). The old code only wrote the state when the
+		// name was ALREADY there, so the HIT was carried by the find-time
+		// pin alone and the next draw still paid a full retry before it could
+		// use it. Pre-create the entry so the very next draw takes the
+		// pin/valid hot path. Bounded by construction: one entry per distinct
+		// RECOVERED name (a name that never recovers never reaches here).
+		TexDefsResolveState fresh;
+		fresh.tex = NULL;
+		fresh.dictSlot = -1;
+		fresh.lastTry = 0;
+		it = s_resolveState.insert(std::make_pair(std::string(name), fresh)).first;
 	}
+	it->second.tex = tex;		// next draw binds the real texture
+	it->second.dictSlot = dictSlot;
 	TexDefsCacheUpsert(name, dictSlot);	// next find-time ask hits the pin
 	if(dbglog_throttle("texdefs_deferretry"))
 		dbglog("[texdefs] defer-retry '%s' -> HIT via dict '%s'",
@@ -1075,7 +1113,11 @@ TexDefsDeferAccept(const char *name, RwTexture *tex, int dictSlot, const char *d
 static void
 TexDefsDeferRetry(int slot)
 {
-	if(s_missLogged <= 0 && s_resolveState.empty())
+	// 2026-11-27: the guard used to test only `s_missLogged` + the resolve
+	// state, so a session whose 32-name `[texdefs] miss #N` cap never filled
+	// but whose beyond-cap table DID (the `missbeyond +N` names) would early
+	// out and never probe them.
+	if(s_missLogged <= 0 && s_missBeyondDistinct <= 0 && s_resolveState.empty())
 		return;			// nothing pending (boot / fully recovered)
 	uint32 objects; uint8 *byteMap; int size;
 	if(!TexDefsPoolInfo(&objects, &byteMap, &size))
@@ -1224,29 +1266,31 @@ TexDefsFindCB(char *name)
 			}
 		}
 	}
-	// N9 FAIL-CLOSED POLICY: tex is still NULL here for a genuinely absent
-	// name (pin/variant/sweep all returned nothing) — AND for an UNNAMED
-	// lookup (name == NULL / ""), which the N6/N8 block above skips
-	// entirely (no name to count, no variant to try, no sweep to run) and
-	// which therefore used to be the one path that could still hand a raw
-	// NULL to the game's draw. NEVER hand NULL to the game's draw: bind the
-	// per-class 1x1 sentinel and return EARLY — the sentinel must not enter
-	// the TexInfo/NmPair attach block below (no metadata, no pairing probe
-	// on it).
-	// Creation failure degrades to the legacy NULL return: the consumer
-	// falls back white exactly as before the policy (same failure surface,
-	// no new behavior). The policy is off-switchable
+	// N9 POLICY (2026-11-27 refactor, per hard requirement "zeroed settings =
+	// vanilla"): the game receives NULL on a miss so its OWN texture
+	// streaming / recovery can still fire — the grey sentinel is applied
+	// ONLY at draw time by our pipes (bldPolicyTexture / vehPolicyTexture /
+	// SkinStage0Resync / render_callbacks), never stored in material->texture.
+	// This restores the game's stock recovery path: with a Vanilla pipe (no
+	// custom pipe attached) the game binds NULL exactly as before the policy
+	// existed, and our pipes still show the grey sentinel as the "missing
+	// texture" signal. The policy is off-switchable
 	// (TexDefsMissPolicyEnable(false)) — then the legacy NULL return stands.
 	if(!tex && s_texDefsMissPolicyOn){
 		TexDefsMissClass cls = TexDefsMissClassify();
+		// Draw-time sentinel is applied by our pipes (bldPolicyTexture /
+		// vehPolicyTexture / SkinStage0Resync / render_callbacks), NOT by the
+		// game's material->texture — so the game receives NULL and keeps its
+		// own texture streaming / recovery path alive (faithful-descendant
+		// doctrine: zeroed settings = vanilla, features added on top).
+		// The sentinel pointer is only needed for the miss-policy receipt's
+		// action field; use the class singleton (no clone allocated) since
+		// nothing is returned.
 		RwTexture *sent = (cls == TEXDEFS_MISS_WORLD)
-		                  ? TexDefsMissSentinelWorld()
-		                  : TexDefsMissSentinelSprite();
+		                  ? s_missSentinelGrey
+		                  : s_missSentinelClear;
 		TexDefsNoteMissPolicy(name ? name : "", cls, sent);
-		if(sent)
-			// Per-name clone (2026-11-16): keep the REQUESTED name on the
-			// returned sentinel so TexDefsResolveAtDraw can retry later.
-			return TexDefsNamedSentinel(sent, name);
+		return NULL;
 	}
 	if(tex){
 		TexInfo *info = findTexInfo(name);
@@ -1612,9 +1656,64 @@ readTexDbTxt(void)
 	fclose(f);
 }
 
+// ---------------------------------------------------------------------------
+// N9 MASTER LEVER (2026-11-27): `texDefsMissPolicy` in skygfx.ini, 0/1,
+// default 1 (absent key == today's behaviour, a plain skygfx.ini is
+// byte-identical to the pre-lever build).
+//
+// WHY THIS EXISTS: TexDefsMissPolicyEnable() has been public since
+// 2026-11-09 with ZERO CALLERS — the fail-closed miss policy was therefore
+// unconditional and no amount of "turn everything off" could reach the
+// pre-N9 behaviour. This wires the existing lever, reading the SAME file with
+// the SAME parser (linb::ini) the config lane uses, so there is one INI
+// grammar in the tree. Probed from InitialiseGame_hook BEFORE the original
+// CGame::Initialise, so it is in force before the first world DFF can miss.
+// PATH: the legacy `skygfx.ini` (config slot 0) — the numbered `skygfxN.ini`
+// slots are not probed from here (IniPathForSlot lives in config.cpp, out of
+// this lane's write scope), so author the key in the base INI.
+//
+// OFF PATH (verified in TexDefsFindCB): the `if(!tex && s_texDefsMissPolicyOn)`
+// block is skipped, the lookup falls through to the legacy NULL return, the
+// `nulltex site=findcb` receipt names it (that line IS the proof the off-path
+// ran), and every consumer keeps its pre-N9 fallback — buildingPipe's
+// bldPolicyTexture(NULL) -> gpWhiteTexture, particles skip, vehiclePipe maps
+// to the world action. No sentinel is ever created or bound.
+//
+// SCOPE OF "OFF": it restores the LEGACY CONSUMER FALLBACK, not the missing
+// TEXTURES. The root defect (the game's dict->parent link is broken in this
+// install, so the full-detail TXD for an LOD dictionary never resolves) is
+// untouched by the policy either way — OFF trades the dim-grey 1x1 slab for
+// the pre-N9 white one. Recovery (TexDefsResolveAtDraw / TexDefsDeferRetry)
+// is independent of the lever and keeps running. Reported honestly in the
+// receipt so nobody reads OFF as "textures restored".
+// ---------------------------------------------------------------------------
+static void
+TexDefsReadMissPolicyLever(void)
+{
+	char *path = getpath("skygfx.ini");
+	if(path == nil)
+		return;
+	linb::ini cfg;
+	if(!cfg.load_file(path))
+		return;
+	std::string v = cfg.get("SkyGfx", "texDefsMissPolicy", "");
+	if(v.empty())
+		return;	// absent -> default ON (behaviour unchanged)
+	int on = atoi(v.c_str());
+	TexDefsMissPolicyEnable(on != 0);
+	dbglog("[texdefs] miss-policy lever texDefsMissPolicy=%d -> %s", on,
+	       on ? "ON (fail-closed: missing name binds the 1x1 sentinel)"
+	          : "OFF (legacy: NULL -> gpWhiteTexture; NOT a texture restore)");
+}
+
 void
 TexDefsLoadDatabase(void)
 {
+	// Master lever FIRST: it must be in force before the very first DFF load
+	// can miss, and it must run even if the Mobile_details.txd guard below
+	// aborts the rest of this function on a broken install.
+	TexDefsReadMissPolicyLever();
+
 	char *path = getpath("models\\Mobile_details.txd");
 	if(path == nil)
 		return;
