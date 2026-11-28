@@ -339,7 +339,7 @@ crashSpecPoolSkipSafe(DWORD site, DWORD esi, DWORD *outWhy, DWORD *outPool)
 //   ret-to-0x80875D (_rwPluginRegistryApply).  Stack-neutral vs the dtor.
 static const DWORD kMatFxFault    = 0x810CB2; // mov eax,[esi+0x10]
 static const DWORD kMatFxHelperLo = 0x810CA0; // helper entry (extended guard)
-static const DWORD kMatFxHelperHi = 0x810D20; // helper end (padding) — [data+0x14] load
+static const DWORD kMatFxHelperHi = 0x810D20; // helper end (padding)
 static const DWORD kMatFxCallerRet= 0x810C78; // ret into dtor 0x810C60 (call at 0x810C73)
 static const DWORD kMatFxRecover  = 0x810C9B; // mov eax,edi; pop edi; pop esi; ret
 static const DWORD kMatFxFaultByte= 0x4810468B; // 8B 46 10 48 @ 0x810CB2
