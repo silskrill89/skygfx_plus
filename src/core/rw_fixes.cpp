@@ -922,10 +922,6 @@ SpriteFlushIndexedDraw_hook(int primType, void *verts, int nverts, void *indices
 		// INI spriteFlushShield (default 1 = ON): 0 = no capture / force /
 		// close at the flush boundary at all (the vanilla batch state is
 		// drawn untouched — bisect lever for the producer-gated force).
-		// W2-1: ONE family-identity predicate for both lever states. Hoisted so
-	// lever-ON uses the same gate as lever-OFF (family || window, screenblit
-	// excluded). See docs/plans/2026-11-27-w2-specs.md SPEC 9 W2-1.
-	SpriteBlendContract gate = spriteBlendContract();
 	if(spriteBatch > 0 && d3d9device && (!config || config->spriteFlushShield)){
 			if(dbglog_once("sprite_flush_force")){
 				int blend = -1, src = -1, dst = -1, zw = -1;
@@ -939,9 +935,17 @@ SpriteFlushIndexedDraw_hook(int primType, void *verts, int nverts, void *indices
 				dbglog("[probe] sprite_flush force=1 pre blend=%d src=%d dst=%d zw=%d",
 					blend, src, dst, zw);
 			}
-			// W2-1: ONE family-identity predicate for both lever states.
-			// gate.pass is (family || window) && !screenblit.
-			if(gate.pass){
+			// Lever-ON (spriteFlushShield=1, the default): force the additive
+			// ONE/ONE pair on EVERY non-empty batch at this shared flush — the
+			// pre-W2-1 behaviour. 0x70CF20 is the carrier for corona/point-light/
+			// cloud glow AND the SilentPatch-deferred glow/particle/smoke
+			// batches, whose raster is NOT one of the four corona statics and
+			// whose producer window has already closed. W2-1 gated this on
+			// gate.pass=(family||window), which let those deferred batches fall
+			// through to fail-open under world normal-alpha -> grey squares.
+			// Font/HUD never flush through 0x70CF20 (0x7273D0/0x701FE9), so the
+			// unconditional force cannot wash out glyphs.
+			{
 				// Capture the PRE-force eleven-state block on every layer BEFORE
 				// the first shield write; spriteFlushShieldClose replays it
 				// immediately after the draw.
@@ -966,10 +970,6 @@ SpriteFlushIndexedDraw_hook(int primType, void *verts, int nverts, void *indices
 					dbglog(g_inCloudsRender
 						? "[CloudShield] flush batch=clouds forced ONE/ONE"
 						: "[CloudShield] flush batch=sprites forced ONE/ONE");
-			}else{
-				// Non-glow batch: delegate to the SHARED in-fence arm
-				// (same fail-closed/skip decision as lever-OFF).
-				glowContractPending = true;
 			}
 		}else if(spriteBatch > 0 && d3d9device){
 			// [PtLightGlow] UNSHIELDED-FLUSH diagnostic (03:01-run black
