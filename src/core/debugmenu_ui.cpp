@@ -195,7 +195,12 @@ static bool ImGuiDrawSurfaceValid(IDirect3DDevice9 *device)
 	ImFontAtlas *atlas = io.Fonts;
 	ImTextureData *tex = (atlas != NULL) ? atlas->TexData : NULL;
 	if(!atlas || atlas->Fonts.Size == 0 || !tex) return false;
-	if(tex->Status == ImTextureStatus_Destroyed) return false;
+	// Do NOT gate on ImTextureStatus_Destroyed / WantCreate: those are the
+	// NORMAL first-frame states. The DX9 backend builds the atlas texture
+	// lazily inside RenderDrawData — skipping until Status==OK creates a
+	// chicken-and-egg deadlock (menu never initialises, Ctrl+4 appears dead).
+	// Device-lost above is the real teardown signal; the font-atlas tex was
+	// rebuilt explicitly in UI_ImGuiCreateDeviceObjects() on Reset.
 	return true;
 }
 

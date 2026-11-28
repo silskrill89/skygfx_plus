@@ -466,12 +466,16 @@ crashMatFx2SkipSafe(DWORD site, DWORD esp, DWORD ebp, DWORD accessType, DWORD fa
 		   *(const volatile DWORD *)(uintptr_t)kMatFx2Fault == kMatFx2FaultB &&
 		   *(const volatile DWORD *)(uintptr_t)kMatFx2Recover == kMatFx2RecovB)
 		{
-			volatile DWORD probe = *(const volatile DWORD *)(uintptr_t)faultAddr;
-			(void)probe;
-			return 0;   // target readable: a different WRITE fault -> propagate
+			// The WRITE already faulted at this exact address — the page may
+			// still be READABLE (freed heap blocks stay committed), so a read
+			// probe returns success and wrongly declines the guard. All 6
+			// conjuncts above positively identify the freed MatFX destructor:
+			// accept directly. Never-swallow is preserved: any fault while
+			// READING A CONJUNCT lands in the __except below and propagates.
+			return 1;
 		}
 	} __except(EXCEPTION_EXECUTE_HANDLER) {
-		return 1;       // target unmapped: freed MatFX data confirmed
+		return 0;       // conjunct read faulted -> not our signature -> propagate
 	}
 	return 0;
 }
