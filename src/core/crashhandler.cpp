@@ -344,6 +344,17 @@ static const DWORD kMatFxCallerRet= 0x810C78; // ret into dtor 0x810C60 (call at
 static const DWORD kMatFxRecover  = 0x810C9B; // mov eax,edi; pop edi; pop esi; ret
 static const DWORD kMatFxFaultByte= 0x4810468B; // 8B 46 10 48 @ 0x810CB2
 static const DWORD kMatFxRecovByte= 0x5E5FC78B; // 8B C7 5F 5E @ 0x810C9B
+// FIX D (2026-11-28): Rw plugin-destructor NULL-container UAF at shutdown.
+// 0x801D50 = push ebx/ebp/esi/edi; mov edi,[esp+0x14]; the arg (freed
+// CustomSpecMap data) is NULL -> 0x801D58 `mov esi,[edi+0x10]` faults at 0x10.
+// Called from the MatFX dtor at 0x810C8C. NULL-return epilogue at 0x801D83
+// (pop edi;pop esi;pop ebp;xor eax,eax;pop ebx;ret) is stack-neutral and
+// returns NULL — the fail-open result for a missing material-data lookup.
+static const DWORD kUafNullFault   = 0x801D58;
+static const DWORD kUafNullCaller  = 0x810C8C;
+static const DWORD kUafNullRecover = 0x801D83;
+static const DWORD kUafNullFaultB  = 0x8B10778B; // 8B 77 10 8B @ fault
+static const DWORD kUafNullRecovB  = 0x335D5E5F; // 5F 5E 5D 33 @ recover
 // Read-only probe targets; addresses live in this declaration layer per the
 // HARD RULE (install/forensics-layer exemption documented in crashhandler.h).
 
@@ -561,6 +572,7 @@ diag_crashHandler(EXCEPTION_POINTERS *ep)
 			ep->ContextRecord->Eip = kSpecCbEpilogue;   // shared CB epilogue
 			ep->ContextRecord->Eax = ep->ContextRecord->Ebx;
 			return EXCEPTION_CONTINUE_EXECUTION;
+
 		}
 	}
 
@@ -573,6 +585,29 @@ diag_crashHandler(EXCEPTION_POINTERS *ep)
 		DWORD mfWhy = 0, mfMaterial = 0;
 		DWORD accessType = ep->ExceptionRecord->ExceptionInformation[0];
 		DWORD faultAddr  = ep->ExceptionRecord->ExceptionInformation[1];
+	// ---- FIX D: Rw plugin-destructor NULL-container UAF (shutdown) ----
+	if(code == 0xC0000005 && accessType == 0 &&
+	   (DWORD)(uintptr_t)ep->ExceptionRecord->ExceptionAddress == kUafNullFault &&
+	   faultAddr == 0x10u)
+	{
+		bool verified = false;
+		__try {
+			verified = *(const volatile DWORD *)(uintptr_t)kUafNullFault == kUafNullFaultB &&
+			           *(const volatile DWORD *)(uintptr_t)kUafNullRecover == kUafNullRecovB &&
+			           *(const volatile DWORD *)(uintptr_t)(ep->ContextRecord->Esp + 0x10) == kUafNullCaller;
+		} __except(EXCEPTION_EXECUTE_HANDLER){ verified = false; }
+		if(verified){
+			if(InterlockedCompareExchange(&s_vehReceiptBusy, 1, 0) == 0){
+				if(dbglog_throttle("uaf_null_skip"))
+					dbglog("[uaf_null_skip] Rw plugin NULL container: eip=0x%08X fault=0x%08X -> NULL return at 0x%08X",
+					       kUafNullFault, faultAddr, kUafNullRecover);
+				InterlockedExchange(&s_vehReceiptBusy, 0);
+			}
+			ep->ContextRecord->Eax = 0;
+			ep->ContextRecord->Eip = kUafNullRecover;
+			return EXCEPTION_CONTINUE_EXECUTION;
+		}
+	}
 		if(crashMatFxSkipSafe(
 			(DWORD)(uintptr_t)ep->ExceptionRecord->ExceptionAddress,
 			ep->ContextRecord->Esp, ep->ContextRecord->Ebp,
