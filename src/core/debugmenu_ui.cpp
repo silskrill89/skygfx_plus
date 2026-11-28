@@ -3489,6 +3489,8 @@ ClampMenuRanges(void)
 		{ &config->texAlphaClassify, "texAlphaClassify" },
 		{ &config->stateBaselineEnable, "stateBaselineEnable" },
 		{ &config->defaultCbShaderHygiene, "defaultCbShaderHygiene" },
+		{ &config->pedOpaqueContract, "pedOpaqueContract" },
+		{ &config->spriteStateShield, "spriteStateShield" },
 		{ &config->pipeChainReflEnable, "pipeChainReflEnable" },
 	};
 	for(size_t i = 0; i < sizeof(stateBits)/sizeof(stateBits[0]); i++){

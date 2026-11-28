@@ -1386,12 +1386,7 @@ copyLiveField(const ModeValue *v, Config *base, const Config *live)
 static bool
 isSafetyLeverField(const ModeValue *v)
 {
-	return v && v->iField && (
-		v->iField == &Config::stateBaselineEnable ||
-		v->iField == &Config::defaultCbShaderHygiene ||
-		v->iField == &Config::spriteStateShield ||
-		v->iField == &Config::pedOpaqueContract ||
-		v->iField == &Config::texAlphaClassify);
+	return v && v->iField && ConfigIsSafetyLever(v->iField);
 }
 
 // Fold the user's live values into the slot base right before a switch, so the

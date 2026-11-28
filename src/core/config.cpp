@@ -145,6 +145,42 @@ int explicitBuildingPipe_tmp;
 // saveConfigTo can round-trip it instead of dropping the key.
 static int g_qualityPreset = 3;
 
+// ---------------------------------------------------------------------------
+// SAFETY-LEVER CONTRACT � single source of truth (2026-11-27).
+// A safety lever is a state-integrity default, NOT a user-opt-in look knob.
+// Parse floors the FLOORED ones to 1; every owning mode profile pins all
+// five to 1; a live menu toggle is session-scoped and is never folded into
+// the per-slot mode base (modeManager adoptLiveEdits), and it returns to 1
+// on the next INI reload. Membership: texAlphaClassify, stateBaselineEnable,
+// defaultCbShaderHygiene, pedOpaqueContract (floored), spriteStateShield
+// (default-1, not floored � toggleable). depthHookEnable/spriteFlushShield/
+// effectsAlphaBlock are DEFAULT-1, NOT FLOORED (doc markers only).
+// ---------------------------------------------------------------------------
+namespace {
+struct SafetyLever { int Config::*field; bool floored; };
+static const SafetyLever kSafetyLevers[] = {
+	{ &Config::texAlphaClassify,       true  },
+	{ &Config::stateBaselineEnable,    true  },
+	{ &Config::defaultCbShaderHygiene, true  },
+	{ &Config::pedOpaqueContract,      true  },
+	{ &Config::spriteStateShield,      false },
+};
+}
+bool ConfigIsSafetyLever(int Config::*f){
+	for(auto &k : kSafetyLevers) if(k.field == f) return true;
+	return false;
+}
+int ConfigSafetyLeverParse(int Config::*f, int raw){
+	for(auto &k : kSafetyLevers){
+		if(k.field != f) continue;
+		if(k.floored) return 1;
+		if(raw < 0) return 0;
+		if(raw > 1) return 1;
+		return raw;
+	}
+	return raw;
+}
+
 // Parse one INI file into `c`. Shared by readIni (skygfx.ini / skygfxN.ini)
 // and loadConfigFile (named configs under configs/).
 // Missing-file semantics unchanged: writes the full default INI at that path.
@@ -694,24 +730,18 @@ readIniFile(const char *modulePath, Config *c)
 	//                           not gated). Default 1 (2026-11-16 particle-
 	//                           alpha cleanup) but NOT floored — toggleable
 	//                           lever, unlike the floored members above.
-	c->texAlphaClassify = readint2(cfg, "Effects", "texAlphaClassify", 1);
+	c->texAlphaClassify = ConfigSafetyLeverParse(&Config::texAlphaClassify, readint2(cfg, "Effects", "texAlphaClassify", 1));
 	// Vanilla-fallback doctrine (2026-11-27): 0 means OFF — no parse floor.
 	// Default 1 keeps stock-enhanced behaviour; a user who zeroes the lever
 	// (or runs with all settings zeroed) gets the stock game path.
-	if(c->texAlphaClassify < 0) c->texAlphaClassify = 0;
-	if(c->texAlphaClassify > 1) c->texAlphaClassify = 1;
 	c->stateBaselineEnable = readint2(cfg, "Core", "stateBaselineEnable", 1);
 	// Vanilla-fallback doctrine: 0 means OFF — no parse floor. Default 1.
-	if(c->stateBaselineEnable < 0) c->stateBaselineEnable = 0;
-	if(c->stateBaselineEnable > 1) c->stateBaselineEnable = 1;
 	// 2026-11-16 particle-alpha cleanup: default restored to 1 (a8aecb7
 	// flipped it to 0 under "run vanilla settings"; with the shields OFF the
 	// black-RGB/opaque-alpha glow textures rasterise as opaque boxes).
 	// Toggleable lever, deliberately NOT floored (every fix keeps its own
 	// toggle): 0 = skip the four-state normalisation (AAP parity).
-	c->spriteStateShield = readint(cfg.get("SkyGfx", "spriteStateShield", ""), 1);
-	if(c->spriteStateShield < 0) c->spriteStateShield = 0;
-	if(c->spriteStateShield > 1) c->spriteStateShield = 1;
+	c->spriteStateShield = ConfigSafetyLeverParse(&Config::spriteStateShield, readint(cfg.get("SkyGfx", "spriteStateShield", ""), 1));
 
 	// m0970 bisect lane — render-state systems that were compiled ON with no
 	// gate at all. Default 1 = the previous always-on behaviour, so nothing
@@ -752,14 +782,10 @@ readIniFile(const char *modulePath, Config *c)
 	if(c->shadowContractEnable > 1) c->shadowContractEnable = 1;
 	c->defaultCbShaderHygiene = readint2(cfg, "Core", "defaultCbShaderHygiene", 1);
 	// Vanilla-fallback doctrine: 0 means OFF — no parse floor. Default 1.
-	if(c->defaultCbShaderHygiene < 0) c->defaultCbShaderHygiene = 0;
-	if(c->defaultCbShaderHygiene > 1) c->defaultCbShaderHygiene = 1;
 	// Ped opaque contract (myDefaultCallback): 1 = enforce blend-off,
 	// zwrite/ztest on, alpha test GREATEREQUAL@1 for the skin pipeline.
 	c->pedOpaqueContract = readint(cfg.get("SkyGfx", "pedOpaqueContract", ""), 1);
 	// Vanilla-fallback doctrine: 0 means OFF — no parse floor. Default 1.
-	if(c->pedOpaqueContract < 0) c->pedOpaqueContract = 0;
-	if(c->pedOpaqueContract > 1) c->pedOpaqueContract = 1;
 	// Ped A/B levers for the view-angle visibility report (myDefaultCallback
 	// isPedPipe branch). pedCullMode valid set: -1 preserve the game's raw
 	// saved cull, 1 CULLNONE, 2 CULLBACK, 3 CULLFRONT; anything else -> -1.

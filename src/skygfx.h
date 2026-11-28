@@ -1013,6 +1013,15 @@ struct Config {
 static_assert(offsetof(Config, version) == 0, "pinned: asm reads in main.cpp");
 static_assert(offsetof(Config, fixGrassPlacement) == 8, "pinned: fixSeed asm in main.cpp");
 static_assert(offsetof(Config, doglare) == 12, "pinned: doglare asm in main.cpp");
+// SAFETY-LEVER CONTRACT (single source of truth, defined in config.cpp):
+//   A safety lever is a state-integrity default, NOT a user-opt-in look knob.
+//   Parse floors the FLOORED ones to 1; every owning mode profile pins all
+//   five to 1; a live menu toggle is session-scoped and is never folded into
+//   the per-slot mode base (modeManager adoptLiveEdits), and it returns to 1
+//   on the next INI reload.
+bool      ConfigIsSafetyLever(int Config::*field);
+int       ConfigSafetyLeverParse(int Config::*field, int raw);
+const int *ConfigSafetyLeverPtr(void);
 extern int numConfigs;
 extern int currentConfig;
 extern Config *config, configs[10];
