@@ -1,7 +1,8 @@
-// fire.cpp - SOFT PARTICLE FAMILY: fire / flames / sparks / muzzle flash
-// Owns: kFireVetoTex + IsFirePrim (byte-identical from neopipe.cpp).
-// The sphere/sphere_CJ entries are the muzzle-flash/camflash prims;
-// waterspark_16 is the spark family - both are deliberately part of flames.
+// fire.cpp - SOFT PARTICLE FAMILY: fire / flames / sparks
+// Owns: kFireVetoTex + IsFirePrim (from neopipe.cpp). Muzzle flash/camflash
+// texture policy (sphere/sphere_CJ) lives in muzzleflash.cpp and is consulted
+// here so the fire veto stays byte-behavior-identical. waterspark_16 is the
+// spark family - deliberately part of flames.
 // 
 #include "skygfx.h"
 #include "neopipe.h"
@@ -20,14 +21,12 @@
 #include <injector\utility.hpp>
 
 bool IsFxRenderPrim(void *prim);
+bool IsMuzzleFlashTexture(const char *name);
 
 namespace {
 const char *const kFireVetoTex[] = {
-	"sphere",		// gunflash/camflash/Flame/flame/molotov_flame/
-				// petrolcan/shootlight/tank_fire/extinguisher/
-				// prt_spark/prt_spark_2
-	"sphere_CJ",		// fire/fire_bike/fire_car/fire_large/fire_med/
-				// flamethrower/jetpack/jetthrust/nitro
+	// sphere/sphere_CJ (muzzle flash/camflash) moved to muzzleflash.cpp;
+	// IsFirePrim consults IsMuzzleFlashTexture first - identical veto set.
 	"wjet6",		// fire flames
 	"fireball6",		// explosion_* fireballs
 	"bullethitsmoke",	// fire_bike/fire_car/flamethrower smoke prims,
@@ -49,6 +48,8 @@ bool IsFirePrim(BYTE *prim)
 	const char *name = tex ? tex->name : NULL;
 	if(!name || !name[0])
 		return false;
+	if(IsMuzzleFlashTexture(name))
+		return true;
 	for(unsigned t = 0; t < sizeof(kFireVetoTex)/sizeof(kFireVetoTex[0]); t++)
 		if(strcmp(name, kFireVetoTex[t]) == 0)
 			return true;

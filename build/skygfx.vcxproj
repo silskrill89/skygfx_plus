@@ -235,6 +235,7 @@
     <ClCompile Include="..\src\render\smoke.cpp" />
     <ClCompile Include="..\src\render\fire.cpp" />
     <ClCompile Include="..\src\render\watersplash.cpp" />
+    <ClCompile Include="..\src\render\muzzleflash.cpp" />
     <!-- texdefs: unified texdb.txt metadata + <diffuse>_n pairing + DK22Pac
          external normal-map lane. Unique basename — no ObjectFileName override,
          no LNK4042 duplicate-basename risk. -->
