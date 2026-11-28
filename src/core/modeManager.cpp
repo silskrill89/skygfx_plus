@@ -1683,8 +1683,8 @@ ApplyMode(ModeId id)
 
 	resetValues();
 	// Xbox mode: force SMAA + SSAO off (the mode profile sets them, but
-	// something re-enables them — the log showed smaaEnable=1 and
-	// ssaoEnable=1 after engage). Both cause black-screen redraws over
+	// something re-enabled them (2026-11 observation, re-enabler never identified). — the log showed smaaEnable=1 and
+	// Both cause black-screen redraws over
 	// the frame in Xbox mode.
 	if(id == MODE_XBOX){
 		config->smaaEnable = 0;
