@@ -218,7 +218,6 @@ int TexDefsMissTextureKind(const RwTexture *tex);   // TEXDEFS_MISS_TEX_* — ne
 // texture when it now resolves, otherwise `tex` unchanged (rate-limited to
 // one full retry per name per second; real textures early-out untouched).
 RwTexture *TexDefsResolveAtDraw(RwTexture *tex);
-RwTexture *TexDefsResolveNullDraw(void);	// A2: walk missed-name log, return first now-resolved texture (or NULL)
 // 2026-11-17 FIX on that path: the CTxdStore sweep now runs as a RECOVERY
 // source for a still-missing name (it used to be reachable only after a
 // game-find/variant HIT, to pin that hit — so a name whose parent TXD

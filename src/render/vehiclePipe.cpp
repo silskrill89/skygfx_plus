@@ -860,12 +860,8 @@ static void vehiclePipe_fxAdditiveBlend(RxD3D9ResEntryHeader *header,
 static RwTexture *
 vehPolicyTexture(RwTexture *tex)
 {
-	if(!tex){
-		RwTexture *recovered = TexDefsResolveNullDraw();	// A2: late-loaded TXD recovery
-		if(recovered)
-			return recovered;
+	if(!tex)
 		return TexDefsMissSentinelWorld();	// A1: NULL from find-CB (miss) -> grey sentinel at draw (game keeps NULL)
-	}
 	// Draw-time resolution (2026-11-16): policy sentinel -> real texture if
 	// its TXD has loaded since the load-time miss (twin bldPolicyTexture).
 	tex = TexDefsResolveAtDraw(tex);

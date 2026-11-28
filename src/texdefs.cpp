@@ -868,37 +868,6 @@ TexDefsTryNameVariant(const char *name)
 // the requested name and makes the remap unresolvable. Remap through a
 // per-name world clone instead; real/world textures pass through as-is.
 // ---------------------------------------------------------------------------
-// ---------------------------------------------------------------------------
-// NULL-DRAW RECOVERY (2026-11-27, A2 partial). When the find-CB returns NULL
-// on a miss (A1 doctrine: game keeps NULL for streaming), material->texture
-// is NULL and the name is gone from the draw path. Walk the missed-name log
-// (s_missNames) once per call and return the first name that now resolves
-// (parent TXD loaded since the miss, or a late registration). Throttled
-// internally via TexDefsResolveAtDraw's 1 s retry; returns NULL if nothing
-// resolves yet (caller applies the grey sentinel for visibility).
-// ---------------------------------------------------------------------------
-RwTexture *
-TexDefsResolveNullDraw(void)
-{
-	// Walk the missed-name log (s_missNames) and return the first name that
-	// now resolves via the CTxdStore pool sweep. Throttled per-name by the
-	// existing 1 s retry so a miss-heavy frame cannot spam gameGetTexture.
-	// Returns NULL if nothing resolves (caller applies the grey sentinel).
-	if(s_missLogged == 0)
-		return NULL;
-	uint32 objects; uint8 *byteMap; int size;
-	if(!TexDefsPoolInfo(&objects, &byteMap, &size))
-		return NULL;
-	for(int i = 0; i < s_missLogged; i++){
-		int hitSlot = -1; char hitDict[32];
-		RwTexture *real = TexDefsDictSweep(s_missNames[i], &hitSlot, hitDict,
-		                                   objects, byteMap, size);
-		if(real && TexDefsMissTextureKind(real) == TEXDEFS_MISS_TEX_NONE)
-			return real;
-	}
-	return NULL;
-}
-
 RwTexture*
 TexDefsRemapToWorld(RwTexture *tex)
 {
