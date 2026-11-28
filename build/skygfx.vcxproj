@@ -230,6 +230,7 @@
     <!-- neopipe: merged neo + neoCarpipe + neoWaterdrops. Unique basename —
          no ObjectFileName override, no LNK4042 duplicate-basename risk. -->
     <ClCompile Include="..\src\render\neopipe.cpp" />
+    <ClCompile Include="..\src\render\clouds.cpp" />
     <ClCompile Include="..\src\render\softparticles.cpp" />
     <ClCompile Include="..\src\render\smoke.cpp" />
     <ClCompile Include="..\src\render\fire.cpp" />
