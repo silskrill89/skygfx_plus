@@ -560,6 +560,9 @@ static const ModeValue kValuesGTAIV[] = {
 	MV_F(sunShaftsDecay, 0.97f),	// IV probe — audit §5.2 P1
 	MV_I(godRaysEnable, 0),		// legacy DrawGodRays pinned off — SunShafts is the IV pass
 	MV_I(heightFogEnable, 1),
+	MV_F(heightFogDensity, 0.002f),		// Spec 12 sec2: own density (gate alone is inert)
+	MV_F(heightFogHeightFalloff, 0.8f),
+	MV_F(heightFogTimecycleScale, 1.0f),
 
 	// PostFX: lens finishing
 	MV_I(grainEnable, 1),		// legacy grain gate (Grain_PS2) — keep SA grain available
@@ -569,10 +572,12 @@ static const ModeValue kValuesGTAIV[] = {
 					// standalone pass off so the two never double up
 	MV_I(motionBlurEnable, 1),
 	MV_F(motionBlurStrength, 0.35f),	// IV probe — Burnout-style radial MB, mid strength
+	MV_F(motionBlurRadial, 0.2f),		// Spec 12 sec2: own radial (was riding deployed 0.965)
 
 	// PostFX: ambient occlusion + AA (SMAA wins when FXAA is also on)
 	MV_I(ssaoEnable, 1),
 	MV_F(ssaoRadius, 1.0f),		// IV probe — audit §5.2 P1
+	MV_I(pipeChainEnable, 0),	// Spec 12 sec2: IV does not own SSR
 	MV_F(ssaoPower, 2.0f),		// IV probe — audit §5.2 P1
 	MV_I(smaaEnable, 1),
 	MV_I(fxaaEnable, 0),		// SMAA covers the AA slot; FXAA stays the cheap fallback
