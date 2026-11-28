@@ -2786,6 +2786,26 @@ CPostEffects::ColourFilter_switch(RwRGBA rgb1, RwRGBA rgb2)
 		dbglog("[PF] skip chars_drawSSSBlur: front buffer sync failed this frame");
 	DumpCurrentRT("cf_m_sss");
 
+	// IV output clamp (Spec 12 sec4): GTAIV filter is a pure bypass (case
+	// @2599-2607) with no tonemap/gamma. The only clamp in the chain is
+	// IVGrade.hlsl:170, which runs BEFORE motion blur/height fog/god rays/SSS
+	// blur (@2733-2787), so those passes can leave the frame >1.0 -> white
+	// band / sun blowout. Clamp here, after all >1-capable passes, before
+	// DrawFinalEffects. Reuses the existing ClampShader (pipelinecommon.cpp:827)
+	// with params.z=0 (pure clamp, bit-identical for values already in [0,1]).
+	// Gated on colorFilter == COLORFILTER_GTAIV only.
+	if(colorFilter == COLORFILTER_GTAIV){
+		UpdateFrontBuffer();
+		if(PfFrontBufferReady("IV output clamp") && ClampShader){
+			float clampParams[4] = { 0.0f, 1.0f, 0.0f, 0.0f };
+			RwD3D9SetPixelShaderConstant(0, clampParams, 1);
+			overrideIm2dPixelShader = ClampShader;
+			RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, colorfilterVerts, 4,
+				colorfilterIndices, 6);
+			overrideIm2dPixelShader = nil;
+		}
+	}
+
 	if(dbglog_throttle("cf_done"))
 		dbglog("ColourFilter_switch: done (filter=%d)", colorFilter);
 
