@@ -1330,37 +1330,61 @@ IsWaterSplashSystem(void *sys)
 }
 
 // F4 (test2-0438): the saturating non-water white/grey smoke family.
-// Triggers = the white-smoke textures; a fire-family texture anywhere in
-// the system is a HARD VETO (fire/sparks must stay additive - the veto is
-// what keeps prt_spark/prt_spark_2, gunflash, camflash, Flame, explosions,
-// nitro, smoke_flare, extinguisher and overheat_car_electric untouched).
+// Triggers = the white-smoke textures. Fire prims are vetoed PER PRIM in the
+// dst-byte rewrite (IsFirePrim), not per system: a gunshot system carries
+// BOTH smokeII_3 (gunsmoke) and sphere (muzzle flash) prims — vetoing the
+// whole system whenever the flash was alive meant the smoke prims lost their
+// blend pin half the time and drew REPLACE = opaque grey squares (the
+// 2026-11-28 "blends properly half the time" report). The pin forces normal
+// alpha only as the ENTRY state; authored (5,2) fire prims still transition
+// to their own additive pair, so per-prim veto keeps sparks/flames additive.
 // Systems already authored SRCALPHA/INVSRCALPHA (the prt_smoke_huge
 // exhaust/skid family) match too: their byte rewrite is a no-op, but the
 // blend pin below repairs their split-cache draw (the F4 "hard additive
 // streaks" are those prims rendering REPLACE after the post-water window).
+namespace {
+const char *const kSmokeTriggerTex[] = {
+	"smoke",		// spraycan mist
+	"smoke4",		// smoke_flare
+	"smoke5",		// WS_factorysmoke - the map smoke sheet
+	"collisionsmoke",	// prt_smoke_huge/prt_collisionsmoke/prt_smokeII_3_expand,
+				// cigarette_smoke, riot_smoke
+	"smokeII_3",		// gunsmoke, heli_dust, prt_wheeldirt, exhale
+};
+const char *const kFireVetoTex[] = {
+	"sphere",		// gunflash/camflash/Flame/flame/molotov_flame/
+				// petrolcan/shootlight/tank_fire/extinguisher/
+				// prt_spark/prt_spark_2
+	"sphere_CJ",		// fire/fire_bike/fire_car/fire_large/fire_med/
+				// flamethrower/jetpack/jetthrust/nitro
+	"wjet6",		// fire flames
+	"fireball6",		// explosion_* fireballs
+	"bullethitsmoke",	// fire_bike/fire_car/flamethrower smoke prims,
+				// coke_puff, puke, explosion_fuel_car
+	"waterspark_16",	// overheat_car_electric sparks
+};
+
+// A single prim's fire-family test, used by the dst-byte rewrite. The prim
+// signature gate keeps freed/recycled objects out before the texture read.
+static bool IsFirePrim(BYTE *prim)
+{
+	if(!IsFxRenderPrim(prim))
+		return false;
+	void **texHolder = (void**)(prim + 0xC);
+	RwTexture *tex = texHolder ? (RwTexture*)*texHolder : NULL;
+	const char *name = tex ? tex->name : NULL;
+	if(!name || !name[0])
+		return false;
+	for(unsigned t = 0; t < sizeof(kFireVetoTex)/sizeof(kFireVetoTex[0]); t++)
+		if(strcmp(name, kFireVetoTex[t]) == 0)
+			return true;
+	return false;
+}
+}
+
 static bool
 IsWhiteSmokeSystem(void *sys)
 {
-	static const char *const triggerTex[] = {
-		"smoke",		// spraycan mist
-		"smoke4",		// smoke_flare (vetoed in practice - also binds sphere)
-		"smoke5",		// WS_factorysmoke - the map smoke sheet
-		"collisionsmoke",	// prt_smoke_huge/prt_collisionsmoke/prt_smokeII_3_expand,
-					// cigarette_smoke, riot_smoke
-		"smokeII_3",		// gunsmoke, heli_dust, prt_wheeldirt, exhale
-	};
-	static const char *const fireVetoTex[] = {
-		"sphere",		// gunflash/camflash/Flame/flame/molotov_flame/
-					// petrolcan/shootlight/tank_fire/extinguisher/
-					// prt_spark/prt_spark_2
-		"sphere_CJ",		// fire/fire_bike/fire_car/fire_large/fire_med/
-					// flamethrower/jetpack/jetthrust/nitro
-		"wjet6",		// fire flames
-		"fireball6",		// explosion_* fireballs
-		"bullethitsmoke",	// fire_bike/fire_car/flamethrower smoke prims,
-					// coke_puff, puke, explosion_fuel_car
-		"waterspark_16",	// overheat_car_electric sparks
-	};
 	if(!sys)
 		return false;
 	signed char primCount = *(signed char*)((char*)sys + 0x1b);
@@ -1378,11 +1402,12 @@ IsWhiteSmokeSystem(void *sys)
 		const char *name = tex->name;
 		if(!name || !name[0])
 			continue;
-		for(unsigned t = 0; t < sizeof(fireVetoTex)/sizeof(fireVetoTex[0]); t++)
-			if(strcmp(name, fireVetoTex[t]) == 0)
-				return false;	// fire/spark family: stay additive
-		for(unsigned t = 0; t < sizeof(triggerTex)/sizeof(triggerTex[0]); t++)
-			if(strcmp(name, triggerTex[t]) == 0)
+		// Per-prim fire veto lives in IsFirePrim (the dst-byte rewrite skips
+		// those prims). A fire prim here does NOT veto the whole system: the
+		// gunsmoke/muzzle-flash pair must both be in the pin window, and the
+		// authored (5,2) fire prim transitions back to additive on its own.
+		for(unsigned t = 0; t < sizeof(kSmokeTriggerTex)/sizeof(kSmokeTriggerTex[0]); t++)
+			if(strcmp(name, kSmokeTriggerTex[t]) == 0)
 				trigger = true;
 	}
 	return trigger;
@@ -1638,7 +1663,10 @@ FxSysRenderHook(void* _this, int edx, int a1, int a2, int a3)
 						// vtable gate: only a live render prim's byte 6 is
 						// the dst blend ID; anything else must not be
 						// touched (recycled/foreign object protection).
-						if(IsFxRenderPrim(prim) && prim[6] == 1){
+						// Per-prim fire veto: a matched gunshot system also
+						// carries sphere (muzzle flash) prims — those stay
+						// additive (dst ONE), only the smoke prims flip.
+						if(IsFxRenderPrim(prim) && !IsFirePrim(prim) && prim[6] == 1){
 							prim[6] = 5;	// rwBLENDONE -> rwBLENDINVSRCALPHA (LUT 0x8A6230)
 							rewriteMask |= (1u << i);
 							rewritten++;
