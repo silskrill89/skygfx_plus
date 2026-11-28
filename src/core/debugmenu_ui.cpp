@@ -21,7 +21,6 @@ extern bool iCanHasNeoDrops;
 extern char asipath[MAX_PATH];	// game dir with trailing '\', set by readIni
 // main.cpp globals that are live but are not Config fields (readIniFile reads
 // them directly, so the menu can edit the same variable the renderer sees).
-extern bool cloudRenderFix;		// CClouds::Render state hygiene (INI cloudRenderFix)
 // waterPipe.cpp: INI waterFresnelSplit — live global, but not written by
 // saveConfigTo (the menu's INI writer covers it, see MenuWriteMissingIniKeys).
 extern int g_waterFresnelSplit;
@@ -825,11 +824,20 @@ BuildSettingRows(void)
 		"1 = unbind stale VS/PS in myDefaultCallback before a default-pipeline\n"
 		"atomic draws (RW value-compare caches otherwise inherit the previous\n"
 		"pass's shader). 0 = legacy behaviour.");
-	rW8n("cloudRenderFix", "Cloud render-state hygiene", &cloudRenderFix,
-		"main.cpp CClouds::Render hook: forces texture filter / alpha test / fog\n"
-		"to known values for the cloud + corona draw, then restores them.\n"
-		"Live for this session. Save INI covers this key (it was previously\n"
-		"read on load but never written back). 0 = vanilla inherited states.");
+	// Cloud render-state granular sub-fixes (2026-11-28): each is an
+	// independent on/off; no single switch can disable cloud correctness.
+	rWn("cloudNoiseFix", "Cloud: ois", &config->cloudNoiseFix,
+		"1 = s9 noise bind / SkyNoise upload once per frame. 0 = disable ONLY this sub-fix.");
+	rWn("cloudFilterFix", "Cloud: ilte", &config->cloudFilterFix,
+		"1 = LINEAR texture filter (removes hard alpha edges). 0 = disable ONLY this sub-fix.");
+	rWn("cloudAlphaFix", "Cloud: lph", &config->cloudAlphaFix,
+		"1 = ALWAYS alpha-test / ref 0 (preserves soft fringe). 0 = disable ONLY this sub-fix.");
+	rWn("cloudFogFix", "Cloud: o", &config->cloudFogFix,
+		"1 = fog off (stops far clouds dissolving). 0 = disable ONLY this sub-fix.");
+	rWn("cloudStage0Fix", "Cloud: tage", &config->cloudStage0Fix,
+		"1 = stage-0 raster save/restore + PS/VS neutralize. 0 = disable ONLY this sub-fix.");
+	rWn("cloudZFix", "Cloud: ", &config->cloudZFix,
+		"1 = ZENABLE/ZFUNC three-layer disagreement guard. 0 = disable ONLY this sub-fix.");
 	// m0970 bisect lane — render-state systems that were compiled ON with no
 	// gate at all. Every default is 1 (= current behaviour), so nothing
 	// renders differently until one is switched off. Turn them off one at a
@@ -1700,7 +1708,7 @@ GetSettingRows(void)
 // The "All Settings" tab (GetCoverageRows) shows every live key exactly
 // once, grouped by subsystem; the per-subsystem tabs above remain the
 // editable homes. Startup-only globals with no Config field are included
-// where a live variable exists (cloudRenderFix, waterFresnelSplit,
+// where a live variable exists (cloud sub-fix fields, waterFresnelSplit,
 // forwardPlusFallback is shown read-only from the active INI).
 //
 // INTENTIONALLY HIDDEN (201 fields, none of them read by a render/frame
@@ -1818,7 +1826,7 @@ static const KeyDefault kKeyDefaults[] = {
 	{ "zwriteThreshold", 128 }, { "zwriteThresholdGrass", 128 }, { "zwriteThresholdPed", 128 },
 	{ "pedShadows", -1 }, { "stencilShadows", -1 },
 	{ "neoWaterDrops", 1 }, { "neoBloodDrops", 0 },
-	{ "cloudRenderFix", 1 }, { "forwardPlusEnable", 1 }, { "forwardPlusDebug", 0 },
+	{ "cloudNoiseFix", 1 }, { "cloudFilterFix", 1 }, { "cloudAlphaFix", 1 }, { "cloudFogFix", 1 }, { "cloudStage0Fix", 1 }, { "cloudZFix", 1 }, { "forwardPlusEnable", 1 }, { "forwardPlusDebug", 0 },
 	{ "profilerEnable", 1 }, { "profilerGpuTimers", 0 }, { "postfxDumpDebug", 0 },
 	{ "NoiseQuality", 0 },
 	// Hotkeys: readIniFile only overwrites keys[] when the INI carries the
@@ -2249,7 +2257,7 @@ CoverageGroupIndex(const char *k)
 	   !strncmp(k, "blur", 4))
 		return CG_POSTFX;
 	if(!strcmp(k, "texAlphaClassify") || !strcmp(k, "stateBaselineEnable") ||
-	   !strcmp(k, "defaultCbShaderHygiene") || !strcmp(k, "cloudRenderFix") ||
+	   !strcmp(k, "defaultCbShaderHygiene") || !strncmp(k, "cloud", 5) ||
 	   !strcmp(k, "colorFilterEnable") || !strncmp(k, "dualPass", 8) ||
 	   !strncmp(k, "ps2Modulate", 11) || !strncmp(k, "zwriteThreshold", 15) ||
 	   !strcmp(k, "backfaceCull") || !strcmp(k, "detailMaps") ||
@@ -3655,7 +3663,7 @@ DrawEffectiveSummary(void)
 // ============================================================
 // INI CLIPBOARD + SAVE COVERAGE
 //   saveConfigTo already writes the Config keys. A handful of menu-editable
-//   keys live outside Config (waterFresnelSplit, cloudRenderFix) or are
+//   keys live outside Config (waterFresnelSplit, cloud sub-fix fields) or are
 //   startup-only globals. The menu writes those back on Save INI / Save as
 //   New Config, and the Copy action renders the exact current values in INI
 //   syntax for a bug report without touching disk.
@@ -3770,7 +3778,7 @@ CopySettingsAsIni(void)
 }
 
 // saveConfigTo() omits these keys: either they live outside Config
-// (waterFresnelSplit / cloudRenderFix) or they are startup globals read by
+// (waterFresnelSplit / cloud sub-fix fields) or they are startup globals read by
 // main.cpp's patch installers. Write them next to the normal save so the
 // menu's Save buttons cover what the menu can edit.
 static void
@@ -3782,8 +3790,18 @@ MenuWriteMissingIniKeys(const char *path)
 		return;	// saveConfigTo failed / file absent: never create a partial INI here
 	WritePrivateProfileStringA("SkyGfx", "waterFresnelSplit",
 		std::to_string(g_waterFresnelSplit).c_str(), path);
-	WritePrivateProfileStringA("SkyGfx", "cloudRenderFix",
-		cloudRenderFix ? "1" : "0", path);
+	WritePrivateProfileStringA("SkyGfx", "cloudNoiseFix",
+		config->cloudNoiseFix ? "1" : "0", path);
+	WritePrivateProfileStringA("SkyGfx", "cloudFilterFix",
+		config->cloudFilterFix ? "1" : "0", path);
+	WritePrivateProfileStringA("SkyGfx", "cloudAlphaFix",
+		config->cloudAlphaFix ? "1" : "0", path);
+	WritePrivateProfileStringA("SkyGfx", "cloudFogFix",
+		config->cloudFogFix ? "1" : "0", path);
+	WritePrivateProfileStringA("SkyGfx", "cloudStage0Fix",
+		config->cloudStage0Fix ? "1" : "0", path);
+	WritePrivateProfileStringA("SkyGfx", "cloudZFix",
+		config->cloudZFix ? "1" : "0", path);
 	char tmp[32];
 	snprintf(tmp, sizeof(tmp), "0x%X", config->keys[0]);
 	WritePrivateProfileStringA("SkyGfx", "keySwitch", tmp, path);
@@ -3827,9 +3845,10 @@ DrawLiveDiagnostics(void)
 		(int)config->colorFilterEnable);
 	ImGui::TextDisabled("modeManager=%d | ivMode=%d | preset=%d | configs=%d current=%d",
 		(int)ModeManager_GetMode(), (int)config->ivMode, config->preset, numConfigs, currentConfig);
-	ImGui::TextDisabled("state: texAlphaClassify=%d stateBaseline=%d defaultCbHygiene=%d cloudRenderFix=%d",
+	ImGui::TextDisabled("state: texAlphaClassify=%d stateBaseline=%d defaultCbHygiene=%d cloud: n/f/a/g/s/z=%d%d%d%d%d%d",
 		config->texAlphaClassify, config->stateBaselineEnable, config->defaultCbShaderHygiene,
-		cloudRenderFix ? 1 : 0);
+		config->cloudNoiseFix, config->cloudFilterFix, config->cloudAlphaFix,
+		config->cloudFogFix, config->cloudStage0Fix, config->cloudZFix);
 	ImGui::TextDisabled("coronaZtest=%d | sunGlare key=%d (capable=%d) | neonDrops capable=%d",
 		config->coronaZtest, (int)config->doglare, iCanHasSunGlare ? 1 : 0,
 		iCanHasNeoDrops ? 1 : 0);

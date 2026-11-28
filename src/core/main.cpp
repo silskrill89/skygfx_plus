@@ -2566,7 +2566,7 @@ fbWp_ArmOnce(void)
 }
 
 // ============================================================
-// CClouds::Render render-state hygiene (INI SkyGfx/cloudRenderFix, default 1)
+// CClouds::Render render-state hygiene (granular INI SkyGfx/cloud*Fix, all default 1)
 // ============================================================
 // CClouds::Render (0x713950..0x714640, called from 0x53DCA2 and 0x53DFA0 —
 // both intercepted below) sets EXACTLY five render states on entry:
@@ -2600,9 +2600,9 @@ fbWp_ArmOnce(void)
 // exactly what a foreign raw write leaves behind (see pipeEnterAlphaMode).
 // No brightness/alpha is touched, so clouds cannot over-blow when high up.
 // States are saved (pre-seeded, a failed Get never reaches the device) and
-// restored on exit. cloudRenderFix = 0 skips the whole thing.
+// restored on exit. Six granular gates (cloudNoise/Filter/Alpha/Fog/Stage0/ZFix)
+// default ON; each disables ONLY its own sub-fix. There is no master switch.
 // ============================================================
-bool cloudRenderFix;
 void (*CClouds__Render_orig)(void);
 
 // Stage-0 texture-raster restore (R5, 2026-11-09): the two CClouds paths
@@ -2630,6 +2630,15 @@ restoreStage0Tex(RwRaster *savedTexRaster, IDirect3DTexture9 *savedDevTex0, cons
 static void
 CClouds__Render_hygiene(void)
 {
+	// Granular sub-fix gates (2026-11-28): each defaults to 1 and disables
+	// ONLY its own piece; no single switch can kill cloud correctness.
+	const bool cloudNoiseFixOn  = (config != NULL) && (config->cloudNoiseFix != 0);
+	const bool cloudFilterFixOn = (config != NULL) && (config->cloudFilterFix != 0);
+	const bool cloudAlphaFixOn  = (config != NULL) && (config->cloudAlphaFix != 0);
+	const bool cloudFogFixOn    = (config != NULL) && (config->cloudFogFix != 0);
+	const bool cloudStage0FixOn = (config != NULL) && (config->cloudStage0Fix != 0);
+	const bool cloudZFixOn      = (config != NULL) && (config->cloudZFix != 0);
+
 	// Xbox-clouds lane hunk C: once per frame, stamp the cloud noise
 	// parameter block (c49-c52, the reserved SkyNoise slots) and bind the
 	// universal tile to sampler s9 for the clouds PS consumed by the
@@ -2638,7 +2647,7 @@ CClouds__Render_hygiene(void)
 	// CClouds::Render call sites (0x53DCA2/0x53DFA0) and must upload once.
 	// s9 is the project-wide noise reservation (noise.h / pipeBindNoise) —
 	// same no-restore convention as buildingPipe's pipeBindNoise(9).
-	if(cloudsPS && d3d9device){
+	if(cloudNoiseFixOn && cloudsPS && d3d9device){
 		static unsigned s_cloudNoiseFrame = 0xFFFFFFFFu;
 		unsigned frameIndex = (unsigned)RWSRCGLOBAL(renderFrame);
 		if(frameIndex != s_cloudNoiseFrame){
@@ -2666,8 +2675,7 @@ CClouds__Render_hygiene(void)
 	// sets SRCBLEND/DESTBLEND/VERTEXALPHA through the rw cache, so a device
 	// parked on SRCALPHA/INVSRCALPHA behind an unchanged cache turns the
 	// additive sun glow into a black square (see effectsForceAlphaBlock).
-	// Runs before the cloudRenderFix gate: the corona draw does not depend
-	// on that INI flag.
+	// Unconditional: the corona draw does not depend on any cloud sub-fix.
 	effectsForceAlphaBlock("Clouds");
 
 	// Sky/sky-dome entry probe (black-screen bisect). CClouds::Render is the
@@ -2721,8 +2729,8 @@ CClouds__Render_hygiene(void)
 	// CClouds binds its cloud/sprite texture into stage 0 and the old restore
 	// never put the raster back, so the rw cache and the raw device could
 	// stay on the cloud atlas past the sky pass — peds then sampled it as a
-	// flat texel at some camera angles. Captured BEFORE the cloudRenderFix
-	// gate so the pass-through path restores it too. L1 value + L3 texture
+	// flat texel at some camera angles. Captured BEFORE any gate so the
+	// pass-through path restores it too. L1 value + L3 texture
 	// (GetTexture AddRefs; Released after the restore). POD only.
 	void *savedTexRasterRaw = NULL;
 	RwRenderStateGet(rwRENDERSTATETEXTURERASTER, &savedTexRasterRaw);
@@ -2740,7 +2748,7 @@ CClouds__Render_hygiene(void)
 		savedDevTex0 = (IDirect3DTexture9*)baseTex;
 	}
 
-	if(!cloudRenderFix || !CClouds__Render_orig){
+	if(!CClouds__Render_orig){
 		// Nothing forced on this path — no restore to protect, no guard needed.
 		// The producer flag still wraps the original: the shared sprite flush
 		// must never force a non-additive pair over clouds (which draw
@@ -2752,7 +2760,8 @@ CClouds__Render_hygiene(void)
 			spriteProducerWindowClouds(false);
 			// Stage-0 raster restore for this path too (park-and-set through
 			// L1, then the raw L3 texture that was bound when we entered).
-			restoreStage0Tex(savedTexRaster, savedDevTex0, "cloud_texraster_passthru");
+			if(cloudStage0FixOn)
+				restoreStage0Tex(savedTexRaster, savedDevTex0, "cloud_texraster_passthru");
 		}
 		// Release on BOTH sub-paths (orig present, or orig NULL and no draw).
 		if(savedDevTex0){
@@ -2855,34 +2864,45 @@ CClouds__Render_hygiene(void)
 	// of which unbind) was still live at the first draw of frame N+1.
 	// Nulling is strictly safe: there is no game shader to preserve on this
 	// path, and RW3.6's own fixed-function draws rely on PS/VS being unset.
-	RwD3D9SetPixelShader(NULL);
-	RwD3D9SetVertexShader(NULL);
-	if(d3d9device){
-		d3d9device->SetPixelShader(NULL);
-		d3d9device->SetVertexShader(NULL);
+	if(cloudStage0FixOn){
+		RwD3D9SetPixelShader(NULL);
+		RwD3D9SetVertexShader(NULL);
+		if(d3d9device){
+			d3d9device->SetPixelShader(NULL);
+			d3d9device->SetVertexShader(NULL);
+		}
 	}
-	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
-	RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION, (void*)rwALPHATESTFUNCTIONALWAYS);
-	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
+	if(cloudFilterFixOn)
+		RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
+	if(cloudAlphaFixOn)
+		RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION, (void*)rwALPHATESTFUNCTIONALWAYS);
+	if(cloudFogFixOn)
+		RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
 	if(d3d9device){
-		d3d9device->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
-		d3d9device->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
-		d3d9device->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_LINEAR);
-	}
-	RwD3D9SetRenderState(D3DRS_ALPHAFUNC, pipeAlphaFuncToD3D(rwALPHATESTFUNCTIONALWAYS));
-	RwD3D9SetRenderState(D3DRS_ALPHAREF, 0);
-	RwD3D9SetRenderState(D3DRS_FOGENABLE, FALSE);
-	if(d3d9device){
-		d3d9device->SetRenderState(D3DRS_ALPHAFUNC, D3DCMP_ALWAYS);
-		d3d9device->SetRenderState(D3DRS_ALPHAREF, 0);
-		d3d9device->SetRenderState(D3DRS_FOGENABLE, FALSE);
-		// Stage-0 colour/alpha ops: CClouds NEVER sets them, so whatever the
-		// previous pass left (SELECTARG1/SELECTARG2 from an Im2D pass) would
-		// otherwise govern the clouds. Raw device only (no rw twin); the
-		// snapshot above already captured both and the restore block below
-		// puts them back, so this force is fully covered.
-		d3d9device->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
-		d3d9device->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_MODULATE);
+		if(cloudFilterFixOn){
+			d3d9device->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+			d3d9device->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+			d3d9device->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_LINEAR);
+		}
+		if(cloudAlphaFixOn){
+			RwD3D9SetRenderState(D3DRS_ALPHAFUNC, pipeAlphaFuncToD3D(rwALPHATESTFUNCTIONALWAYS));
+			RwD3D9SetRenderState(D3DRS_ALPHAREF, 0);
+			d3d9device->SetRenderState(D3DRS_ALPHAFUNC, D3DCMP_ALWAYS);
+			d3d9device->SetRenderState(D3DRS_ALPHAREF, 0);
+		}
+		if(cloudFogFixOn){
+			RwD3D9SetRenderState(D3DRS_FOGENABLE, FALSE);
+			d3d9device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+		}
+		if(cloudStage0FixOn){
+			// Stage-0 colour/alpha ops: CClouds NEVER sets them, so whatever the
+			// previous pass left (SELECTARG1/SELECTARG2 from an Im2D pass) would
+			// otherwise govern the clouds. Raw device only (no rw twin); the
+			// snapshot above already captured both and the restore block below
+			// puts them back, so this force is fully covered.
+			d3d9device->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
+			d3d9device->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_MODULATE);
+		}
 	}
 
 	// ROUGH REDUCTION (2026-11-10): SEH __try/__except removed — call the
@@ -2894,13 +2914,18 @@ CClouds__Render_hygiene(void)
 
 	// ---- restore: rw cache first (so later Gets agree), then the raw force
 	// closes the gap where the cache already read the saved value ----
-	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)sFilter);
-	RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION, (void*)sAlphaFn);
-	RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTIONREF, (void*)sAlphaRf);
-	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)sFog);
-	RwD3D9SetRenderState(D3DRS_ALPHAFUNC, pipeAlphaFuncToD3D(sAlphaFn));
-	RwD3D9SetRenderState(D3DRS_ALPHAREF, sAlphaRf);
-	RwD3D9SetRenderState(D3DRS_FOGENABLE, sFogDev ? TRUE : FALSE);
+	if(cloudFilterFixOn)
+		RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)sFilter);
+	if(cloudAlphaFixOn){
+		RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION, (void*)sAlphaFn);
+		RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTIONREF, (void*)sAlphaRf);
+		RwD3D9SetRenderState(D3DRS_ALPHAFUNC, pipeAlphaFuncToD3D(sAlphaFn));
+		RwD3D9SetRenderState(D3DRS_ALPHAREF, sAlphaRf);
+	}
+	if(cloudFogFixOn){
+		RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)sFog);
+		RwD3D9SetRenderState(D3DRS_FOGENABLE, sFogDev ? TRUE : FALSE);
+	}
 	// Z-test/Z-func restore — three-layer (rw cache + driver cache + raw
 	// device), mirror of depthhook.cpp:470-472. Sanitize the saved values
 	// first (same convention as D3D9RenderDual): a failed Get must never
@@ -2929,7 +2954,7 @@ CClouds__Render_hygiene(void)
 		(sZFuncDrv == (DWORD)D3DCMP_LESSEQUAL) &&
 		(sZEn == TRUE) &&
 		(sZFunc == (DWORD)D3DCMP_LESSEQUAL);
-	if(!depthLegsCanonical){
+	if(cloudZFixOn && !depthLegsCanonical){
 		if(dbglog_throttle("cloud_zguard"))
 			dbglog("[CloudShield] ZFUNC guard: captured dev zfunc=%d zen=%d → canonical",
 				(int)sZFunc, (int)sZEn);
@@ -2976,26 +3001,35 @@ CClouds__Render_hygiene(void)
 	// cluster texture (ForwardPlus) would ride the clouds' raw state into
 	// the next draw. RW API + raw device both, so raw-set drift can't hide
 	// behind RW's shader cache.
-	RwD3D9SetPixelShader(NULL);
-	RwD3D9SetVertexShader(NULL);
-	if(d3d9device){
-		d3d9device->SetPixelShader(NULL);
-		d3d9device->SetVertexShader(NULL);
-		d3d9device->SetTexture(5, NULL);
+	if(cloudStage0FixOn){
+		RwD3D9SetPixelShader(NULL);
+		RwD3D9SetVertexShader(NULL);
+		if(d3d9device){
+			d3d9device->SetPixelShader(NULL);
+			d3d9device->SetVertexShader(NULL);
+			d3d9device->SetTexture(5, NULL);
+		}
 	}
 	if(d3d9device){
-		d3d9device->SetSamplerState(0, D3DSAMP_MINFILTER, sMinF);
-		d3d9device->SetSamplerState(0, D3DSAMP_MAGFILTER, sMagF);
-		d3d9device->SetSamplerState(0, D3DSAMP_MIPFILTER, sMipF);
-		d3d9device->SetRenderState(D3DRS_ALPHAFUNC, pipeAlphaFuncToD3D(sAlphaFn));
-		d3d9device->SetRenderState(D3DRS_ALPHAREF, sAlphaRf);
-		d3d9device->SetRenderState(D3DRS_FOGENABLE, sFogDev ? TRUE : FALSE);
+		if(cloudFilterFixOn){
+			d3d9device->SetSamplerState(0, D3DSAMP_MINFILTER, sMinF);
+			d3d9device->SetSamplerState(0, D3DSAMP_MAGFILTER, sMagF);
+			d3d9device->SetSamplerState(0, D3DSAMP_MIPFILTER, sMipF);
+		}
+		if(cloudAlphaFixOn){
+			d3d9device->SetRenderState(D3DRS_ALPHAFUNC, pipeAlphaFuncToD3D(sAlphaFn));
+			d3d9device->SetRenderState(D3DRS_ALPHAREF, sAlphaRf);
+		}
+		if(cloudFogFixOn)
+			d3d9device->SetRenderState(D3DRS_FOGENABLE, sFogDev ? TRUE : FALSE);
 		d3d9device->SetRenderState(D3DRS_ZENABLE, sZEn);
 		d3d9device->SetRenderState(D3DRS_ZFUNC, sZFunc);
-		// Stage-0 ops — raw-only (no rw twin). The blend/write L3 pin moved
-		// to the pipeDeviceStateSet calls above (one source: rw capture).
-		d3d9device->SetTextureStageState(0, D3DTSS_COLOROP, sStageColorOp);
-		d3d9device->SetTextureStageState(0, D3DTSS_ALPHAOP, sStageAlphaOp);
+		if(cloudStage0FixOn){
+			// Stage-0 ops — raw-only (no rw twin). The blend/write L3 pin moved
+			// to the pipeDeviceStateSet calls above (one source: rw capture).
+			d3d9device->SetTextureStageState(0, D3DTSS_COLOROP, sStageColorOp);
+			d3d9device->SetTextureStageState(0, D3DTSS_ALPHAOP, sStageAlphaOp);
+		}
 	}
 	// Stage-0 texture raster restore — the missing half of this hygiene block.
 	// CClouds binds its cloud/sprite texture and never puts the entry raster
@@ -3003,7 +3037,8 @@ CClouds__Render_hygiene(void)
 	// cloud atlas (peds as a flat atlas texel at certain camera angles).
 	// Park-and-set through L1 so a cache-hit cannot no-op, then the raw L3
 	// texture captured before the original ran (GetTexture AddRef'd).
-	restoreStage0Tex(savedTexRaster, savedDevTex0, "cloud_texraster_normal");
+	if(cloudStage0FixOn)
+		restoreStage0Tex(savedTexRaster, savedDevTex0, "cloud_texraster_normal");
 	if(savedDevTex0){
 		savedDevTex0->Release();
 		savedDevTex0 = NULL;
@@ -3510,14 +3545,12 @@ InjectDelayedPatches()
 	// CClouds::Render: wrap BOTH call sites (the mirror-skipping one at
 	// 0x53DFA0 and the plain one at 0x53DCA2) with the render-state hygiene
 	// hook — see CClouds__Render_hygiene for the inherited-state analysis.
-	// InterceptCall keeps the original target in CClouds__Render_orig, so
-	// cloudRenderFix=0 simply passes straight through.
-	// Vanilla-fallback doctrine: only install the cloud hygiene hooks when
-	// the lever is on; zeroed = stock CClouds::Render.
-	if(cloudRenderFix){
-		InterceptCall(&CClouds__Render_orig, CClouds__Render_hygiene, 0x53DCA2);
-		InterceptCall(&CClouds__Render_orig, CClouds__Render_hygiene, 0x53DFA0);
-	}
+	// InterceptCall keeps the original target in CClouds__Render_orig. The
+	// hygiene is now ALWAYS installed — the six granular cloud*Fix settings
+	// gate individual sub-fixes inside it (all default 1); there is no master
+	// switch that can turn cloud correctness off.
+	InterceptCall(&CClouds__Render_orig, CClouds__Render_hygiene, 0x53DCA2);
+	InterceptCall(&CClouds__Render_orig, CClouds__Render_hygiene, 0x53DFA0);
 	// 0x53D81C call CSky::Render (0x714650) — sky-dome stage, verified but
 	// deliberately NOT intercepted. Disassembly (1.0 US) shows 0x714650 sets
 	// its OWN state before any rasterisation: TEXRASTER=NULL / ZTEST=off /

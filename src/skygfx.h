@@ -1009,6 +1009,17 @@ struct Config {
 	int rwFixesEnable;		// 1 = install the RW fix machines (corona/flush/font/
 							// pointlight shields, rw_fixes.cpp) at DllMain.
 							// 0 = skip every install (attribution bisect lever).
+
+
+	// ---- Cloud render-state granular sub-fixes (2026-11-28) ----
+	// Each defaults to 1 = the sub-fix is active. A user can disable ONE
+	// piece to bisect a cloud artifact; no master switch can disable all.
+	int cloudNoiseFix;	// 1 = s9 noise bind / SkyNoise upload once per frame (granular cloud sub-fix; default 1).
+	int cloudFilterFix;	// 1 = LINEAR texture filter (removes hard alpha edges) (granular cloud sub-fix; default 1).
+	int cloudAlphaFix;	// 1 = ALWAYS alpha-test / ref 0 (preserves soft fringe) (granular cloud sub-fix; default 1).
+	int cloudFogFix;	// 1 = fog off (stops far clouds dissolving) (granular cloud sub-fix; default 1).
+	int cloudStage0Fix;	// 1 = stage-0 raster save/restore + PS/VS neutralize (granular cloud sub-fix; default 1).
+	int cloudZFix;	// 1 = ZENABLE/ZFUNC three-layer disagreement guard (granular cloud sub-fix; default 1).
 };
 static_assert(offsetof(Config, version) == 0, "pinned: asm reads in main.cpp");
 static_assert(offsetof(Config, fixGrassPlacement) == 8, "pinned: fixSeed asm in main.cpp");

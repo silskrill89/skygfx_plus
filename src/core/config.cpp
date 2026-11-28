@@ -31,7 +31,6 @@ extern int transparentLockon;
 extern int fixShadows;
 extern bool privateHooks;
 extern bool forceWindShader;
-extern bool cloudRenderFix;
 extern int g_noiseQuality;             // utility noise knob (menuGet/SetNoiseQuality)
 extern bool g_waterTempBufferHook;     // water temp-buffer kill-switch
 extern int g_waterFresnelSplit;        // waterPipe.cpp
@@ -543,10 +542,14 @@ readIniFile(const char *modulePath, Config *c)
 	c->pedShadows = parseShadowToggle("pedShadows", "pedShadows");
 	c->stencilShadows = parseShadowToggle("stencilShadows", "stencilShadows");
 	disableClouds = readint(cfg.get("SkyGfx", "disableClouds", ""), 0);
-	// Cloud render-state hygiene (CClouds__Render_hygiene): force texture
-	// filter / alpha test / fog to known values for the cloud draw so the
-	// inherited states cannot hard-cut or fog the clouds away. Default ON.
-	cloudRenderFix = readint(cfg.get("SkyGfx", "cloudRenderFix", ""), 1) != 0;
+	// Cloud render-state granular sub-fixes (CClouds__Render_hygiene): each
+	// default 1; disable ONE to bisect a cloud artifact.
+	c->cloudNoiseFix = readint(cfg.get("SkyGfx", "cloudNoiseFix", ""), 1) != 0;
+	c->cloudFilterFix = readint(cfg.get("SkyGfx", "cloudFilterFix", ""), 1) != 0;
+	c->cloudAlphaFix = readint(cfg.get("SkyGfx", "cloudAlphaFix", ""), 1) != 0;
+	c->cloudFogFix = readint(cfg.get("SkyGfx", "cloudFogFix", ""), 1) != 0;
+	c->cloudStage0Fix = readint(cfg.get("SkyGfx", "cloudStage0Fix", ""), 1) != 0;
+	c->cloudZFix = readint(cfg.get("SkyGfx", "cloudZFix", ""), 1) != 0;
 	disableGamma = readint(cfg.get("SkyGfx", "disableGamma", ""), 0);
 	transparentLockon = readint(cfg.get("SkyGfx", "transparentLockon", ""), 0);
 	fixShadows = readint(cfg.get("SkyGfx", "fixShadows", ""), 0);
@@ -1286,7 +1289,12 @@ readIniFile(const char *modulePath, Config *c)
 		EMIT("SkyGfx", "waterSss", "1"); \
 		EMIT("SkyGfx", "waterVolume", "1"); \
 		EMIT("SkyGfx", "waterFresnelSplit", "1"); \
-		EMIT("SkyGfx", "cloudRenderFix", "1"); \
+		EMIT("SkyGfx", "cloudNoiseFix", "1"); \
+		EMIT("SkyGfx", "cloudFilterFix", "1"); \
+		EMIT("SkyGfx", "cloudAlphaFix", "1"); \
+		EMIT("SkyGfx", "cloudFogFix", "1"); \
+		EMIT("SkyGfx", "cloudStage0Fix", "1"); \
+		EMIT("SkyGfx", "cloudZFix", "1"); \
 		EMIT("SkyGfx", "dofEnable", "0"); \
 		EMIT("SkyGfx", "dofFocusDistance", "20.0"); \
 		EMIT("SkyGfx", "dofFocusRange", "15.0"); \
@@ -1418,8 +1426,13 @@ readIniFile(const char *modulePath, Config *c)
 		cfg.set("SkyGfx", "waterQuality", "3");
 		cfg.set("SkyGfx", "; waterFresnelSplit: 1=fresnel split (default), 0=legacy composite", "");
 		cfg.set("SkyGfx", "waterFresnelSplit", "1");
-		cfg.set("SkyGfx", "; cloudRenderFix: 1=cloud render-state hygiene (default), 0=vanilla inherited states", "");
-		cfg.set("SkyGfx", "cloudRenderFix", "1");
+		cfg.set("SkyGfx", "; Cloud granular sub-fixes: 1=on (default); disable ONE to bisect", "");
+		cfg.set("SkyGfx", "cloudNoiseFix", "1");
+		cfg.set("SkyGfx", "cloudFilterFix", "1");
+		cfg.set("SkyGfx", "cloudAlphaFix", "1");
+		cfg.set("SkyGfx", "cloudFogFix", "1");
+		cfg.set("SkyGfx", "cloudStage0Fix", "1");
+		cfg.set("SkyGfx", "cloudZFix", "1");
 
 		// ===== New post-effects (DOF / Bloom / Tonemap LUT / Sun shafts / FXAA / Grain / CA / Vignette) =====
 		cfg.set("SkyGfx", "; ===== New post-effects (all off by default - opt in) =====", "");
@@ -1917,7 +1930,12 @@ saveConfigTo(const char *path)
 		cfg.set("SkyGfx", "waterStyle", waterStyleNames[c->waterStyle]);
 	cfg.set("SkyGfx", "waterQuality", std::to_string(c->waterQuality));
 	cfg.set("SkyGfx", "waterFresnelSplit", std::to_string((float)g_waterFresnelSplit));
-	cfg.set("SkyGfx", "cloudRenderFix", std::to_string(cloudRenderFix ? 1 : 0));
+	cfg.set("SkyGfx", "cloudNoiseFix", std::to_string(c->cloudNoiseFix != 0));
+	cfg.set("SkyGfx", "cloudFilterFix", std::to_string(c->cloudFilterFix != 0));
+	cfg.set("SkyGfx", "cloudAlphaFix", std::to_string(c->cloudAlphaFix != 0));
+	cfg.set("SkyGfx", "cloudFogFix", std::to_string(c->cloudFogFix != 0));
+	cfg.set("SkyGfx", "cloudStage0Fix", std::to_string(c->cloudStage0Fix != 0));
+	cfg.set("SkyGfx", "cloudZFix", std::to_string(c->cloudZFix != 0));
 	char keyBuf[16];
 	snprintf(keyBuf, sizeof(keyBuf), "0x%X", c->keys[0]);
 	cfg.set("SkyGfx", "keySwitch", keyBuf);
