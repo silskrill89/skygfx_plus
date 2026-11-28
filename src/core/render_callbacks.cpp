@@ -210,8 +210,13 @@ pedStage0Resync(RpAtomic *atomic, PedPipeState *pdsState)
 				       recovered->name[0] ? recovered->name : "?");
 			resolved = TexDefsRemapToWorld(resolved);	// name-preserving world remap
 		}
-		if(!resolved)
-			resolved = TexDefsMissSentinelWorld();	// A1: NULL from find-CB (miss) -> grey sentinel at draw (game keeps NULL)
+		if(!resolved){
+			RwTexture *recovered = TexDefsResolveNullDraw();	// A2: late-loaded TXD recovery
+			if(recovered)
+				resolved = recovered;
+			else
+				resolved = TexDefsMissSentinelWorld();	// A1: NULL from find-CB (miss) -> grey sentinel at draw (game keeps NULL)
+		}
 		// L1 rw cache — park-and-set (vehBindDiffuse3L stage-0 discipline).
 		if(resolved && resolved->raster){
 			RwRaster *whiteRas = (gpWhiteTexture && gpWhiteTexture->raster)

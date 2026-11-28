@@ -1385,8 +1385,14 @@ bldPolicyTexture(RwTexture *tex)
 		       (void*)tex, tex ? TexDefsMissTextureKind(tex) : -1,
 		       (tex && tex->name[0]) ? tex->name : "");
 	}
-	if(!tex)
+	if(!tex){
+		// A2: try to recover a late-loaded TXD from the missed-name log
+		// before falling back to the grey sentinel.
+		RwTexture *recovered = TexDefsResolveNullDraw();
+		if(recovered)
+			return recovered;
 		return TexDefsMissSentinelWorld();	// A1: NULL from find-CB (miss) -> grey sentinel at draw (game keeps NULL for streaming)
+	}
 	// Draw-time resolution (2026-11-16): if this is a policy sentinel whose
 	// parent TXD has since loaded, swap in the REAL texture — this is the
 	// one chokepoint all four building cbs (PS2/Xbox/PBR/Sphere) bind stage
